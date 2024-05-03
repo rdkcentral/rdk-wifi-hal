@@ -1726,7 +1726,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
 #define GPIO_UNEXPORT_PATH "/sys/class/gpio/unexport"
 #define GPIO_DIRECTION_PATH "/sys/class/gpio/gpio%d/direction"
 #define GPIO_VALUE_PATH "/sys/class/gpio/gpio%d/value"
-#define ECOMODE_SCRIPT_FILE "/etc/sky/wifi.sh"
+#define ECOMODE_SCRIPT_FILE "/etc/init/wifi.sh"
 #define GPIO_DIRECTION_OUT "out"
 #define BUFLEN_2 2
 
@@ -1751,7 +1751,7 @@ static int enable_echo_feature_and_power_control_configs(void)
         wifi_hal_dbg_print("%s:%d cmd [%s] unsuccessful \n", __func__, __LINE__, cmd);
     }
 
-    snprintf(cmd, sizeof(cmd), " /etc/sky/wifi.sh dpden 1");
+    snprintf(cmd, sizeof(cmd), "%s dpden 1", ECOMODE_SCRIPT_FILE);
     rc = system(cmd);
     if (rc == 0) {
         wifi_hal_dbg_print("%s:%d cmd [%s] successful \n", __func__, __LINE__, cmd);
