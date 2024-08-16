@@ -46,7 +46,7 @@ int no_seq_check(struct nl_msg *msg, void *arg)
     return NL_OK;
 }
 
-#if defined(_PLATFORM_RASPBERRYPI_)
+#if defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
 int notify_assoc_data(wifi_interface_info_t *interface, struct nlattr **tb,
     union wpa_event_data event)
 {
@@ -58,7 +58,6 @@ int notify_assoc_data(wifi_interface_info_t *interface, struct nlattr **tb,
     mac_addr_str_t sta_mac_str;
     wifi_frame_t mgmt_frame;
     int sig_dbm = -100;
-    int phy_rate = 60;
     wifi_mgmtFrameType_t mgmt_type;
     wifi_direction_t dir;
     struct ieee80211_mgmt *mgmt = NULL;
@@ -105,18 +104,8 @@ int notify_assoc_data(wifi_interface_info_t *interface, struct nlattr **tb,
 #ifdef WIFI_HAL_VERSION_3_PHASE2
         callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame, 0);
 #else
-#if defined(RDK_ONEWIFI) &&                                                                     \
-    (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-        defined(TCHCBRV2_PORT) || defined(SCXER10_PORT))
-        if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
-            phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]) *10;
-        }
-        callbacks->mgmt_frame_rx_callback(vap->vap_index, sta_mac, (unsigned char *)mgmt, frame_len,
-            mgmt_type, dir, sig_dbm, phy_rate);
-#else
         callbacks->mgmt_frame_rx_callback(vap->vap_index, sta_mac, (unsigned char *)mgmt, frame_len,
             mgmt_type, dir, 0);
-#endif
 #endif
 
         for (unsigned int i = 0; i < hooks->num_hooks; i++) {
@@ -129,6 +118,7 @@ cleanup:
     if (mgmt) {
         free(mgmt);
     }
+    return NL_SKIP;
 }
 
 static void nl80211_new_station_event(wifi_interface_info_t *interface, struct nlattr **tb)
@@ -158,7 +148,7 @@ static void nl80211_new_station_event(wifi_interface_info_t *interface, struct n
     event.assoc_info.req_ies = ies;
     event.assoc_info.req_ies_len = ies_len;
     event.assoc_info.addr = mac;
-    wifi_hal_dbg_print("%s:%d: New station ies_len:%zu, ies:%p\n", __func__, __LINE__, ies_len, ies);
+    wifi_hal_dbg_print("%s:%d: New station ies_len:%ld, ies:%p\n", __func__, __LINE__, ies_len, ies);
     notify_assoc_data(interface, tb, event);
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_ASSOC, &event);
 }
@@ -187,7 +177,7 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     //Remove the station from the bridge, if present
     wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
 }
-#endif
+#endif //_PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
 
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 static void nl80211_parse_wmm_params(struct nlattr *wmm_attr,
@@ -1569,7 +1559,7 @@ static void nl80211_vendor_event(wifi_interface_info_t *interface,
 static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, struct nlattr **tb)
 {
     switch (cmd) {
-#if defined(_PLATFORM_RASPBERRYPI_) 
+#if defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_) 
     case NL80211_CMD_NEW_STATION:
         nl80211_new_station_event(interface, tb);
         break;
@@ -1577,7 +1567,7 @@ static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, stru
     case NL80211_CMD_DEL_STATION:
         nl80211_del_station_event(interface, tb);
         break;
-#endif
+#endif // _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
     case NL80211_CMD_FRAME_TX_STATUS:
         nl80211_frame_tx_status_event(interface, tb);
         break;
