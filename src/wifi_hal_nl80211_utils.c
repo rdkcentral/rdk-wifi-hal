@@ -350,6 +350,7 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 0, 0, "radio1", "wlan0"},
 #endif
 #endif
+
 };
 #endif
 
@@ -358,6 +359,37 @@ const wifi_driver_info_t  driver_info = {
     "pi4",
     "cfg80211",
     {"RaspBerry","RaspBerry","PI","PI","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    platform_pre_init,
+    platform_post_init,
+    platform_set_radio,
+    platform_set_radio_pre_init,
+    platform_pre_create_vap,
+    platform_create_vap,
+    platform_get_ssid_default,
+    platform_get_keypassphrase_default,
+    platform_get_radius_key_default,
+    platform_get_wps_pin_default,
+    platform_get_country_code_default,
+    platform_wps_event,
+    platform_flags_init,
+    platform_get_aid,
+    platform_free_aid,
+    platform_sync_done,
+    platform_update_radio_presence,
+    platform_set_txpower,
+    platform_set_offload_mode,
+    platform_get_acl_num,
+    platform_get_vendor_oui,
+    platform_set_neighbor_report,
+    platform_get_radio_phytemperature,
+    platform_set_dfs,
+    platform_get_radio_caps,
+#endif
+
+#ifdef BANANA_PI_PORT // for reference device platforms
+    "bpi4",
+    "cfg80211",
+    {"Banana Filogic Wireless Gateway","Banana","PI","PI","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
     platform_pre_init,
     platform_post_init,
     platform_set_radio,
