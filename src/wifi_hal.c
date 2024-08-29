@@ -1574,10 +1574,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     platform_set_beacon_prot_t set_vap_beacon_prot_fn;
     unsigned int i;
     char msg[2048];
+#ifdef NL80211_ACL
     int set_acl = 0;
-#if !defined(CMXB7_PORT) && !defined(_PLATFORM_RASPBERRYPI_)
+#else
     int filtermode;
-#endif // !CMXB7_PORT && !_PLATFORM_RASPBERRYPI_
+#endif
     //bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 #if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
 #ifdef CONFIG_MLO
@@ -1878,7 +1879,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
 #endif // EASY_MESH_NODE
         }
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
+#ifdef NL80211_ACL
         if (set_acl == 1) {
             nl80211_set_acl(interface);
         }
@@ -1904,11 +1905,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     __LINE__, vap->vap_index);
                 return RETURN_ERR;
             }
-            if (set_acl == 1) {
-                nl80211_set_acl(interface);
-            }
         }
-#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_
+#endif // NL80211_ACL
         if (vap->vap_mode == wifi_vap_mode_ap) {
             wifi_hal_info_print("%s:%d: vap index:%d set power:%d\n",  __func__, __LINE__,
                 vap->vap_index, vap->u.bss_info.mgmtPowerControl);
