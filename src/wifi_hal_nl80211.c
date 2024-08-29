@@ -9018,7 +9018,6 @@ static standard_mapping_t standard_map[] = {
     { "be", RDK_VENDOR_NL80211_STANDARD_BE },
 #endif /* CONFIG_IEEE80211BE */
 };
-
 static void str_to_standard(const char *str, uint32_t *standard)
 {
     size_t i;
@@ -9030,7 +9029,6 @@ static void str_to_standard(const char *str, uint32_t *standard)
         }
     }
 }
-
 static void wl_cfgvendor_get_station_bw(wifi_associated_dev3_t *sta_info, u8 *bw)
 {
     switch (atoi(sta_info->cli_OperatingChannelBandwidth)) {
@@ -9044,7 +9042,6 @@ static void wl_cfgvendor_get_station_bw(wifi_associated_dev3_t *sta_info, u8 *bw
         default: *bw = 0; break;
     }
 }
-
 static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, bool emu_state, wifi_associated_dev3_t *stats, unsigned int count, wifi_interface_info_t *interface)
 {
     wifi_hal_stats_dbg_print("%s:%d: value of vap index %d emu_enable %d and count is %d\n", __func__, __LINE__, vap_index, emu_state, count);
@@ -9160,7 +9157,6 @@ static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, boo
     }
     return 0;
 }
-
 int wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state, wifi_associated_dev3_t *stats, unsigned int count, unsigned int phy_index, unsigned int interface_index)
 {
     struct nl_msg *msg;
@@ -9184,7 +9180,6 @@ int wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state,
         free(interface);
         return -1;
     }
-
     /*
      * message format
      *
@@ -9233,7 +9228,6 @@ int wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state,
         }
     }
     free(interface);
-
     return 0;
 }
 
