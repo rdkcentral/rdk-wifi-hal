@@ -1343,7 +1343,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
     
             prepare_param_name(param_name, interface_name, "_bcnprs_txpwr_offset");
             set_decimal_nvram_param(param_name, abs(map->vap_array[index].u.bss_info.mgmtPowerControl));
-
+            wifi_setApManagementFramePowerControl(map->vap_array[index].vap_index, map->vap_array[index].u.bss_info.mgmtPowerControl);
         } else if (map->vap_array[index].vap_mode == wifi_vap_mode_sta) {
 
             prepare_param_name(param_name, interface_name, "_akm");
@@ -2899,6 +2899,63 @@ INT wifi_getRadioTrafficStats2(INT radioIndex, wifi_radioTrafficStats2_t *radioT
 
     return RETURN_OK;
 }
+
+static int set_ap_pwr(wifi_interface_info_t *interface, INT *power)
+{
+    struct nlattr *nlattr;
+    struct nl_msg *msg;
+    int ret = RETURN_ERR;
+
+    msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0,
+                                     OUI_COMCAST,
+                                     RDK_VENDOR_NL80211_SUBCMD_SET_MGT_FRAME_PWR);
+
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    nlattr = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+
+    if (nla_put(msg, RDK_VENDOR_ATTR_MGT_FRAME_PWR_LEVEL, sizeof(*power), power) < 0) {
+        wifi_hal_error_print("%s:%d Failed to put AP power\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return RETURN_ERR;
+    }
+    nla_nest_end(msg, nlattr);
+
+    ret = nl80211_send_and_recv(msg, NULL, power, NULL, NULL);
+
+    if (ret) {
+        wifi_hal_error_print("%s:%d Failed to send NL message: %d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
+        return RETURN_ERR;
+    }
+
+    return RETURN_OK;
+}
+
+INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
+{
+    wifi_interface_info_t *interface;
+
+    wifi_hal_dbg_print("%s:%d: Set AP management frame for index: %d\n", __func__, __LINE__,
+        apIndex);
+
+    interface = get_interface_by_vap_index(apIndex);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get interface for ap index: %d\n", __func__,
+            __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+    if (set_ap_pwr(interface, &dBm)) {
+        wifi_hal_error_print("%s:%d: Failed to set ap power for ap index: %d\n", __func__,
+            __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+
+    return RETURN_OK;
+}
+
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT
 
 int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
