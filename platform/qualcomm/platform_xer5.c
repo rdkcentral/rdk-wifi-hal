@@ -1093,7 +1093,11 @@ int platform_update_radio_presence(void)
     wifi_hal_info_print("%s:%d: g_wifi_hal.num_radios %d\n", __func__, __LINE__, g_wifi_hal.num_radios);
     for (index = 0; index < g_wifi_hal.num_radios; index++)
     {
+#ifndef _PLATFORM_BANANAPI_R4_
         radio = get_radio_by_rdk_index(index);
+#else //_PLATFORM_BANANAPI_R4_
+        radio = &g_wifi_hal.radio_info[index];
+#endif //_PLATFORM_BANANAPI_R4_
         snprintf(cmd, sizeof(cmd), "/sys/class/net/wifi%d",index);
         if (!is_interface_exists(cmd)) {
                radio->radio_presence = false;

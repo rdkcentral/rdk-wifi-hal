@@ -1654,7 +1654,11 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
 
+#ifndef _PLATFORM_BANANAPI_R4_
     radio = get_radio_by_phy_index(index);
+#else //_PLATFORM_BANANAPI_R4_
+    radio = get_radio_by_rdk_index(index);
+#endif //_PLATFORM_BANANAPI_R4_
     if (radio == NULL) {
         wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
             index);

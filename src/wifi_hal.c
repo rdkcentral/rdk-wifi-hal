@@ -213,7 +213,11 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     for (i = 0; i < hal->wifi_prop.numRadios; i++) {
         radio_band = 0;
         is_band_found = false;
+#ifndef _PLATFORM_BANANAPI_R4_
         radio = get_radio_by_rdk_index(i);
+#else //_PLATFORM_BANANAPI_R4_
+        radio = &g_wifi_hal.radio_info[i];
+#endif //_PLATFORM_BANANAPI_R4_
         wifi_hal_info_print("%s:%d:Enumerating interfaces on PHY radio index: %d, RDK radio index:%d\n", __func__, __LINE__, radio->index, i);
         hal->wifi_prop.radio_presence[i] = radio->radio_presence;
         interface = hash_map_get_first(radio->interface_map);
@@ -348,7 +352,11 @@ INT wifi_hal_init()
     }
 
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
+#ifndef _PLATFORM_BANANAPI_R4_
         radio = get_radio_by_rdk_index(i);
+#else //_PLATFORM_BANANAPI_R4_
+        radio = &g_wifi_hal.radio_info[i];
+#endif //_PLATFORM_BANANAPI_R4_
         if (radio->radio_presence == false) {
             wifi_hal_error_print("%s:%d: Skip the Radio %d .This is sleeping in ECO mode \n", __func__, __LINE__, radio->index);
             continue;
@@ -365,7 +373,11 @@ INT wifi_hal_init()
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT)
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         wifi_interface_info_t *interface;
+#ifndef _PLATFORM_BANANAPI_R4_
         radio = get_radio_by_rdk_index(i);
+#else //_PLATFORM_BANANAPI_R4_
+        radio = &g_wifi_hal.radio_info[i];
+#endif //_PLATFORM_BANANAPI_R4_
         update_hostap_config_params(radio);
         interface = hash_map_get_first(radio->interface_map);
 
