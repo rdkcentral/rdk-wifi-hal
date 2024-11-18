@@ -5785,7 +5785,7 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
     int sec_chan_offset, freq, freq1, bandwidth;
     u8 seg0;
     char country[8];
-    int ret;
+    int ret = 0;
 
     param = &radio->oper_param;
     get_coutry_str_from_code(param->countryCode, country);
@@ -5880,7 +5880,7 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
         }
     }
 
-    return 0;
+    return ret;
 }
 
 int nl80211_update_wiphy(wifi_radio_info_t *radio)
