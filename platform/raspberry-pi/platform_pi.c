@@ -371,7 +371,6 @@ INT wifi_getApDeviceRSSI(INT ap_index, CHAR *MAC, INT *output_RSSI)
     return 0;
 }
 
-
 static int get_sta_list_handler(struct nl_msg *msg, void *arg)
 {
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
@@ -395,75 +394,24 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
     return NL_OK;
 }
 
-int get_sta_list(wifi_interface_info_t *interface, sta_list_t *sta_list)
+static int get_sta_list(wifi_interface_info_t *interface, sta_list_t *sta_list)
 {
-    int ret, family_id;
-    struct nl_sock *sock = NULL;
+    int ret;
     struct nl_msg *msg = NULL;
-    struct nl_cb *cb = NULL;
 
-    sta_list->num = 0;
-
-    sock = nl_socket_alloc();
-    if (!sock) {
-        wifi_hal_error_print("%s:%d Failed to allocate netlink socket\n", __func__, __LINE__);
-        return RETURN_ERR;
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, NLM_F_DUMP, NL80211_CMD_GET_STATION);
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        return -1;
     }
 
-    ret = genl_connect(sock);
+    ret = nl80211_send_and_recv(msg, get_sta_list_handler, sta_list, NULL, NULL);
     if (ret < 0) {
-        wifi_hal_error_print("%s:%d Failed to connect to netlink socket: %s\n", __func__, __LINE__, nl_geterror(ret));
-        nl_socket_free(sock);
-        return RETURN_ERR;
+        wifi_hal_error_print("%s:%d Failed to execute NL command\n", __func__, __LINE__);
+        return -1;
     }
 
-    family_id = genl_ctrl_resolve(sock, "nl80211");
-    if (family_id < 0) {
-        wifi_hal_error_print("%s:%d Failed to resolve nl80211 family\n", __func__, __LINE__);
-        nl_socket_free(sock);
-        return RETURN_ERR;
-    }
-
-    msg = nlmsg_alloc();
-    if (!msg) {
-        wifi_hal_error_print("%s:%d Failed to allocate nlmsg\n", __func__, __LINE__);
-        nl_socket_free(sock);
-        return RETURN_ERR;
-    }
-
-    genlmsg_put(msg, 0, 0, family_id, 0, NLM_F_DUMP, NL80211_CMD_GET_STATION, 0);
-    nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
-
-    cb = nl_cb_alloc(NL_CB_DEFAULT);
-    if (!cb) {
-        wifi_hal_error_print("%s:%d Failed to allocate callback\n", __func__, __LINE__);
-        nlmsg_free(msg);
-        nl_socket_free(sock);
-        return RETURN_ERR;
-    }
-
-    nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, get_sta_list_handler, sta_list);
-
-    ret = nl_send_auto(sock, msg);
-    if (ret < 0) {
-        wifi_hal_error_print("%s:%d Failed to send nlmsg: %s\n",  __func__, __LINE__, nl_geterror(ret));
-        nl_cb_put(cb);
-        nlmsg_free(msg);
-        nl_socket_free(sock);
-        return RETURN_ERR;
-    }
-
-    ret = nl_recvmsgs(sock, cb);
-    if (ret < 0) {
-        wifi_hal_error_print("%s:%d Failed to receive netlink messages: %s\n", __func__, __LINE__, nl_geterror(ret));
-        return RETURN_ERR;
-    }
-
-    nl_cb_put(cb);
-    nlmsg_free(msg);
-    nl_socket_free(sock);
-
-    return RETURN_OK;
+    return 0;
 }
 
 static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
@@ -545,74 +493,26 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     return NL_OK;
 }
 
-int get_sta_stats(wifi_interface_info_t *interface, mac_address_t mac, wifi_associated_dev3_t *dev)
+static int get_sta_stats(wifi_interface_info_t *interface, mac_address_t mac, wifi_associated_dev3_t *dev)
 {
-    int family_id, ret;
-    struct nl_sock *sock = NULL;
+    int ret;
     struct nl_msg *msg = NULL;
-    struct nl_cb *cb = NULL;
 
-    sock = nl_socket_alloc();
-    if (!sock) {
-        wifi_hal_error_print("%s:%d Failed to allocate netlink socket\n", __func__, __LINE__);
-        return RETURN_ERR;
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_GET_STATION);
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        return -1;
     }
 
-    ret = genl_connect(sock);
-    if (ret < 0) {
-        wifi_hal_error_print("%s:%d Failed to connect to netlink socket: %s\n", __func__, __LINE__, nl_geterror(ret));
-        nl_socket_free(sock);
-        return RETURN_ERR;
-    }
-
-    family_id = genl_ctrl_resolve(sock, "nl80211");
-    if (family_id < 0) {
-        wifi_hal_error_print("%s:%d Failed to resolve nl80211 family\n", __func__, __LINE__);
-        nl_socket_free(sock);
-        return RETURN_ERR;
-    }
-
-    msg = nlmsg_alloc();
-    if (!msg) {
-        wifi_hal_error_print("%s:%d Failed to allocate nlmsg\n", __func__, __LINE__);
-        nl_socket_free(sock);
-        return RETURN_ERR;
-    }
-
-    genlmsg_put(msg, 0, 0, family_id, 0, 0, NL80211_CMD_GET_STATION, 0);
-    nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
     nla_put(msg, NL80211_ATTR_MAC, sizeof(mac_address_t), mac);
 
-    cb = nl_cb_alloc(NL_CB_DEFAULT);
-    if (!cb) {
-        wifi_hal_error_print("%s:%d Failed to allocate callback\n", __func__, __LINE__);
-        nlmsg_free(msg);
-        nl_socket_free(sock);
-        return RETURN_ERR;
-    }
-
-    nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, get_sta_stats_handler, dev);
-
-    ret = nl_send_auto(sock, msg);
+    ret = nl80211_send_and_recv(msg, get_sta_stats_handler, dev, NULL, NULL);
     if (ret < 0) {
-        wifi_hal_error_print("%s:%d Failed to send nlmsg: %s\n", __func__, __LINE__, nl_geterror(ret));
-        nl_cb_put(cb);
-        nlmsg_free(msg);
-        nl_socket_free(sock);
-        return RETURN_ERR;
+        wifi_hal_error_print("%s:%d Failed to execute NL command\n", __func__, __LINE__);
+        return -1;
     }
 
-    ret = nl_recvmsgs(sock, cb);
-    if (ret < 0) {
-        wifi_hal_error_print("%s:%d Failed to receive netlink messages: %s\n", __func__, __LINE__, nl_geterror(ret));
-        return RETURN_ERR;
-    }
-
-    nl_cb_put(cb);
-    nlmsg_free(msg);
-    nl_socket_free(sock);
-
-    return RETURN_OK;
+    return 0;
 }
 
 INT wifi_getApAssociatedDeviceDiagnosticResult3(INT apIndex,
@@ -626,11 +526,11 @@ INT wifi_getApAssociatedDeviceDiagnosticResult3(INT apIndex,
     interface = get_interface_by_vap_index(apIndex);
     if (interface == NULL) {
         wifi_hal_error_print("%s:%d Failed to get interface for index %d\n", __func__, __LINE__, apIndex);
-        return RETURN_ERR;
+        return -1;
     }
 
     ret = get_sta_list(interface, &sta_list);
-    if (ret != 0) {
+    if (ret < 0) {
         wifi_hal_error_print("%s:%d Failed to get sta list\n", __func__, __LINE__);
         goto exit;
     }
@@ -641,7 +541,7 @@ INT wifi_getApAssociatedDeviceDiagnosticResult3(INT apIndex,
 
     for (i = 0; i < sta_list.num; i++) {
         ret = get_sta_stats(interface, sta_list.macs[i], &(*associated_dev_array)[i]);
-        if (ret != RETURN_OK) {
+        if (ret < 0) {
             wifi_hal_error_print("%s:%d Failed to get sta stats\n", __func__, __LINE__);
             free(*associated_dev_array);
             *associated_dev_array = NULL;
