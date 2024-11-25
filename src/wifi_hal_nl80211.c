@@ -69,7 +69,7 @@
 #include <rdk_nl80211_hal.h>
 #endif
 
-
+#define AP_UNABLE_TO_HANDLE_ADDITIONAL_ASSOCIATIONS 17
 #define OVS_MODULE "/sys/module/openvswitch"
 #define ONEWIFI_TESTSUITE_TMPFILE "/tmp/onewifi_testsuite_configured"
 
@@ -1876,7 +1876,6 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         mgmt_type = WIFI_MGMT_FRAME_TYPE_DEAUTH;
         wifi_hal_dbg_print("%s:%d: Received deauth frame from: %s\n", __func__, __LINE__,
                            to_mac_str(sta, sta_mac_str));
-
         if (callbacks->num_apDeAuthEvent_cbs == 0) {
             break;
         }
@@ -10276,8 +10275,10 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
     u16 fc;
     int use_cookie = 1;
     int res, interface_freq;
-    //mac_addr_str_t mac_str;
+
     char country[8];
+    wifi_device_callbacks_t *callbacks;
+    callbacks = get_hal_device_callbacks();
 
     interface = (wifi_interface_info_t *)priv;
     vap = &interface->vap_info;
@@ -10293,6 +10294,15 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
 
     mgmt = (struct ieee80211_mgmt *) data;
     fc = le_to_host16(mgmt->frame_control);
+
+    if (WLAN_FC_GET_STYPE(fc) == WLAN_FC_STYPE_AUTH &&
+        mgmt->u.auth.status_code == AP_UNABLE_TO_HANDLE_ADDITIONAL_ASSOCIATIONS &&
+        callbacks->max_cli_rejection_cb != NULL) {
+        mac_addr_str_t mac_str;
+        callbacks->max_cli_rejection_cb(interface->vap_info.vap_index,
+            to_mac_str(mgmt->da, mac_str), AP_UNABLE_TO_HANDLE_ADDITIONAL_ASSOCIATIONS);
+    }
+
     //wifi_hal_dbg_print("nl80211: send_mlme - da= %s noack=%d freq=%u fc=0x%x\n",
     //to_mac_str(mgmt->da, mac_str), noack, freq, fc);
 
