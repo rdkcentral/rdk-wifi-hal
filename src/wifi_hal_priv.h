@@ -187,9 +187,9 @@ extern "C" {
 
 /* 5GHz radio */
 #define MIN_FREQ_MHZ_5G             5180
-#define MAX_FREQ_MHZ_5G             5825
+#define MAX_FREQ_MHZ_5G             5885
 #define MIN_CHANNEL_5G              36
-#define MAX_CHANNEL_5G              165
+#define MAX_CHANNEL_5G              177
 
 /* 6GHz radio */
 #define MIN_FREQ_MHZ_6G             5935
@@ -409,6 +409,7 @@ typedef struct wifi_interface_info_t {
     char bridge[32];
     unsigned int index;
     unsigned int phy_index;
+    unsigned int rdk_radio_index;
     mac_address_t   mac;
     unsigned int type;
     unsigned int interface_status;
@@ -935,7 +936,6 @@ int     wifi_set_ap_wps_ie(void *priv, const struct wpabuf *beacon,
                       const struct wpabuf *assocresp);
 int     wifi_sta_get_seqnum(const char *ifname, void *priv, const u8 *addr, int idx, u8 *seq);
 int     wifi_commit(void *priv);
-wifi_radio_info_t *get_radio_by_phy_index(wifi_radio_index_t index);
 wifi_radio_info_t *get_radio_by_rdk_index(wifi_radio_index_t index);
 int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *interface);
 int get_op_class_from_radio_params(wifi_radio_operationParam_t *param);
@@ -958,8 +958,9 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
 int get_security_mode_support_radius(int mode);
 void wps_enum_to_string(unsigned int methods, char *str, int len);
 int get_radio_variant_str_from_int(unsigned int variant, char *variant_str);
-int get_rdk_radio_index(unsigned int phy_index);
+int get_rdk_radio_indices(unsigned int phy_index, int *rdk_radio_indices, int *num_radios_mapped);
 int get_interface_name_from_radio_index(uint8_t radio_index, char *interface_name);
+int get_rdk_radio_index_from_interface_name(char *interface_name);
 int get_sec_channel_offset(wifi_radio_info_t *radio, int freq);
 int get_bw80_center_freq(wifi_radio_operationParam_t *param, const char *country);
 int get_bw160_center_freq(wifi_radio_operationParam_t *param, const char *country);
@@ -1182,6 +1183,7 @@ extern u8_bitmap g_DialogToken[MAX_AP_INDEX];
 int wifi_freq_to_channel(int freq, uint *channel);
 int wifi_channel_to_freq(const char* country, UCHAR opclass, uint channel, uint *freq);
 enum nl80211_band wifi_freq_band_to_nl80211_band(wifi_freq_bands_t band);
+enum nl80211_band get_nl80211_band_from_rdk_radio_index(unsigned int rdk_radio_index);
 const char* get_chan_dfs_state(struct hostapd_channel_data *chan);
 
 static inline size_t wifi_strnlen(const char *src, size_t maxlen) {
