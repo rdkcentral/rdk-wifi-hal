@@ -2183,7 +2183,10 @@ void recv_data_frame(wifi_interface_info_t *interface)
                 len  = buflen - shift;
 
                 char rssi = *(buff + sizeof(struct ethhdr) + 15);
+                char bitrate = *(buff + sizeof(struct ethhdr) + 10);
+                char noise = *(buff + sizeof(struct ethhdr) + 16);
 
+                wifi_hal_dbg_print("%s:%d Rssi 0x%02x bitrate 0x%02x noise 0x%02x\n", __func__, __LINE__, rssi, bitrate, noise);
                 mgmt = (struct ieee80211_mgmt *)(buff + shift);
 
                 if ((memcmp(mgmt->da, bmac, sizeof(mac_address_t)) != 0) && (memcmp(mgmt->da, interface->mac, sizeof(mac_address_t)) != 0))
@@ -2235,7 +2238,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
             u16 rtap_len;
             mac_addr_str_t mac_str;
             int proto;
-            char rssi;
+            char rssi, noise;
 
             rtap_len = WPA_GET_BE16(buff + sizeof(struct ethhdr) + 2);
             shift = sizeof(struct ethhdr) + ntohs(rtap_len);
@@ -2261,6 +2264,10 @@ void recv_data_frame(wifi_interface_info_t *interface)
             }
 
             rssi = *(buff + sizeof(struct ethhdr) + 15);
+            noise = *(buff + sizeof(struct ethhdr) + 16);
+
+            wifi_hal_dbg_print("%s:%d Data frame Rssi 0x%02x Noise 0x%02x\n", __func__, __LINE__, rssi, noise);
+
 
             // 66 is Broadcom SW+HW headers
             data = (unsigned char*) calloc(len + 66, sizeof(unsigned char));
@@ -6904,7 +6911,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     count = hash_map_count(interface->scan_info_map);
     if (count == 0) {
         pthread_mutex_unlock(&interface->scan_info_mutex);
-        wifi_hal_error_print("%s:%d: [SCAN] No Scan results...\n", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d: [SCAN] No Scan results...\n", __func__, __LINE__);
         bss = NULL;
         if (callbacks->scan_result_callback != NULL) {
             callbacks->scan_result_callback(interface->vap_info.radio_index, &bss, &count);
@@ -7298,7 +7305,6 @@ static standard_mapping_t standard_map[] = {
     { "be", RDK_VENDOR_NL80211_STANDARD_BE },
 #endif /* CONFIG_IEEE80211BE */
 };
-
 static void str_to_standard(const char *str, uint32_t *standard)
 {
     size_t i;
@@ -7310,7 +7316,6 @@ static void str_to_standard(const char *str, uint32_t *standard)
         }
     }
 }
-
 static void wl_cfgvendor_get_station_bw(wifi_associated_dev3_t *sta_info, u8 *bw)
 {
     switch (atoi(sta_info->cli_OperatingChannelBandwidth)) {
@@ -7324,7 +7329,6 @@ static void wl_cfgvendor_get_station_bw(wifi_associated_dev3_t *sta_info, u8 *bw
         default: *bw = 0; break;
     }
 }
-
 static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, bool emu_state, wifi_associated_dev3_t *stats, unsigned int count, wifi_interface_info_t *interface)
 {
     wifi_hal_dbg_print("%s:%d: value of vap index %d emu_enable %d and count is %d\n", __func__, __LINE__, vap_index, emu_state, count);
@@ -7438,7 +7442,6 @@ static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, boo
     }
     return 0;
 }
-
 int wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state, wifi_associated_dev3_t *stats, unsigned int count, unsigned int phy_index, unsigned int interface_index)
 {
     struct nl_msg *msg;
@@ -7462,7 +7465,6 @@ int wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state,
         free(interface);
         return -1;
     }
-
     /*
      * message format
      *
@@ -7511,7 +7513,6 @@ int wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state,
         }
     }
     free(interface);
-
     return 0;
 }
 
@@ -7750,6 +7751,9 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     } else if (security->encr == wifi_encryption_aes_tkip) {
         interface->wpa_s.current_ssid->pairwise_cipher = WPA_CIPHER_TKIP;
         interface->wpa_s.current_ssid->group_cipher = WPA_CIPHER_CCMP;
+    } else if (security->encr == wifi_encryption_none) {
+        interface->wpa_s.current_ssid->pairwise_cipher = WPA_CIPHER_NONE;
+        interface->wpa_s.current_ssid->group_cipher = WPA_CIPHER_NONE;
     } else {
         wifi_hal_info_print("%s:%d:Invalid encryption mode:%d in wifi_hal_connect\n", __func__,
             __LINE__, security->encr);
@@ -7802,7 +7806,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         }
         memset(interface->wpa_s.current_ssid->sae_password, 0, MAX_PWD_LEN);
         strncpy(interface->wpa_s.current_ssid->sae_password, security->u.key.key,
-            strlen(security->u.key.key) - 1);
+            MAX_PWD_LEN-1);
     } else if ((security->mode != wifi_security_mode_wpa2_enterprise) &&
         (security->mode != wifi_security_mode_wpa3_enterprise)) {
         interface->wpa_s.current_ssid->passphrase = malloc(MAX_PWD_LEN);
@@ -7816,7 +7820,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         interface->wpa_s.current_ssid->ssid_len = 0;
         memset(interface->wpa_s.current_ssid->passphrase, 0, MAX_PWD_LEN);
         strncpy(interface->wpa_s.current_ssid->passphrase, security->u.key.key,
-            strlen(security->u.key.key) - 1);
+            MAX_PWD_LEN-1);
     }
 
     if (security->mode != wifi_security_mode_wpa3_personal) {
@@ -7863,7 +7867,6 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     memcpy(interface->wpa_s.bssid, backhaul->bssid, ETH_ALEN);
     dl_list_add(&interface->wpa_s.bss, &interface->wpa_s.current_bss->list);
     sme_send_authentication(&interface->wpa_s, curr_bss, interface->wpa_s.current_ssid, 1);
-    free(curr_bss);
     return 0;
 #else
     if ((msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_CONNECT)) == NULL) {
@@ -12032,7 +12035,7 @@ int nl80211_set_acl_mode(wifi_interface_info_t *interface, uint32_t mac_filter_m
     int ret = RETURN_OK;
     wifi_vap_info_t *vap;
     vap = &interface->vap_info;
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
+#ifdef NL80211_ACL
     struct nl_msg *msg;
     struct nlattr *acl;
     unsigned int policy;
@@ -12110,7 +12113,7 @@ int nl80211_set_acl_mode(wifi_interface_info_t *interface, uint32_t mac_filter_m
             vap->u.bss_info.mac_filter_mode = mac_filter_mode;
         }
     }
-#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
+#endif // NL80211_ACL
     return ret;
 }
 
@@ -13253,6 +13256,7 @@ int wifi_supplicant_drv_associate(void *priv, struct wpa_driver_associate_params
     interface = (wifi_interface_info_t *)priv;
     struct nl_msg *msg;
     int ret;
+    u32 suite;
 
     int ver = 0;
     u32 cipher;
@@ -13266,18 +13270,40 @@ int wifi_supplicant_drv_associate(void *priv, struct wpa_driver_associate_params
             params->freq.freq);
     nla_put(msg, NL80211_ATTR_SSID, params->ssid_len,
             params->ssid);
-    if (params->wpa_proto & WPA_PROTO_WPA)
-        ver |= NL80211_WPA_VERSION_1;
-    if (params->wpa_proto & WPA_PROTO_RSN)
-        ver |= NL80211_WPA_VERSION_2;
 
-    nla_put_u32(msg, NL80211_ATTR_WPA_VERSIONS, ver);
-    cipher = wpa_cipher_to_cipher_suite(params->pairwise_suite);
-    nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITES_PAIRWISE,
-            cipher);
-    cipher = wpa_cipher_to_cipher_suite(params->group_suite);
-    nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITE_GROUP, cipher);
-    nla_put_u32(msg, NL80211_ATTR_AKM_SUITES, RSN_AUTH_KEY_MGMT_SAE);
+    //If None dont set the NL80211_ATTR_AKM_SUITES
+    //else get the NL80211_ATTR_AKM_SUITES
+    if (!(params->key_mgmt_suite & WPA_KEY_MGMT_NONE)) {
+        cipher = wpa_cipher_to_cipher_suite(params->pairwise_suite);
+        nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITES_PAIRWISE,
+                cipher);
+        cipher = wpa_cipher_to_cipher_suite(params->group_suite);
+        nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITE_GROUP, cipher);
+        if (params->wpa_proto & WPA_PROTO_WPA)
+            ver |= NL80211_WPA_VERSION_1;
+        if (params->wpa_proto & WPA_PROTO_RSN)
+            ver |= NL80211_WPA_VERSION_2;
+
+        nla_put_u32(msg, NL80211_ATTR_WPA_VERSIONS, ver);
+
+        if (params->key_mgmt_suite & WPA_KEY_MGMT_IEEE8021X)
+            suite = RSN_AUTH_KEY_MGMT_UNSPEC_802_1X;
+        if (params->key_mgmt_suite & WPA_KEY_MGMT_PSK)
+            suite = RSN_AUTH_KEY_MGMT_PSK_OVER_802_1X;
+        if (params->key_mgmt_suite & WPA_KEY_MGMT_SAE)
+            suite = RSN_AUTH_KEY_MGMT_SAE;
+        if (params->key_mgmt_suite & WPA_KEY_MGMT_IEEE8021X_SHA256)
+            suite = RSN_AUTH_KEY_MGMT_802_1X_SHA256;
+        if (params->key_mgmt_suite & WPA_KEY_MGMT_PSK_SHA256)
+            suite = RSN_AUTH_KEY_MGMT_PSK_SHA256;
+
+        wifi_hal_dbg_print("%s:%d: suite : 0x%x\n", __func__, __LINE__,
+                suite);
+        nla_put_u32(msg, NL80211_ATTR_AKM_SUITES, suite);
+    } else {
+        nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
+    }
+
     if (params->rrm_used) {
         nla_put_flag(msg, NL80211_ATTR_USE_RRM);
     }

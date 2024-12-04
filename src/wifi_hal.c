@@ -523,6 +523,21 @@ INT wifi_hal_send_mgmt_frame_response(int ap_index, int type, int status, int st
     return RETURN_OK;
 }
 
+void wifi_hal_deauth(int vap_index, int status, uint8_t *mac)
+{
+    u8 own_addr[ETH_ALEN];
+    wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
+    struct hostapd_data *hapd = &interface->u.ap.hapd;
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    memcpy(own_addr, hapd->own_addr, ETH_ALEN);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+#ifdef HOSTAPD_2_10
+    wifi_drv_sta_deauth(interface, own_addr, mac, status);
+#endif
+    return;
+}
+
 #if defined(CONFIG_IEEE80211BE) && defined(SCXER10_PORT) && defined(KERNEL_NO_320MHZ_SUPPORT)
 INT _wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
 
@@ -1104,11 +1119,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     platform_create_vap_t set_vap_params_fn;
     unsigned int i;
     char msg[2048];
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
+#ifdef NL80211_ACL
     int set_acl = 0;
 #else
     int filtermode;
-#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
+#endif 
     //bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 #if defined(VNTXER5_PORT)
     char mld_ifname[32];
@@ -1169,14 +1184,14 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             vap->u.bss_info.preassoc.supported_data_transmit_rates,
             vap->u.bss_info.preassoc.minimum_advertised_mcs,
             vap->u.bss_info.preassoc.sixGOpInfoMinRate);
-
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
+      
+#ifdef NL80211_ACL
         if ((vap->u.bss_info.enabled == 1) &&
             ((vap->u.bss_info.mac_filter_enable == TRUE) ||
              (interface->vap_info.u.bss_info.mac_filter_enable != vap->u.bss_info.mac_filter_enable))) {
             set_acl = 1;
         }
-#endif // PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
+#endif 
 
 #if defined(VNTXER5_PORT)
         if (platform_set_intf_mld_bonding(radio, interface) != RETURN_OK) {
@@ -1398,7 +1413,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
+#ifdef NL80211_ACL
             if (set_acl == 1) {
                 nl80211_set_acl(interface);
             }
@@ -1423,7 +1438,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     __LINE__, vap->vap_index);
                 return RETURN_ERR;
             }
-#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
+#endif // NL80211_ACL
             re_configure_steering_mac_list(interface);
         }
         if (vap->vap_mode == wifi_vap_mode_ap) {
@@ -2963,7 +2978,7 @@ static INT _wifi_hal_getNeighboringWiFiStatus(INT radioIndex, wifi_neighbor_ap2_
         pthread_mutex_unlock(&interface->scan_state_mutex);
         wifi_hal_dbg_print("%s:%d: [SCAN] Scan is running, come later\n", __func__, __LINE__);
         errno = EAGAIN;
-        return WIFI_HAL_INTERNAL_ERROR;
+        return WIFI_HAL_NOT_READY;
     }
 
 get_results:

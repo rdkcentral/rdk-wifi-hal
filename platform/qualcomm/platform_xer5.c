@@ -734,6 +734,21 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
 
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
+    wifi_vap_info_t *vap;
+    int vap_itr;
+    char interface_name[32];
+    char cmd[DEFAULT_CMD_SIZE];
+
+    for (vap_itr=0; vap_itr < map->num_vaps; vap_itr++) {
+        vap = &map->vap_array[vap_itr];
+        get_interface_name_from_vap_index(vap->vap_index, interface_name);
+        if (vap->vap_mode == wifi_vap_mode_ap) {
+            /*Enabling ap_bridge for all ap vaps for intra bss packet transfer*/
+            snprintf(cmd, sizeof(cmd), "cfg80211tool %s ap_bridge 1", interface_name);
+            wifi_hal_dbg_print("%s:%d Executing %s\n",__func__,__LINE__, cmd);
+            system(cmd);
+        }
+    }
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     return 0;
 }

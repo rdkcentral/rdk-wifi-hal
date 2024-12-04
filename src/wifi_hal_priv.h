@@ -749,6 +749,7 @@ INT wifi_hal_keypassphrase_init(char *password, int vap_index);
 INT wifi_hal_wps_pin_init(char *pin);
 INT wifi_hal_hostApGetErouter0Mac(char *out);
 INT wifi_hal_send_mgmt_frame_response(int ap_index, int type, int status, int status_code, uint8_t *frame, uint8_t *mac, int len, int rssi);
+void wifi_hal_deauth(int vap_index, int status, uint8_t *mac);
 INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal);
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss);
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
@@ -969,6 +970,11 @@ int pick_akm_suite(int sel);
 void wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const u8 *data,size_t data_len,unsigned int freq);
 int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason);
 void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac);
+#if HOSTAPD_VERSION >= 211 //2.11
+int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reason,int link_id);
+#else
+int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reason);
+#endif
 #ifdef HOSTAPD_2_11 //2.11
  int wifi_drv_send_mlme(void *priv, const u8 *data,
                       size_t data_len,int noack,

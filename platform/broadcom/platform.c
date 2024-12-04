@@ -287,11 +287,13 @@ INT wifi_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, INT d
 INT wifi_getNeighboringWiFiStatus(INT radio_index, wifi_neighbor_ap2_t **neighbor_ap_array,
     UINT *output_array_size)
 {
-    if (wifi_hal_getNeighboringWiFiStatus(radio_index, neighbor_ap_array, output_array_size) !=
-        RETURN_OK) {
+    int ret;
+    ret = wifi_hal_getNeighboringWiFiStatus(radio_index, neighbor_ap_array, output_array_size);
+    if (ret == WIFI_HAL_NOT_READY) {
+        return ret;
+    } else if (ret == RETURN_ERR) {
         wifi_hal_error_print("%s:%d: wifi_hal_getNeighboringWiFiStatus failed\n", __func__,
             __LINE__);
-        return RETURN_ERR;
     }
 #if defined WIFI_EMULATOR_CHANGE
     if (get_emu_neighbor_stats(radio_index, neighbor_ap_array, output_array_size) != RETURN_OK) {
@@ -299,7 +301,7 @@ INT wifi_getNeighboringWiFiStatus(INT radio_index, wifi_neighbor_ap2_t **neighbo
         return RETURN_ERR;
     }
 #endif
-    return RETURN_OK;
+    return ret;
 }
 
 int sta_disassociated(int ap_index, char *mac, int reason)
