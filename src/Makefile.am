@@ -118,6 +118,12 @@ if RASPBERRY_PI_PORT
 librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/raspberry-pi
 librdk_wifihal_la_SOURCES += ../platform/raspberry-pi/platform_pi.c
 endif
+
+if BANANA_PI_PORT
+librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/banana-pi
+librdk_wifihal_la_SOURCES += ../platform/banana-pi/platform.c
+endif
+
 include_HEADERS = wifi_hal_rdk.h wifi_hal_rdk_framework.h ieee80211.h ../util_crypto/aes_siv.h
 
 if ONE_WIFIBUILD

@@ -810,12 +810,12 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         goto reload_config;
     }
 
-#if !defined(_PLATFORM_RASPBERRYPI_)
+#if !defined(_PLATFORM_RASPBERRYPI_) && !defined(_PLATFORM_BANANAPI_R4_)
     // Call Vendor HAL
     if (wifi_setRadioDfsAtBootUpEnable(index,operationParam->DfsEnabledBootup) != 0) {
         wifi_hal_dbg_print("%s:%d:Failed to Enable DFSAtBootUp on radio %d\n", __func__, __LINE__, index);
     }
-#endif
+#endif // PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
 
 Exit:
     if ((set_radio_params_fn = get_platform_set_radio_fn()) != NULL) {
@@ -1104,11 +1104,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     platform_create_vap_t set_vap_params_fn;
     unsigned int i;
     char msg[2048];
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
+#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
     int set_acl = 0;
 #else
     int filtermode;
-#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_
+#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
     //bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 #if defined(VNTXER5_PORT)
     char mld_ifname[32];
@@ -1170,13 +1170,14 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             vap->u.bss_info.preassoc.minimum_advertised_mcs,
             vap->u.bss_info.preassoc.sixGOpInfoMinRate);
 
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
+#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
         if ((vap->u.bss_info.enabled == 1) &&
             ((vap->u.bss_info.mac_filter_enable == TRUE) ||
              (interface->vap_info.u.bss_info.mac_filter_enable != vap->u.bss_info.mac_filter_enable))) {
             set_acl = 1;
         }
-#endif
+#endif // PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
+
 #if defined(VNTXER5_PORT)
         if (platform_set_intf_mld_bonding(radio, interface) != RETURN_OK) {
             wifi_hal_error_print("%s:%d: vap index:%d failed to create bonding\n", __func__, __LINE__,
@@ -1397,7 +1398,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
+#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
             if (set_acl == 1) {
                 nl80211_set_acl(interface);
             }
@@ -1422,7 +1423,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     __LINE__, vap->vap_index);
                 return RETURN_ERR;
             }
-#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_
+#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
             re_configure_steering_mac_list(interface);
         }
         if (vap->vap_mode == wifi_vap_mode_ap) {
