@@ -1499,7 +1499,7 @@ static void wifi_hal_steering_check_sta_status(wifi_interface_info_t *interface)
             cli_cfg = &ptr->bm_client_cfg;
             int32_t rssi_change_assoc = WIFI_STEERING_RSSI_UNCHANGED;
             key = to_mac_str(ptr->mac_addr, sta_mac_str);
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
+#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
             wifi_associated_dev3_t associated_dev;
             memset(&associated_dev, 0, sizeof(associated_dev));
             //wifi_getApDeviceRSSI API is not available on CMXB7 platform. So, we need to use this API to get rssi value.
@@ -1512,7 +1512,7 @@ static void wifi_hal_steering_check_sta_status(wifi_interface_info_t *interface)
                 int snr = (rssi > -90) ? (rssi + 90) : 0;
                 wifi_hal_dbg_print("old_snr::%d,New updated snr:%d for MAC=%s - vap:%d:: rssi:%d\n", ptr->rssi, snr, key, ptr->vap_index, rssi);
                 ptr->rssi = snr;
-#endif
+#endif // _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
             }
 
             wifi_hal_dbg_print("Check RSSI state for associated MAC=%s snr=%d hXing=%d, lXing=%d\n",
@@ -3248,7 +3248,7 @@ int ovs_add_br(const char *brname)
 {
     wifi_hal_dbg_print("%s:%d ovs-vsctl add-br %s\n", __func__, __LINE__, brname);
     int rc = run_prog("/usr/bin/ovs-vsctl",
-#if !defined(_PLATFORM_RASPBERRYPI_)
+#if !defined(_PLATFORM_RASPBERRYPI_) && !defined(_PLATFORM_BANANAPI_R4_)
                       "--may-exist",
 #endif
                       "add-br", brname);
@@ -3299,7 +3299,7 @@ int ovs_br_add_if(const char *brname, const char *ifname)
 {
     wifi_hal_dbg_print("%s:%d ovs-vsctl add-port %s %s\n", __func__, __LINE__, brname, ifname);
     int rc = run_prog("/usr/bin/ovs-vsctl",
-#if !defined(_PLATFORM_RASPBERRYPI_)
+#if !defined(_PLATFORM_RASPBERRYPI_) && !defined(_PLATFORM_BANANAPI_R4_)
                       "--may-exist",
 #endif
                       "add-port", brname, ifname);
@@ -10169,7 +10169,7 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
 
     wifi_hal_dbg_print("%s:%d: Enter %s %d\n", __func__, __LINE__, to_mac_str(addr, mac_str), reason);
 
-#if defined(_PLATFORM_RASPBERRYPI_)
+#if defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
     wifi_device_callbacks_t *callbacks;
 
     callbacks = get_hal_device_callbacks();
@@ -10179,7 +10179,7 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
             callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(addr, mac_str), 0);
         }
     }
-#endif
+#endif // _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
     if (drv->device_ap_sme) {
         return wifi_sta_remove(interface, addr, 0, reason);
     }
@@ -12032,7 +12032,7 @@ int nl80211_set_acl_mode(wifi_interface_info_t *interface, uint32_t mac_filter_m
     int ret = RETURN_OK;
     wifi_vap_info_t *vap;
     vap = &interface->vap_info;
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
+#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
     struct nl_msg *msg;
     struct nlattr *acl;
     unsigned int policy;
@@ -12110,7 +12110,7 @@ int nl80211_set_acl_mode(wifi_interface_info_t *interface, uint32_t mac_filter_m
             vap->u.bss_info.mac_filter_mode = mac_filter_mode;
         }
     }
-#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_
+#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
     return ret;
 }
 
@@ -13606,7 +13606,7 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_KEY);
 
     nla_put_u8(msg, NL80211_ATTR_KEY_IDX, params->key_idx);
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(_PLATFORM_RASPBERRYPI_)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
     // NL80211_KEY_DEFAULT_BEACON enum is not defined in broadcom nl80211.h header
     nla_put_flag(msg, wpa_alg_bip(params->alg) ? NL80211_ATTR_KEY_DEFAULT_MGMT : NL80211_ATTR_KEY_DEFAULT);
 #else
