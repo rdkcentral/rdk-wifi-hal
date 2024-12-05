@@ -782,7 +782,62 @@ INT wifi_getApInterworkingServiceEnable(INT apIndex, BOOL *output_bool)
 
 INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCHAR *frame, UINT len)
 {
-    return 0;
+    /*
+    No need for a netlink callback, sending a frame is "fire and forget"
+    Some drivers will call a netlink callback (if provided) to "ack" to userspace
+    that the frame was transmitted, but that's not particularly useful
+    */
+    struct nl_sock *socket = NULL;
+    struct nl_msg *msg = NULL;
+    int driver_id = -1;
+
+    wifi_hal_dbg_print("%s:%d: sending 80211 action frame on apIndex %u, freq %d\n", __func__,
+        __LINE__, apIndex, frequency);
+    socket = nl_socket_alloc();
+    if (!socket) {
+        wifi_hal_error_print("%s:%d: Failed to allocate netlink socket.\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    if (!genl_connect(socket)) {
+        wifi_hal_error_print("%s:%d: Failed to connect to netlink.\n", __func__, __LINE__);
+        nl_socket_free(socket);
+        return RETURN_ERR;
+    }
+
+    driver_id = genl_ctrl_resolve(socket, "nl80211");
+    if (!driver_id) {
+        wifi_hal_error_print("%s:%d: Failed to resolve nl80211 driver family.\n", __func__,
+            __LINE__);
+        nl_socket_free(socket);
+        return RETURN_ERR;
+    }
+
+    msg = nlmsg_alloc();
+    if (!msg) {
+        wifi_hal_error_print("%s:%d: Failed to allocate nlmsg\n", __func__, __LINE__);
+        nl_socket_free(socket);
+        return RETURN_ERR;
+    }
+
+    genlmsg_put(msg, 0, 0, driver_id, 0, 0, NL80211_CMD_FRAME, 0);
+    nla_put_u32(msg, NL80211_ATTR_IFINDEX, apIndex);
+    nla_put(msg, NL80211_ATTR_MAC, sizeof(mac_address_t), MacAddr);
+    nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ, frequency);
+    nla_put(msg, NL80211_ATTR_FRAME, len, frame);
+    int nl_send_res = nl_send_auto(socket, msg);
+    if (nl_send_res < 0) {
+        wifi_hal_error_print("%s:%d: Failed to send NL80211_CMD_FRAME to netlink. (%s)\n", __func__,
+            __LINE__, nl_geterror(nl_send_res));
+        nlmsg_free(msg);
+        nl_socket_free(socket);
+        return RETURN_ERR;
+    }
+    nlmsg_free(msg);
+    msg = NULL;
+    nl_socket_free(socket);
+    socket = NULL;
+    return RETURN_OK;
 }
 
 INT wifi_setDownStreamGroupAddress(INT apIndex, BOOL disabled)
