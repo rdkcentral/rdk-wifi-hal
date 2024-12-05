@@ -79,6 +79,7 @@ static unsigned char eapol_qos_info[] = {0x88,0x02,0x3c,0x00,0x04,0xf0,0x21,0x5f
 static unsigned char llc_info[] = {0xaa, 0xaa, 0x03, 0x00,0x00,0x00,0x88,0x8e};
 #endif
 
+
 static int scan_info_handler(struct nl_msg *msg, void *arg);
 
 struct family_data {
@@ -780,10 +781,10 @@ static void remove_station_from_other_interfaces(wifi_interface_info_t *interfac
     wifi_interface_info_t *iter;
     mac_addr_str_t sta_mac_str;
 
-    radio = get_radio_by_phy_index(interface->phy_index);
+    radio = get_radio_by_rdk_index(interface->rdk_radio_index);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d: radio with index %d is not found for interface %s (ifindex %d)\n", __func__, __LINE__,
-                           interface->phy_index, interface->name, interface->index);
+        wifi_hal_error_print("%s:%d: radio with rdk_radio_index %d is not found for interface %s (ifindex %d)\n",
+            __func__, __LINE__, interface->rdk_radio_index, interface->name, interface->index);
         return;
     }
 
@@ -1499,7 +1500,7 @@ static void wifi_hal_steering_check_sta_status(wifi_interface_info_t *interface)
             cli_cfg = &ptr->bm_client_cfg;
             int32_t rssi_change_assoc = WIFI_STEERING_RSSI_UNCHANGED;
             key = to_mac_str(ptr->mac_addr, sta_mac_str);
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
+#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
             wifi_associated_dev3_t associated_dev;
             memset(&associated_dev, 0, sizeof(associated_dev));
             //wifi_getApDeviceRSSI API is not available on CMXB7 platform. So, we need to use this API to get rssi value.
@@ -1512,7 +1513,7 @@ static void wifi_hal_steering_check_sta_status(wifi_interface_info_t *interface)
                 int snr = (rssi > -90) ? (rssi + 90) : 0;
                 wifi_hal_dbg_print("old_snr::%d,New updated snr:%d for MAC=%s - vap:%d:: rssi:%d\n", ptr->rssi, snr, key, ptr->vap_index, rssi);
                 ptr->rssi = snr;
-#endif
+#endif // _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
             }
 
             wifi_hal_dbg_print("Check RSSI state for associated MAC=%s snr=%d hXing=%d, lXing=%d\n",
@@ -2534,7 +2535,7 @@ void recv_link_status()
             if (tb[IFLA_IFNAME]) {
                 ifName = (char *)RTA_DATA(tb[IFLA_IFNAME]);
                 for (i = 0; ((i < g_wifi_hal.num_radios) && !found) ; i++) {
-                    radio = get_radio_by_rdk_index(i);
+                    radio = &g_wifi_hal.radio_info[i];
                     if (radio == NULL) continue;
                     if (radio->interface_map == NULL) continue;
                     interface = hash_map_get_first(radio->interface_map);
@@ -3255,7 +3256,7 @@ int ovs_add_br(const char *brname)
 {
     wifi_hal_dbg_print("%s:%d ovs-vsctl add-br %s\n", __func__, __LINE__, brname);
     int rc = run_prog("/usr/bin/ovs-vsctl",
-#if !defined(_PLATFORM_RASPBERRYPI_)
+#if !defined(_PLATFORM_RASPBERRYPI_) && !defined(_PLATFORM_BANANAPI_R4_)
                       "--may-exist",
 #endif
                       "add-br", brname);
@@ -3306,7 +3307,7 @@ int ovs_br_add_if(const char *brname, const char *ifname)
 {
     wifi_hal_dbg_print("%s:%d ovs-vsctl add-port %s %s\n", __func__, __LINE__, brname, ifname);
     int rc = run_prog("/usr/bin/ovs-vsctl",
-#if !defined(_PLATFORM_RASPBERRYPI_)
+#if !defined(_PLATFORM_RASPBERRYPI_) && !defined(_PLATFORM_BANANAPI_R4_)
                       "--may-exist",
 #endif
                       "add-port", brname, ifname);
@@ -4732,6 +4733,8 @@ static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
 
     nla_parse(tb, NL80211_BAND_ATTR_MAX, nla_data(nl_band), nla_len(nl_band), NULL);
 
+    wifi_hal_dbg_print("%s:%d:band_type:%d rdk_radio_index:%d\n",
+                __func__, __LINE__, nl_band->nla_type, radio->rdk_radio_index);
     if (tb[NL80211_BAND_ATTR_FREQS] == NULL) {
         wifi_hal_dbg_print("%s:%d: Frequency attributes not present\n", __func__, __LINE__);
         return NL_OK;
@@ -4739,6 +4742,7 @@ static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
 
     // get the hw mode also
     if ((mode = phy_info_freqs(radio, tb[NL80211_BAND_ATTR_FREQS], &band)) == NULL) {
+        wifi_hal_dbg_print("%s:%d: Mode returned from phy_info_freqs is NULL\n", __func__, __LINE__);
         return NL_OK;
     }
 
@@ -4839,30 +4843,34 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh;
     //unsigned int *cmd;
-#if !defined(VNTXER5_PORT)
     unsigned int j;
-#endif
     unsigned int phy_index = 0;
-    int rdk_radio_index;
+    int rdk_radio_indices[MAX_NUM_RADIOS];
+    int num_radios_mapped = MAX_NUM_RADIOS;
+    int ret = 0;
+
 #if defined(VNTXER5_PORT)
     int existing_radio_found = 0;
 #endif
     if (g_wifi_hal.num_radios > MAX_NUM_RADIOS) {
+        wifi_hal_dbg_print("%s:%d: Returning num radios:%d exceeds MAX:%d\n",
+            __func__, __LINE__, g_wifi_hal.num_radios, MAX_NUM_RADIOS);
         return NL_SKIP;
     }
-
-    gnlh = nlmsg_data(nlmsg_hdr(msg));
-
-    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
 #if !defined(VNTXER5_PORT)
     for (j = 0; j < g_wifi_hal.num_radios; j++)
     {
         if (strcmp(g_wifi_hal.radio_info[j].name, nla_get_string(tb[NL80211_ATTR_WIPHY_NAME])) == 0) {
+            wifi_hal_dbg_print("%s:%d: Returning phy:%s already configured earlier\n",
+                __func__, __LINE__, g_wifi_hal.radio_info[j].name);
             return NL_SKIP;
         }
     }
 #endif
+    gnlh = nlmsg_data(nlmsg_hdr(msg));
+
+    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
 #ifdef CONFIG_WIFI_EMULATOR
     static unsigned int interface_radio_index = 0;
@@ -4878,9 +4886,12 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     phy_index = nla_get_u32(tb[NL80211_ATTR_WIPHY]);
 #endif //CONFIG_WIFI_EMULATOR
 
-    rdk_radio_index = get_rdk_radio_index(phy_index);
-
-    if ( rdk_radio_index == -1 ) {
+    // Get the array of rdk_radio_indexes associated with this phy
+    memset(rdk_radio_indices, 0, sizeof(rdk_radio_indices));
+    ret = get_rdk_radio_indices(phy_index, rdk_radio_indices, &num_radios_mapped);
+    wifi_hal_info_print("%s:%d: [AH] For phy_index:%u, num_radios_mapped:%d, g_wifi_hal.num_radios:%d\n",
+                __func__, __LINE__, phy_index, num_radios_mapped, g_wifi_hal.num_radios);
+    if (ret != 0) {
         wifi_hal_error_print("%s:%d: Skipping for phy_index = %u, "
                    "since it is not present in the interface table\n",
                    __func__,__LINE__, phy_index);
@@ -4888,317 +4899,319 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     }
 
     //print_attributes(__func__, tb);
+    for (j=0; (j < num_radios_mapped && g_wifi_hal.num_radios < MAX_NUM_RADIOS); j++) {
 #if !defined(VNTXER5_PORT)
-    radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
-    memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
-#else
-    for (int i = 0; i < MAX_NUM_RADIOS; i++) {
-        if (g_wifi_hal.radio_info[i].index == phy_index) {
-            radio = &g_wifi_hal.radio_info[i];
-            existing_radio_found = 1;
-            break;
-        }
-    }
-    if (!existing_radio_found) {
         radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
-        g_wifi_hal.num_radios++;
-    }
+        memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
+#else
+        for (int i = 0; i < MAX_NUM_RADIOS; i++) {
+            if (g_wifi_hal.radio_info[i].index == phy_index) {
+                radio = &g_wifi_hal.radio_info[i];
+                existing_radio_found = 1;
+                break;
+            }
+        }
+        if (!existing_radio_found) {
+            radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
+            g_wifi_hal.num_radios++;
+        }
 #endif
 
-    if (tb[NL80211_ATTR_WIPHY]) {
-        radio->index = phy_index;
-        radio->rdk_radio_index = rdk_radio_index;
-        radio->capab.index = radio->index;
-    }
+        if (tb[NL80211_ATTR_WIPHY]) {
+            radio->index = phy_index;
+            radio->rdk_radio_index = rdk_radio_indices[j];
+            radio->capab.index = radio->index;
+        }
 
-    if (tb[NL80211_ATTR_WIPHY_NAME]) {
-        strcpy(radio->name, nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]));
-    }
+        if (tb[NL80211_ATTR_WIPHY_NAME]) {
+            strcpy(radio->name, nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]));
+        }
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT)
-    capa = &radio->driver_data.capa;
+        capa = &radio->driver_data.capa;
 
-    if (tb[NL80211_ATTR_MAX_NUM_SCAN_SSIDS]) {
-        capa->max_scan_ssids =
-            nla_get_u8(tb[NL80211_ATTR_MAX_NUM_SCAN_SSIDS]);
-    }
+        if (tb[NL80211_ATTR_MAX_NUM_SCAN_SSIDS]) {
+            capa->max_scan_ssids =
+                nla_get_u8(tb[NL80211_ATTR_MAX_NUM_SCAN_SSIDS]);
+        }
 
-    if (tb[NL80211_ATTR_MAX_NUM_SCHED_SCAN_SSIDS]) {
-        capa->max_sched_scan_ssids =
-            nla_get_u8(tb[NL80211_ATTR_MAX_NUM_SCHED_SCAN_SSIDS]);
-    }
+        if (tb[NL80211_ATTR_MAX_NUM_SCHED_SCAN_SSIDS]) {
+            capa->max_sched_scan_ssids =
+                nla_get_u8(tb[NL80211_ATTR_MAX_NUM_SCHED_SCAN_SSIDS]);
+        }
 
-    if (tb[NL80211_ATTR_MAX_NUM_SCHED_SCAN_PLANS] &&
-        tb[NL80211_ATTR_MAX_SCAN_PLAN_INTERVAL] &&
-        tb[NL80211_ATTR_MAX_SCAN_PLAN_ITERATIONS]) {
-        capa->max_sched_scan_plans =
-            nla_get_u32(tb[NL80211_ATTR_MAX_NUM_SCHED_SCAN_PLANS]);
+        if (tb[NL80211_ATTR_MAX_NUM_SCHED_SCAN_PLANS] &&
+            tb[NL80211_ATTR_MAX_SCAN_PLAN_INTERVAL] &&
+            tb[NL80211_ATTR_MAX_SCAN_PLAN_ITERATIONS]) {
+            capa->max_sched_scan_plans =
+                nla_get_u32(tb[NL80211_ATTR_MAX_NUM_SCHED_SCAN_PLANS]);
 
-        capa->max_sched_scan_plan_interval =
-            nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_INTERVAL]);
+            capa->max_sched_scan_plan_interval =
+                nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_INTERVAL]);
 
-        capa->max_sched_scan_plan_iterations =
-            nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_ITERATIONS]);
-    }
+            capa->max_sched_scan_plan_iterations =
+                nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_ITERATIONS]);
+        }
 
-    if (tb[NL80211_ATTR_MAX_MATCH_SETS]) {
-        capa->max_match_sets =
-            nla_get_u8(tb[NL80211_ATTR_MAX_MATCH_SETS]);
-    }
+        if (tb[NL80211_ATTR_MAX_MATCH_SETS]) {
+            capa->max_match_sets =
+                nla_get_u8(tb[NL80211_ATTR_MAX_MATCH_SETS]);
+        }
 
-    if (tb[NL80211_ATTR_MAC_ACL_MAX]) {
-        capa->max_acl_mac_addrs =
-            nla_get_u32(tb[NL80211_ATTR_MAC_ACL_MAX]);
-    }
+        if (tb[NL80211_ATTR_MAC_ACL_MAX]) {
+            capa->max_acl_mac_addrs =
+                nla_get_u32(tb[NL80211_ATTR_MAC_ACL_MAX]);
+        }
 
-    if (tb[NL80211_ATTR_SUPPORTED_IFTYPES]) {
-        struct nlattr *nl_mode;
-        int i;
+        if (tb[NL80211_ATTR_SUPPORTED_IFTYPES]) {
+            struct nlattr *nl_mode;
+            int i;
 
-        nla_for_each_nested(nl_mode, tb[NL80211_ATTR_SUPPORTED_IFTYPES], i) {
-            switch (nla_type(nl_mode)) {
-            case NL80211_IFTYPE_AP:
-                capa->flags |= WPA_DRIVER_FLAGS_AP;
-                break;
-            case NL80211_IFTYPE_MESH_POINT:
-                capa->flags |= WPA_DRIVER_FLAGS_MESH;
-                break;
-            case NL80211_IFTYPE_ADHOC:
-                capa->flags |= WPA_DRIVER_FLAGS_IBSS;
-                break;
-            case NL80211_IFTYPE_P2P_DEVICE:
-                capa->flags |=
-                    WPA_DRIVER_FLAGS_DEDICATED_P2P_DEVICE;
-                break;
-            case NL80211_IFTYPE_P2P_GO:
-                radio->driver_data.p2p_go_supported = 1;
-                break;
-            case NL80211_IFTYPE_P2P_CLIENT:
-                radio->driver_data.p2p_client_supported = 1;
-                break;
+            nla_for_each_nested(nl_mode, tb[NL80211_ATTR_SUPPORTED_IFTYPES], i) {
+                switch (nla_type(nl_mode)) {
+                case NL80211_IFTYPE_AP:
+                    capa->flags |= WPA_DRIVER_FLAGS_AP;
+                    break;
+                case NL80211_IFTYPE_MESH_POINT:
+                    capa->flags |= WPA_DRIVER_FLAGS_MESH;
+                    break;
+                case NL80211_IFTYPE_ADHOC:
+                    capa->flags |= WPA_DRIVER_FLAGS_IBSS;
+                    break;
+                case NL80211_IFTYPE_P2P_DEVICE:
+                    capa->flags |=
+                        WPA_DRIVER_FLAGS_DEDICATED_P2P_DEVICE;
+                    break;
+                case NL80211_IFTYPE_P2P_GO:
+                    radio->driver_data.p2p_go_supported = 1;
+                    break;
+                case NL80211_IFTYPE_P2P_CLIENT:
+                    radio->driver_data.p2p_client_supported = 1;
+                    break;
+                }
             }
         }
-    }
 
-    if (tb[NL80211_ATTR_INTERFACE_COMBINATIONS]) {
-        struct nlattr *nl_combi;
-        int rem_combi;
+        if (tb[NL80211_ATTR_INTERFACE_COMBINATIONS]) {
+            struct nlattr *nl_combi;
+            int rem_combi;
 
-        nla_for_each_nested(nl_combi, tb[NL80211_ATTR_INTERFACE_COMBINATIONS], rem_combi) {
-            if (wiphy_info_iface_comb_process(radio, nl_combi) > 0)
-                break;
-        }
-    }
-
-    if (tb[NL80211_ATTR_SUPPORTED_COMMANDS]) {
-        struct nlattr *nl_cmd;
-        int i;
-
-        nla_for_each_nested(nl_cmd, tb[NL80211_ATTR_SUPPORTED_COMMANDS], i) {
-            switch (nla_get_u32(nl_cmd)) {
-            case NL80211_CMD_AUTHENTICATE:
-                radio->driver_data.auth_supported = 1;
-                break;
-            case NL80211_CMD_CONNECT:
-                radio->driver_data.connect_supported = 1;
-                break;
-            case NL80211_CMD_START_SCHED_SCAN:
-                capa->sched_scan_supported = 1;
-                break;
-            case NL80211_CMD_PROBE_CLIENT:
-                radio->driver_data.poll_command_supported = 1;
-                break;
-            case NL80211_CMD_CHANNEL_SWITCH:
-                radio->driver_data.channel_switch_supported = 1;
-                break;
-            case NL80211_CMD_SET_QOS_MAP:
-                radio->driver_data.set_qos_map_supported = 1;
-                break;
-            case NL80211_CMD_UPDATE_FT_IES:
-                radio->driver_data.update_ft_ies_supported = 1;
-                break;
+            nla_for_each_nested(nl_combi, tb[NL80211_ATTR_INTERFACE_COMBINATIONS], rem_combi) {
+                if (wiphy_info_iface_comb_process(radio, nl_combi) > 0)
+                    break;
             }
         }
-    }
 
-    if (tb[NL80211_ATTR_CIPHER_SUITES]) {
-        int i, num;
-        u32 *ciphers;
+        if (tb[NL80211_ATTR_SUPPORTED_COMMANDS]) {
+            struct nlattr *nl_cmd;
+            int i;
 
-        num = nla_len(tb[NL80211_ATTR_CIPHER_SUITES]) / sizeof(u32);
-        ciphers = nla_data(tb[NL80211_ATTR_CIPHER_SUITES]);
-        for (i = 0; i < num; i++) {
-            u32 c = ciphers[i];
-
-            wifi_hal_info_print("%s:%d: nl80211: Supported cipher %02x-%02x-%02x:%d\n", __func__, __LINE__,
-                c >> 24, (c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff);
-
-            switch (c) {
-            case RSN_CIPHER_SUITE_CCMP_256:
-                capa->enc |= WPA_DRIVER_CAPA_ENC_CCMP_256;
-                break;
-            case RSN_CIPHER_SUITE_GCMP_256:
-                capa->enc |= WPA_DRIVER_CAPA_ENC_GCMP_256;
-                break;
-            case RSN_CIPHER_SUITE_CCMP:
-                capa->enc |= WPA_DRIVER_CAPA_ENC_CCMP;
-                break;
-            case RSN_CIPHER_SUITE_GCMP:
-                capa->enc |= WPA_DRIVER_CAPA_ENC_GCMP;
-                break;
-            case RSN_CIPHER_SUITE_TKIP:
-                capa->enc |= WPA_DRIVER_CAPA_ENC_TKIP;
-                break;
-            case RSN_CIPHER_SUITE_WEP104:
-                capa->enc |= WPA_DRIVER_CAPA_ENC_WEP104;
-                break;
-            case RSN_CIPHER_SUITE_WEP40:
-                capa->enc |= WPA_DRIVER_CAPA_ENC_WEP40;
-                break;
-            case RSN_CIPHER_SUITE_AES_128_CMAC:
-                capa->enc |= WPA_DRIVER_CAPA_ENC_BIP;
-                break;
-            case RSN_CIPHER_SUITE_BIP_GMAC_128:
-                capa->enc |= WPA_DRIVER_CAPA_ENC_BIP_GMAC_128;
-                break;
-            case RSN_CIPHER_SUITE_BIP_GMAC_256:
-                capa->enc |= WPA_DRIVER_CAPA_ENC_BIP_GMAC_256;
-                break;
-            case RSN_CIPHER_SUITE_BIP_CMAC_256:
-                capa->enc |= WPA_DRIVER_CAPA_ENC_BIP_CMAC_256;
-                break;
-            case RSN_CIPHER_SUITE_NO_GROUP_ADDRESSED:
-                capa->enc |= WPA_DRIVER_CAPA_ENC_GTK_NOT_USED;
-                break;
+            nla_for_each_nested(nl_cmd, tb[NL80211_ATTR_SUPPORTED_COMMANDS], i) {
+                switch (nla_get_u32(nl_cmd)) {
+                case NL80211_CMD_AUTHENTICATE:
+                    radio->driver_data.auth_supported = 1;
+                    break;
+                case NL80211_CMD_CONNECT:
+                    radio->driver_data.connect_supported = 1;
+                    break;
+                case NL80211_CMD_START_SCHED_SCAN:
+                    capa->sched_scan_supported = 1;
+                    break;
+                case NL80211_CMD_PROBE_CLIENT:
+                    radio->driver_data.poll_command_supported = 1;
+                    break;
+                case NL80211_CMD_CHANNEL_SWITCH:
+                    radio->driver_data.channel_switch_supported = 1;
+                    break;
+                case NL80211_CMD_SET_QOS_MAP:
+                    radio->driver_data.set_qos_map_supported = 1;
+                    break;
+                case NL80211_CMD_UPDATE_FT_IES:
+                    radio->driver_data.update_ft_ies_supported = 1;
+                    break;
+                }
             }
         }
-    }
 
-    if (tb[NL80211_ATTR_AKM_SUITES]) {
-        radio->driver_data.has_key_mgmt = 1;
-        capa->key_mgmt = get_akm_suites_info(tb[NL80211_ATTR_AKM_SUITES]);
+        if (tb[NL80211_ATTR_CIPHER_SUITES]) {
+            int i, num;
+            u32 *ciphers;
 
-        wifi_hal_info_print("%s:%d: nl80211: wiphy supported key_mgmt 0x%x\n", __func__, __LINE__,
-                capa->key_mgmt);
-    }
+            num = nla_len(tb[NL80211_ATTR_CIPHER_SUITES]) / sizeof(u32);
+            ciphers = nla_data(tb[NL80211_ATTR_CIPHER_SUITES]);
+            for (i = 0; i < num; i++) {
+                u32 c = ciphers[i];
 
-    if (tb[NL80211_ATTR_IFTYPE_AKM_SUITES]) {
-        struct nlattr *nl_if;
-        int rem_if;
+                wifi_hal_info_print("%s:%d: nl80211: Supported cipher %02x-%02x-%02x:%d\n", __func__, __LINE__,
+                    c >> 24, (c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff);
 
-        nla_for_each_nested(nl_if, tb[NL80211_ATTR_IFTYPE_AKM_SUITES], rem_if)
-            get_iface_akm_suites_info(radio, nl_if);
-    }
-
-    if (tb[NL80211_ATTR_OFFCHANNEL_TX_OK]) {
-        wifi_hal_info_print("%s:%d: nl80211: Using driver-based off-channel TX\n", __func__, __LINE__);
-        capa->flags |= WPA_DRIVER_FLAGS_OFFCHANNEL_TX;
-    }
-
-    if (tb[NL80211_ATTR_ROAM_SUPPORT]) {
-        wifi_hal_info_print("%s:%d: nl80211: Using driver-based roaming\n", __func__, __LINE__);
-        capa->flags |= WPA_DRIVER_FLAGS_BSS_SELECTION;
-    }
-
-    if (tb[NL80211_ATTR_MAX_REMAIN_ON_CHANNEL_DURATION]) {
-        capa->max_remain_on_chan = nla_get_u32(tb[NL80211_ATTR_MAX_REMAIN_ON_CHANNEL_DURATION]);
-    }
-
-    if (tb[NL80211_ATTR_SUPPORT_AP_UAPSD]) {
-        capa->flags |= WPA_DRIVER_FLAGS_AP_UAPSD;
-    }
-
-    if (tb[NL80211_ATTR_TDLS_SUPPORT]) {
-        wifi_hal_info_print("%s:%d: nl80211: TDLS supported\n", __func__, __LINE__);
-        capa->flags |= WPA_DRIVER_FLAGS_TDLS_SUPPORT;
-
-        if (tb[NL80211_ATTR_TDLS_EXTERNAL_SETUP]) {
-            wifi_hal_info_print("%s:%d: nl80211: TDLS external setup\n", __func__, __LINE__);
-            capa->flags |= WPA_DRIVER_FLAGS_TDLS_EXTERNAL_SETUP;
+                switch (c) {
+                case RSN_CIPHER_SUITE_CCMP_256:
+                    capa->enc |= WPA_DRIVER_CAPA_ENC_CCMP_256;
+                    break;
+                case RSN_CIPHER_SUITE_GCMP_256:
+                    capa->enc |= WPA_DRIVER_CAPA_ENC_GCMP_256;
+                    break;
+                case RSN_CIPHER_SUITE_CCMP:
+                    capa->enc |= WPA_DRIVER_CAPA_ENC_CCMP;
+                    break;
+                case RSN_CIPHER_SUITE_GCMP:
+                    capa->enc |= WPA_DRIVER_CAPA_ENC_GCMP;
+                    break;
+                case RSN_CIPHER_SUITE_TKIP:
+                    capa->enc |= WPA_DRIVER_CAPA_ENC_TKIP;
+                    break;
+                case RSN_CIPHER_SUITE_WEP104:
+                    capa->enc |= WPA_DRIVER_CAPA_ENC_WEP104;
+                    break;
+                case RSN_CIPHER_SUITE_WEP40:
+                    capa->enc |= WPA_DRIVER_CAPA_ENC_WEP40;
+                    break;
+                case RSN_CIPHER_SUITE_AES_128_CMAC:
+                    capa->enc |= WPA_DRIVER_CAPA_ENC_BIP;
+                    break;
+                case RSN_CIPHER_SUITE_BIP_GMAC_128:
+                    capa->enc |= WPA_DRIVER_CAPA_ENC_BIP_GMAC_128;
+                    break;
+                case RSN_CIPHER_SUITE_BIP_GMAC_256:
+                    capa->enc |= WPA_DRIVER_CAPA_ENC_BIP_GMAC_256;
+                    break;
+                case RSN_CIPHER_SUITE_BIP_CMAC_256:
+                    capa->enc |= WPA_DRIVER_CAPA_ENC_BIP_CMAC_256;
+                    break;
+                case RSN_CIPHER_SUITE_NO_GROUP_ADDRESSED:
+                    capa->enc |= WPA_DRIVER_CAPA_ENC_GTK_NOT_USED;
+                    break;
+                }
+            }
         }
-    }
 
-    if (tb[NL80211_ATTR_DEVICE_AP_SME]) {
-        /* XXX: undeclared in nl80211_copy.h, maybe needs to be fixed
-        u32 ap_sme_features_flags =
-            nla_get_u32(tb[NL80211_ATTR_DEVICE_AP_SME]);
+        if (tb[NL80211_ATTR_AKM_SUITES]) {
+            radio->driver_data.has_key_mgmt = 1;
+            capa->key_mgmt = get_akm_suites_info(tb[NL80211_ATTR_AKM_SUITES]);
 
-        if (ap_sme_features_flags & NL80211_AP_SME_SA_QUERY_OFFLOAD) {
-            capa->flags2 |= WPA_DRIVER_FLAGS2_SA_QUERY_OFFLOAD_AP;
-        }*/
-
-        radio->driver_data.device_ap_sme = 1;
-    }
-
-    wiphy_info_feature_flags(radio, tb[NL80211_ATTR_FEATURE_FLAGS]);
-    wiphy_info_ext_feature_flags(radio, tb[NL80211_ATTR_EXT_FEATURES]);
-    wiphy_info_probe_resp_offload(capa,
-                      tb[NL80211_ATTR_PROBE_RESP_OFFLOAD]);
-
-    if (tb[NL80211_ATTR_EXT_CAPA] && tb[NL80211_ATTR_EXT_CAPA_MASK] &&
-        radio->driver_data.extended_capa == NULL) {
-        radio->driver_data.extended_capa =
-            os_malloc(nla_len(tb[NL80211_ATTR_EXT_CAPA]));
-        if (radio->driver_data.extended_capa) {
-            os_memcpy(radio->driver_data.extended_capa,
-                  nla_data(tb[NL80211_ATTR_EXT_CAPA]),
-                  nla_len(tb[NL80211_ATTR_EXT_CAPA]));
-            radio->driver_data.extended_capa_len =
-                nla_len(tb[NL80211_ATTR_EXT_CAPA]);
+            wifi_hal_info_print("%s:%d: nl80211: wiphy supported key_mgmt 0x%x\n", __func__, __LINE__,
+                    capa->key_mgmt);
         }
-        radio->driver_data.extended_capa_mask =
-            os_malloc(nla_len(tb[NL80211_ATTR_EXT_CAPA_MASK]));
-        if (radio->driver_data.extended_capa_mask) {
-            os_memcpy(radio->driver_data.extended_capa_mask,
-                  nla_data(tb[NL80211_ATTR_EXT_CAPA_MASK]),
-                  nla_len(tb[NL80211_ATTR_EXT_CAPA_MASK]));
-        } else {
-            os_free(radio->driver_data.extended_capa);
-            radio->driver_data.extended_capa = NULL;
-            radio->driver_data.extended_capa_len = 0;
+
+        if (tb[NL80211_ATTR_IFTYPE_AKM_SUITES]) {
+            struct nlattr *nl_if;
+            int rem_if;
+
+            nla_for_each_nested(nl_if, tb[NL80211_ATTR_IFTYPE_AKM_SUITES], rem_if)
+                get_iface_akm_suites_info(radio, nl_if);
         }
-    }
 
-    wiphy_info_extended_capab(&radio->driver_data, tb[NL80211_ATTR_IFTYPE_EXT_CAPA]);
+        if (tb[NL80211_ATTR_OFFCHANNEL_TX_OK]) {
+            wifi_hal_info_print("%s:%d: nl80211: Using driver-based off-channel TX\n", __func__, __LINE__);
+            capa->flags |= WPA_DRIVER_FLAGS_OFFCHANNEL_TX;
+        }
 
-    wiphy_info_wowlan_triggers(capa,
-                   tb[NL80211_ATTR_WOWLAN_TRIGGERS_SUPPORTED]);
+        if (tb[NL80211_ATTR_ROAM_SUPPORT]) {
+            wifi_hal_info_print("%s:%d: nl80211: Using driver-based roaming\n", __func__, __LINE__);
+            capa->flags |= WPA_DRIVER_FLAGS_BSS_SELECTION;
+        }
 
-    if (tb[NL80211_ATTR_MAX_AP_ASSOC_STA]) {
-        capa->max_stations =
-            nla_get_u32(tb[NL80211_ATTR_MAX_AP_ASSOC_STA]);
-    }
+        if (tb[NL80211_ATTR_MAX_REMAIN_ON_CHANNEL_DURATION]) {
+            capa->max_remain_on_chan = nla_get_u32(tb[NL80211_ATTR_MAX_REMAIN_ON_CHANNEL_DURATION]);
+        }
 
-    if (tb[NL80211_ATTR_MAX_CSA_COUNTERS]) {
-        capa->max_csa_counters =
-            nla_get_u8(tb[NL80211_ATTR_MAX_CSA_COUNTERS]);
-    }
+        if (tb[NL80211_ATTR_SUPPORT_AP_UAPSD]) {
+            capa->flags |= WPA_DRIVER_FLAGS_AP_UAPSD;
+        }
 
-    if (tb[NL80211_ATTR_WIPHY_SELF_MANAGED_REG]) {
-        capa->flags |= WPA_DRIVER_FLAGS_SELF_MANAGED_REGULATORY;
-    }
+        if (tb[NL80211_ATTR_TDLS_SUPPORT]) {
+            wifi_hal_info_print("%s:%d: nl80211: TDLS supported\n", __func__, __LINE__);
+            capa->flags |= WPA_DRIVER_FLAGS_TDLS_SUPPORT;
+
+            if (tb[NL80211_ATTR_TDLS_EXTERNAL_SETUP]) {
+                wifi_hal_info_print("%s:%d: nl80211: TDLS external setup\n", __func__, __LINE__);
+                capa->flags |= WPA_DRIVER_FLAGS_TDLS_EXTERNAL_SETUP;
+            }
+        }
+
+        if (tb[NL80211_ATTR_DEVICE_AP_SME]) {
+            /* XXX: undeclared in nl80211_copy.h, maybe needs to be fixed
+            u32 ap_sme_features_flags =
+                nla_get_u32(tb[NL80211_ATTR_DEVICE_AP_SME]);
+
+            if (ap_sme_features_flags & NL80211_AP_SME_SA_QUERY_OFFLOAD) {
+                capa->flags2 |= WPA_DRIVER_FLAGS2_SA_QUERY_OFFLOAD_AP;
+            }*/
+
+            radio->driver_data.device_ap_sme = 1;
+        }
+
+        wiphy_info_feature_flags(radio, tb[NL80211_ATTR_FEATURE_FLAGS]);
+        wiphy_info_ext_feature_flags(radio, tb[NL80211_ATTR_EXT_FEATURES]);
+        wiphy_info_probe_resp_offload(capa,
+                        tb[NL80211_ATTR_PROBE_RESP_OFFLOAD]);
+
+        if (tb[NL80211_ATTR_EXT_CAPA] && tb[NL80211_ATTR_EXT_CAPA_MASK] &&
+            radio->driver_data.extended_capa == NULL) {
+            radio->driver_data.extended_capa =
+                os_malloc(nla_len(tb[NL80211_ATTR_EXT_CAPA]));
+            if (radio->driver_data.extended_capa) {
+                os_memcpy(radio->driver_data.extended_capa,
+                    nla_data(tb[NL80211_ATTR_EXT_CAPA]),
+                    nla_len(tb[NL80211_ATTR_EXT_CAPA]));
+                radio->driver_data.extended_capa_len =
+                    nla_len(tb[NL80211_ATTR_EXT_CAPA]);
+            }
+            radio->driver_data.extended_capa_mask =
+                os_malloc(nla_len(tb[NL80211_ATTR_EXT_CAPA_MASK]));
+            if (radio->driver_data.extended_capa_mask) {
+                os_memcpy(radio->driver_data.extended_capa_mask,
+                    nla_data(tb[NL80211_ATTR_EXT_CAPA_MASK]),
+                    nla_len(tb[NL80211_ATTR_EXT_CAPA_MASK]));
+            } else {
+                os_free(radio->driver_data.extended_capa);
+                radio->driver_data.extended_capa = NULL;
+                radio->driver_data.extended_capa_len = 0;
+            }
+        }
+
+        wiphy_info_extended_capab(&radio->driver_data, tb[NL80211_ATTR_IFTYPE_EXT_CAPA]);
+
+        wiphy_info_wowlan_triggers(capa,
+                    tb[NL80211_ATTR_WOWLAN_TRIGGERS_SUPPORTED]);
+
+        if (tb[NL80211_ATTR_MAX_AP_ASSOC_STA]) {
+            capa->max_stations =
+                nla_get_u32(tb[NL80211_ATTR_MAX_AP_ASSOC_STA]);
+        }
+
+        if (tb[NL80211_ATTR_MAX_CSA_COUNTERS]) {
+            capa->max_csa_counters =
+                nla_get_u8(tb[NL80211_ATTR_MAX_CSA_COUNTERS]);
+        }
+
+        if (tb[NL80211_ATTR_WIPHY_SELF_MANAGED_REG]) {
+            capa->flags |= WPA_DRIVER_FLAGS_SELF_MANAGED_REGULATORY;
+        }
 
 #if HOSTAPD_VERSION >= 211
 #ifdef CONFIG_IEEE80211BE
-    if (tb[NL80211_ATTR_MLO_SUPPORT]) {
-        capa->flags2 |= WPA_DRIVER_FLAGS2_MLO;
-    }
+        if (tb[NL80211_ATTR_MLO_SUPPORT]) {
+            capa->flags2 |= WPA_DRIVER_FLAGS2_MLO;
+        }
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT
-    if (tb[NL80211_ATTR_WDEV]) {
-        radio->dev_id = nla_get_u64(tb[NL80211_ATTR_WDEV]);
-    }
+        if (tb[NL80211_ATTR_WDEV]) {
+            radio->dev_id = nla_get_u64(tb[NL80211_ATTR_WDEV]);
+        }
 
 #if !defined(VNTXER5_PORT)
-    g_wifi_hal.num_radios++;
+        g_wifi_hal.num_radios++;
 #endif
+    }
     return NL_SKIP;
 
 }
 
 static int wiphy_get_info_handler(struct nl_msg *msg, void *arg)
 {
-    wifi_radio_info_t *radio;
+    wifi_radio_info_t *radio = (wifi_radio_info_t *) arg;
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh;
     struct nlattr *nl_band;//, *nl_cmd;
@@ -5206,14 +5219,19 @@ static int wiphy_get_info_handler(struct nl_msg *msg, void *arg)
     struct nlattr *tb_comb[NUM_NL80211_IFACE_COMB];
     int rem_combi;
     int rem_band;
-    gnlh = nlmsg_data(nlmsg_hdr(msg));
-    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
-    if (tb[NL80211_ATTR_WIPHY]) {
-        radio = get_radio_by_phy_index(nla_get_u32(tb[NL80211_ATTR_WIPHY]));
-    } else {
+    enum nl80211_band band_type, radio_nl80211_band_type;
+    int num_bands=0;
+
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: radio is null, returning\n", __func__, __LINE__);
         return NL_OK;
     }
-    //wifi_hal_dbg_print("%s:%d: wiphy index:%d name:%s\n", __func__, __LINE__, radio->index, radio->name);
+
+    wifi_hal_dbg_print("%s:%d:wiphy index:%d rdk_radio_index:%d name:%s\n",
+        __func__, __LINE__, radio->index, radio->rdk_radio_index, radio->name);
+    gnlh = nlmsg_data(nlmsg_hdr(msg));
+    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
+
     radio->capab.cipherSupported = 0;
     if (tb[NL80211_ATTR_CIPHER_SUITES]) {
         phy_info_cipher(radio, tb[NL80211_ATTR_CIPHER_SUITES]);
@@ -5222,12 +5240,25 @@ static int wiphy_get_info_handler(struct nl_msg *msg, void *arg)
     memset((unsigned char *)radio->hw_modes, 0, NUM_NL80211_BANDS*sizeof(struct hostapd_hw_modes));
     if (tb[NL80211_ATTR_WIPHY_BANDS] != NULL) {
         nla_for_each_nested(nl_band, tb[NL80211_ATTR_WIPHY_BANDS], rem_band) {
-            phy_info_band(radio, nl_band);
-            radio->capab.numSupportedFreqBand++;
+            //Check whether nl_band is applicable to the radio and process only
+            //if it is applicable
+            band_type = nl_band->nla_type;
+            radio_nl80211_band_type = get_nl80211_band_from_rdk_radio_index(radio->rdk_radio_index);
+            wifi_hal_dbg_print("%s:%d:band_type:%d radio_band_type:%d processing:%s\n",
+                __func__, __LINE__, band_type, radio_nl80211_band_type,
+                ((band_type == radio_nl80211_band_type)? "yes":"no"));
+            if (band_type == radio_nl80211_band_type) {
+                phy_info_band(radio, nl_band);
+                radio->capab.numSupportedFreqBand++;
+            }
+            num_bands++;
         }
     } else {
         wifi_hal_info_print("%s:%d: Bands attribute not present in radio index:%d\n", __func__, __LINE__, radio->index);
     }
+    wifi_hal_dbg_print("%s:%d:Num bands supported:%d by phy index:%d\n", __func__, __LINE__, num_bands, radio->index);
+    wifi_hal_dbg_print("%s:%d:Configured bands supported:%d in radio based on rdk_radio_index:%d\n",
+        __func__, __LINE__, radio->capab.numSupportedFreqBand, radio->rdk_radio_index);
     if (tb[NL80211_ATTR_INTERFACE_COMBINATIONS]) {
         nla_for_each_nested(nl_combi, tb[NL80211_ATTR_INTERFACE_COMBINATIONS], rem_combi) {
             static struct nla_policy iface_combination_policy[NUM_NL80211_IFACE_COMB] = {
@@ -5335,20 +5366,36 @@ void interface_free(wifi_interface_info_t *interface)
 int interface_info_handler(struct nl_msg *msg, void *arg)
 {
     //unsigned int radio_index;
-    wifi_radio_info_t *radio;
+    wifi_radio_info_t *radio = (wifi_radio_info_t *)arg;
     wifi_interface_info_t *interface = NULL;
     wifi_vap_info_t *vap;
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh;
+    int rdk_radio_index_of_intf = -1;
+
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: radio is null, returning\n", __func__, __LINE__);
+        return NL_SKIP;
+    }
+
+    wifi_hal_dbg_print("%s:%d: Invoked for rdk_radio_index:%d\n",
+                    __func__, __LINE__, radio->rdk_radio_index);
 
     gnlh = nlmsg_data(nlmsg_hdr(msg));
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
     //print_attributes(__func__, tb);
     if (tb[NL80211_ATTR_WIPHY]) {
-        radio = get_radio_by_phy_index(nla_get_u32(tb[NL80211_ATTR_WIPHY]));
-
         if (radio != NULL && tb[NL80211_ATTR_IFNAME]) {
+            // Get rdk radio index associated with interface name and continue only if it is
+            // matching with radio's rdk index
+            rdk_radio_index_of_intf = get_rdk_radio_index_from_interface_name(nla_get_string(tb[NL80211_ATTR_IFNAME]));
+            if (rdk_radio_index_of_intf != radio->rdk_radio_index) {
+                //Interface does not belong to this radio, return
+                wifi_hal_dbg_print("%s:%d: Interface:%s not part of rdk_radio_index:%d\n",
+                    __func__, __LINE__, nla_get_string(tb[NL80211_ATTR_IFNAME]), radio->rdk_radio_index);
+                return NL_SKIP;
+            }
 #ifdef CONFIG_WIFI_EMULATOR
             update_interface_names(nla_get_u32(tb[NL80211_ATTR_WIPHY]), nla_get_string(tb[NL80211_ATTR_IFNAME]));
 #endif
@@ -5367,6 +5414,8 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                 hash_map_remove(radio->interface_map, interface->name);
             }
             interface->phy_index = radio->index;
+            interface->rdk_radio_index = radio->rdk_radio_index;
+
             vap = &interface->vap_info;
 
             if (tb[NL80211_ATTR_IFINDEX]) {
@@ -5475,35 +5524,12 @@ static int phy_info_handler(struct nl_msg *msg, void *arg)
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     struct nlattr *nl_band;
     int rem_band;
-    enum nl80211_band band = 0;
+    enum nl80211_band band = 0, radio_nl80211_band_type;
+    int i;
 
     nla_parse(tb_msg, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
         genlmsg_attrlen(gnlh, 0), NULL);
 
-    if (tb_msg[NL80211_ATTR_WIPHY]) {
-        radio = get_radio_by_phy_index(nla_get_u32(tb_msg[NL80211_ATTR_WIPHY]));
-        if (radio == NULL) {
-            return NL_SKIP;
-        }
-    } else {
-        return NL_OK;
-    }
-
-#ifdef CMXB7_PORT
-    if (tb_msg[NL80211_ATTR_INTERFACE_COMBINATIONS])
-    {
-        struct nlattr *nl_combi;
-        int rem_combi;
-
-        nla_for_each_nested(nl_combi, tb_msg[NL80211_ATTR_INTERFACE_COMBINATIONS], rem_combi)
-        {
-                if ( wiphy_info_iface_comb_process(radio, nl_combi) > 0 )
-                        break;
-        }
-    }
-#endif
-
-    wifi_hal_dbg_print("%s:%d: wiphy index:%d name:%s\n", __func__, __LINE__, radio->index, radio->name);
     if (!tb_msg[NL80211_ATTR_WIPHY_BANDS])
         return NL_SKIP;
 
@@ -5515,11 +5541,35 @@ static int phy_info_handler(struct nl_msg *msg, void *arg)
             return NL_OK;
         }
 
-        if (phy_info_freqs(radio, tb_msg[NL80211_BAND_ATTR_FREQS], &band) == NULL) {
-            return NL_OK;
+        for (i = 0; i < g_wifi_hal.num_radios; i++) {
+            radio = &g_wifi_hal.radio_info[i];
+            radio_nl80211_band_type = get_nl80211_band_from_rdk_radio_index(radio->rdk_radio_index);
+            wifi_hal_dbg_print("%s:%d: wiphy index:%d name:%s rdk_radio_index:%d\n",
+                __func__, __LINE__, radio->index, radio->name, radio->rdk_radio_index);
+            wifi_hal_dbg_print("%s:%d:band_type:%d radio_band_type:%d processing:%s\n",
+                __func__, __LINE__, nl_band->nla_type, radio_nl80211_band_type,
+                ((nl_band->nla_type == radio_nl80211_band_type)? "yes":"no"));
+
+            if (nl_band->nla_type == radio_nl80211_band_type) {
+                if (phy_info_freqs(radio, tb_msg[NL80211_BAND_ATTR_FREQS], &band) == NULL) {
+                    return NL_OK;
+                }
+    #ifdef CMXB7_PORT
+                if (tb_msg[NL80211_ATTR_INTERFACE_COMBINATIONS])
+                {
+                    struct nlattr *nl_combi;
+                    int rem_combi;
+
+                    nla_for_each_nested(nl_combi, tb_msg[NL80211_ATTR_INTERFACE_COMBINATIONS], rem_combi)
+                    {
+                        if ( wiphy_info_iface_comb_process(radio, nl_combi) > 0 )
+                            break;
+                    }
+                }
+    #endif
+            }
         }
     }
-
     return NL_SKIP;
 }
 
@@ -5865,7 +5915,7 @@ int init_nl80211()
         return -1;
     }
 
-    //wifi_hal_dbg_print("%s:%d: Number of radios: %d\n", __func__, __LINE__, g_wifi_hal.num_radios);
+    wifi_hal_dbg_print("%s:%d: Number of supported radios: %d\n", __func__, __LINE__, g_wifi_hal.num_radios);
 
     g_wifi_hal.link_fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
     if (g_wifi_hal.link_fd  > 0) {
@@ -5946,12 +5996,12 @@ int init_nl80211()
             return -1;
         }
         nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index);
-        if (nl80211_send_and_recv(msg, interface_info_handler, &g_wifi_hal, NULL, NULL)) {
+        if (nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL)) {
             return -1;
         }
 
-        //wifi_hal_dbg_print("%s:%d: Found %d interfaces on radio index:%d\n", __func__, __LINE__,
-        //    hash_map_count(radio->interface_map), radio->index);
+        wifi_hal_dbg_print("%s:%d: Found %d interfaces on radio index:%d\n", __func__, __LINE__,
+            hash_map_count(radio->interface_map), radio->index);
     }
 
     return 0;
@@ -6131,7 +6181,7 @@ int nl80211_init_primary_interfaces()
     wifi_interface_info_t *interface;
 
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
-        radio = get_radio_by_rdk_index(i);
+        radio = &g_wifi_hal.radio_info[i];
         if (radio->radio_presence == false) {
             wifi_hal_error_print("%s:%d: Skip the Radio %d .This is sleeping in ECO mode \n", __func__, __LINE__, radio->index);
             continue;
@@ -6155,7 +6205,7 @@ int nl80211_init_primary_interfaces()
 
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
 
-        if ((ret = nl80211_send_and_recv(msg, interface_info_handler, &g_wifi_hal, NULL, NULL))) {
+        if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
             wifi_hal_error_print("%s:%d: Error updating %s interface on dev:%d error: %d (%s) \n",
                 __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
             return -1;
@@ -6195,7 +6245,7 @@ int nl80211_init_radio_info()
         }
 
         if (nl80211_send_and_recv(msg, wiphy_get_info_handler,
-            &g_wifi_hal, NULL, NULL)) {
+            radio, NULL, NULL)) {
             return -1;
         }
     }
@@ -6754,7 +6804,7 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
 
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
 
-        if ((ret = nl80211_send_and_recv(msg, interface_info_handler, &g_wifi_hal, NULL, NULL))) {
+        if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
             wifi_hal_error_print("%s:%d: Error updating %s interface on dev:%d error: %d (%s)\n",
                         __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
             return -1;
@@ -6771,7 +6821,7 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_STATION);
     }
 
-    if ((ret = nl80211_send_and_recv(msg, interface_info_handler, &g_wifi_hal, NULL, NULL))) {
+    if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
         wifi_hal_error_print("%s:%d: Error updating %s interface on dev:%d error: %d (%s)\n",
             __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
         return -1;
@@ -6829,7 +6879,7 @@ int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wif
     }
 #endif
 
-    if ((ret = nl80211_send_and_recv(msg, interface_info_handler, &g_wifi_hal, NULL, NULL))) {
+    if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
         wifi_hal_error_print("%s:%d: Error creating %s interface on dev:%d error: %d (%s)\n", __func__, __LINE__,
             ifname, radio->index, ret, strerror(-ret));
         return -1;
@@ -10172,7 +10222,7 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
 
     wifi_hal_dbg_print("%s:%d: Enter %s %d\n", __func__, __LINE__, to_mac_str(addr, mac_str), reason);
 
-#if defined(_PLATFORM_RASPBERRYPI_)
+#if defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
     wifi_device_callbacks_t *callbacks;
 
     callbacks = get_hal_device_callbacks();
@@ -10182,7 +10232,7 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
             callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(addr, mac_str), 0);
         }
     }
-#endif
+#endif // _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
     if (drv->device_ap_sme) {
         return wifi_sta_remove(interface, addr, 0, reason);
     }
@@ -12829,48 +12879,27 @@ int wifi_drv_set_supp_port(void *priv, int authorized)
 
 int wifi_hal_purgeScanResult(unsigned int vap_index, unsigned char *sta_mac)
 {
-    wifi_radio_info_t *radio;
     wifi_interface_info_t *interface = NULL;
-    unsigned char radio_index = 0;
     char *key = NULL;
     mac_addr_str_t sta_mac_str;
 
-    if ((vap_index % 2) == 0) {
-        radio_index = 0;
-    } else {
-        radio_index = 1;
-    }
+    // Get interface from vap_index and use that interface instead of
+    // obtaining interface from radio_info.
+    interface = get_interface_by_vap_index(vap_index);
+    wifi_hal_dbg_print("%s:%d: Obtained interface:%p for vap_index:%d\n",
+        __func__, __LINE__, interface, vap_index);
 
-    if((radio_index >= MAX_NUM_RADIOS) || (vap_index >= MAX_VAP) || sta_mac == NULL)
-    {
-        return RETURN_ERR;
-    }
-
-    radio = get_radio_by_phy_index(radio_index);
-
-    if (radio != NULL) {
-        interface = hash_map_get_first(radio->interface_map);
-        while (interface != NULL) {
-            if (interface->vap_info.vap_index == vap_index) {
-                break;
-            }
-            interface = hash_map_get_next(radio->interface_map, interface);
-        }
-        if ((interface != NULL) && (interface->scan_info_map != NULL)) {
-            void *free_scan_info_map;
-            key = to_mac_str(sta_mac, sta_mac_str);
-            wifi_hal_dbg_print("%s:%d: [SCAN] clear old ssid entry %s\r\n", __func__, __LINE__, key);
-            pthread_mutex_lock(&interface->scan_info_mutex);
-            free_scan_info_map = hash_map_remove(interface->scan_info_map, key);
-            pthread_mutex_unlock(&interface->scan_info_mutex);
-            free(free_scan_info_map);
-        } else {
-            return RETURN_ERR;
-        }
+    if ((interface != NULL) && (interface->scan_info_map != NULL)) {
+        void *free_scan_info_map;
+        key = to_mac_str(sta_mac, sta_mac_str);
+        wifi_hal_dbg_print("%s:%d: [SCAN] clear old ssid entry %s\r\n", __func__, __LINE__, key);
+        pthread_mutex_lock(&interface->scan_info_mutex);
+        free_scan_info_map = hash_map_remove(interface->scan_info_map, key);
+        pthread_mutex_unlock(&interface->scan_info_mutex);
+        free(free_scan_info_map);
     } else {
         return RETURN_ERR;
     }
-
     return RETURN_OK;
 }
 
@@ -13039,6 +13068,7 @@ int wifi_drv_set_operstate(void *priv, int state)
     wifi_hal_info_print("%s:%d: Enter, interface:%s bridge:%s driver operation state:%d\n",
             __func__, __LINE__, interface->name, vap->bridge_name, state);
 
+#ifndef CONFIG_WIFI_EMULATOR
     if (interface->vap_configured == true) {
         if (state == 1) {
             wifi_hal_dbg_print("%s:%d: VAP already configured\n", __func__, __LINE__);
@@ -13054,6 +13084,7 @@ int wifi_drv_set_operstate(void *priv, int state)
             return 0;
         }
     }
+#endif
 
     if (vap->u.bss_info.enabled == false && vap->u.sta_info.enabled == false) {
         wifi_hal_dbg_print("%s:%d: VAP not enabled\n", __func__, __LINE__);
@@ -13092,6 +13123,9 @@ int wifi_drv_set_operstate(void *priv, int state)
         }
     }
 #else
+    if ((interface->vap_configured == true)  && (vap->vap_mode == wifi_vap_mode_sta)) {
+        close(interface->u.sta.sta_sock_fd);
+    }
     sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock_fd < 0) {
         wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
@@ -13632,7 +13666,7 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_KEY);
 
     nla_put_u8(msg, NL80211_ATTR_KEY_IDX, params->key_idx);
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(_PLATFORM_RASPBERRYPI_)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
     // NL80211_KEY_DEFAULT_BEACON enum is not defined in broadcom nl80211.h header
     nla_put_flag(msg, wpa_alg_bip(params->alg) ? NL80211_ATTR_KEY_DEFAULT_MGMT : NL80211_ATTR_KEY_DEFAULT);
 #else
@@ -14450,7 +14484,7 @@ static size_t wifi_drv_get_rnr_colocation_len(void *priv, size_t *current_len)
     }
 
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
-        radio = get_radio_by_rdk_index(i);
+        radio = &g_wifi_hal.radio_info[i];
         if (radio && radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
             break;
         }
@@ -14519,7 +14553,7 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
     }
 
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
-        radio = get_radio_by_rdk_index(i);
+        radio = &g_wifi_hal.radio_info[i];
         if (radio && radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
             break;
         }

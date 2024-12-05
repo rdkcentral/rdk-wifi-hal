@@ -350,6 +350,7 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 0, 0, "radio1", "wlan0"},
 #endif
 #endif
+
 };
 #endif
 
@@ -358,6 +359,37 @@ const wifi_driver_info_t  driver_info = {
     "pi4",
     "cfg80211",
     {"RaspBerry","RaspBerry","PI","PI","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    platform_pre_init,
+    platform_post_init,
+    platform_set_radio,
+    platform_set_radio_pre_init,
+    platform_pre_create_vap,
+    platform_create_vap,
+    platform_get_ssid_default,
+    platform_get_keypassphrase_default,
+    platform_get_radius_key_default,
+    platform_get_wps_pin_default,
+    platform_get_country_code_default,
+    platform_wps_event,
+    platform_flags_init,
+    platform_get_aid,
+    platform_free_aid,
+    platform_sync_done,
+    platform_update_radio_presence,
+    platform_set_txpower,
+    platform_set_offload_mode,
+    platform_get_acl_num,
+    platform_get_vendor_oui,
+    platform_set_neighbor_report,
+    platform_get_radio_phytemperature,
+    platform_set_dfs,
+    platform_get_radio_caps,
+#endif
+
+#ifdef BANANA_PI_PORT // for reference device platforms
+    "bpi4",
+    "cfg80211",
+    {"Banana Filogic Wireless Gateway","Banana","PI","PI","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
     platform_pre_init,
     platform_post_init,
     platform_set_radio,
@@ -1271,17 +1303,57 @@ int get_interface_name_from_radio_index(uint8_t radio_index, char *interface_nam
     return RETURN_ERR;
 }
 
-int get_rdk_radio_index(unsigned int phy_index)
+int get_rdk_radio_index_from_interface_name(char *interface_name)
 {
-    const wifi_interface_name_idex_map_t *map;
-    unsigned int i;
+    uint8_t i = 0;
+    const wifi_interface_name_idex_map_t *map = NULL;
     for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
         map = &interface_index_map[i];
-        if ( phy_index == map->phy_index ) {
+        if ((strcmp(interface_name, map->interface_name) == 0))  {
+            wifi_hal_dbg_print("%s:%d rdk_radio_index:%d for interface:%s\n",
+                __func__, __LINE__, map->rdk_radio_index, interface_name);
             return map->rdk_radio_index;
         }
     }
+    wifi_hal_dbg_print("%s:%d rdk_radio_index:%d for interface:%s\n",
+        __func__, __LINE__, -1, interface_name);
     return -1;
+}
+
+int get_rdk_radio_indices(unsigned int phy_index, int *rdk_radio_indices, int *num_radios_mapped)
+{
+    uint8_t i = 0;
+    int num_radios = 0;
+    int max_radios;
+
+    if (rdk_radio_indices == NULL || num_radios_mapped == NULL) {
+        return RETURN_ERR;
+    }
+    max_radios = *num_radios_mapped;
+
+    for (i = 0; i < get_sizeof_radio_interfaces_map(); i++) {
+        if (l_radio_interface_map[i].phy_index == phy_index ) {
+            if (num_radios < max_radios) {
+                rdk_radio_indices[num_radios] = l_radio_interface_map[i].radio_index;
+                num_radios++;
+            } else {
+                wifi_hal_error_print("%s:%d: Not adding rdk radio%u, "
+                   "since exceeding max_radios:%d\n",
+                   __func__,__LINE__, i, max_radios);
+            }
+        }
+    }
+    *num_radios_mapped = num_radios;
+    if (num_radios == 0) {
+        return RETURN_ERR;
+    }
+    wifi_hal_dbg_print("%s:%d: Filled rdk_radio_indices, size:%d\n",
+        __func__, __LINE__, *num_radios_mapped);
+    for (i = 0; i < *num_radios_mapped; i++) {
+        wifi_hal_dbg_print("%u ", rdk_radio_indices[i]);
+    }
+    wifi_hal_dbg_print("\n");
+    return RETURN_OK;
 }
 
 int is_backhaul_interface(wifi_interface_info_t *interface)
@@ -1458,7 +1530,7 @@ int get_interface_name_from_vap_index(unsigned int vap_index, char *interface_na
     wifi_radio_info_t *radio;
 
     for (l_index = 0; l_index < g_wifi_hal.num_radios; l_index++) {
-        radio = get_radio_by_rdk_index(l_index);
+        radio = &g_wifi_hal.radio_info[l_index];
         total_num_of_vaps += radio->capab.maxNumberVAPs;
     }
 
@@ -1495,21 +1567,6 @@ wifi_radio_info_t *get_radio_by_rdk_index(wifi_radio_index_t index)
     return NULL;
 }
 
-
-wifi_radio_info_t *get_radio_by_phy_index(wifi_radio_index_t index)
-{
-    wifi_radio_info_t *radio;
-    unsigned int i;
-
-    for (i = 0; i < g_wifi_hal.num_radios; i++) {
-        radio = &g_wifi_hal.radio_info[i];
-        if (radio->index == index) {
-            return radio;
-        }
-    }
-
-    return NULL;
-}
 
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index)
 {
@@ -3235,6 +3292,24 @@ enum nl80211_band wifi_freq_band_to_nl80211_band(wifi_freq_bands_t band)
     }
 }
 
+enum nl80211_band get_nl80211_band_from_rdk_radio_index(unsigned int rdk_radio_index)
+{
+    switch(rdk_radio_index) {
+        case 0:
+            return NL80211_BAND_2GHZ;
+        case 1:
+            return NL80211_BAND_5GHZ;
+        case 2:
+    #if HOSTAPD_VERSION >= 210
+            return NL80211_BAND_6GHZ;
+    #endif
+        default:
+            //not supported case
+            return NUM_NL80211_BANDS;
+
+    }
+}
+
 const char* get_chan_dfs_state(struct hostapd_channel_data *chan)
 {
     switch (chan->flag & HOSTAPD_CHAN_DFS_MASK) {
@@ -3258,7 +3333,7 @@ int get_total_num_of_vaps(void)
     wifi_radio_info_t *radio;
 
     for (l_index = 0; l_index < g_wifi_hal.num_radios; l_index++) {
-        radio = get_radio_by_rdk_index(l_index);
+        radio = &g_wifi_hal.radio_info[l_index];
         total_num_of_vaps += radio->capab.maxNumberVAPs;
     }
 
