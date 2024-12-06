@@ -13039,6 +13039,7 @@ int wifi_drv_set_operstate(void *priv, int state)
     wifi_hal_info_print("%s:%d: Enter, interface:%s bridge:%s driver operation state:%d\n",
             __func__, __LINE__, interface->name, vap->bridge_name, state);
 
+#ifndef CONFIG_WIFI_EMULATOR
     if (interface->vap_configured == true) {
         if (state == 1) {
             wifi_hal_dbg_print("%s:%d: VAP already configured\n", __func__, __LINE__);
@@ -13054,6 +13055,7 @@ int wifi_drv_set_operstate(void *priv, int state)
             return 0;
         }
     }
+#endif
 
     if (vap->u.bss_info.enabled == false && vap->u.sta_info.enabled == false) {
         wifi_hal_dbg_print("%s:%d: VAP not enabled\n", __func__, __LINE__);
@@ -13092,6 +13094,12 @@ int wifi_drv_set_operstate(void *priv, int state)
         }
     }
 #else
+    if ((interface->vap_configured == true)  && (vap->vap_mode == wifi_vap_mode_sta)) {
+	 if (interface->u.sta.sta_sock_fd != 0) {
+             close(interface->u.sta.sta_sock_fd);
+             interface->u.sta.sta_sock_fd = 0;
+         }
+    }
     sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock_fd < 0) {
         wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
