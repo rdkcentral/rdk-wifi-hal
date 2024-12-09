@@ -7,12 +7,12 @@
 #include "nvram_api.h"
 #endif // defined(WLDM_21_2)
 #include "wlcsm_lib_wl.h"
-#if defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#if defined (ENABLED_EDPD)
 #include <fcntl.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#endif // defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#endif // defined (ENABLED_EDPD)
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) 
 #include <rdk_nl80211_hal.h>
@@ -88,13 +88,13 @@ static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char
 int sta_disassociated(int ap_index, char *mac, int reason);
 int sta_deauthenticated(int ap_index, char *mac, int reason);
 int sta_associated(int ap_index, wifi_associated_dev_t *associated_dev);
-#if defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#if defined (ENABLED_EDPD)
 static int check_edpdctl_enabled();
 static int check_dpd_feature_enabled();
 static int enable_echo_feature_and_power_control_configs(void);
 int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down);
 int platform_set_gpio_config_for_ecomode(const int wl_idx, const bool eco_pwr_down);
-#endif // defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#endif // defined (ENABLED_EDPD)
 
 #ifndef NEWPLATFORM_PORT
 static char const *bss_nvifname[] = {
@@ -419,7 +419,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         return RETURN_ERR;
     }
 
-#if defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#if defined (ENABLED_EDPD)
     int ret = 0;
     if (operationParam->EcoPowerDown) {
         /* Enable eco mode feature and power control configurations. */
@@ -434,23 +434,26 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
            wifi_hal_dbg_print("%s:%d: Failed to enable ECO mode for radio index:%d\n", __func__, __LINE__, index);
         }
 
+#ifdef _SR213_PRODUCT_REQ_
         //Disconnect the GPIO
         ret = platform_set_gpio_config_for_ecomode(index, true);
         if (ret != RETURN_OK) {
             wifi_hal_dbg_print("%s:%d: Failed to disconnect gpio for radio index:%d\n", __func__, __LINE__, index);
         }
+#endif
     } else {
         /* Enable eco mode feature and power control configurations. */
         ret = enable_echo_feature_and_power_control_configs();
         if (ret != RETURN_OK) {
             wifi_hal_error_print("%s:%d: Failed to enable EDPD ECO Mode feature\n", __func__, __LINE__);
         }
-
+#ifdef _SR213_PRODUCT_REQ_
         //Connect the GPIO
         ret = platform_set_gpio_config_for_ecomode(index, false);
         if (ret != RETURN_OK) {
             wifi_hal_dbg_print("%s:%d: Failed to connect gpio for radio index:%d\n", __func__, __LINE__, index);
         }
+#endif
 
         //Disable ECO mode for radio
         ret = platform_set_ecomode_for_radio(index, false);
@@ -458,7 +461,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
             wifi_hal_dbg_print("%s:%d: Failed to disable ECO mode for radio index:%d\n", __func__, __LINE__, index);
         }
     }
-#endif // defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#endif // defined (ENABLED_EDPD)
 
     if (radio->radio_presence == false) {
         wifi_hal_dbg_print("%s:%d Skip this radio %d. This is in sleeping mode\n", __FUNCTION__, __LINE__, index);
@@ -1707,7 +1710,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
 
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT 
 
-#if defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#if defined (ENABLED_EDPD)
 /* EDPD - WLAN Power down control support APIs. */
 #define GPIO_PIN_24G_RADIO 101
 #define GPIO_PIN_5G_RADIO 102
@@ -2006,7 +2009,7 @@ int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down)
 
     return rc;
 }
-#endif // defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#endif // defined (ENABLED_EDPD)
 
 int platform_set_txpower(void* priv, uint txpower)
 {
