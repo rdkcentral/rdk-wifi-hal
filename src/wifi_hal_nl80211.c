@@ -1757,6 +1757,11 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         mgmt_type = WIFI_MGMT_FRAME_TYPE_AUTH;
         wifi_hal_dbg_print("%s:%d: Received auth frame from: %s\n", __func__, __LINE__,
                            to_mac_str(sta, sta_mac_str));
+        if (is_core_acl_drop_mgmt_frame(interface, sta)) {
+            wifi_hal_dbg_print("%s:%d: Station present in acl list dropping auth req\n",
+                                   __func__, __LINE__);
+            return -1;
+        }
         if (callbacks->steering_event_callback != 0) {
             handle_auth_req_event_for_bm(interface, sta, sig_dbm);
         }
