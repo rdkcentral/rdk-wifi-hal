@@ -107,6 +107,74 @@ void init_radius_config(wifi_interface_info_t *interface)
     }
 }
 
+void set_interface_vendor_ies(wifi_interface_info_t* interface) {
+
+
+    struct hostapd_bss_config *conf = NULL;
+    wifi_vap_info_t* vap_info = NULL;
+    USHORT ves_len = 0;
+    struct wpabuf* ve_wpabuf = NULL;
+
+    if (interface == NULL) {
+        wifi_hal_dbg_print("%s:%d: interface is NULL\n", __func__, __LINE__);
+        return;
+    }
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_dbg_print("%s:%d: interface is not AP mode\n", __func__, __LINE__);
+        return;
+    }
+    
+    conf = &interface->u.ap.conf;
+
+    if (conf->vendor_elements) {
+        // Free previously allocated vendor elements
+        wpabuf_free(conf->vendor_elements);
+        conf->vendor_elements = NULL;
+    }
+
+    /* Vendor OUI IEs */
+    platform_get_vendor_oui_t platform_get_vendor_oui_fn = get_platform_vendor_oui_fn();
+    if (platform_get_vendor_oui_fn != NULL) {
+        char vendor_oui[128] = {0};
+        struct wpabuf *elems = NULL;
+
+        if (platform_get_vendor_oui_fn(vendor_oui, sizeof(vendor_oui)) == 0) {
+            wifi_hal_dbg_print("%s:%d: vendor_oui = %s \n", __func__, __LINE__,vendor_oui);
+            
+            if (elems = wpabuf_parse_bin(vendor_oui)) {
+                conf->vendor_elements = elems;
+            }
+        }
+    }
+
+    // At this point, conf->vendor_elements is either NULL or allocated with 
+
+    // Add custom added vendor elements if allocated
+    vap_info = &interface->vap_info;
+    ves_len = vap_info->u.bss_info.vendor_elements_len;
+
+    wifi_hal_dbg_print("%s:%d: ves_len = %d\n", __func__, __LINE__, ves_len);
+
+    if (vap_info->vap_mode == wifi_vap_mode_ap && ves_len > 0
+                                               && (ve_wpabuf = wpabuf_alloc(ves_len))) {
+        UCHAR* ve_s = vap_info->u.bss_info.vendor_elements;
+
+        wpabuf_put_data(ve_wpabuf, (void*) ve_s, ves_len);
+        wifi_hal_info_print("%s:%d: Adding %d vendor elements\n", __func__, __LINE__, ves_len);
+        if (conf->vendor_elements) {
+            // Add custom vendor elements to vendor elements defined above (suchh as OUI, if any)
+            // The first conf->vendor_elements and ve_wpabuf are freed in the wpabuf_concat func
+            conf->vendor_elements = wpabuf_concat(conf->vendor_elements, ve_wpabuf);
+        } else {
+            // Set custom vendor IEs as vendor elements since no vendor IEs are defined previously
+            // Lifetime will be handled by hostapd 
+            conf->vendor_elements = ve_wpabuf;
+        }
+        wpa_hexdump_buf(MSG_DEBUG, "Created vendor elements:", conf->vendor_elements);
+    }
+}
+
+
 void init_hostap_bss(wifi_interface_info_t *interface)
 {
     struct hostapd_bss_config *conf;
@@ -250,22 +318,10 @@ void init_hostap_bss(wifi_interface_info_t *interface)
     conf->bss_load_update_period = 360000;
 #endif
 
-    /* Vendor Specific IE */
-    platform_get_vendor_oui_t platform_get_vendor_oui_fn = get_platform_vendor_oui_fn();
-    if (platform_get_vendor_oui_fn != NULL) {
-        char vendor_oui[128] = {0};
-        struct wpabuf *elems = NULL;
+    set_interface_vendor_ies(interface);
 
-        if (platform_get_vendor_oui_fn(vendor_oui, sizeof(vendor_oui)) == 0) {
-            wifi_hal_dbg_print("%s:%d: vendor_oui = %s \n", __func__, __LINE__,vendor_oui);
-            elems = wpabuf_parse_bin(vendor_oui);
-
-            if (elems) {
-                conf->vendor_elements = elems;
-            }
-        }
-    }
 }
+
 
 void init_oem_config(wifi_interface_info_t *interface)
 {
