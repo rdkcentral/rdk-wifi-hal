@@ -1886,25 +1886,30 @@ int pick_akm_suite(int sel)
     if (0) {
 #ifdef CONFIG_IEEE80211R
     } else if (sel & WPA_KEY_MGMT_FT_PSK) {
-        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT FT/PSK", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT FT/PSK\n", __func__, __LINE__);
         return  WPA_KEY_MGMT_FT_PSK;
 #endif /* CONFIG_IEEE80211R */
+#ifdef CONFIG_SAE
+    } else if (sel & WPA_KEY_MGMT_SAE) {
+        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT SAE\n", __func__, __LINE__);
+        return WPA_KEY_MGMT_SAE;
+#endif
 #ifdef CONFIG_IEEE80211W
     } else if (sel & WPA_KEY_MGMT_IEEE8021X_SHA256) {
-        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT 802.1X with SHA256", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT 802.1X with SHA256\n", __func__, __LINE__);
         return  WPA_KEY_MGMT_IEEE8021X_SHA256;
     } else if (sel & WPA_KEY_MGMT_PSK_SHA256) {
-        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT PSK with SHA256", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT PSK with SHA256\n", __func__, __LINE__);
         return  WPA_KEY_MGMT_PSK_SHA256;
 #endif /* CONFIG_IEEE80211W */
     } else if (sel & WPA_KEY_MGMT_IEEE8021X) {
-       wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT 802.1X", __func__, __LINE__);
+       wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT 802.1X\n", __func__, __LINE__);
        return WPA_KEY_MGMT_IEEE8021X;
     } else if (sel & WPA_KEY_MGMT_PSK) {
-        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT WPA-PSK", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT WPA-PSK\n", __func__, __LINE__);
         return WPA_KEY_MGMT_PSK;
     } else {
-        wifi_hal_dbg_print("%s:%d: WPA: Failed to select authenticated key management type", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d: WPA: Failed to select authenticated key management type\n", __func__, __LINE__);
         return -1;
     }
 }
@@ -3111,7 +3116,7 @@ int create_ecomode_interfaces(void)
           radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
           memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
           radio->radio_presence = false;
-          radio->index =  l_radio_interface_map[radioIndex].radio_index; // Random index values causes set_interface_properties failing in update vap info
+          radio->index =  l_radio_interface_map[radioIndex].phy_index;
           radio->rdk_radio_index = l_radio_interface_map[radioIndex].radio_index;
           radio->capab.index = radio->index;
           sprintf(radio->name, "%s", l_radio_interface_map[radioIndex].radio_name);

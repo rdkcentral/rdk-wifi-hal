@@ -957,10 +957,22 @@ static struct hostapd_channel_data *hw_mode_get_channel(struct hostapd_hw_modes 
 
 static struct hostapd_hw_modes *get_hw_mode(struct hostapd_iface *iface)
 {
+    enum hostapd_hw_mode hw_mode = iface->conf->hw_mode;
+
     for (int i = 0; i < iface->num_hw_features; i++) {
-        if (iface->hw_features[i].mode == iface->conf->hw_mode && iface->freq > 0 &&
+        if (iface->hw_features[i].mode == hw_mode && iface->freq > 0 &&
             hw_mode_get_channel(&iface->hw_features[i], iface->freq, NULL)) {
             return &iface->hw_features[i];
+        }
+    }
+
+    if (hw_mode == HOSTAPD_MODE_IEEE80211G) {
+        hw_mode = HOSTAPD_MODE_IEEE80211B;
+        for (int i = 0; i < iface->num_hw_features; i++) {
+            if (iface->hw_features[i].mode == hw_mode && iface->freq > 0 &&
+                hw_mode_get_channel(&iface->hw_features[i], iface->freq, NULL)) {
+                return &iface->hw_features[i];
+            }
         }
     }
 
@@ -2481,8 +2493,10 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
 
         if (data.key_mgmt & WPA_KEY_MGMT_NONE) {
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, WPA_KEY_MGMT_NONE);
+            wpa_sm_set_param(sm, WPA_PARAM_PAIRWISE, WPA_CIPHER_NONE);
+            wpa_sm_set_param(sm, WPA_PARAM_GROUP, WPA_CIPHER_NONE);
         } else {
-            sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_PSK_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+            sel = (WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_PSK_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
             key_mgmt = pick_akm_suite(sel); 
 
             if (key_mgmt == -1) {
@@ -2514,9 +2528,14 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
 
             if (sec->mode == wifi_security_mode_wpa2_personal) {
                 sel = (WPA_KEY_MGMT_PSK | wpa_key_mgmt_11w);
-                wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, WPA_KEY_MGMT_PSK);
             } else if (sec->mode == wifi_security_mode_wpa2_enterprise) {
                 sel = (WPA_KEY_MGMT_IEEE8021X | wpa_key_mgmt_11w);
+            } else if (sec->mode == wifi_security_mode_wpa3_transition) {
+                sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w);
+            } else if (sec->mode == wifi_security_mode_wpa3_personal) {
+                sel = (WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w);
+            } else if (sec->mode == wifi_security_mode_wpa3_enterprise) {
+                sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w);
             } else {
                 wifi_hal_error_print("Unsupported security mode : 0x%x\n", sec->mode);
                 return;

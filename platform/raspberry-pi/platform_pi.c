@@ -682,7 +682,8 @@ INT wifi_getApInterworkingServiceEnable(INT apIndex, BOOL *output_bool)
 
 INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCHAR *frame, UINT len)
 {
-    return 0;
+    wifi_hal_send_mgmt_frame(apIndex, MacAddr, frame, len, frequency);
+    return RETURN_OK;
 }
 
 INT wifi_setDownStreamGroupAddress(INT apIndex, BOOL disabled)
