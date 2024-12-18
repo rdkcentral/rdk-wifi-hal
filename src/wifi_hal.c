@@ -891,13 +891,21 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                 } else if (ret != 0) {
                     wifi_hal_error_print("%s:%d: Error switching channel ret:%d\n", __func__,
                         __LINE__, ret);
-                    return RETURN_ERR;
+                    if (ret == -EOPNOTSUPP) {
+                        wifi_hal_dbg_print(
+                            "%s:%d Try updation of hostap config params for EOPNOTSUPP error\n",
+                            __func__, __LINE__);
+                        goto try_hostap_config_update;
+                    } else {
+                        return RETURN_ERR;
+                    }
                 }
             }
             goto Exit;
         }
     }
 
+try_hostap_config_update:
     if (radio->configured && radio->oper_param.enable) {
         update_hostap_radio_param(radio, operationParam);
     }
