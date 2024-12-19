@@ -797,13 +797,21 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                 } else if (ret != 0) {
                     wifi_hal_error_print("%s:%d: Error switching channel ret:%d\n", __func__,
                         __LINE__, ret);
-                    return RETURN_ERR;
+                    if (ret == -EOPNOTSUPP) {
+                        wifi_hal_dbg_print(
+                            "%s:%d Try updation of hostap config params for EOPNOTSUPP error\n",
+                            __func__, __LINE__);
+                        goto try_hostap_config_update;
+                    } else {
+                        return RETURN_ERR;
+                    }
                 }
             }
             goto Exit;
         }
     }
 
+try_hostap_config_update:
     if (radio->configured && radio->oper_param.enable) {
         update_hostap_radio_param(radio, operationParam);
     }
@@ -825,12 +833,12 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         goto reload_config;
     }
 
-#if !defined(_PLATFORM_RASPBERRYPI_)
+#if !defined(_PLATFORM_RASPBERRYPI_) && !defined(_PLATFORM_BANANAPI_R4_)
     // Call Vendor HAL
     if (wifi_setRadioDfsAtBootUpEnable(index,operationParam->DfsEnabledBootup) != 0) {
         wifi_hal_dbg_print("%s:%d:Failed to Enable DFSAtBootUp on radio %d\n", __func__, __LINE__, index);
     }
-#endif
+#endif // PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
 
 Exit:
     if ((set_radio_params_fn = get_platform_set_radio_fn()) != NULL) {
@@ -1077,6 +1085,7 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
 
     interface->wpa_s.driver = &g_wpa_supplicant_driver_nl80211_ops;
     dl_list_init(&interface->wpa_s.bss);
+    dl_list_init(&interface->wpa_s.bss_tmp_disallowed);
 
     return RETURN_OK;
 }
@@ -1123,7 +1132,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     int set_acl = 0;
 #else
     int filtermode;
-#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_
+#endif
     //bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 #if defined(VNTXER5_PORT)
     char mld_ifname[32];
@@ -1192,6 +1201,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             set_acl = 1;
         }
 #endif
+
 #if defined(VNTXER5_PORT)
         if (platform_set_intf_mld_bonding(radio, interface) != RETURN_OK) {
             wifi_hal_error_print("%s:%d: vap index:%d failed to create bonding\n", __func__, __LINE__,
