@@ -774,6 +774,8 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         radio->oper_param.channelWidth = operationParam->channelWidth;
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
         radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
+        memcpy(radio->oper_param.channel_map, operationParam->channel_map,
+            sizeof(radio->oper_param.channel_map));
 
 #ifdef CMXB7_PORT
         if( ((radio->oper_param.band == WIFI_FREQUENCY_5_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5H_BAND))) {
