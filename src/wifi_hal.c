@@ -46,6 +46,17 @@
 
 #define MAC_ADDRESS_LEN 6
 
+#ifdef CONFIG_WIFI_EMULATOR
+#define RADIO_INDEX_ASSERT_RC(radioIndex, retcode) \
+    do { \
+        int _index = (int)radioIndex; \
+        if ((_index >= (MAX_NUM_SIMULATED_CLIENT)) || (_index < 0)) { \
+            wifi_hal_error_print("%s: INCORRECT radioIndex = %d numRadios = %d\n", \
+                    __FUNCTION__, _index, MAX_NUM_SIMULATED_CLIENT); \
+            return retcode; \
+        } \
+    } while (0)
+#else
 #define RADIO_INDEX_ASSERT_RC(radioIndex, retcode) \
     do { \
         int _index = (int)radioIndex; \
@@ -55,6 +66,7 @@
             return retcode; \
         } \
     } while (0)
+#endif
 
 #define AP_INDEX_ASSERT_RC(apIndex, retcode) \
     do { \
@@ -97,6 +109,19 @@ extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
 #if !defined(CMXB7_PORT)
 wifi_hal_priv_t g_wifi_hal;
 #endif
+
+INT wifi_hal_getInterfaceMap(wifi_interface_name_idex_map_t *if_map, unsigned int max_entries,
+    unsigned int *if_map_size)
+{
+    *if_map_size = get_sizeof_interfaces_index_map();
+    if (max_entries < *if_map_size) {
+        wifi_hal_error_print("%s:%d: Invalid buffer size %d, expected %d\n", __func__, __LINE__,
+            max_entries, *if_map_size);
+        return RETURN_ERR;
+    }
+    get_wifi_interface_info_map(if_map);
+    return RETURN_OK;
+}
 
 INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 {

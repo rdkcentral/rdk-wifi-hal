@@ -4560,11 +4560,15 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     defined(SCXER10_PORT) || defined(SCXF10_PORT)
     int existing_radio_found = 0;
 #endif
+#ifdef CONFIG_WIFI_EMULATOR
+  if (g_wifi_hal.num_radios > MAX_NUM_SIMULATED_CLIENT) {
+#else
 #ifndef FEATURE_SINGLE_PHY
     if (g_wifi_hal.num_radios > MAX_NUM_RADIOS) {
 #else //FEATURE_SINGLE_PHY
     if (g_wifi_hal.num_radios >= MAX_NUM_RADIOS) {
 #endif //FEATURE_SINGLE_PHY
+#endif //CONFIG_WIFI_EMULATOR
         wifi_hal_dbg_print("%s:%d: Returning num radios:%d exceeds MAX:%d\n",
             __func__, __LINE__, g_wifi_hal.num_radios, MAX_NUM_RADIOS);
         return NL_SKIP;
@@ -4631,7 +4635,11 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
     memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
 #else
+#ifdef CONFIG_WIFI_EMULATOR
+    for (int i = 0; i < MAX_NUM_SIMULATED_CLIENT; i++) {
+#else
     for (int i = 0; i < MAX_NUM_RADIOS; i++) {
+#endif
         if (g_wifi_hal.radio_info[i].index == phy_index) {
             radio = &g_wifi_hal.radio_info[i];
             existing_radio_found = 1;
@@ -5666,8 +5674,13 @@ int init_nl80211()
 
     // dump all phy info
     g_wifi_hal.num_radios = 0;
+#ifdef CONFIG_WIFI_EMULATOR
+    memset((unsigned char *)g_wifi_hal.radio_info, 0, MAX_NUM_SIMULATED_CLIENT*sizeof(wifi_radio_info_t));
+    for (int i = 0; i < MAX_NUM_SIMULATED_CLIENT; i++) {
+#else
     memset((unsigned char *)g_wifi_hal.radio_info, 0, MAX_NUM_RADIOS*sizeof(wifi_radio_info_t));
     for (int i = 0; i < MAX_NUM_RADIOS; i++) {
+#endif
         g_wifi_hal.radio_info[i].index = -1;
     }
     init_interface_map();
