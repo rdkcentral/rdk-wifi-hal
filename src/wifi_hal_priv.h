@@ -103,6 +103,11 @@ extern "C" {
 #endif
 
 #define EM_CFG_FILE "/nvram/EasymeshCfg.json"
+
+#ifdef CONFIG_WIFI_EMULATOR
+#define MAX_NUM_SIMULATED_CLIENT (MAX_NUM_RADIOS*100)
+#endif
+
 /*
  * Copyright (c) 2003-2013, Jouni Malinen <j@w1.fi>
  * Licensed under the BSD-3 License
@@ -577,7 +582,11 @@ typedef struct {
     struct nl_handle *nl_event;
     unsigned int port_bitmap[32];
     unsigned int num_radios;
+#ifdef CONFIG_WIFI_EMULATOR
+     wifi_radio_info_t radio_info[MAX_NUM_SIMULATED_CLIENT];
+#else
     wifi_radio_info_t radio_info[MAX_NUM_RADIOS];
+#endif
     wifi_device_callbacks_t device_callbacks;
     wifi_hal_platform_flags_t platform_flags;
     pthread_mutex_t	nl_create_socket_lock;
@@ -729,6 +738,8 @@ INT wifi_hal_wps_pin_init(char *pin);
 INT wifi_hal_hostApGetErouter0Mac(char *out);
 INT wifi_hal_send_mgmt_frame_response(int ap_index, int type, int status, int status_code, uint8_t *frame, uint8_t *mac, int len, int rssi);
 void wifi_hal_deauth(int vap_index, int status, uint8_t *mac);
+INT wifi_hal_getInterfaceMap(wifi_interface_name_idex_map_t *if_map, unsigned int max_entries,
+    unsigned int *if_map_size);
 INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal);
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss);
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);

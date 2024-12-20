@@ -1311,7 +1311,7 @@ static unsigned int get_sizeof_radio_interfaces_map(void)
 
 BOOL is_wifi_hal_vap_private(UINT ap_index)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if ((interface_index_map[index].index == ap_index) &&
                 (strncmp(interface_index_map[index].vap_name, "private_ssid", strlen("private_ssid")) == 0)) {
@@ -1323,7 +1323,7 @@ BOOL is_wifi_hal_vap_private(UINT ap_index)
 
 BOOL is_wifi_hal_vap_xhs(UINT ap_index)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if ((interface_index_map[index].index == ap_index) &&
                 (strncmp(interface_index_map[index].vap_name, "iot_ssid", strlen("iot_ssid")) == 0)) {
@@ -1335,7 +1335,7 @@ BOOL is_wifi_hal_vap_xhs(UINT ap_index)
 
 BOOL is_wifi_hal_vap_hotspot(UINT ap_index)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if ((interface_index_map[index].index == ap_index) &&
                 (strncmp(interface_index_map[index].vap_name, "hotspot", strlen("hotspot")) == 0)) {
@@ -1347,7 +1347,7 @@ BOOL is_wifi_hal_vap_hotspot(UINT ap_index)
 
 BOOL is_wifi_hal_vap_hotspot_from_interfacename(char *interface_name)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if ((strcmp(interface_index_map[index].interface_name, interface_name) == 0) &&
                 (strncmp(interface_index_map[index].vap_name, "hotspot", strlen("hotspot")) == 0)) {
@@ -1387,7 +1387,7 @@ wifi_vap_info_t* get_wifi_vap_info_from_interfacename(char *interface_name)
 
 BOOL is_wifi_hal_6g_radio_from_interfacename(char *interface_name)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     wifi_radio_info_t *radio;
 
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
@@ -1410,7 +1410,7 @@ BOOL is_wifi_hal_6g_radio_from_interfacename(char *interface_name)
 
 BOOL is_wifi_hal_vap_hotspot_open(UINT ap_index)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if ((interface_index_map[index].index == ap_index) &&
                 (strncmp(interface_index_map[index].vap_name, "hotspot_open", strlen("hotspot_open")) == 0)) {
@@ -1422,7 +1422,7 @@ BOOL is_wifi_hal_vap_hotspot_open(UINT ap_index)
 
 BOOL is_wifi_hal_vap_lnf(UINT ap_index)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if ((interface_index_map[index].index == ap_index) &&
                 (strncmp(interface_index_map[index].vap_name, "lnf", strlen("lnf")) == 0)) {
@@ -1434,7 +1434,7 @@ BOOL is_wifi_hal_vap_lnf(UINT ap_index)
 
 BOOL is_wifi_hal_vap_lnf_psk(UINT ap_index)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if ((interface_index_map[index].index == ap_index) &&
                 (strncmp(interface_index_map[index].vap_name, "lnf_psk", strlen("lnf_psk")) == 0)) {
@@ -1446,7 +1446,7 @@ BOOL is_wifi_hal_vap_lnf_psk(UINT ap_index)
 
 BOOL is_wifi_hal_vap_mesh(UINT ap_index)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if ((interface_index_map[index].index == ap_index) &&
                 (strncmp(interface_index_map[index].vap_name, "mesh", strlen("mesh")) == 0)) {
@@ -1458,7 +1458,7 @@ BOOL is_wifi_hal_vap_mesh(UINT ap_index)
 
 BOOL is_wifi_hal_vap_mesh_backhaul(UINT ap_index)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if ((interface_index_map[index].index == ap_index) &&
                 (strncmp(interface_index_map[index].vap_name, "mesh_backhaul", strlen("mesh_backhaul")) == 0)) {
@@ -1470,7 +1470,7 @@ BOOL is_wifi_hal_vap_mesh_backhaul(UINT ap_index)
 
 BOOL is_wifi_hal_vap_hotspot_secure(UINT ap_index)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if ((interface_index_map[index].index == ap_index) &&
                 (strncmp(interface_index_map[index].vap_name, "hotspot_secure", strlen("hotspot_secure")) == 0)) {
@@ -1482,7 +1482,7 @@ BOOL is_wifi_hal_vap_hotspot_secure(UINT ap_index)
 
 BOOL is_wifi_hal_vap_lnf_radius(UINT ap_index)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if ((interface_index_map[index].index == ap_index) &&
                 (strncmp(interface_index_map[index].vap_name, "lnf_radius", strlen("lnf_radius")) == 0)) {
@@ -1494,7 +1494,7 @@ BOOL is_wifi_hal_vap_lnf_radius(UINT ap_index)
 
 BOOL is_wifi_hal_vap_mesh_sta(UINT ap_index)
 {
-    unsigned char index = 0;
+    unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if ((interface_index_map[index].index == ap_index) &&
                 (strncmp(interface_index_map[index].vap_name, "mesh_sta", strlen("mesh_sta")) == 0)) {
@@ -4055,14 +4055,14 @@ int wifi_channelBandwidth_from_str(const char *str, wifi_channelBandwidth_t *ban
 #ifdef CONFIG_WIFI_EMULATOR
 void init_interface_map(void)
 {
-    interface_index_map = (wifi_interface_name_idex_map_t *)malloc(sizeof(wifi_interface_name_idex_map_t)*MAX_CLIENTS);
+    interface_index_map = (wifi_interface_name_idex_map_t *)malloc(sizeof(wifi_interface_name_idex_map_t)*MAX_NUM_SIMULATED_CLIENT);
     if (interface_index_map != NULL) {
-        memset(interface_index_map, 0, sizeof(wifi_interface_name_idex_map_t)*MAX_CLIENTS);
+        memset(interface_index_map, 0, sizeof(wifi_interface_name_idex_map_t)*MAX_NUM_SIMULATED_CLIENT);
     }
 
-    l_radio_interface_map = (radio_interface_mapping_t *)malloc(sizeof(radio_interface_mapping_t)*MAX_CLIENTS);
+    l_radio_interface_map = (radio_interface_mapping_t *)malloc(sizeof(radio_interface_mapping_t)*MAX_NUM_SIMULATED_CLIENT);
     if (l_radio_interface_map != NULL) {
-        memset(l_radio_interface_map, 0, sizeof(radio_interface_mapping_t)*MAX_CLIENTS);
+        memset(l_radio_interface_map, 0, sizeof(radio_interface_mapping_t)*MAX_NUM_SIMULATED_CLIENT);
     }
 
     return;
