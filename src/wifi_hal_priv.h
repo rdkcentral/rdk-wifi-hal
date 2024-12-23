@@ -1219,7 +1219,8 @@ int wifi_strcpy(char *dest, size_t dest_size, const char *src);
 int wifi_strcat(char *dest, size_t dest_size, const char *src);
 int wifi_strncpy(char *dest, size_t dest_size, const char *src, size_t count);
 int str_list_append(char *dest, size_t dest_size, const char *src);
-int wifi_ieee80211Variant_to_str(char *dest, size_t dest_size, wifi_ieee80211Variant_t variant);
+int wifi_ieee80211Variant_to_str(char *dest, size_t dest_size, wifi_ieee80211Variant_t variant,
+    const char *str);
 int wifi_channelBandwidth_to_str(char *dest, size_t dest_size, wifi_channelBandwidth_t bandwidth);
 int wifi_bitrate_to_str(char *dest, size_t dest_size, wifi_bitrate_t bitrate);
 void init_interface_map(void);
