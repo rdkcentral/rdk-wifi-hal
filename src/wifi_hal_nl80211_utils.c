@@ -3520,11 +3520,51 @@ fail:
     return RETURN_ERR;
 }
 
-int wifi_ieee80211Variant_to_str(char *dest, size_t dest_size, wifi_ieee80211Variant_t variant)
+int wifi_ieee80211Variant_to_str(char *dest, size_t dest_size, wifi_ieee80211Variant_t variant,
+    const char *str)
 {
-    return wifi_enum_bitmap_to_str(dest, dest_size,
-        wifi_variant_Map, ARRAY_SIZE(wifi_variant_Map),
-        "802.11", (int)variant);
+    const char *mode;
+
+    if (*str != '\0') {
+        return wifi_enum_bitmap_to_str(dest, dest_size, wifi_variant_Map,
+            ARRAY_SIZE(wifi_variant_Map), str, (int)variant);
+    } else {
+        if ((dest != NULL) && (dest_size != 0)) {
+            *dest = '\0';
+
+            if (variant & WIFI_80211_VARIANT_A) {
+                mode = "a";
+                str_list_append(dest, dest_size, mode);
+            }
+            if (variant & WIFI_80211_VARIANT_B) {
+                mode = "b";
+                str_list_append(dest, dest_size, mode);
+            }
+            if (variant & WIFI_80211_VARIANT_G) {
+                mode = "g";
+                str_list_append(dest, dest_size, mode);
+            }
+            if (variant &
+                (WIFI_80211_VARIANT_N | WIFI_80211_VARIANT_AC | WIFI_80211_VARIANT_AX |
+                    WIFI_80211_VARIANT_BE)) {
+                if (variant & WIFI_80211_VARIANT_BE) {
+                    mode = "be";
+                } else if (variant & WIFI_80211_VARIANT_AX) {
+                    mode = "ax";
+                } else if (variant & WIFI_80211_VARIANT_AC) {
+                    mode = "ac";
+                } else {
+                    mode = "n";
+                }
+                str_list_append(dest, dest_size, mode);
+            }
+        } else {
+            wifi_hal_error_print("%s:%d: NULL or zero-size buffer\n", __func__, __LINE__);
+            return RETURN_ERR;
+        }
+    }
+
+    return RETURN_OK;
 }
 
 int wifi_channelBandwidth_to_str(char *dest, size_t dest_size, wifi_channelBandwidth_t bandwidth)

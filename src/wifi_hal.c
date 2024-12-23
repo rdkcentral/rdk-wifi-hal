@@ -2518,12 +2518,15 @@ static int decode_bss_info_to_neighbor_ap_info(wifi_neighbor_ap2_t *ap, const wi
     }
 
     // - ap_SupportedStandards
-    if (wifi_ieee80211Variant_to_str(ap->ap_SupportedStandards, sizeof(ap->ap_SupportedStandards), bss->supp_standards)) {
+    // 4th argument - Any prefix to be added before the standard i.e., 802.11
+    if (wifi_ieee80211Variant_to_str(ap->ap_SupportedStandards, sizeof(ap->ap_SupportedStandards),
+            bss->supp_standards, "")) {
         ret = RETURN_ERR;
     }
 
     // - ap_OperatingStandards
-    if (wifi_ieee80211Variant_to_str(ap->ap_OperatingStandards, sizeof(ap->ap_OperatingStandards), bss->oper_standards)) {
+    if (wifi_ieee80211Variant_to_str(ap->ap_OperatingStandards, sizeof(ap->ap_OperatingStandards),
+            bss->oper_standards, "")) {
         ret = RETURN_ERR;
     }
 
