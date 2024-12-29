@@ -6004,7 +6004,26 @@ int nl80211_init_primary_interfaces()
         if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
             wifi_hal_error_print("%s:%d: Error updating %s interface on dev:%d error: %d (%s) \n",
                 __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
-            return -1;
+            if (ret != ENODEV) {
+                // Try updating the mode again after bringing the interface down
+                nl80211_interface_enable(interface->name, false);
+                wifi_hal_dbg_print(
+                    "%s:%d: Updating %s interface after bringing the interface down.\n", __func__,
+                    __LINE__, interface->name);
+                msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0,
+                    NL80211_CMD_SET_INTERFACE);
+                nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
+                ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL);
+                if (ret) {
+                    wifi_hal_error_print("%s:%d: Error updating %s interface even after interface "
+                                         "is down on dev:%d error: %d (%s) \n",
+                        __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
+                    return -1;
+                }
+            } else {
+                // If failure was ENODEV then no need of retrying as the device is not present
+                return -1;
+            }
         }
         nl80211_interface_enable(primary_interface->name, true);
     }
