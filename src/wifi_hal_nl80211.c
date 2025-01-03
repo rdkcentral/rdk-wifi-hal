@@ -7094,22 +7094,21 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
         // STA mode: filter result
         scan_info = hash_map_get_first(interface->scan_info_map);
         while (scan_info != NULL) {
-            if (strcmp(scan_info->ssid, interface->vap_info.u.sta_info.ssid) == 0){
-                bss[desired_scanned_ssid_pos] = *scan_info;
-                ssid_found_count++;
-                desired_scanned_ssid_pos++;
-            }
+            wifi_hal_dbg_print("%s:%d: [SCAN] ssid:%s, interface->vap_info.u.sta_info.ssid:%s, freq->%d\n", __func__, __LINE__, scan_info->ssid, interface->vap_info.u.sta_info.ssid, scan_info->freq);
+            bss[desired_scanned_ssid_pos] = *scan_info;
+            ssid_found_count++;
+            desired_scanned_ssid_pos++;
             scan_info = hash_map_get_next(interface->scan_info_map, scan_info);
         }
         pthread_mutex_unlock(&interface->scan_info_mutex);
-        wifi_hal_dbg_print("%s:%d: [SCAN] scan found %u results with ssid:%s\n", __func__, __LINE__, ssid_found_count, interface->vap_info.u.sta_info.ssid);
+        wifi_hal_dbg_print("%s:%d: [SCAN] scan_found_count:%u, count:%d, results with ssid:%s\n", __func__, __LINE__, ssid_found_count, count, interface->vap_info.u.sta_info.ssid);
     }
     else {
         // AP mode: copy all
         unsigned total_ap_count;
         scan_info = hash_map_get_first(interface->scan_info_map);
         while (scan_info != NULL) {
-            // wifi_hal_dbg_print("%s:%d: [SCAN] ssid:%s, freq->%d\n", scan_info->ssid, scan_info->freq, __func__, __LINE__);
+            // wifi_hal_dbg_print("%s:%d: [SCAN] ssid:%s, freq->%d\n", __func__, __LINE__, scan_info->ssid, scan_info->freq);
             bss[desired_scanned_ssid_pos] = *scan_info;
             ssid_found_count++;
             desired_scanned_ssid_pos++;
@@ -7130,6 +7129,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
             if (!new_bss) {
                 // - error, but not critical, original array still is valid
                 wifi_hal_error_print("%s:%d: [SCAN] memory re-allocation error!\n", __func__, __LINE__);
+		perror("realloc failed");
             }
             else
                 bss = new_bss;
