@@ -3632,6 +3632,7 @@ static int phy_info_rates(wifi_radio_info_t *radio, struct hostapd_hw_modes *mod
         return NL_OK;
     }
 
+    mode->num_rates = 0;
     nla_for_each_nested(nl_rate, tb, rem_rate) {
         nla_parse(tb_rate, NL80211_BITRATE_ATTR_MAX, nla_data(nl_rate), nla_len(nl_rate), rate_policy);
         if (!tb_rate[NL80211_BITRATE_ATTR_RATE])
@@ -3651,7 +3652,7 @@ static int phy_info_rates(wifi_radio_info_t *radio, struct hostapd_hw_modes *mod
             continue;
         }
         mode->rates[idx] = nla_get_u32(tb_rate[NL80211_BITRATE_ATTR_RATE]);
-        //wifi_hal_dbg_print("%d ", mode->rates[idx]);
+        //wifi_hal_dbg_print("%d\n", mode->rates[idx]);
         idx++;
     }
 
@@ -5549,6 +5550,7 @@ static int phy_info_rates_get_hw_features(struct hostapd_hw_modes *mode, struct 
     if (tb == NULL)
         return NL_OK;
 
+    mode->num_rates = 0;
     nla_for_each_nested(nl_rate, tb, rem_rate) {
         nla_parse(tb_rate, NL80211_BITRATE_ATTR_MAX,
               nla_data(nl_rate), nla_len(nl_rate),
@@ -5581,14 +5583,14 @@ static int phy_info_rates_get_hw_features(struct hostapd_hw_modes *mode, struct 
 
 static int phy_info_handler(struct nl_msg *msg, void *arg)
 {
-    wifi_radio_info_t *radio = (wifi_radio_info_t *)arg;
+    wifi_radio_info_t *radio;
     struct nlattr *tb_msg[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     struct nlattr *nl_band;
     int rem_band;
     enum nl80211_band band = 0;
-#ifdef FEATURE_SINGLE_PHY
     enum nl80211_band radio_nl80211_band_type;
+#ifdef FEATURE_SINGLE_PHY
     int i;
 #endif //FEATURE_SINGLE_PHY
 
@@ -5620,13 +5622,42 @@ static int phy_info_handler(struct nl_msg *msg, void *arg)
     }
 #endif
 
-    wifi_hal_dbg_print("%s:%d: wiphy index:%d name:%s\n", __func__, __LINE__, radio->index,
-        radio->name);
     if (!tb_msg[NL80211_ATTR_WIPHY_BANDS])
         return NL_SKIP;
 
     nla_for_each_nested(nl_band, tb_msg[NL80211_ATTR_WIPHY_BANDS], rem_band) {
         nla_parse(tb_msg, NL80211_BAND_ATTR_MAX, nla_data(nl_band), nla_len(nl_band), NULL);
+
+        if (tb_msg[NL80211_BAND_ATTR_RATES]) {
+#ifdef FEATURE_SINGLE_PHY
+            // Update the right radio with the bit rates in case of single phy
+            for (i = 0; i < g_wifi_hal.num_radios; i++) {
+                radio = &g_wifi_hal.radio_info[i];
+#else //FEATURE_SINGLE_PHY
+            {
+#endif //FEATURE_SINGLE_PHY
+                radio_nl80211_band_type = get_nl80211_band_from_rdk_radio_index(
+                    radio->rdk_radio_index);
+                wifi_hal_dbg_print("%s:%d: wiphy index:%d name:%s rdk_radio_index:%d\n", __func__,
+                    __LINE__, radio->index, radio->name, radio->rdk_radio_index);
+                wifi_hal_dbg_print("%s:%d:band_type:%d radio_band_type:%d processing:%s\n",
+                    __func__, __LINE__, nl_band->nla_type, radio_nl80211_band_type,
+                    ((nl_band->nla_type == radio_nl80211_band_type) ? "yes" : "no"));
+                if (nl_band->nla_type == radio_nl80211_band_type) {
+                    wifi_hal_dbg_print("%s:%d:phy_info_rates being invoked from phy_info_handler\n",
+                        __func__, __LINE__);
+                    phy_info_ht_capa(&radio->hw_modes[radio_nl80211_band_type],
+                        tb_msg[NL80211_BAND_ATTR_HT_CAPA],
+                        tb_msg[NL80211_BAND_ATTR_HT_AMPDU_FACTOR],
+                        tb_msg[NL80211_BAND_ATTR_HT_AMPDU_DENSITY],
+                        tb_msg[NL80211_BAND_ATTR_HT_MCS_SET]);
+                    phy_info_vht_capa(&radio->hw_modes[radio_nl80211_band_type],
+                        tb_msg[NL80211_BAND_ATTR_VHT_CAPA], tb_msg[NL80211_BAND_ATTR_VHT_MCS_SET]);
+                    phy_info_rates(radio, &radio->hw_modes[radio_nl80211_band_type],
+                        radio_nl80211_band_type, tb_msg[NL80211_BAND_ATTR_RATES]);
+                }
+            }
+        }
 
         if (tb_msg[NL80211_BAND_ATTR_FREQS] == NULL) {
             wifi_hal_dbg_print("%s:%d: Frequency attributes not present\n", __func__, __LINE__);
