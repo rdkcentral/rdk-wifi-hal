@@ -1415,7 +1415,6 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 #endif
     mode = iface->current_mode;
 
-#if !defined(PLATFORM_LINUX)
     if ((strlen (vap->u.bss_info.preassoc.supported_data_transmit_rates) > 0) && strcmp(vap->u.bss_info.preassoc.supported_data_transmit_rates, "disabled")) {
         if(iface->current_cac_rates) {
             os_free(iface->current_cac_rates);
@@ -1437,7 +1436,6 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     else {
         iface->current_rates = radio->rate_data[band];
     }
-#endif
     wifi_hal_info_print("%s:%d: Interface: %s band: %d mode:%p (%d) has %d rates\n", __func__,
         __LINE__, interface->name, band, mode, mode->mode, mode->num_rates);
 
@@ -1466,7 +1464,6 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     wifi_hal_info_print("%s:%d: Interface: %s band: %d mode:%p (%d) has %d rates\n", __func__,
         __LINE__, interface->name, band, mode, mode->mode, mode->num_rates);
     iface->num_rates = 0;
-#if !defined(PLATFORM_LINUX) 
     for (i = 0; i < mode->num_rates; i++) {
 /*
         if (iface->conf->supported_rates &&
@@ -1506,7 +1503,6 @@ int update_hostap_iface(wifi_interface_info_t *interface)
             iface->num_rates, rate->rate, rate->flags);
         iface->num_rates++;
     }
-#endif /* !defined(PLATFORM_LINUX) */
     cf1 = iface->freq;
     freq1 = cf1;
 

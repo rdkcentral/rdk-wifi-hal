@@ -5550,6 +5550,7 @@ static int phy_info_rates_get_hw_features(struct hostapd_hw_modes *mode, struct 
     if (tb == NULL)
         return NL_OK;
 
+    mode->num_rates = 0;
     nla_for_each_nested(nl_rate, tb, rem_rate) {
         nla_parse(tb_rate, NL80211_BITRATE_ATTR_MAX,
               nla_data(nl_rate), nla_len(nl_rate),
