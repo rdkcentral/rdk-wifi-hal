@@ -571,7 +571,7 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     }
 
     if (status != WLAN_STATUS_SUCCESS) {
-        wifi_hal_error_print("%s:%d: status code unsuccessful, returning\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: status code %d unsuccessful, returning\n", __func__, __LINE__, status);
         send_sta_connection_status_to_cb(backhaul->bssid, interface->vap_info.vap_index, wifi_connection_status_ap_not_found);
         return;    
     }

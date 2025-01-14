@@ -32,6 +32,7 @@ Licensed under the BSD-3 License
 #include <stdlib.h>
 #include "wifi_hal_priv.h"
 #include "wifi_hal.h"
+#include <cjson/cJSON.h>
 
 #define NULL_CHAR '\0'
 #define NEW_LINE '\n'
@@ -39,6 +40,8 @@ Licensed under the BSD-3 License
 #define MAX_CMD_SIZE 1024
 #define RPI_LEN_32 32
 #define INVALID_KEY                      "12345678"
+
+#define BACKHAUL_CFG_JSON "/nvram/BackhaulCfg.json"
 
 int wifi_nvram_defaultRead(char *in,char *out);
 int _syscmd(char *cmd, char *retBuf, int retBufSize);
@@ -86,6 +89,89 @@ int wifi_nvram_defaultRead(char *in,char *out)
     position++;
     strncpy(out,position,strlen(position)+1);
     return 0; 
+}
+
+static inline cJSON *json_open_backhaul_cfg(void)
+{
+    FILE *fp;
+    cJSON *json = NULL;
+    size_t len;
+    char *buff;
+
+    fp = fopen(BACKHAUL_CFG_JSON, "r");
+    if (fp == NULL) {
+        wifi_hal_error_print("%s:%d: Failed (err=%d, msg=%s) to open file:%s\n", __func__, __LINE__,
+            errno, strerror(errno), BACKHAUL_CFG_JSON);
+        return json;
+    }
+    fseek(fp, 0, SEEK_END);
+    len = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    buff = malloc(len);
+    if (buff == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate %zu bytes for json file\n", __func__,
+            __LINE__, len);
+        return NULL;
+    }
+    len = fread(buff, 1, len, fp);
+    json = cJSON_ParseWithLength(buff, len);
+    if (json == NULL) {
+        const char *const error_ptr = cJSON_GetErrorPtr();
+        wifi_hal_error_print("%s:%d: Error json file parse: %s\n", __func__, __LINE__,
+            (error_ptr ? error_ptr : "UNKNOWN"));
+    }
+    free(buff);
+    fclose(fp);
+    return json;
+}
+
+static inline int json_parse_backhaul_keypassphrase(char *backhaul_keypassphrase)
+{
+    cJSON *backhaul_keypassphrase_item;
+    cJSON *json = NULL;
+    cJSON_bool valid;
+
+    json = json_open_backhaul_cfg();
+    if (json == NULL) {
+        return -1;
+    }
+
+    backhaul_keypassphrase_item = cJSON_GetObjectItem(json, "Backhaul_KeyPassphrase");
+    if (!(valid = cJSON_IsString(backhaul_keypassphrase_item))) {
+        wifi_hal_error_print("%s:%d: (InterfaceName) does "
+                             "not exist or is not a string\n",
+            __func__, __LINE__);
+        cJSON_Delete(json);
+        return -1;
+    }
+    strncpy(backhaul_keypassphrase, cJSON_GetStringValue(backhaul_keypassphrase_item), 128);
+    cJSON_Delete(json);
+    return 0;
+}
+
+static inline int json_parse_backhaul_ssid(char *backhaul_ssid)
+{
+    cJSON *backhaul_ssid_item;
+    cJSON *json = NULL;
+    cJSON_bool valid;
+
+    json = json_open_backhaul_cfg();
+    if (json == NULL) {
+        return -1;
+    }
+
+    backhaul_ssid_item = cJSON_GetObjectItem(json, "Backhaul_SSID");
+    if (!(valid = cJSON_IsString(backhaul_ssid_item))) {
+        wifi_hal_error_print("%s:%d: (InterfaceName) does "
+                             "not exist or is not a string\n",
+            __func__, __LINE__);
+        cJSON_Delete(json);
+        return -1;
+    }
+    strncpy(backhaul_ssid, cJSON_GetStringValue(backhaul_ssid_item), 128);
+    cJSON_Delete(json);
+    return 0;
 }
 
 int platform_pre_init()
@@ -158,21 +244,38 @@ int nvram_get_current_security_mode(wifi_security_modes_t *security_mode,int vap
 
 int platform_get_keypassphrase_default(char *password, int vap_index)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);  
-    /*password is not sensitive,won't grant access to real devices*/ 
-    wifi_nvram_defaultRead("rpi_wifi_password",password);
+    wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
+    if (is_wifi_hal_vap_mesh_sta(vap_index)) {
+        if (!json_parse_backhaul_keypassphrase(password)) {
+            wifi_hal_dbg_print("%s:%d, read password from jSON file\n", __func__, __LINE__);
+            return 0;
+        }
+    }
+    /*password is not sensitive,won't grant access to real devices*/
+    wifi_nvram_defaultRead("rpi_wifi_password", password);
     if (strlen(password) == 0) {
-       wifi_hal_error_print("%s:%d nvram default password not found, "
-           "enforced alternative default password\n", __func__, __LINE__);
-       strncpy(password, INVALID_KEY, strlen(INVALID_KEY) + 1);
+        wifi_hal_error_print("%s:%d nvram default password not found, "
+                             "enforced alternative default password\n",
+            __func__, __LINE__);
+        strncpy(password, INVALID_KEY, strlen(INVALID_KEY) + 1);
     }
     return 0;
 }
 
 int platform_get_ssid_default(char *ssid, int vap_index)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);   
-    sprintf(ssid,"RPI_RDKB-AP%d",vap_index);
+    int ret = 0;
+
+    wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
+    /* if the vap_index is that of mesh STA then try to obtain the ssid from nvram */
+    /* Read from JSON the details about backhaul SSID */
+    if (is_wifi_hal_vap_mesh_sta(vap_index)) {
+        if (!json_parse_backhaul_ssid(ssid)) {
+            wifi_hal_dbg_print("%s:%d, read SSID:%s from jSON file\n", __func__, __LINE__, ssid);
+            return 0;
+        }
+    }
+    sprintf(ssid, "RPI_RDKB-AP%d", vap_index);
     return 0;
 }
 

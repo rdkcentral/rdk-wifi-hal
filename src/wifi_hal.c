@@ -395,10 +395,11 @@ INT wifi_hal_init()
         interface = hash_map_get_first(radio->interface_map);
 
         while (interface != NULL) {
-            update_hostap_data(interface);
-            update_hostap_iface(interface);
-            update_hostap_iface_flags(interface);
-            init_hostap_hw_features(interface);
+            if (update_hostap_data(interface) == RETURN_OK) {
+                update_hostap_iface(interface);
+                update_hostap_iface_flags(interface);
+                init_hostap_hw_features(interface);
+            }
             interface = hash_map_get_next(radio->interface_map, interface);
         }
     }
