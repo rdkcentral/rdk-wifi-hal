@@ -2899,6 +2899,101 @@ INT wifi_getRadioTrafficStats2(INT radioIndex, wifi_radioTrafficStats2_t *radioT
 
     return RETURN_OK;
 }
+
+static int get_radio_txpwr_handler(struct nl_msg *msg, void *arg)
+{
+      unsigned int tx_pwr = 0;
+      struct nlattr *tb[NL80211_ATTR_MAX + 1];
+      struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+      unsigned long *tx_pwr_dbm= (unsigned long *)arg;
+
+      if (nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0),
+          NULL) < 0) {
+          wifi_hal_error_print("%s:%d Failed to parse vendor data\n", __func__, __LINE__);
+          return NL_SKIP;
+      }
+
+      if (tb[NL80211_ATTR_WIPHY_TX_POWER_LEVEL] == NULL) {
+          wifi_hal_error_print("%s:%d Radio tx power attribute is missing\n", __func__, __LINE__);
+          return NL_SKIP;
+      }
+
+      tx_pwr = nla_get_u32(tb[NL80211_ATTR_WIPHY_TX_POWER_LEVEL]);
+      wifi_hal_dbg_print("%s:%d tx_pwr from nl iss %u\n", __func__, __LINE__, tx_pwr);
+      *tx_pwr_dbm  = tx_pwr / 4;
+      wifi_hal_dbg_print("%s:%d Processed tx_pwr is %lu\n", __func__, __LINE__, *tx_pwr_dbm);
+      return NL_SKIP;
+}
+
+static struct nl_msg *nl80211_drv_cmd_msg(int nl80211_id, wifi_interface_info_t *intf, int flags, uint8_t cmd)
+  {
+     struct nl_msg *msg;
+
+      msg = nlmsg_alloc();
+	if (msg == NULL) {
+         return NULL;
+      }
+
+if (genlmsg_put(msg, 0, 0, nl80211_id, 0, flags, cmd, 0) == NULL) {
+	nlmsg_free(msg);
+	return NULL;
+}
+
+if (intf != NULL) {
+	nla_put_u32(msg, NL80211_ATTR_IFINDEX, intf->index);
+	nla_put_u32(msg, NL80211_ATTR_WIPHY, intf->phy_index);
+}
+
+return msg;
+}
+
+static int get_radio_tx_power(wifi_interface_info_t *interface, ULONG *tx_power)
+{
+    struct nl_msg *msg;
+      int ret = RETURN_ERR;
+  
+      wifi_hal_dbg_print("%s:%d Entering\n", __func__, __LINE__);
+      msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_GET_INTERFACE);
+      if (msg == NULL) {
+          wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+          return RETURN_ERR;
+      }
+      ret = nl80211_send_and_recv(msg, get_radio_txpwr_handler, tx_power, NULL, NULL);
+      if (ret) {
+         wifi_hal_error_print("%s:%d Failed to send NL message %d %s\n", __func__, __LINE__, ret, nl_geterror(ret));
+          return RETURN_ERR;
+      }
+  
+      return RETURN_OK;
+}
+INT wifi_getRadioTransmitPower(INT radioIndex, ULONG *tx_power)
+{
+    wifi_interface_info_t *interface;
+    wifi_radio_info_t *radio;
+    
+    wifi_hal_dbg_print("%s:%d: Get radio transmit power for index %d\n", __func__, __LINE__, radioIndex);
+    
+    radio = get_radio_by_rdk_index(radioIndex);
+      if (radio == NULL) {
+          wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+              radioIndex);
+          return RETURN_ERR;
+      }
+
+      interface = get_primary_interface(radio);
+      if (interface == NULL) {
+          wifi_hal_error_print("%s:%d: Failed to get interface for radio index: %d\n", __func__,
+              __LINE__, radioIndex);
+          return RETURN_ERR;
+      }
+
+      if (get_radio_tx_power(interface, tx_power)) {
+	     wifi_hal_error_print("%s:%d: Failed to get radio tx power for radio %d\n", __func__, __LINE__, radioIndex);
+	     return RETURN_ERR;
+      }
+	
+    return RETURN_OK;
+}
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT
 
 int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
