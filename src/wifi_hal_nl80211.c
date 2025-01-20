@@ -2081,8 +2081,10 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
         sig_dbm = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
     }
 #if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(TCHCBRV2_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT))
+    wifi_hal_info_print("%s:%d POORNA About to enter the NL retrieval of PHY RATE\n",__func__,__LINE__);
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]);
+ 	wifi_hal_info_print("%s:%d POORNA The retrieved value of Phy Rate = %d\n",__func__,__LINE__,phy_rate);
     }
 #endif
     if ((attr = tb[NL80211_ATTR_REASON_CODE]) != NULL) {
