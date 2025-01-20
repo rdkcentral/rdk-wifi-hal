@@ -515,6 +515,7 @@ static int get_sta_stats(wifi_interface_info_t *interface, mac_address_t mac, wi
     return 0;
 }
 
+#ifdef CONFIG_WIFI_EMULATOR
 INT wifi_getApAssociatedDeviceDiagnosticResult3(INT apIndex,
     wifi_associated_dev3_t **associated_dev_array, UINT *output_array_size)
 {
@@ -690,6 +691,8 @@ INT wifi_setDownStreamGroupAddress(INT apIndex, BOOL disabled)
 {
     return 0;
 }
+#endif
+
 INT wifi_getApAssociatedClientDiagnosticResult(INT ap_index, char *key,wifi_associated_dev3_t *assoc)
 {
     return RETURN_ERR;
