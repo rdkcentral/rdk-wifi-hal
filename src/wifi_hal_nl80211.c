@@ -1765,6 +1765,11 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         if (callbacks->steering_event_callback != 0) {
             handle_auth_req_event_for_bm(interface, sta, sig_dbm);
         }
+        if (is_core_acl_drop_mgmt_frame(interface, sta)) {
+            wifi_hal_dbg_print("%s:%d: Station present in acl list dropping auth req\n",
+                                   __func__, __LINE__);
+            return -1;
+        }
         remove_station_from_other_interfaces(interface, sta);
 #ifdef WIFI_EMULATOR_CHANGE
         send_mgmt_to_char_dev = true;
@@ -12198,6 +12203,72 @@ int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type,
     return 0;
 }
 
+int nl80211_put_acl(struct nl_msg *msg, wifi_interface_info_t *interface)
+{
+    if (!msg || !interface) {
+        wifi_hal_error_print("%s:%d NULL Pointer\n", __func__, __LINE__);
+        return -1;
+    }
+
+    struct nlattr *acl;
+    unsigned int i = 0, policy;
+    acl_map_t *acl_map = NULL;
+    wifi_vap_info_t *vap;
+    mac_address_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+    vap = &interface->vap_info;
+    if (!vap) {
+        wifi_hal_error_print("%s:%d NULL Pointer\n", __func__, __LINE__);
+        return -1;
+    }
+    if (vap->u.bss_info.mac_filter_enable == true) {
+        if (vap->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_black_list) {
+            policy = NL80211_ACL_POLICY_ACCEPT_UNLESS_LISTED;
+        } else {
+            policy = NL80211_ACL_POLICY_DENY_UNLESS_LISTED;
+        }
+
+
+        nla_put_u32(msg, NL80211_ATTR_ACL_POLICY, policy);
+
+        acl = nla_nest_start(msg, NL80211_ATTR_MAC_ADDRS);
+
+        if (acl == NULL) {
+            wifi_hal_dbg_print("%s:%d Failed to to add ACL list to msg\n", __func__, __LINE__);
+            return -1;
+        }
+
+        if (interface->acl_map != NULL) {
+            acl_map = hash_map_get_first(interface->acl_map);
+            while (acl_map != NULL) {
+                if (nla_put(msg, i, ETH_ALEN, acl_map->mac_addr)) {
+                    wifi_hal_dbg_print("%s:%d Failed to add MAC to ACL list\n", __func__, __LINE__);
+                    return -ENOMEM;
+                }
+                acl_map = hash_map_get_next(interface->acl_map, acl_map);
+                i++;
+            }
+        }
+        if (i == 0) {
+            if (nla_put(msg, i, ETH_ALEN, null_mac)) {
+                wifi_hal_dbg_print("%s:%d Failed to add MAC to ACL list\n", __func__, __LINE__);
+                return -ENOMEM;
+            }
+        }
+        nla_nest_end(msg, acl);
+
+        wifi_hal_dbg_print("%s:%d: ACL count: %d ACL mode: %s \n", __func__, __LINE__, i,
+            vap->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_black_list ? "Blacklist" : "Whitelist");
+
+    } else {
+        nla_put_u32(msg, NL80211_ATTR_ACL_POLICY, NL80211_ACL_POLICY_ACCEPT_UNLESS_LISTED);
+        nla_put_u32(msg, NL80211_ATTR_MAC_ADDRS, 0);
+        wifi_hal_dbg_print("%s:%d: Disable ACL\n", __func__, __LINE__);
+    }
+
+    return RETURN_OK;
+}
+
 int nl80211_set_acl(wifi_interface_info_t *interface)
 {
     struct nl_msg *msg;
@@ -13031,6 +13102,11 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
             return -1;
         }
     }
+
+#ifdef NL80211_ACL
+    nl80211_put_acl(msg, interface);
+#endif
+
 #ifdef EAPOL_OVER_NL
     if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_CONTROL_PORT_FRAME && interface->bss_nl_connect_event_fd > 0 ) {
         ret = nl80211_set_rx_control_port_owner(msg, interface);
