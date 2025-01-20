@@ -792,6 +792,7 @@ INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress);
 INT wifi_hal_delApAclDevices(INT apIndex);
 INT wifi_hal_steering_eventRegister(wifi_steering_eventCB_t event_cb);
 INT wifi_hal_setRadioTransmitPower(wifi_radio_index_t radioIndex, uint txpower);
+INT wifi_hal_getRadioTransmitPower(INT radioIndex, ULONG *tx_power);
 INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, INT dwell_time, UINT chan_num, UINT *chan_list);
 INT wifi_hal_getNeighboringWiFiStatus(INT radioIndex, wifi_neighbor_ap2_t **neighbor_ap_array, UINT *output_array_size);
 INT wifi_hal_getNeighboringWiFiStatus_test(INT radioIndex, wifi_neighbor_ap2_t **neighbor_ap_array, UINT *output_array_size);
