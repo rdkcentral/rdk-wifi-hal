@@ -3110,8 +3110,8 @@ static int get_radio_tx_power(wifi_interface_info_t *interface, ULONG *tx_power)
 }
 INT wifi_hal_getRadioTransmitPower(INT radioIndex, ULONG *tx_power)
 {
-    wifi_interface_info_t *interface;
-    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface = NULL;
+    wifi_radio_info_t *radio = NULL;
 
     wifi_hal_dbg_print("%s:%d: Get radio transmit power for index %d\n", __func__, __LINE__,
         radioIndex);
