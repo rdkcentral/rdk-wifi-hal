@@ -4024,11 +4024,11 @@ void wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char
     os_memcpy(hdr->addr3, bssid_buf, ETH_ALEN);
 
 #ifdef HOSTAPD_2_11 // 2.11
-    wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, 0, NULL, 0, 0, 0, 0);
+    wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, 0, 0);
 #elif HOSTAPD_2_10 // 2.10
-    wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, 0, NULL, 0, 0, 0);
+    wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, 0);
 #else
-    wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, 0, NULL, 0);
+    wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0);
 #endif
 
     os_free(buf);
