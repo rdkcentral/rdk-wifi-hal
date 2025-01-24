@@ -792,6 +792,7 @@ INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress);
 INT wifi_hal_delApAclDevices(INT apIndex);
 INT wifi_hal_steering_eventRegister(wifi_steering_eventCB_t event_cb);
 INT wifi_hal_setRadioTransmitPower(wifi_radio_index_t radioIndex, uint txpower);
+INT wifi_hal_getRadioTransmitPower(INT radioIndex, ULONG *tx_power);
 INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, INT dwell_time, UINT chan_num, UINT *chan_list);
 INT wifi_hal_getNeighboringWiFiStatus(INT radioIndex, wifi_neighbor_ap2_t **neighbor_ap_array, UINT *output_array_size);
 INT wifi_hal_getNeighboringWiFiStatus_test(INT radioIndex, wifi_neighbor_ap2_t **neighbor_ap_array, UINT *output_array_size);
@@ -1066,6 +1067,10 @@ int wifi_drv_set_ap_mlo(struct nl_msg *msg, void *priv, struct wpa_driver_ap_par
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb);
 int update_hostap_mlo(wifi_interface_info_t *interface);
 #endif /* CONFIG_IEEE80211BE */
+
+wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio);
+void wifi_hal_configure_mbssid(wifi_radio_info_t *radio);
+
 #ifdef __cplusplus
 }
 #endif
