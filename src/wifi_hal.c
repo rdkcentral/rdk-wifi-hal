@@ -4157,10 +4157,32 @@ int wifi_hal_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)
 {
     wifi_interface_info_t *interface = get_interface_by_vap_index(apIndex);
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: WiFi interface not found for vap:%d\n", __func__, __LINE__, apIndex);
+        wifi_hal_error_print("%s:%d: WiFi interface not found for vap:%d\n", __func__, __LINE__,
+            apIndex);
         return RETURN_ERR;
     }
-    return (nl80211_set_acl_mode(interface, mac_filter_mode));
+
+    wifi_vap_info_t *vap;
+    vap = &interface->vap_info;
+    if (vap == NULL) {
+        wifi_hal_error_print("%s:%d: WiFi interface not found for vap:%d\n", __func__, __LINE__,
+            apIndex);
+        return RETURN_ERR;
+    }
+
+    if (vap->u.bss_info.enabled != true || vap->u.bss_info.mac_filter_enable == false ||
+        vap->vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print(":%s:%d mac filter not enabled:%d for vap:%d\n", __func__, __LINE__,
+            vap->u.bss_info.enabled, vap->vap_index);
+        return RETURN_ERR;
+    } else if (vap->u.bss_info.mac_filter_mode == mac_filter_mode) {
+        wifi_hal_error_print(":%s:%d mac filtermode is already set for vap:%d\n", __func__,
+            __LINE__, vap->vap_index);
+        return RETURN_OK;
+    }
+    vap->u.bss_info.mac_filter_mode = mac_filter_mode;
+
+    return (nl80211_set_acl(interface));
 }
 
 int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)
@@ -4192,5 +4214,6 @@ int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)
         vap->u.bss_info.mac_filter_enable = true;
     }
 
-    return (nl80211_set_acl_mode(interface, mac_filter_mode));
+    vap->u.bss_info.mac_filter_mode = mac_filter_mode;
+    return (nl80211_set_acl(interface));
 }
