@@ -4178,10 +4178,12 @@ int wifi_hal_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)
 
     switch (mac_filter_mode) {
     case 2:
+        vap->u.bss_info.mac_filter_enable = true;
         vap->u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
         break;
 
     case 1:
+        vap->u.bss_info.mac_filter_enable = true;
         vap->u.bss_info.mac_filter_mode = wifi_mac_filter_mode_white_list;
         break;
 
