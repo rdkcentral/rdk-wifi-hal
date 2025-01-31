@@ -557,7 +557,9 @@ void wifi_hal_deauth(int vap_index, int status, uint8_t *mac)
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-#ifdef HOSTAPD_2_10
+#if HOSTAPD_VERSION >= 211 //2.11
+    wifi_drv_sta_deauth(interface, own_addr, mac, status, 0);
+#else
     wifi_drv_sta_deauth(interface, own_addr, mac, status);
 #endif
     return;
