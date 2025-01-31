@@ -407,7 +407,47 @@ int check_radio_index(uint8_t radio_index)
 
 int platform_post_init(wifi_vap_info_map_t *vap_map)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    char cmd[DEFAULT_CMD_SIZE];
+    int i, apIndex;
+    int ret = -1;
+
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+
+    for (i = 0; i < MAX_NUM_RADIOS; i++) {
+        if(i == RDK_2G_RADIO) {
+            for (apIndex = 0; apIndex < MAX_NUM_VAP_PER_RADIO; apIndex++) {
+                if (isValidAPIndex(VAP_RADIO_2G[apIndex])) {
+                    snprintf(cmd,sizeof(cmd), "cfg80211tool %s%d acsmindwell 51", VAP_PREFIX, VAP_RADIO_2G[apIndex]);
+                    ret = system(cmd);
+                    if(ret == -1) {
+                        wifi_hal_error_print("Unable to set min ACS dwell %s:%d \n", __func__, __LINE__);
+                    }
+                    snprintf(cmd,sizeof(cmd), "cfg80211tool %s%d acsmaxdwell 51", VAP_PREFIX, VAP_RADIO_2G[apIndex]);
+                    ret = system(cmd);
+                    if(ret == -1) {
+                        wifi_hal_error_print("Unable to set max ACS dwell %s:%d \n", __func__, __LINE__);
+                    }
+                }
+            }
+        }
+        if (i == RDK_5G_RADIO) {
+            for (apIndex = 0; apIndex < MAX_NUM_VAP_PER_RADIO; apIndex++) {
+                if (isValidAPIndex(VAP_RADIO_5G[apIndex])) {
+                    snprintf(cmd,sizeof(cmd), "cfg80211tool %s%d acsmindwell 51", VAP_PREFIX, VAP_RADIO_5G[apIndex]);
+                    ret = system(cmd);
+                    if(ret == -1) {
+                        wifi_hal_error_print("Unable to set min ACS dwell %s:%d \n", __func__, __LINE__);
+                    }
+                    snprintf(cmd,sizeof(cmd), "cfg80211tool %s%d acsmaxdwell 51", VAP_PREFIX, VAP_RADIO_5G[apIndex]);
+                    ret = system(cmd);
+                    if(ret == -1) {
+                        wifi_hal_error_print("Unable to set max ACS dwell %s:%d \n", __func__, __LINE__);
+                    }
+                }
+            }
+        }
+    }
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     return 0;
 }
 
