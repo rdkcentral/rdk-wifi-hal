@@ -647,6 +647,14 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     uint32_t apIndex = 0, primary_vap_index = 0;// check private vap index
     int channel = 0;
     char *guard_int = NULL;
+    wifi_radio_info_t *radio = NULL;
+
+
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
+        return RETURN_ERR;
+    }
 
     if (operationParam == NULL || check_radio_index(index) != 0 ) {
         wifi_hal_error_print("%s:%d returning error param:%p index:%d\n",__func__,__LINE__, operationParam, index);
@@ -759,13 +767,16 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
         }
     }
 
+    // ACS will trigger only at bootup. Post that it shouldn't trigger unless OneWiFi gets
+    // restarted due to abnormal behaviour.
     if (operationParam->autoChannelEnabled) {
-        snprintf(cmd, sizeof(cmd), "iwconfig %s%d channel 0",VAP_PREFIX, primary_vap_index);
-        ret = system(cmd);
-        if(ret == -1) {
-            wifi_hal_error_print("ACS set command failed %s:%d \n",__func__, __LINE__);
+        if(!radio->configured) {
+            snprintf(cmd, sizeof(cmd), "iwconfig %s%d channel 0",VAP_PREFIX, primary_vap_index);
+            ret = system(cmd);
+            if(ret == -1) {
+                wifi_hal_error_print("ACS set command failed %s:%d \n",__func__, __LINE__);
+            }
         }
-
     }
 
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
