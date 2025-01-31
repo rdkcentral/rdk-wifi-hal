@@ -431,7 +431,7 @@ typedef enum
  * @addtogroup WIFI_HAL_TYPES
  * @{
  */
-typedef unsigned long long  u64;
+typedef uint64_t  u64;
 typedef unsigned int        u32;
 typedef unsigned short      u16;
 typedef unsigned char       u8;

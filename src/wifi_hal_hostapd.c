@@ -1687,6 +1687,7 @@ int update_hostap_interfaces(wifi_radio_info_t *radio)
 
 static void print_hw_variants_by_bitmask(uint32_t mask)
 {
+    int i;
     static const char* const wifi_mode_strings[] =
     {
         "WIFI_80211_VARIANT_A",
@@ -1702,14 +1703,15 @@ static void print_hw_variants_by_bitmask(uint32_t mask)
 #endif /* CONFIG_IEEE80211BE */
     };
 
-    for (unsigned int i = 0; i < ARRAY_SIZE(wifi_mode_strings); i++) {
+    for (i = 0; i < ARRAY_SIZE(wifi_mode_strings); i++) {
         if (mask & (1ul << i))
-            wifi_hal_dbg_print("WIFI HW MODE SET[%u]: %s\n", i, wifi_mode_strings[i]);
+            wifi_hal_dbg_print("WIFI HW MODE SET[%d]: %s\n", i, wifi_mode_strings[i]);
     }
 }
 
 static void print_bw_variants_by_bitmask(uint32_t mask)
 {
+    int i;
     // According to <@brief Wifi Channel Bandwidth Types> in hal generic interface enums
     static const char* const wifi_bw_strings[] =
     {
@@ -1723,9 +1725,9 @@ static void print_bw_variants_by_bitmask(uint32_t mask)
 #endif /* CONFIG_IEEE80211BE */
     };
 
-    for (unsigned int i = 0; i < ARRAY_SIZE(wifi_bw_strings); i++) {
+    for (i = 0; i < ARRAY_SIZE(wifi_bw_strings); i++) {
         if (mask & (1ul << i))
-            wifi_hal_dbg_print("WIFI BW SET[%u]: %s\n", i, wifi_bw_strings[i]);
+            wifi_hal_dbg_print("WIFI BW SET[%d]: %s\n", i, wifi_bw_strings[i]);
     }
 }
 
