@@ -56,7 +56,7 @@ struct rtnl_kvr_handle
     __u32           dump;
 };
 
-#define MAX_REGISTERED_CB_NUM   2
+#define MAX_REGISTERED_CB_NUM   4
 #define MAX_DPP_ATTRIBS_SIZE       2048
 #ifndef IFLA_WIRELESS
 #define IFLA_WIRELESS   (IFLA_MASTER + 1)
