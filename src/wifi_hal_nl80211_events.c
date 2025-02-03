@@ -1343,7 +1343,7 @@ void prepare_to_call_process_csi(unsigned char *data, size_t len)
     wifi_device_callbacks_t *callbacks;
     callbacks = get_hal_device_callbacks();
 
-    wifi_hal_dbg_print("%s:%d: Vendor data len is %d and data is %p\n", __func__, __LINE__, len, data);
+    wifi_hal_dbg_print("%s:%d: Vendor data len is %zu and data is %p\n", __func__, __LINE__, len, data);
 
     _wlan_wifi_drv_to_hal_csi_data(cli_CsiData, driver_csi);
 

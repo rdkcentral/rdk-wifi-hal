@@ -459,7 +459,7 @@ INT wifi_hal_getAssociationReqIEs(  UINT apIndex,
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     station = ap_get_sta(&interface->u.ap.hapd, (const u8 *) clientMacAddress);
     if (req_ies_size < station->assoc_req_len) {
-      wifi_hal_error_print("%s:%d: req_ies_size %u is too small (should be at least %u)\n", __func__, __LINE__, req_ies_size, station->assoc_req_len);
+      wifi_hal_error_print("%s:%d: req_ies_size %u is too small (should be at least %zu)\n", __func__, __LINE__, req_ies_size, station->assoc_req_len);
       pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
       return RETURN_ERR;
     }
