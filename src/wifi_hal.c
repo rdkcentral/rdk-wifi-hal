@@ -2465,26 +2465,26 @@ static int decode_bss_info_to_neighbor_ap_info(wifi_neighbor_ap2_t *ap, const wi
             str = "WEP";
             break;
         case wifi_security_mode_wpa_personal:
-            str = "WPA";
+            str = "WPA-Personal";
             break;
         case wifi_security_mode_wpa_enterprise:
             str = "WPA-Enterprise";
             break;
         case wifi_security_mode_wpa2_personal:
-            str = "WPA2";
+            str = "WPA2-Personal";
             break;
         case wifi_security_mode_wpa2_enterprise:
             str = "WPA2-Enterprise";
             break;
         case wifi_security_mode_wpa_wpa2_personal:
-            str = "WPA-WPA2";
+            str = "WPA-WPA2-Personal";
             break;
         case wifi_security_mode_wpa_wpa2_enterprise:
             str = "WPA-WPA2-Enterprise";
             break;
         /* For future usage */
         case wifi_security_mode_wpa3_personal:
-            str = "WPA3";
+            str = "WPA3-Personal";
             break;
         case wifi_security_mode_wpa3_transition:
             str = "WPA3-Transition";

@@ -8603,15 +8603,39 @@ static inline wifi_security_modes_t add_wpa2(wifi_security_modes_t mode)
     }
 }
 
+static inline wifi_security_modes_t add_wpa3(wifi_security_modes_t mode)
+{
+    switch (mode) {
+        case wifi_security_mode_wpa3_transition:
+            return wifi_security_mode_wpa3_transition;
+        case wifi_security_mode_wpa3_enterprise:
+            return wifi_security_mode_wpa3_enterprise;
+        default:
+            return wifi_security_mode_wpa3_personal;
+    }
+}
+
+static inline wifi_security_modes_t add_wpa_akm(wifi_security_modes_t mode)
+{
+    switch (mode) {
+        case wifi_security_mode_wpa_personal:
+            return wifi_security_mode_wpa_personal;
+        case wifi_security_mode_wpa_wpa2_personal:
+            return wifi_security_mode_wpa_wpa2_personal;
+        default:
+            return wifi_security_mode_wpa2_personal;
+    }
+}
+
 static inline wifi_security_modes_t add_enterprise(wifi_security_modes_t mode)
 {
     switch (mode) {
-        case wifi_security_mode_wpa2_personal:
-            return wifi_security_mode_wpa2_enterprise;
-        case wifi_security_mode_wpa_wpa2_personal:
+        case wifi_security_mode_wpa_enterprise:
+            return wifi_security_mode_wpa_enterprise;
+        case wifi_security_mode_wpa_wpa2_enterprise:
             return wifi_security_mode_wpa_wpa2_enterprise;
         default:
-            return wifi_security_mode_wpa_enterprise;
+            return wifi_security_mode_wpa2_enterprise;
     }
 }
 
@@ -8627,7 +8651,7 @@ static void parse_rsn(const uint8_t type, uint8_t len, const uint8_t *data,
 {
     uint16_t suite_count = 0;
     uint i;
-
+    bool multiple_suite_count = false;
     (void)type;
     (void)len;
     (void)data;
@@ -8672,6 +8696,10 @@ static void parse_rsn(const uint8_t type, uint8_t len, const uint8_t *data,
                 bss->sec_mode = add_wpa2(bss->sec_mode);
                 bss->enc_method = wifi_encryption_aes;
                 break;
+            case RSN_CIPHER_SUITE_GCMP:
+                bss->sec_mode = add_wpa3(bss->sec_mode);
+                bss->enc_method = wifi_encryption_aes;
+                break;
             default:
                 // unsupported combination (can be exteneded in future)
                 break;
@@ -8709,6 +8737,10 @@ static void parse_rsn(const uint8_t type, uint8_t len, const uint8_t *data,
                     bss->sec_mode = add_wpa2(bss->sec_mode);
                     bss->enc_method = wifi_encryption_aes;
                     break;
+                case RSN_CIPHER_SUITE_GCMP:
+                    bss->sec_mode = add_wpa3(bss->sec_mode);
+                    bss->enc_method = wifi_encryption_aes;
+                    break;
                 default:
                     // unsupported combination (can be exteneded in future)
                     break;
@@ -8722,6 +8754,9 @@ static void parse_rsn(const uint8_t type, uint8_t len, const uint8_t *data,
     {
         suite_count = WPA_GET_LE16(data);
         len -= 2; data += 2;
+        if (suite_count > 1) {
+            multiple_suite_count = true;
+        }
     }
 
     PARSE_CHECK("AKM suite", len, 4*suite_count);
@@ -8729,7 +8764,22 @@ static void parse_rsn(const uint8_t type, uint8_t len, const uint8_t *data,
         for (i = 0; i < suite_count; ++i) {
             uint32_t suite_type = WPA_GET_BE32(data);
             switch (suite_type) {
+                case RSN_AUTH_KEY_MGMT_PSK_OVER_802_1X:
+                    if (multiple_suite_count == true) {
+                        bss->sec_mode = wifi_security_mode_wpa3_transition;
+                    } else {
+                        bss->sec_mode = add_wpa_akm(bss->sec_mode);
+                    }
+                    break;
+                case RSN_AUTH_KEY_MGMT_SAE:
+                    if (multiple_suite_count == true) {
+                        bss->sec_mode = wifi_security_mode_wpa3_transition;
+                    } else {
+                        bss->sec_mode = add_wpa3(bss->sec_mode);
+                    }
+                    break;
                 case WPA_AUTH_KEY_MGMT_UNSPEC_802_1X:
+                case RSN_AUTH_KEY_MGMT_UNSPEC_802_1X:
                     bss->sec_mode = add_enterprise(bss->sec_mode);
                     break;
                 default:
