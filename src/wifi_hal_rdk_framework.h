@@ -125,6 +125,7 @@ typedef struct {
     struct rtnl_kvr_handle                  rtnl_kvr;
     wifi_newApAssociatedDevice_callback     assoc_cb[MAX_REGISTERED_CB_NUM];
     unsigned int                            num_assoc_cbs;
+    wifi_apMaxClientRejection_callback      max_cli_rejection_cb;
     wifi_apDisassociatedDevice_callback     disassoc_cb[MAX_REGISTERED_CB_NUM];
     unsigned int                            num_disassoc_cbs;
     unsigned int                            num_radius_eap_cbs;

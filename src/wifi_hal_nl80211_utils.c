@@ -1836,7 +1836,7 @@ int get_security_mode_str_from_int(wifi_security_modes_t security_mode, unsigned
         }
 #else
         strcpy(security_mode_str, "sae");
-#endif
+#endif /* CONFIG_IEEE80211BE */
         break;
 
     case wifi_security_mode_wpa3_transition:
@@ -1856,7 +1856,7 @@ int get_security_mode_str_from_int(wifi_security_modes_t security_mode, unsigned
         }
 #else
         strcpy(security_mode_str, "psk2 sae");
-#endif
+#endif /* CONFIG_IEEE80211BE */
         break;
 
     case wifi_security_mode_wpa_enterprise:
@@ -1900,23 +1900,17 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
                 wifi_hal_error_print("%s:%d NULL pointer!\n", __FUNCTION__, __LINE__);
                 return RETURN_ERR;
             }
-            int has_gcmp256 = 0;
-            if (wifi_vap_mode_ap == interface->vap_info.vap_mode) {
+            unsigned char has_gcmp256 = 0;
+            if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
                 const wifi_security_modes_t security_mode = interface->vap_info.u.bss_info.security.mode;
                 switch (security_mode) {
-                    case wifi_security_mode_none:
-                    case wifi_security_mode_wpa_wpa2_personal:
-                    case wifi_security_mode_wpa2_personal:
-                    case wifi_security_mode_wpa3_transition:
-                    case wifi_security_mode_wpa_enterprise:
-                    case wifi_security_mode_wpa2_enterprise:
-                    case wifi_security_mode_wpa_wpa2_enterprise:
-                    case wifi_security_mode_wpa3_enterprise:
-                    case wifi_security_mode_enhanced_open:
-                        break;
-                    default:
-                        has_gcmp256 = !interface->u.ap.conf.disable_11be;
-                        break;
+                case wifi_security_mode_wpa3_personal:
+                case wifi_security_mode_wpa3_transition:
+                case wifi_security_mode_wpa3_enterprise:
+                    has_gcmp256 = !interface->u.ap.conf.disable_11be;
+                    break;
+                default:
+                    break;
                 }
             }
             if (has_gcmp256) {
@@ -1927,7 +1921,7 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
         }
 #else
         strcpy(encryption_mode_str, "aes");
-#endif
+#endif /* CONFIG_IEEE80211BE */
         break;
 
     case wifi_encryption_aes_tkip:
@@ -1984,6 +1978,11 @@ int pick_akm_suite(int sel)
         return  WPA_KEY_MGMT_FT_PSK;
 #endif /* CONFIG_IEEE80211R */
 #ifdef CONFIG_SAE
+#ifdef CONFIG_IEEE80211BE
+    } else if (sel & WPA_KEY_MGMT_SAE_EXT_KEY) {
+        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT SAE_EXT\n", __func__, __LINE__);
+        return WPA_KEY_MGMT_SAE_EXT_KEY;
+#endif /* CONFIG_IEEE80211BE */
     } else if (sel & WPA_KEY_MGMT_SAE) {
         wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT SAE\n", __func__, __LINE__);
         return WPA_KEY_MGMT_SAE;

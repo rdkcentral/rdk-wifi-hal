@@ -997,6 +997,11 @@ static int qca_create_mld_interfaces(wifi_vap_info_map_t *map)
                                             vap->vap_index, MAC2STR(mld_mac_addr));
             wifi_hal_info_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
             system(cmd);
+	    if (is_wifi_hal_vap_mesh_backhaul(vap->vap_index)) {
+		    snprintf(cmd, sizeof(cmd), "ip link set dev mld%d mtu 1600", vap->vap_index);
+		    wifi_hal_info_print("adding 1600 MTU value to mld%d \n", vap->vap_index);
+		    system(cmd);
+	    }
         }
     }
     return RETURN_OK;

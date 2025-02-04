@@ -954,13 +954,38 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
 
 // This function will handle all DFS Events
 static void nl80211_dfs_radar_event(wifi_interface_info_t *interface, struct nlattr **tb) {
-#ifdef CMXB7_PORT
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *mgt_interface;
     enum nl80211_radar_event event_type = 0;
     int freq = 5180, cf1 = 5180, cf2 = 0, bw = 0, ht_enabled = 0, chan_offset = 0, bandwidth = 0;
 
-    if( strncmp(interface->name, "wlan2", sizeof(interface->name)) ) {
-        wifi_hal_info_print("%s:%d name:%s bss_start:%d \n", __func__, __LINE__, interface->name, interface->bss_started);
-        return ;
+    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d failed get radio for index %d\n", __func__, __LINE__,
+            interface->vap_info.radio_index);
+        return;
+    }
+
+    if (radio->oper_param.band != WIFI_FREQUENCY_5_BAND &&
+        radio->oper_param.band != WIFI_FREQUENCY_5L_BAND &&
+        radio->oper_param.band != WIFI_FREQUENCY_5H_BAND) {
+        return;
+    }
+
+    if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_UPDATE_WIPHY_ON_PRIMARY) {
+        mgt_interface = get_primary_interface(radio);
+    }
+    else {
+        mgt_interface = get_private_vap_interface(radio);
+    }
+
+    if (mgt_interface == NULL) {
+        wifi_hal_error_print("%s:%d failed to get primary/private interface\n", __func__, __LINE__);
+        return;
+    }
+
+    if (interface != mgt_interface) {
+        return;
     }
 
     if (!tb[NL80211_ATTR_WIPHY_FREQ] || !tb[NL80211_ATTR_RADAR_EVENT])
@@ -1064,7 +1089,7 @@ static void nl80211_dfs_radar_event(wifi_interface_info_t *interface, struct nla
             wifi_hal_error_print("%s:%d  Unknown radar event detected\n", __FUNCTION__, __LINE__);
             break;
     }
-#endif
+
     return ;
 }
 
