@@ -809,13 +809,13 @@ static void remove_station_from_other_interfaces(wifi_interface_info_t *interfac
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
+#ifdef NL80211_ACL
 bool is_core_acl_drop_mgmt_frame(wifi_interface_info_t *interface, mac_address_t sta_mac)
 {
     wifi_vap_info_t *l_vap_info;
     acl_map_t *l_acl_map = NULL;
     mac_addr_str_t sta_mac_str;
     char *key = NULL;
-    bool drop = false;
 
     memset(sta_mac_str, 0, sizeof(sta_mac_str));
 
@@ -825,17 +825,18 @@ bool is_core_acl_drop_mgmt_frame(wifi_interface_info_t *interface, mac_address_t
         key = to_mac_str(sta_mac, sta_mac_str);
         l_acl_map = hash_map_get(interface->acl_map, key);
 
-        if (l_acl_map != NULL) {
-            wifi_hal_dbg_print("%s:%d: MAC %s entry present in acl list- mac mode:%d\n", __func__, __LINE__, key, l_vap_info->u.bss_info.mac_filter_mode);
-            drop = true;
-        }
         if (l_vap_info->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_white_list) {
-            drop = !drop;
+            if (l_acl_map != NULL)
+                return false;
+        } else {
+            if (l_acl_map == NULL)
+                return false;
         }
+        return true;
     }
-
-    return drop;
+    return false;
 }
+#endif
 
 bool is_sta_in_blocked_state(wifi_interface_info_t *interface, mac_address_t sta_mac)
 {
@@ -1765,11 +1766,13 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         if (callbacks->steering_event_callback != 0) {
             handle_auth_req_event_for_bm(interface, sta, sig_dbm);
         }
+#ifdef NL80211_ACL
         if (is_core_acl_drop_mgmt_frame(interface, sta)) {
             wifi_hal_dbg_print("%s:%d: Station present in acl list dropping auth req\n",
                                    __func__, __LINE__);
             return -1;
         }
+#endif
         remove_station_from_other_interfaces(interface, sta);
 #ifdef WIFI_EMULATOR_CHANGE
         send_mgmt_to_char_dev = true;
@@ -1820,10 +1823,12 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         if (callbacks->steering_event_callback != 0) {
             handle_probe_req_event_for_bm(interface, mgmt, len, sta, sig_dbm);
         }
+#ifdef NL80211_ACL
         // If mac filter acl is enabled then we need to drop mgmt frame based on acl config
         if (is_core_acl_drop_mgmt_frame(interface, sta)) {
             return -1;
         }
+#endif
 #ifdef WIFI_EMULATOR_CHANGE
         send_mgmt_to_char_dev = true;
 #endif
