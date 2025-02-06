@@ -694,3 +694,7 @@ INT wifi_getApAssociatedClientDiagnosticResult(INT ap_index, char *key,wifi_asso
 {
     return RETURN_ERR;
 }
+INT wifi_getApManagementFramePowerControl(INT apIndex, INT *output_dBm)
+{
+    return 0;
+}
