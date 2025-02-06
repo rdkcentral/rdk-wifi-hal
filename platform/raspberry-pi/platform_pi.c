@@ -600,6 +600,11 @@ int handle_rrm_action_frame(struct wifi_interface_info_t *interface, const mac_a
     return 0;
 }
 
+INT wifi_getApManagementFramePowerControl(INT apIndex, INT *output_dBm)
+{
+    return 0;
+}
+
 INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
 {
     return 0;
