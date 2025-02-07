@@ -3205,6 +3205,15 @@ int platform_get_radio_caps(wifi_radio_index_t index)
         radio->driver_data.capa.flags2 |= WPA_DRIVER_FLAGS2_MLO;
 #endif /* CONFIG_IEEE80211BE */
 
+    radio->driver_data.capa.flags2 |= WPA_DRIVER_FLAGS2_BEACON_RATE_HE;
+    if (radio->capab.band[0] == WIFI_FREQUENCY_2_4_BAND) {
+        radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_BEACON_RATE_HT |
+            WPA_DRIVER_FLAGS_BEACON_RATE_LEGACY;
+    } else {
+        radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_BEACON_RATE_VHT |
+            WPA_DRIVER_FLAGS_BEACON_RATE_HT | WPA_DRIVER_FLAGS_BEACON_RATE_LEGACY;
+    }
+
     for (interface = hash_map_get_first(radio->interface_map); interface != NULL;
         interface = hash_map_get_next(radio->interface_map, interface)) {
 
