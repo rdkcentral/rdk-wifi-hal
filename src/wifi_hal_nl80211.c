@@ -13219,26 +13219,8 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
     radio_param = &radio->oper_param;
+
     drv = &radio->driver_data;
-
-    // update beacon rate params and interface struct
-    params->beacon_rate = vap->u.bss_info.beaconRate;
-    interface->u.ap.hapd.iconf->beacon_rate = vap->u.bss_info.beaconRate;
-
-    // update beacon rate type
-
-    if ((radio_param->variant & WIFI_80211_VARIANT_AX) ||
-        (radio_param->variant & WIFI_80211_VARIANT_BE)) {
-#if HOSTAPD_VERSION >= 210	    
-        params->rate_type = BEACON_RATE_HE;
-#endif // HOSTAPD_VERSION >= 210	    
-    } else if (radio_param->variant & WIFI_80211_VARIANT_AC) {
-        params->rate_type = BEACON_RATE_VHT;
-    } else if (radio_param->variant & WIFI_80211_VARIANT_N) {
-        params->rate_type = BEACON_RATE_HT;
-    } else {
-        params->rate_type = BEACON_RATE_LEGACY;
-    }
 
     beacon_set = params->reenable ? 0 : interface->beacon_set;
 
