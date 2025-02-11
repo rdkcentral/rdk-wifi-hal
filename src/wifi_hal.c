@@ -774,6 +774,8 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         radio->oper_param.channelWidth = operationParam->channelWidth;
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
         radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
+        memcpy(radio->oper_param.channel_map, operationParam->channel_map,
+            sizeof(radio->oper_param.channel_map));
 
 #ifdef CMXB7_PORT
         if( ((radio->oper_param.band == WIFI_FREQUENCY_5_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5H_BAND))) {
@@ -1147,7 +1149,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif
 {
     wifi_radio_info_t *radio;
-    wifi_interface_info_t *interface;
+    wifi_interface_info_t *interface, *mbssid_tx_interface;
     wifi_vap_info_t *vap;
     platform_pre_create_vap_t pre_set_vap_params_fn;
     platform_create_vap_t set_vap_params_fn;
@@ -1413,6 +1415,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
             // set the vap mode on the interface
             interface->vap_info.vap_mode = vap->vap_mode;
+
+            mbssid_tx_interface = wifi_hal_get_mbssid_tx_interface(radio);
+            if (mbssid_tx_interface != NULL && mbssid_tx_interface != interface) {
+                wifi_hal_configure_mbssid(radio);
+            }
 
         } else if (vap->vap_mode == wifi_vap_mode_sta) {
 #ifdef CONFIG_WIFI_EMULATOR
@@ -1721,7 +1728,7 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
     }
     vap = &interface->vap_info;
 
-    key = to_mac_str(sta_mac, sta_mac_str);
+    key = to_mac_str(DeviceMacAddress, sta_mac_str);
     
     wifi_hal_dbg_print("%s:%d: Interface: %s MAC: %s\n", __func__, __LINE__, interface->name, key);
 
@@ -1760,6 +1767,13 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
         return RETURN_ERR;
     }
 
+    if ((vap->u.bss_info.mac_filter_enable == true) &&
+        (vap->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_black_list)) {
+        if (nl80211_kick_device(interface, DeviceMacAddress) != 0) {
+            wifi_hal_error_print("%s:%d: Unable to kick MAC %s on ap_index %d\n", __func__,
+                __LINE__, DeviceMacAddress, apIndex);
+        }
+    }
     return 0;
 }
 #else
@@ -1768,6 +1782,7 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
     wifi_interface_info_t *interface = NULL;
     wifi_vap_info_t *vap;
     acl_map_t *acl_map = NULL;
+    mac_address_t sta_mac;
 
     interface = get_interface_by_vap_index(apIndex);
     if(!interface){
@@ -1813,6 +1828,14 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
         return RETURN_ERR;
     }
 
+    to_mac_bytes(DeviceMacAddress, sta_mac);
+    if ((vap->u.bss_info.mac_filter_enable == true) &&
+        (vap->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_black_list)) {
+        if (nl80211_kick_device(interface, sta_mac) != 0) {
+            wifi_hal_error_print("%s:%d: Unable to kick MAC %s on ap_index %d\n", __func__,
+                __LINE__, DeviceMacAddress, apIndex);
+        }
+    }
     return 0;
 }
 #endif
@@ -2442,26 +2465,26 @@ static int decode_bss_info_to_neighbor_ap_info(wifi_neighbor_ap2_t *ap, const wi
             str = "WEP";
             break;
         case wifi_security_mode_wpa_personal:
-            str = "WPA";
+            str = "WPA-Personal";
             break;
         case wifi_security_mode_wpa_enterprise:
             str = "WPA-Enterprise";
             break;
         case wifi_security_mode_wpa2_personal:
-            str = "WPA2";
+            str = "WPA2-Personal";
             break;
         case wifi_security_mode_wpa2_enterprise:
             str = "WPA2-Enterprise";
             break;
         case wifi_security_mode_wpa_wpa2_personal:
-            str = "WPA-WPA2";
+            str = "WPA-WPA2-Personal";
             break;
         case wifi_security_mode_wpa_wpa2_enterprise:
             str = "WPA-WPA2-Enterprise";
             break;
         /* For future usage */
         case wifi_security_mode_wpa3_personal:
-            str = "WPA3";
+            str = "WPA3-Personal";
             break;
         case wifi_security_mode_wpa3_transition:
             str = "WPA3-Transition";
@@ -3801,6 +3824,19 @@ INT wifi_vapstatus_callback_register(wifi_vapstatus_callback func) {
     return RETURN_OK;
 }
 
+void wifi_hal_ap_max_client_rejection_callback_register(wifi_apMaxClientRejection_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+
+    if (callbacks == NULL) {
+        return;
+    }
+
+    callbacks->max_cli_rejection_cb = func;
+}
+
 void wifi_hal_apDisassociatedDevice_callback_register(wifi_apDisassociatedDevice_callback func)
 {
     wifi_device_callbacks_t *callbacks;
@@ -3996,6 +4032,8 @@ void wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char
     wifi_interface_info_t *interface;
     u8 *buf;
     struct ieee80211_hdr *hdr;
+    mac_address_t bssid_buf;
+    memset(bssid_buf, 0xff, sizeof(bssid_buf));
 
     buf = os_zalloc(24 + data_len);
     if (buf == NULL)
@@ -4012,14 +4050,14 @@ void wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char
     }
     os_memcpy(hdr->addr1, sta, ETH_ALEN);
     os_memcpy(hdr->addr2, interface->mac, ETH_ALEN);
-    os_memcpy(hdr->addr3, interface->mac, ETH_ALEN);
+    os_memcpy(hdr->addr3, bssid_buf, ETH_ALEN);
 
-#ifdef HOSTAPD_2_11 //2.11
-    wifi_drv_send_mlme(interface,buf, 24+data_len, 0, 0, NULL, 0,0,0,0);
-#elif HOSTAPD_2_10 //2.10
-    wifi_drv_send_mlme(interface,buf, 24+data_len, 0, 0, NULL, 0,0,0);
+#ifdef HOSTAPD_2_11 // 2.11
+    wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, 0, 0);
+#elif HOSTAPD_2_10 // 2.10
+    wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, 0);
 #else
-    wifi_drv_send_mlme(interface,buf,24+data_len, 0, 0, NULL, 0);
+    wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0);
 #endif
 
     os_free(buf);
@@ -4115,14 +4153,50 @@ bool is_db_upgrade_required(char* inactive_firmware)
     return false;
 }
 
-int wifi_hal_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)
+int wifi_hal_setApMacAddressControlMode(uint32_t apIndex, uint32_t mac_filter_mode)
 {
     wifi_interface_info_t *interface = get_interface_by_vap_index(apIndex);
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: WiFi interface not found for vap:%d\n", __func__, __LINE__, apIndex);
+        wifi_hal_error_print("%s:%d: WiFi interface not found for vap:%d\n", __func__, __LINE__,
+            apIndex);
         return RETURN_ERR;
     }
-    return (nl80211_set_acl_mode(interface, mac_filter_mode));
+
+    wifi_vap_info_t *vap;
+    vap = &interface->vap_info;
+    if (vap == NULL) {
+        wifi_hal_error_print("%s:%d: WiFi interface not found for vap:%d\n", __func__, __LINE__,
+            apIndex);
+        return RETURN_ERR;
+    }
+
+    if (vap->u.bss_info.enabled != true || vap->vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print(":%s:%d bss not enabled:%d for vap:%d\n", __func__, __LINE__,
+            vap->u.bss_info.enabled, vap->vap_index);
+        return RETURN_ERR;
+    }
+
+    switch (mac_filter_mode) {
+    case 2:
+        vap->u.bss_info.mac_filter_enable = true;
+        vap->u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
+        break;
+
+    case 1:
+        vap->u.bss_info.mac_filter_enable = true;
+        vap->u.bss_info.mac_filter_mode = wifi_mac_filter_mode_white_list;
+        break;
+
+    case 0:
+        vap->u.bss_info.mac_filter_enable = false;
+        break;
+
+    default:
+        wifi_hal_error_print(":%s:%d Wrong Mac mode %d\n", __func__, __LINE__, mac_filter_mode);
+        return RETURN_ERR;
+    }
+
+    return (nl80211_set_acl(interface));
 }
 
 int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)
@@ -4154,5 +4228,6 @@ int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)
         vap->u.bss_info.mac_filter_enable = true;
     }
 
-    return (nl80211_set_acl_mode(interface, mac_filter_mode));
+    vap->u.bss_info.mac_filter_mode = mac_filter_mode;
+    return (nl80211_set_acl(interface));
 }

@@ -340,32 +340,9 @@ INT wifi_getApEnable(INT apIndex, BOOL *output_bool)
 //--------------------------------------------------------------------------------------------------
 INT wifi_setApMacAddressControlMode(INT apIndex, INT filterMode)
 {
-    wifi_vap_info_t *vap_info = NULL;
-    wifi_interface_info_t *interface = NULL;
-
-    interface = get_interface_by_vap_index(apIndex);
-    if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: interface for ap index:%d not found\n", __func__, __LINE__, apIndex);
-        return RETURN_ERR;
-    }
-
-    vap_info = &interface->vap_info;
-
-    if (vap_info->vap_mode == wifi_vap_mode_ap) {
-        if (filterMode == 0) {
-               vap_info->u.bss_info.mac_filter_enable = FALSE;
-               vap_info->u.bss_info.mac_filter_mode  = wifi_mac_filter_mode_black_list;
-        } else if(filterMode == 1) {
-               vap_info->u.bss_info.mac_filter_enable = TRUE;
-               vap_info->u.bss_info.mac_filter_mode  = wifi_mac_filter_mode_white_list;
-        } else if(filterMode == 2) {
-               vap_info->u.bss_info.mac_filter_enable = TRUE;
-               vap_info->u.bss_info.mac_filter_mode  = wifi_mac_filter_mode_black_list;
-        }
-    }
-
     return RETURN_OK;
 }
+
 
 //--------------------------------------------------------------------------------------------------
 INT wifi_getBssLoad(INT apIndex, BOOL *enabled)
@@ -716,8 +693,4 @@ INT wifi_setDownStreamGroupAddress(INT apIndex, BOOL disabled)
 INT wifi_getApAssociatedClientDiagnosticResult(INT ap_index, char *key,wifi_associated_dev3_t *assoc)
 {
     return RETURN_ERR;
-}
-INT wifi_getApManagementFramePowerControl(INT apIndex, INT *output_dBm)
-{
-    return 0;
 }
