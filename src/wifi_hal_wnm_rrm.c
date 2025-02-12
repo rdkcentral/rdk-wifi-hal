@@ -32,6 +32,24 @@
 
 #include "wifi_hal_priv.h"
 #include "wifi_hal_wnm_rrm.h"
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <linux/rtnetlink.h>
+#include <netpacket/packet.h>
+#include <netlink/route/link/bridge.h>
+#include "wifi_hal.h"
+#include "wifi_hal_priv.h"
+#include "wpa_auth_i.h"
+#include "driver_nl80211.h"
+#include "ieee802_11.h"
+#include "ap/sta_info.h"
+#include "ap/dfs.h"
+#include <sys/wait.h>
+#include <linux/if_ether.h>
+#include <netinet/ether.h>
+#include <linux/filter.h>
+#include <fcntl.h>
 
 /* See Table 9-112—Optional subelement IDs for Beacon report */
 #define WLAN_BEACON_REPORT_SUBELEM_WIDE_BW_CHSWITCH 163
@@ -599,7 +617,7 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
         wifi_hal_error_print("%s:%d: Request beacon: Destination address is not connected\n", __func__, __LINE__);
         return -1;
     }
-
+/*
     if ((mode == BEACON_REPORT_MODE_PASSIVE &&
         !(sta->rrm_enabled_capa[0] & WLAN_RRM_CAPS_BEACON_REPORT_PASSIVE))
         || (mode == BEACON_REPORT_MODE_ACTIVE &&
@@ -610,7 +628,7 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
         wifi_hal_error_print("%s:%d: Request beacon: Destination station does not support BEACON report (mode %d) in RRM\n", __func__, __LINE__, mode);
         return -1;
     }
-
+*/
     if (channel == 255 && !ap_ch_rep) {
         wifi_hal_error_print("%s:%d: Request beacon: channel set to 255, but no ap channel report data provided\n", __func__, __LINE__);
         return -1;
@@ -964,7 +982,7 @@ static void handle_beacon_report_response(int ap_index, struct hostapd_data *hap
     attr = get_ie(&pos[29], len - 29, WLAN_BEACON_REPORT_SUBELEM_WIDE_BW_CHSWITCH);
     if (attr) {
         if (attr[1] < 3) { // 3 bytes, see below
-            wifi_hal_error_print("%s:%d: beacon report wide wb channel switch corrupted\n", __func__, __LINE__);
+            wifi_hal_dbg_print("%s:%d: beacon report wide wb channel switch corrupted\n", __func__, __LINE__);
         }
         else {
             rep->wideBandWidthChannelPresent = 1;
@@ -1020,7 +1038,387 @@ static int handle_radio_msmt_report(wifi_interface_info_t *interface, const mac_
     /* Pass the reports array to the callback function */
     call_BeaconReport_callback(ap_index, (wifi_BeaconReport_t*)reps.data, reps.size, dialog_token);
     darray_cleanup(&reps);
-    return WIFI_HAL_SUCCESS;
+    return RETURN_OK;
+}
+
+int wifi_rrm_send_beacon_resp(unsigned int ap_index, wifi_neighbor_ap2_t *bss,
+    unsigned int num_ssid, unsigned int token, unsigned int num_report)
+{
+    struct wpabuf *wpa_buf = NULL;
+    struct rrm_measurement_beacon_report rep;
+    uint8_t idx = 0;
+    size_t ssid_len = 0;
+    unsigned int itr = 0;
+    wifi_radio_info_t *radio = NULL;
+    wifi_interface_info_t *interface = get_interface_by_vap_index(ap_index);
+
+    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    wifi_radio_operationParam_t *radio_param = NULL;
+    radio_param = &radio->oper_param;
+    int op_class = 0;
+    op_class = get_op_class_from_radio_params(radio_param);
+
+    for (itr = 0; itr < num_report; itr++) {
+        ssid_len = strlen(bss->ap_SSID);
+        rep.op_class = op_class;
+        rep.channel = bss->ap_Channel;
+        rep.start_time = 0x00;
+        rep.duration = 0x00;
+        rep.rcpi = rssi_to_rcpi(bss->ap_SignalStrength);
+        rep.rsni = bss->ap_SignalStrength -
+            bss->ap_Noise; /* 255 indicates that RSNI is not available */
+        rep.antenna_id = 0; /* unknown */
+        rep.parent_tsf = 0x00;
+        mac_address_t mac_addr;
+        to_mac_bytes(bss->ap_BSSID, mac_addr);
+        os_memcpy(rep.bssid, mac_addr, ETH_ALEN);
+
+        uint8_t *buf, *pos, *pos1;
+        buf = malloc(sizeof(struct rrm_measurement_beacon_report) + 15 + ssid_len +
+            REPORTED_FRAME_BODY_SUBELEM_LEN);
+        memset(buf, 0,
+            sizeof(struct rrm_measurement_beacon_report) + 15 + REPORTED_FRAME_BODY_SUBELEM_LEN);
+
+        memcpy(buf, &rep, sizeof(struct rrm_measurement_beacon_report));
+        pos1 = buf + sizeof(struct rrm_measurement_beacon_report);
+        pos = pos1;
+        *pos++ = WLAN_BEACON_REPORT_SUBELEM_FRAME_BODY;
+        pos++;
+
+        WPA_PUT_LE64(pos, 0x00);
+        pos += 8;
+        WPA_PUT_LE16(pos, 0x00);
+        pos += 2;
+
+        WPA_PUT_LE16(pos, 0x00);
+        pos += 2;
+
+        *pos++ = 0x00;
+        *pos++ = ssid_len;
+        memcpy(pos, bss->ap_SSID, ssid_len);
+        pos += ssid_len;
+        pos1[1] = pos - pos1 - 2;
+
+        uint8_t *pos2;
+        pos2 = buf + (pos - pos1) + sizeof(struct rrm_measurement_beacon_report);
+        pos2[0] = WLAN_BEACON_REPORT_SUBELEM_FRAME_BODY_FRAGMENT_ID;
+        pos2[1] = 2;
+        pos2[2] = 1;
+        pos2[3] = idx;
+        pos2[3] |= REPORTED_FRAME_BODY_MORE_FRAGMENTS;
+
+        pos2 += REPORTED_FRAME_BODY_SUBELEM_LEN;
+        size_t data_len = ((pos - pos1) + sizeof(struct rrm_measurement_beacon_report) +
+            REPORTED_FRAME_BODY_SUBELEM_LEN);
+        wpabuf_resize(&wpa_buf, 5 + data_len);
+        wpabuf_put_u8(wpa_buf, WLAN_EID_MEASURE_REPORT);
+        wpabuf_put_u8(wpa_buf, 3 + data_len);
+        wpabuf_put_u8(wpa_buf, 0x01);
+        wpabuf_put_u8(wpa_buf, MEASUREMENT_REPORT_MODE_ACCEPT);
+        wpabuf_put_u8(wpa_buf, MEASURE_TYPE_BEACON);
+
+        wpabuf_put_data(wpa_buf, buf, data_len);
+
+        // wpa_hexdump_buf(MSG_DEBUG, "RRM: Radio Measurement report", wpa_buf);
+        bss++;
+        os_free(buf);
+    }
+    u8 *wpos = wpabuf_mhead_u8(wpa_buf);
+    struct wpabuf *report = wpabuf_alloc(wpabuf_len(wpa_buf) + 3);
+    wpabuf_put_u8(report, WLAN_ACTION_RADIO_MEASUREMENT);
+    wpabuf_put_u8(report, WLAN_RRM_RADIO_MEASUREMENT_REPORT);
+    wpabuf_put_u8(report, token);
+    wpabuf_put_data(report, wpos, wpabuf_len(wpa_buf));
+    // Sending to air.
+    // wifi_interface_info_t *interface = get_interface_by_vap_index(ap_index);
+    wifi_bss_info_t *backhaul;
+    backhaul = &interface->u.sta.backhaul;
+    wifi_hal_send_mgmt_frame(ap_index, backhaul->bssid, wpabuf_head(report), wpabuf_len(report), 0);
+    os_free(wpa_buf);
+    return RETURN_OK;
+}
+
+static int wifi_hal_parse_rrm_beacon_req(wifi_interface_info_t *interface,
+    const struct rrm_measurement_beacon_request *req, size_t len, wifi_hal_rrm_request_t *meas_req)
+{
+    wifi_hal_dbg_print("%s:%d ===\n", __func__, __LINE__);
+    int op_class;
+
+    if (len < sizeof(*req)) {
+        wifi_hal_error_print("%s:%d RRM: request element too short, len: %d\n", __func__, __LINE__,
+            len);
+        return RETURN_ERR;
+    }
+    int duration_mandatory = !!(req->mode & MEASUREMENT_REQUEST_MODE_DURATION_MANDATORY);
+
+    wifi_radio_info_t *radio = NULL;
+    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: Unable to get radio_info for radio index %d\n", __func__,
+            __LINE__, interface->vap_info.radio_index);
+        return RETURN_ERR;
+    }
+
+    wifi_radio_operationParam_t *radio_param = NULL;
+    radio_param = &radio->oper_param;
+    if ((op_class = get_op_class_from_radio_params(radio_param)) == -1) {
+        wifi_hal_error_print("%s:%d: could not find op_class for radio index:%d\n", __func__,
+            __LINE__, interface->vap_info.radio_index);
+        return RETURN_ERR;
+    }
+
+    /* beacon table mode not supported */
+    if (req->mode != BEACON_REPORT_MODE_PASSIVE && req->mode != BEACON_REPORT_MODE_ACTIVE) {
+        wifi_hal_error_print("%s:%d RRM: request mode %u not supported\n", __func__, __LINE__,
+            req->mode);
+        return RETURN_ERR;
+    }
+    /*
+        while (elems_len /rrm_measurement_request_element
+            >= 2) {
+            if (subelems[1] > elems_len - 2) {
+                wifi_hal_dbg_print("%s:%d RRM: subelement too short, len: %d\n", __func__, __LINE__,
+                    subelems[1]);
+                return -1;
+            }
+            //Ignoring subelement as of now.
+        }
+        */
+    meas_req->duration = le_to_host16(req->duration);
+    meas_req->duration_mandatory = duration_mandatory;
+    wifi_hal_dbg_print(
+        "%s:%d duration:%d mandatory:%d oper_class:%d channel:%d mode:%d %02x...%02x\n",
+        __func__, __LINE__, req->duration, duration_mandatory, req->oper_class, req->channel,
+        req->mode, req->bssid[0], req->bssid[5]);
+    if (meas_req->duration == 0) {
+        wifi_hal_error_print("%s:%d RRM: duration 0\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    if (meas_req->duration_mandatory) {
+        wifi_hal_error_print("%s:%d RRM: mandaory duration not supported\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    meas_req->op_class = req->oper_class;
+
+    return RETURN_OK;
+}
+
+static void handle_beacon_rep_response(int ap_index, u8 token, const u8 *pos, size_t len,
+    wifi_BeaconReport_t *rep)
+{
+    // const u8 *end;
+    const u8 *attr;
+    u8 measurement_rep_mode = 0;
+
+    if (!rep)
+        return;
+
+    os_memset(rep, 0, sizeof(wifi_BeaconReport_t));
+    measurement_rep_mode = pos[1];
+    if (measurement_rep_mode != 0 || (len < 29)) {
+        /* call callbacks with empty data */
+        return;
+    }
+
+    // end = pos + len;
+
+    rep->opClass = pos[3]; /* Operating Class */
+    rep->channel = pos[4]; /* Channel Number */
+    rep->startTime = WPA_GET_LE64(
+        &pos[5]); /* Actual Measurement Start Time (in TSF of the BSS requesting the measurement) */
+    rep->duration = WPA_GET_LE16(&pos[13]); /* in TUs */
+    rep->frameInfo = pos[15]; /* Reported Frame Information */
+    rep->rcpi = pos[16]; /* RCPI */
+    rep->rsni = pos[17]; /* RSNI */
+    os_memcpy(rep->bssid, &pos[18], ETH_ALEN); /* BSSID */
+    rep->antenna = pos[24]; /* Antenna ID */
+    rep->tsf = WPA_GET_LE32(&pos[25]); /* Parent TSF */
+    // rep.numRepetitions = ??? No such element in Radio Measurement Report frame format
+    // (see 9.6.7.3)
+
+    attr = get_ie(&pos[29], len - 29, WLAN_BEACON_REPORT_SUBELEM_WIDE_BW_CHSWITCH);
+    if (attr) {
+        if (attr[1] < 3) { // 3 bytes, see below
+            wifi_hal_error_print("%s:%d: beacon report wide wb channel switch corrupted\n",
+                __func__, __LINE__);
+        } else {
+            rep->wideBandWidthChannelPresent = 1;
+            rep->wideBandwidthChannel.bandwidth = attr[2];
+            rep->wideBandwidthChannel.centerSeg0 = attr[3];
+            rep->wideBandwidthChannel.centerSeg1 = attr[4];
+        }
+    }
+    mac_addr_str_t key;
+
+    wifi_hal_dbg_print("%s:%d:bssid is %s\n", __func__, __LINE__,
+        to_mac_str(rep->bssid, key));
+
+    return;
+}
+
+int wifi_hal_parse_rm_beaon_report(unsigned int apIndex, char *buff, size_t len,
+    wifi_hal_rrm_report_t *resp)
+{
+    wifi_interface_info_t *interface = get_interface_by_vap_index(apIndex);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: WiFi interface not found for vap:%d\n", __func__, __LINE__,
+            apIndex);
+        return RETURN_ERR;
+    }
+
+    struct ieee80211_mgmt *mgmt = (struct ieee80211_mgmt *)buff;
+    const u8 *pos, *ie, *end;
+    u8 dialog_token;
+    dyn_array reps;
+    wifi_BeaconReport_t *rep;
+
+    darray_init(&reps, sizeof(wifi_BeaconReport_t));
+
+    end = ((u8 *)mgmt) + len;
+    dialog_token = mgmt->u.action.u.rrm.dialog_token;
+    pos = mgmt->u.action.u.rrm.variable;
+
+    while ((ie = get_ie(pos, end - pos, WLAN_EID_MEASURE_REPORT))) {
+        if (ie[1] < 3) {
+            wifi_hal_dbg_print("%s:%d: Bad Measurement Report element\n", __func__, __LINE__);
+            return -1;
+        }
+
+        wifi_hal_dbg_print("%s:%d: Measurement report mode 0x%x type %u\n", __func__, __LINE__,
+            ie[3], ie[4]);
+
+        /* Report type */
+        switch (ie[4]) {
+        case MEASURE_TYPE_BEACON:
+            /* Add a new entry to the reports array and fill it with report info */
+            rep = darray_add(&reps);
+            handle_beacon_rep_response(apIndex, dialog_token, ie + 2, ie[1], rep);
+            break;
+        default:
+            wifi_hal_dbg_print("%s:%d: Measurement report type %u is not supported by HAL code\n",
+                __func__, __LINE__, ie[4]);
+            break;
+        }
+
+        pos = ie + ie[1] + 2;
+    }
+    if (resp == NULL) {
+        wifi_hal_error_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    resp->dialog_token = dialog_token;
+    resp->size = reps.size;
+    resp->beacon_repo = (wifi_BeaconReport_t *)malloc(sizeof(wifi_BeaconReport_t) * resp->size);
+    memcpy(resp->beacon_repo, reps.data, sizeof(wifi_BeaconReport_t) * resp->size);
+    darray_cleanup(&reps);
+    return RETURN_OK;
+}
+
+int wifi_hal_parse_rm_beacon_request(unsigned int apIndex, char *buff, size_t len,
+    wifi_hal_rrm_request_t *req)
+{
+    const struct rrm_measurement_request_element *meas_req;
+    struct ieee80211_mgmt *mgmt = (struct ieee80211_mgmt *)buff;
+    // struct rrm_measurement_beacon_report *resp  = (struct rrm_measurement_beacon_report
+    // *)malloc(sizeof(struct rrm_measurement_beacon_report ));
+    wifi_interface_info_t *interface = get_interface_by_vap_index(apIndex);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: WiFi interface not found for vap:%d\n", __func__, __LINE__,
+            apIndex);
+        return RETURN_ERR;
+    }
+
+    if (mgmt == NULL || req == NULL) {
+        wifi_hal_error_print("%s:%d null argument\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.action.u.rrm)) {
+        wifi_hal_error_print("%s:%d too short measurement request, len: %d\n", __func__, __LINE__,
+            len);
+        return RETURN_ERR;
+    }
+
+    uint8_t *payload;
+    payload = (uint8_t *)mgmt + IEEE80211_HDRLEN;
+
+    payload++; // going to action.
+    payload++; // going to dialog token.
+    payload++;
+    payload++;
+    payload++;
+    len -= IEEE80211_HDRLEN + 5;
+
+    meas_req = (const struct rrm_measurement_request_element *)payload;
+    if (mgmt->u.action.u.rrm.action == WLAN_RRM_RADIO_MEASUREMENT_REPORT) {
+        // wifi_hal_parse_rm_beaon_report(apIndex, buff, len, resp);
+        // wifi_hal_parse_rrm_beacon_rep(apIndex, meas_req, len, NULL);
+        return 0;
+    }
+    if (mgmt->u.action.category != WLAN_ACTION_RADIO_MEASUREMENT ||
+        mgmt->u.action.u.rrm.action != WLAN_RRM_RADIO_MEASUREMENT_REQUEST) {
+        wifi_hal_error_print("%s:%d wrong measurement request category/action\n", __func__, __LINE__);
+        return -1;
+    }
+
+    req->dialog_token = mgmt->u.action.u.rrm.dialog_token;
+
+    // pos = mgmt->u.action.u.rrm.variable;
+    // len -= IEEE80211_HDRLEN + sizeof(mgmt->u.action.u.rrm);
+
+    if (len < 2) {
+        wifi_hal_error_print("%s:%d too short measurement request, len: %d\n", __func__, __LINE__,
+            len);
+        return -1;
+    }
+
+    meas_req = (const struct rrm_measurement_request_element *)payload;
+    if (meas_req->eid != WLAN_EID_MEASURE_REQUEST) {
+        wifi_hal_error_print("%s:%d wrong measurement request EID %u\n", __func__, __LINE__,
+            meas_req->eid);
+        return -1;
+    }
+
+    if (meas_req->len < 3) {
+        wifi_hal_error_print("%s:%d measurement request element too short, len: %d\n", __func__,
+            __LINE__, meas_req->len);
+        return -1;
+    }
+
+    if (meas_req->len > len - 2) {
+        wifi_hal_error_print("%s:%d measurement request element too long, len: %d\n", __func__,
+            __LINE__, meas_req->len);
+        return -1;
+    }
+
+    if (meas_req->mode & MEASUREMENT_REQUEST_MODE_ENABLE) {
+        wifi_hal_error_print("%s:%d enable bit is not supported\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if ((meas_req->mode & MEASUREMENT_REQUEST_MODE_PARALLEL) &&
+        meas_req->type > MEASURE_TYPE_RPI_HIST) {
+        wifi_hal_error_print("%s:%d parallel measurements are not supported\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if (meas_req->mode & MEASUREMENT_REQUEST_MODE_DURATION_MANDATORY) {
+        wifi_hal_error_print("%s:%d mandatory duration is not supported\n", __func__, __LINE__);
+        return -1;
+    }
+
+    switch (meas_req->type) {
+    case MEASURE_TYPE_BEACON:
+        return wifi_hal_parse_rrm_beacon_req(interface, (const void *)meas_req->variable, len, req);
+    default:
+        wifi_hal_error_print("%s:%d unsupported radio measurement type %u\n", __func__, __LINE__,
+            meas_req->type);
+        return -1;
+    }
+
+    return 0;
 }
 
 #if !defined(PLATFORM_LINUX)

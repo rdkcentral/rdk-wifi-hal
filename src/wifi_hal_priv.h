@@ -652,6 +652,16 @@ typedef int    (* platform_get_radio_phytemperature_t)(wifi_radio_index_t index,
 typedef int    (* platform_set_dfs_t)(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
 typedef int    (* platform_get_radio_caps_t)(wifi_radio_index_t index);
 
+int wifi_hal_parse_rrm_beacon_rep(wifi_interface_info_t *interface, char *buff,
+        size_t len, struct rrm_measurement_beacon_report *meas_rep);
+typedef struct wifi_hal_rrm_request {
+    uint8_t dialog_token;
+    uint8_t duration;
+    bool    duration_mandatory;
+    uint8_t op_class;
+    uint8_t channel;
+} wifi_hal_rrm_request_t; 
+
 typedef struct {
     wifi_channelStats_t *arr;
     int arr_size;
@@ -660,6 +670,14 @@ struct ieee80211_he_cap_elem {
     u8 mac_cap_info[6];
     u8 phy_cap_info[11];
 } __attribute__((__packed__));
+
+
+typedef struct {
+    unsigned char dialog_token;
+    size_t size;
+    wifi_BeaconReport_t *beacon_repo;
+} wifi_hal_rrm_report_t;
+
 
 struct ieee80211_he_mcs_nss_supp {
     __le16 rx_mcs_80;
@@ -812,6 +830,10 @@ INT wifi_hal_BTMQueryRequest_callback_register(UINT apIndex,
                                             wifi_BTMResponse_callback btmResponseCallback);
 INT wifi_hal_RMBeaconRequestCallbackRegister(UINT apIndex, wifi_RMBeaconReport_callback beaconReportCallback);
 INT wifi_hal_RMBeaconRequestCallbackUnregister(UINT apIndex, wifi_RMBeaconReport_callback beaconReportCallback);
+int wifi_rrm_send_beacon_resp(unsigned int ap_index, wifi_neighbor_ap2_t *bss, unsigned int num_ssid, unsigned int token,
+                            unsigned int num_count);
+int wifi_hal_parse_rm_beacon_request(unsigned int apIndex, char* buff, size_t len,
+    wifi_hal_rrm_request_t *req);
 wifi_radio_info_t *get_radio_by_index(wifi_radio_index_t index);
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index);
 wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index);
