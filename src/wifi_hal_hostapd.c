@@ -141,7 +141,7 @@ void set_interface_vendor_ies(wifi_interface_info_t* interface) {
         if (platform_get_vendor_oui_fn(vendor_oui, sizeof(vendor_oui)) == 0) {
             wifi_hal_dbg_print("%s:%d: vendor_oui = %s \n", __func__, __LINE__,vendor_oui);
             
-            if (elems = wpabuf_parse_bin(vendor_oui)) {
+            if ((elems = wpabuf_parse_bin(vendor_oui)) != NULL) {
                 conf->vendor_elements = elems;
             }
         }
