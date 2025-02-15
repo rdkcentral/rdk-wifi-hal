@@ -126,16 +126,16 @@ static int get_ccspwifiagent_interface_name_from_vap_index(unsigned int vap_inde
     }
 
     if ((vap_index >= total_num_of_vaps) || (interface_name == NULL)) {
-        wifi_hal_error_print("%s:%d: Wrong vap_index:%d \n",__func__, __LINE__, vap_index);
+        wifi_hal_stats_error_print("%s:%d: Wrong vap_index:%d \n",__func__, __LINE__, vap_index);
         return RETURN_ERR;
     }
 
     l_interface_name = bss_nvifname[vap_index];
     if(l_interface_name != NULL) {
         strncpy(interface_name, l_interface_name, (strlen(l_interface_name) + 1));
-        wifi_hal_dbg_print("%s:%d: VAP index %d: interface name %s\n", __func__, __LINE__, vap_index, interface_name);
+        wifi_hal_stats_dbg_print("%s:%d: VAP index %d: interface name %s\n", __func__, __LINE__, vap_index, interface_name);
     } else {
-        wifi_hal_error_print("%s:%d: Interface name not found:%d \n",__func__, __LINE__, vap_index);
+        wifi_hal_stats_error_print("%s:%d: Interface name not found:%d \n",__func__, __LINE__, vap_index);
         return RETURN_ERR;
     }
     return RETURN_OK;
@@ -423,7 +423,7 @@ static int disable_dfs_auto_channel_change(int radio_index, int disable)
     }
 
     if (wl_ioctl(radio_dev, WLC_UP, NULL, 0) < 0) {
-        wifi_hal_error_print("%s:%d failed to set radio up for %s, err: %d (%s)\n", __func__,
+        wifi_hal_stats_error_print("%s:%d failed to set radio up for %s, err: %d (%s)\n", __func__,
             __LINE__, radio_dev, errno, strerror(errno));
         return -1;
     }
@@ -444,7 +444,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     wifi_radio_info_t *radio;
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
-        wifi_hal_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
+        wifi_hal_stats_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
         return RETURN_ERR;
     }
 
@@ -467,14 +467,14 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         //Disconnect the GPIO
         ret = platform_set_gpio_config_for_ecomode(index, true);
         if (ret != RETURN_OK) {
-            wifi_hal_dbg_print("%s:%d: Failed to disconnect gpio for radio index:%d\n", __func__, __LINE__, index);
+            wifi_hal_stats_dbg_print("%s:%d: Failed to disconnect gpio for radio index:%d\n", __func__, __LINE__, index);
         }
 #endif
     } else {
         /* Enable eco mode feature and power control configurations. */
         ret = enable_echo_feature_and_power_control_configs();
         if (ret != RETURN_OK) {
-            wifi_hal_error_print("%s:%d: Failed to enable EDPD ECO Mode feature\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: Failed to enable EDPD ECO Mode feature\n", __func__, __LINE__);
         }
 #ifdef _SR213_PRODUCT_REQ_
         //Connect the GPIO
@@ -909,7 +909,7 @@ int platform_wps_event(wifi_wps_event_t data)
             break;
 
         default:
-            wifi_hal_info_print("%s:%d wps event[%d] not handle\r\n", __func__, __LINE__, data.event);
+            wifi_hal_stats_info_print("%s:%d wps event[%d] not handle\r\n", __func__, __LINE__, data.event);
             break;
     }
 

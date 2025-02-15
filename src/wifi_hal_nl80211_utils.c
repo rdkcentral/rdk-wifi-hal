@@ -2272,6 +2272,34 @@ int get_bw320_center_freq(wifi_radio_operationParam_t *param, const char *countr
 }
 #endif /* CONFIG_IEEE80211BE */
 
+//wifi_halstats
+void wifi_hal_stats_print(wifi_hal_stats_log_level_t level, const char *format, ...)
+{
+    char buff[256] = {0};
+    FILE *fpg = NULL;
+    get_formatted_time(buff);
+#ifndef CONFIG_WIFI_EMULATOR
+    if ((access("/nvram/wifiHalStatsDbg", R_OK)) == 0) {
+        fpg = fopen("/tmp/wifiHalStats", "a+");
+        if (fpg == NULL) {
+            return;
+        }
+    } else {
+        switch (level) {
+            case WIFI_HAL_STATS_LOG_LVL_INFO:
+            case WIFI_HAL_STATS_LOG_LVL_ERROR:
+                fpg = fopen("/rdklogs/logs/wifiHalStats.txt", "a+");
+                if (fpg == NULL) {
+                    return;
+                }
+            break;
+            case WIFI_HAL_STATS_LOG_LVL_DEBUG:
+            default:
+                return;
+        }
+    }
+    #endif
+}  
 void wifi_hal_print(wifi_hal_log_level_t level, const char *format, ...)
 {
     char buff[256] = {0};
