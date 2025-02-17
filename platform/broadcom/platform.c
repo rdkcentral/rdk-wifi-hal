@@ -1292,6 +1292,12 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
         }
     }
 
+    if (wl_iovar_set(interface_name, "usr_auth", &enable, sizeof(enable)) < 0) {
+        wifi_hal_error_print("%s:%d failed to set usr_auth %d for %s, err: %d (%s)\n", __func__,
+            __LINE__, enable, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
     if (enable) {
         assoc_ctrl = ASSOC_HOSTAP_FULL_CTRL;
     } else if (is_wifi_hal_vap_hotspot_open(vap_index) ||
