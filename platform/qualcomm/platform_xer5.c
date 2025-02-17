@@ -26,10 +26,6 @@
 #define MAX_BUF_SIZE 300
 #define VAP_PREFIX "ath"
 #define RADIO_PREFIX "wifi"
-#if defined(MAX_NUM_RADIOS)
-#undef MAX_NUM_RADIOS
-#endif
-#define MAX_NUM_RADIOS 2
 #define OUI_QCA "0x001374"
 #define RETRY_LIMIT 7
 
