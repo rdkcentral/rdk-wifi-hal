@@ -1087,7 +1087,8 @@ typedef enum {
 typedef enum {
     WIFI_HAL_STATS_LOG_LVL_DEBUG,
     WIFI_HAL_STATS_LOG_LVL_INFO,
-    WIFI_HAL_STATS_LOG_LVL_ERROR
+    WIFI_HAL_STATS_LOG_LVL_ERROR,
+    WIFI_HAL_STATS_LOG_LVL_MAX
 }wifi_hal_stats_log_level_t;
 
 void wifi_hal_print(wifi_hal_log_level_t level, const char *format, ...)__attribute__((format(printf, 2, 3)));

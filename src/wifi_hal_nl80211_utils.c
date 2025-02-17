@@ -2278,13 +2278,10 @@ void wifi_hal_stats_print(wifi_hal_stats_log_level_t level, const char *format, 
     char buff[256] = {0};
     FILE *fpg = NULL;
     get_formatted_time(buff);
-#ifndef CONFIG_WIFI_EMULATOR
+    va_list list;
     if ((access("/nvram/wifiHalStatsDbg", R_OK)) == 0) {
         fpg = fopen("/tmp/wifiHalStats", "a+");
-        if (fpg == NULL) {
-            return;
-        }
-    } else {
+        } else {
         switch (level) {
             case WIFI_HAL_STATS_LOG_LVL_INFO:
             case WIFI_HAL_STATS_LOG_LVL_ERROR:
@@ -2298,8 +2295,26 @@ void wifi_hal_stats_print(wifi_hal_stats_log_level_t level, const char *format, 
                 return;
         }
     }
-    #endif
-}  
+    if (fpg == NULL) {
+            return;
+        }
+    static const char *level_marker[WIFI_HAL_STATS_LOG_LVL_MAX] =
+      {
+          [WIFI_HAL_STATS_LOG_LVL_DEBUG] = "<D>",
+          [WIFI_HAL_STATS_LOG_LVL_INFO] = "<I>",
+          [WIFI_HAL_STATS_LOG_LVL_ERROR] = "<E>",
+      };
+      if (level < WIFI_HAL_STATS_LOG_LVL_MAX)
+          snprintf(&buff[strlen(buff)], 256 - strlen(buff), " %s ", level_marker[level]);
+  
+      fprintf(fpg, "%s ", buff);
+      va_start(list, format);
+      vfprintf(fpg, format, list);
+      va_end(list);
+      fflush(fpg);
+      fclose(fpg);
+      return;
+      }  
 void wifi_hal_print(wifi_hal_log_level_t level, const char *format, ...)
 {
     char buff[256] = {0};
