@@ -740,9 +740,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                     interface->vap_info.u.bss_info.enabled, radio->configured,
                     radio->oper_param.enable);
                 if (radio->oper_param.enable && interface->vap_info.u.bss_info.enabled) {
-                    if (nl80211_interface_enable(interface->name, true) != 0 ||
-                    is_wifi_hal_vap_xhs(interface->vap_info.vap_index) ||
-                    is_wifi_hal_vap_lnf(interface->vap_info.vap_index)) {
+                    if (nl80211_interface_enable(interface->name, true) != 0) {
                         ret = nl80211_retry_interface_enable(interface, true);
                         if (ret != 0) {
                             wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n",
@@ -1344,9 +1342,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         if (radio->configured && radio->oper_param.enable) {
             wifi_hal_info_print("%s:%d: interface:%s set up\n", __func__, __LINE__,
                 interface->name);
-            if (nl80211_interface_enable(interface->name, true) != 0 ||
-                    is_wifi_hal_vap_xhs(interface->vap_info.vap_index) ||
-                    is_wifi_hal_vap_lnf(interface->vap_info.vap_index)) {
+            if (nl80211_interface_enable(interface->name, true) != 0) {
                 ret = nl80211_retry_interface_enable(interface, true);
                 if (ret != 0) {
                     wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n", __func__,

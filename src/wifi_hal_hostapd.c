@@ -141,7 +141,7 @@ void set_interface_vendor_ies(wifi_interface_info_t* interface) {
         if (platform_get_vendor_oui_fn(vendor_oui, sizeof(vendor_oui)) == 0) {
             wifi_hal_dbg_print("%s:%d: vendor_oui = %s \n", __func__, __LINE__,vendor_oui);
             
-            if (elems = wpabuf_parse_bin(vendor_oui)) {
+            if ((elems = wpabuf_parse_bin(vendor_oui)) != NULL) {
                 conf->vendor_elements = elems;
             }
         }
@@ -2562,7 +2562,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
             wpa_sm_set_param(sm, WPA_PARAM_PAIRWISE, WPA_CIPHER_NONE);
             wpa_sm_set_param(sm, WPA_PARAM_GROUP, WPA_CIPHER_NONE);
         } else {
-            sel = (WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_PSK_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+            sel = (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK |
+                WPA_KEY_MGMT_PSK_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
             key_mgmt = pick_akm_suite(sel); 
 
             if (key_mgmt == -1) {

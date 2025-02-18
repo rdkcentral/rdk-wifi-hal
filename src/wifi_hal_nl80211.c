@@ -1794,16 +1794,20 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #ifdef WIFI_EMULATOR_CHANGE
         send_mgmt_to_char_dev = true;
 #endif
+
+#if !defined(WIFI_EMULATOR_CHANGE)
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
-    defined(SKYSR213_PORT) || defined(SKYSR300_PORT) || defined(TCHCBRV2_PORT)
-        /* Authentication done in driver except SAE */
-        if (len >= IEEE80211_HDRLEN + sizeof(mgmt->u.auth) &&
-            le_to_host16(mgmt->u.auth.auth_alg) != WLAN_AUTH_SAE) {
-            forward_frame = false;
-        }
+		defined(SKYSR213_PORT) || defined(SKYSR300_PORT) || defined(TCHCBRV2_PORT)
+		/* Authentication done in driver except SAE */
+		if (len >= IEEE80211_HDRLEN + sizeof(mgmt->u.auth) &&
+				le_to_host16(mgmt->u.auth.auth_alg) != WLAN_AUTH_SAE) {
+			forward_frame = false;
+		}
 #endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) ||
-          defined(SCXER10_PORT) || defined(SKYSR213_PORT) || defined(SKYSR300_PORT) ||
-          defined(TCHCBRV2_PORT) */
+		 defined(SCXER10_PORT) || defined(SKYSR213_PORT) || defined(SKYSR300_PORT) ||
+		 defined(TCHCBRV2_PORT) */
+#endif //WIFI_EMULATOR_CHANGE
+
         break;
 
     case WLAN_FC_STYPE_ASSOC_REQ:
@@ -7075,9 +7079,7 @@ Exit:
         interface = hash_map_get_first(radio->interface_map);
         while (interface != NULL) {
             if (interface->bss_started) {
-                if (nl80211_interface_enable(interface->name, true) != 0 ||
-                    is_wifi_hal_vap_xhs(interface->vap_info.vap_index) ||
-                    is_wifi_hal_vap_lnf(interface->vap_info.vap_index)) {
+                if (nl80211_interface_enable(interface->name, true) != 0) {
                     ret = nl80211_retry_interface_enable(interface, true);
                     if (ret != 0) {
                         wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n",

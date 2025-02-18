@@ -2886,6 +2886,10 @@ static int get_radio_diagnostics(wifi_interface_info_t *interface,
     int ret = RETURN_ERR;
 
     wifi_hal_dbg_print("%s:%d Entering\n", __func__, __LINE__);
+    /* Test code  to trigger reinterface */
+    wifi_hal_dbg_print("%s:%d [AH]: Triggering reinterface enable start\n", __func__, __LINE__);
+    nl80211_retry_interface_enable(interface, true);
+    wifi_hal_dbg_print("%s:%d [AH]: Triggering reinterface enable done\n", __func__, __LINE__);
     msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
         RDK_VENDOR_NL80211_SUBCMD_GET_RADIO_INFO);
     if (msg == NULL) {

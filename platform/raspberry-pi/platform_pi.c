@@ -38,7 +38,7 @@ Licensed under the BSD-3 License
 #define MAX_BUF_SIZE 128
 #define MAX_CMD_SIZE 1024
 #define RPI_LEN_32 32
-#define MAX_KEYPASSPHRASE_LEN 128
+#define MAX_KEYPASSPHRASE_LEN 129
 #define MAX_SSID_LEN 33
 #define INVALID_KEY                      "12345678"
 
