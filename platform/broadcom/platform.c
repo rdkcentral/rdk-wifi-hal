@@ -402,6 +402,35 @@ static int enable_spect_management(int radio_index, int enable)
     return 0;
 }
 
+static int disable_dfs_auto_channel_change(int radio_index, int disable)
+{
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT)
+    char radio_dev[IFNAMSIZ];
+
+    snprintf(radio_dev, sizeof(radio_dev), "wl%d", radio_index);
+
+    if (wl_ioctl(radio_dev, WLC_DOWN, NULL, 0) < 0) {
+        wifi_hal_error_print("%s:%d failed to set radio down for %s, err: %d (%s)\n", __func__,
+            __LINE__, radio_dev, errno, strerror(errno));
+        return -1;
+    }
+
+    if (wl_iovar_set(radio_dev, "dfs_auto_channel_change_disable", &disable, sizeof(disable)) < 0) {
+        wifi_hal_error_print("%s:%d failed to set dfs_auto_channel_change_disable %d for %s, "
+                             "err: %d (%s)\n",
+            __func__, __LINE__, disable, radio_dev, errno, strerror(errno));
+        return -1;
+    }
+
+    if (wl_ioctl(radio_dev, WLC_UP, NULL, 0) < 0) {
+        wifi_hal_error_print("%s:%d failed to set radio up for %s, err: %d (%s)\n", __func__,
+            __LINE__, radio_dev, errno, strerror(errno));
+        return -1;
+    }
+#endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) */
+    return 0;
+}
+
 int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
     if ((index < 0) || (operationParam == NULL)) {
@@ -518,6 +547,8 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     if (radio->oper_param.DfsEnabled != operationParam->DfsEnabled) {
         /* sometimes spectrum management is not enabled by nvram */
         enable_spect_management(index, operationParam->DfsEnabled);
+        /* userspace selects new channel and configures CSA when radar detected */
+        disable_dfs_auto_channel_change(index, true);
     }
 
 #if defined(CONFIG_IEEE80211BE) && defined(SCXER10_PORT)
@@ -1343,7 +1374,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
     
             prepare_param_name(param_name, interface_name, "_bcnprs_txpwr_offset");
             set_decimal_nvram_param(param_name, abs(map->vap_array[index].u.bss_info.mgmtPowerControl));
-
+            wifi_setApManagementFramePowerControl(map->vap_array[index].vap_index, map->vap_array[index].u.bss_info.mgmtPowerControl);
         } else if (map->vap_array[index].vap_mode == wifi_vap_mode_sta) {
 
             prepare_param_name(param_name, interface_name, "_akm");
@@ -2899,6 +2930,68 @@ INT wifi_getRadioTrafficStats2(INT radioIndex, wifi_radioTrafficStats2_t *radioT
 
     return RETURN_OK;
 }
+
+static int set_ap_pwr(wifi_interface_info_t *interface, INT *power)
+{
+    struct nlattr *nlattr;
+    struct nl_msg *msg;
+    int ret = RETURN_ERR;
+
+    msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0,
+                                     OUI_COMCAST,
+                                     RDK_VENDOR_NL80211_SUBCMD_SET_MGT_FRAME_PWR);
+
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    nlattr = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+
+    if (nla_put(msg, RDK_VENDOR_ATTR_MGT_FRAME_PWR_LEVEL, sizeof(*power), power) < 0) {
+        wifi_hal_error_print("%s:%d Failed to put AP power\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return RETURN_ERR;
+    }
+    nla_nest_end(msg, nlattr);
+
+    ret = nl80211_send_and_recv(msg, NULL, power, NULL, NULL);
+
+    if (ret) {
+        wifi_hal_error_print("%s:%d Failed to send NL message: %d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
+        return RETURN_ERR;
+    }
+
+    return RETURN_OK;
+}
+
+INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
+{
+    wifi_interface_info_t *interface;
+
+    wifi_hal_dbg_print("%s:%d: Set AP management frame for index: %d\n", __func__, __LINE__,
+        apIndex);
+
+    interface = get_interface_by_vap_index(apIndex);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get interface for ap index: %d\n", __func__,
+            __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+    if (set_ap_pwr(interface, &dBm)) {
+        wifi_hal_error_print("%s:%d: Failed to set ap power for ap index: %d\n", __func__,
+            __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+
+    return RETURN_OK;
+}
+
+INT wifi_getRadioTransmitPower(INT radioIndex, ULONG *tx_power)
+{
+    return wifi_hal_getRadioTransmitPower(radioIndex, tx_power);
+}
+
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT
 
 int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
@@ -2967,8 +3060,6 @@ static void platform_get_radio_caps_common(wifi_radio_info_t *radio,
 static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
     // Set values from driver beacon, NL values are not valid.
-    static const u8 ext_cap[] = { 0x85, 0x00, 0x08, 0x02, 0x01, 0x00, 0x00, 0x40, 0x00, 0x40,
-        0x20 };
     static const u8 ht_mcs[16] = { 0xff, 0xff, 0xff, 0xff };
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT)
     static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
@@ -2986,14 +3077,6 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     struct hostapd_iface *iface = &interface->u.ap.iface;
 
     radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD;
-
-    free(radio->driver_data.extended_capa);
-    radio->driver_data.extended_capa = malloc(sizeof(ext_cap));
-    memcpy(radio->driver_data.extended_capa, ext_cap, sizeof(ext_cap));
-    free(radio->driver_data.extended_capa_mask);
-    radio->driver_data.extended_capa_mask = malloc(sizeof(ext_cap));
-    memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
-    radio->driver_data.extended_capa_len = sizeof(ext_cap);
 
     for (int i = 0; i < iface->num_hw_features; i++) {
         iface->hw_features[i].ht_capab = 0x11ef;
@@ -3018,8 +3101,6 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
 
 static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
-    static const u8 ext_cap[] = { 0x84, 0x00, 0x08, 0x02, 0x01, 0x00, 0x00, 0x40, 0x00, 0x40,
-        0x20 };
     static const u8 ht_mcs[16] = { 0xff, 0xff, 0xff, 0xff };
     static const u8 vht_mcs[8] = { 0xaa, 0xff, 0x00, 0x00, 0xaa, 0xff, 0x00, 0x20 };
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT)
@@ -3040,14 +3121,6 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     struct hostapd_iface *iface = &interface->u.ap.iface;
 
     radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD | WPA_DRIVER_FLAGS_DFS_OFFLOAD;
-
-    free(radio->driver_data.extended_capa);
-    radio->driver_data.extended_capa = malloc(sizeof(ext_cap));
-    memcpy(radio->driver_data.extended_capa, ext_cap, sizeof(ext_cap));
-    free(radio->driver_data.extended_capa_mask);
-    radio->driver_data.extended_capa_mask = malloc(sizeof(ext_cap));
-    memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
-    radio->driver_data.extended_capa_len = sizeof(ext_cap);
 
     for (int i = 0; i < iface->num_hw_features; i++) {
         iface->hw_features[i].ht_capab = 0x01ef;
@@ -3088,8 +3161,6 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
 
 static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
-    static const u8 ext_cap[] = { 0x84, 0x00, 0x48, 0x02, 0x01, 0x00, 0x00, 0x40, 0x00, 0x40,
-        0x21 };
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT)
     static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x02, 0x1b, 0x95,
@@ -3100,18 +3171,6 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
         0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
 #endif // TCXB7_PORT || TCXB8_PORT
     struct hostapd_iface *iface = &interface->u.ap.iface;
-
-    free(radio->driver_data.extended_capa);
-    radio->driver_data.extended_capa = malloc(sizeof(ext_cap));
-    memcpy(radio->driver_data.extended_capa, ext_cap, sizeof(ext_cap));
-    free(radio->driver_data.extended_capa_mask);
-    radio->driver_data.extended_capa_mask = malloc(sizeof(ext_cap));
-    memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
-    radio->driver_data.extended_capa_len = sizeof(ext_cap);
-
-    // MBSSID is not supported
-    radio->driver_data.extended_capa[WLAN_EXT_CAPAB_MULTIPLE_BSSID / 8] &=
-        ~(1 << (WLAN_EXT_CAPAB_MULTIPLE_BSSID % 8));
 
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT)

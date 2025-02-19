@@ -426,14 +426,13 @@ typedef struct wifi_interface_info_t {
     mac_address_t   mac;
     unsigned int type;
     unsigned int interface_status;
-    bool    primary;
-    wifi_vap_info_t     vap_info;
-    bool    vap_initialized;
-    bool    bss_started;
-   
-    bool    vap_configured; // important flag, flag = true means that hostap is configured for this and 
-                            // interface is ready to receive 802.11 data frames
-    bool    bridge_configured;
+    bool primary;
+    wifi_vap_info_t vap_info;
+    bool vap_initialized;
+    bool bss_started;
+    bool vap_configured; // important flag, flag = true means that hostap is configured for this and
+                         // interface is ready to receive 802.11 data frames
+    bool bridge_configured;
     struct nl_handle *nl_event;
     int nl_event_fd;
     struct nl_cb *nl_cb;
@@ -519,6 +518,7 @@ typedef struct {
     unsigned int  prev_channel;
     unsigned int  prev_channelWidth;
     bool radio_presence; //True for ECO mode Active radio, false for ECO mode power down sleeping radio
+    bool radar_detected;
 } wifi_radio_info_t;
 
 typedef wifi_vap_name_t wifi_vap_type_t;
@@ -792,6 +792,7 @@ INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress);
 INT wifi_hal_delApAclDevices(INT apIndex);
 INT wifi_hal_steering_eventRegister(wifi_steering_eventCB_t event_cb);
 INT wifi_hal_setRadioTransmitPower(wifi_radio_index_t radioIndex, uint txpower);
+INT wifi_hal_getRadioTransmitPower(INT radioIndex, ULONG *tx_power);
 INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, INT dwell_time, UINT chan_num, UINT *chan_list);
 INT wifi_hal_getNeighboringWiFiStatus(INT radioIndex, wifi_neighbor_ap2_t **neighbor_ap_array, UINT *output_array_size);
 INT wifi_hal_getNeighboringWiFiStatus_test(INT radioIndex, wifi_neighbor_ap2_t **neighbor_ap_array, UINT *output_array_size);
@@ -805,6 +806,7 @@ void wifi_hal_apDisassociatedDevice_callback_register(wifi_apDisassociatedDevice
 void wifi_hal_radiusEapFailure_callback_register(wifi_radiusEapFailure_callback func);
 void wifi_hal_radiusFallback_failover_callback_register(wifi_radiusFallback_failover_callback func);
 void wifi_hal_apDeAuthEvent_callback_register(wifi_apDeAuthEvent_callback func);
+void wifi_hal_ap_max_client_rejection_callback_register(wifi_apMaxClientRejection_callback func);
 INT wifi_hal_BTMQueryRequest_callback_register(UINT apIndex,
                                             wifi_BTMQueryRequest_callback btmQueryCallback,
                                             wifi_BTMResponse_callback btmResponseCallback);
@@ -1066,6 +1068,10 @@ int wifi_drv_set_ap_mlo(struct nl_msg *msg, void *priv, struct wpa_driver_ap_par
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb);
 int update_hostap_mlo(wifi_interface_info_t *interface);
 #endif /* CONFIG_IEEE80211BE */
+
+wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio);
+void wifi_hal_configure_mbssid(wifi_radio_info_t *radio);
+
 #ifdef __cplusplus
 }
 #endif

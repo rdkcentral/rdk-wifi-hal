@@ -407,7 +407,47 @@ int check_radio_index(uint8_t radio_index)
 
 int platform_post_init(wifi_vap_info_map_t *vap_map)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    char cmd[DEFAULT_CMD_SIZE];
+    int i, apIndex;
+    int ret = -1;
+
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+
+    for (i = 0; i < MAX_NUM_RADIOS; i++) {
+        if(i == RDK_2G_RADIO) {
+            for (apIndex = 0; apIndex < MAX_NUM_VAP_PER_RADIO; apIndex++) {
+                if (isValidAPIndex(VAP_RADIO_2G[apIndex])) {
+                    snprintf(cmd,sizeof(cmd), "cfg80211tool %s%d acsmindwell 51", VAP_PREFIX, VAP_RADIO_2G[apIndex]);
+                    ret = system(cmd);
+                    if(ret == -1) {
+                        wifi_hal_error_print("Unable to set min ACS dwell %s:%d \n", __func__, __LINE__);
+                    }
+                    snprintf(cmd,sizeof(cmd), "cfg80211tool %s%d acsmaxdwell 51", VAP_PREFIX, VAP_RADIO_2G[apIndex]);
+                    ret = system(cmd);
+                    if(ret == -1) {
+                        wifi_hal_error_print("Unable to set max ACS dwell %s:%d \n", __func__, __LINE__);
+                    }
+                }
+            }
+        }
+        if (i == RDK_5G_RADIO) {
+            for (apIndex = 0; apIndex < MAX_NUM_VAP_PER_RADIO; apIndex++) {
+                if (isValidAPIndex(VAP_RADIO_5G[apIndex])) {
+                    snprintf(cmd,sizeof(cmd), "cfg80211tool %s%d acsmindwell 51", VAP_PREFIX, VAP_RADIO_5G[apIndex]);
+                    ret = system(cmd);
+                    if(ret == -1) {
+                        wifi_hal_error_print("Unable to set min ACS dwell %s:%d \n", __func__, __LINE__);
+                    }
+                    snprintf(cmd,sizeof(cmd), "cfg80211tool %s%d acsmaxdwell 51", VAP_PREFIX, VAP_RADIO_5G[apIndex]);
+                    ret = system(cmd);
+                    if(ret == -1) {
+                        wifi_hal_error_print("Unable to set max ACS dwell %s:%d \n", __func__, __LINE__);
+                    }
+                }
+            }
+        }
+    }
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     return 0;
 }
 
@@ -607,6 +647,14 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     uint32_t apIndex = 0, primary_vap_index = 0;// check private vap index
     int channel = 0;
     char *guard_int = NULL;
+    wifi_radio_info_t *radio = NULL;
+
+
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
+        return RETURN_ERR;
+    }
 
     if (operationParam == NULL || check_radio_index(index) != 0 ) {
         wifi_hal_error_print("%s:%d returning error param:%p index:%d\n",__func__,__LINE__, operationParam, index);
@@ -719,13 +767,16 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
         }
     }
 
+    // ACS will trigger only at bootup. Post that it shouldn't trigger unless OneWiFi gets
+    // restarted due to abnormal behaviour.
     if (operationParam->autoChannelEnabled) {
-        snprintf(cmd, sizeof(cmd), "iwconfig %s%d channel 0",VAP_PREFIX, primary_vap_index);
-        ret = system(cmd);
-        if(ret == -1) {
-            wifi_hal_error_print("ACS set command failed %s:%d \n",__func__, __LINE__);
+        if(!radio->configured) {
+            snprintf(cmd, sizeof(cmd), "iwconfig %s%d channel 0",VAP_PREFIX, primary_vap_index);
+            ret = system(cmd);
+            if(ret == -1) {
+                wifi_hal_error_print("ACS set command failed %s:%d \n",__func__, __LINE__);
+            }
         }
-
     }
 
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
@@ -997,6 +1048,11 @@ static int qca_create_mld_interfaces(wifi_vap_info_map_t *map)
                                             vap->vap_index, MAC2STR(mld_mac_addr));
             wifi_hal_info_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
             system(cmd);
+	    if (is_wifi_hal_vap_mesh_backhaul(vap->vap_index)) {
+		    snprintf(cmd, sizeof(cmd), "ip link set dev mld%d mtu 1600", vap->vap_index);
+		    wifi_hal_info_print("adding 1600 MTU value to mld%d \n", vap->vap_index);
+		    system(cmd);
+	    }
         }
     }
     return RETURN_OK;
