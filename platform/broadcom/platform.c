@@ -423,7 +423,7 @@ static int disable_dfs_auto_channel_change(int radio_index, int disable)
     }
 
     if (wl_ioctl(radio_dev, WLC_UP, NULL, 0) < 0) {
-        wifi_hal_stats_stats_error_print("%s:%d failed to set radio up for %s, err: %d (%s)\n", __func__,
+        wifi_hal_stats_error_print("%s:%d failed to set radio up for %s, err: %d (%s)\n", __func__,
             __LINE__, radio_dev, errno, strerror(errno));
         return -1;
     }
@@ -909,7 +909,7 @@ int platform_wps_event(wifi_wps_event_t data)
             break;
 
         default:
-            wifi_hal_stats_stats_info_print("%s:%d wps event[%d] not handle\r\n", __func__, __LINE__, data.event);
+            wifi_hal_stats_info_print("%s:%d wps event[%d] not handle\r\n", __func__, __LINE__, data.event);
             break;
     }
 

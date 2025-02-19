@@ -937,12 +937,12 @@ static void *rdk_hal_server_func(void *arg)
 
     if (((p_ipc_node->type != hal_ipc_node_type_notification_server) ||
             (p_ipc_node->type != hal_ipc_node_type_sync_call_server)) == false) {
-        wifi_hal_error_print("%s:%d: Invalid node type: %d\n", __func__, __LINE__, p_ipc_node->type);
+        wifi_hal_stats_error_print("%s:%d: Invalid node type: %d\n", __func__, __LINE__, p_ipc_node->type);
         return NULL;
     }
 
     if ((p_ipc_node->srv_sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        wifi_hal_error_print("%s:%d:server socket create failed err: %d\n", __func__, __LINE__, errno);
+        wifi_hal_stats_error_print("%s:%d:server socket create failed err: %d\n", __func__, __LINE__, errno);
         return NULL;
     }
 
@@ -952,30 +952,30 @@ static void *rdk_hal_server_func(void *arg)
 
     unlink(p_ipc_node->node_path);
     if (bind(p_ipc_node->srv_sock, (struct sockaddr *)&p_ipc_node->srv_sockaddr, len) == -1) {
-        wifi_hal_error_print("%s:%d:server socket bind failed err: %d\n", __func__, __LINE__, errno);
+        wifi_hal_stats_error_print("%s:%d:server socket bind failed err: %d\n", __func__, __LINE__, errno);
         close(p_ipc_node->srv_sock);
         return NULL;
     }
 
     if ((setsockopt(p_ipc_node->srv_sock, SOL_SOCKET, SO_RCVBUF, &max_size ,sizeof(int))) < 0) {
-        wifi_hal_error_print("%s:%d:server socket size set failed err: %d\n", __func__, __LINE__, errno);
+        wifi_hal_stats_error_print("%s:%d:server socket size set failed err: %d\n", __func__, __LINE__, errno);
         close(p_ipc_node->srv_sock);
         return NULL;
     }
 
     if ((setsockopt(p_ipc_node->srv_sock, SOL_SOCKET, SO_SNDBUF, &max_size ,sizeof(int))) < 0) {
-        wifi_hal_error_print("%s:%d:server socket size set failed err: %d\n", __func__, __LINE__, errno);
+        wifi_hal_stats_error_print("%s:%d:server socket size set failed err: %d\n", __func__, __LINE__, errno);
         close(p_ipc_node->srv_sock);
         return NULL;
     }
 
     if (listen(p_ipc_node->srv_sock, 32) == -1) {
-        wifi_hal_error_print("%s:%d:server socket listen failed err: %d\n", __func__, __LINE__, errno);
+        wifi_hal_stats_error_print("%s:%d:server socket listen failed err: %d\n", __func__, __LINE__, errno);
         close(p_ipc_node->srv_sock);
         return NULL;
     }
 
-    wifi_hal_dbg_print("%s:%d: Enter loop.\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: Enter loop.\n", __func__, __LINE__);
 
     while ((cli_sock = accept(p_ipc_node->srv_sock, (struct sockaddr *)&cli_sockaddr, &len)) != -1) {
         ///**************************************************************************************///
@@ -990,7 +990,7 @@ static void *rdk_hal_server_func(void *arg)
         if (sizeof(hal_ipc_processor_desc_t) > max_size) {
             while (target_bytes < sizeof(hal_ipc_processor_desc_t)) {
                 if (((nbytes = recv(cli_sock, ptr, (sizeof(hal_ipc_processor_desc_t) - target_bytes > max_size) ? max_size : (sizeof(hal_ipc_processor_desc_t) - target_bytes), 0)) == -1) || (nbytes == 0)) {
-                    wifi_hal_error_print("%s:%d:receiving command response failed err: %d data len:%zu\n", __func__, __LINE__, errno, nbytes);
+                    wifi_hal_stats_error_print("%s:%d:receiving command response failed err: %d data len:%zu\n", __func__, __LINE__, errno, nbytes);
                     close(cli_sock);
                     break_cycle = 1;
                     break;
@@ -1003,7 +1003,7 @@ static void *rdk_hal_server_func(void *arg)
             }
         } else {
             if (((nbytes = recv(cli_sock, (unsigned char *) &desc, sizeof(hal_ipc_processor_desc_t), 0)) == -1) || (nbytes == 0)) {
-                wifi_hal_error_print("%s:%d:receiving command response failed err: %d data len:%zu\n", __func__, __LINE__, errno, nbytes);
+                wifi_hal_stats_error_print("%s:%d:receiving command response failed err: %d data len:%zu\n", __func__, __LINE__, errno, nbytes);
                 close(cli_sock);
                 continue;
             }
@@ -1022,7 +1022,7 @@ static void *rdk_hal_server_func(void *arg)
             desc.scratch_buf = malloc(desc.scratch_buf_size);
 
             if (!desc.scratch_buf) {
-                wifi_hal_error_print("%s:%d: failed to allocate memory of %d bytes for scratch buffer\n", __func__, __LINE__, desc.scratch_buf_size);
+                wifi_hal_stats_error_print("%s:%d: failed to allocate memory of %d bytes for scratch buffer\n", __func__, __LINE__, desc.scratch_buf_size);
                 close(cli_sock);
                 continue;
             }
@@ -1033,7 +1033,7 @@ static void *rdk_hal_server_func(void *arg)
             if (desc.scratch_buf_size > max_size) {
                 while (target_bytes < desc.scratch_buf_size) {
                     if (((nbytes = recv(cli_sock, (unsigned char *)tmp, (desc.scratch_buf_size - target_bytes) > max_size ? max_size : (desc.scratch_buf_size - target_bytes), 0)) == -1) || (nbytes == 0)) {
-                        wifi_hal_error_print("%s:%d:receiving desc scratch buf in chunks failed err: %d data len:%zu\n", __func__, __LINE__, errno, nbytes);
+                        wifi_hal_stats_error_print("%s:%d:receiving desc scratch buf in chunks failed err: %d data len:%zu\n", __func__, __LINE__, errno, nbytes);
                         free(desc.scratch_buf);
                         close(cli_sock);
                         break_cycle = 1;
@@ -1047,7 +1047,7 @@ static void *rdk_hal_server_func(void *arg)
                 nbytes = target_bytes;
             } else {
                 if (((nbytes = recv(cli_sock, (unsigned char *)tmp, desc.scratch_buf_size, 0)) == -1) || (nbytes == 0)) {
-                    wifi_hal_error_print("%s:%d:receiving command response failed err: %d data len:%zu\n", __func__, __LINE__, errno, nbytes);
+                    wifi_hal_stats_error_print("%s:%d:receiving command response failed err: %d data len:%zu\n", __func__, __LINE__, errno, nbytes);
                     free(desc.scratch_buf);
                     close(cli_sock);
                     continue;
@@ -1059,7 +1059,7 @@ static void *rdk_hal_server_func(void *arg)
             desc.scratch_buf_size = 0;
         }
 
-        wifi_hal_dbg_print("%s:%d: Received command to execute: %s, bytes: %zu, expected: %d\n", __func__, __LINE__, desc.name, sizeof(hal_ipc_processor_desc_t) + nbytes, desc.len);
+        wifi_hal_stats_dbg_print("%s:%d: Received command to execute: %s, bytes: %zu, expected: %d\n", __func__, __LINE__, desc.name, sizeof(hal_ipc_processor_desc_t) + nbytes, desc.len);
 
         assert((sizeof(hal_ipc_processor_desc_t) + nbytes) == desc.len);
         ///**************************************************************************************///
@@ -1068,7 +1068,7 @@ static void *rdk_hal_server_func(void *arg)
         serv_processor = processor_desc[desc.type].ipc_processor[processor_type_ipc_server_output];
 
         if ((serv_processor != NULL) && (serv_processor(&desc, NULL, NULL, NULL, NULL, NULL) != 0)) {
-            wifi_hal_error_print("%s:%d: Execution failed: %s\n", __func__, __LINE__, desc.name);
+            wifi_hal_stats_error_print("%s:%d: Execution failed: %s\n", __func__, __LINE__, desc.name);
             // indicate ipc failure
             desc.ret = -1;
             desc.len = sizeof(hal_ipc_processor_desc_t);
@@ -1079,7 +1079,7 @@ static void *rdk_hal_server_func(void *arg)
         ///                     SEND DATA TO CLIENT                                              ///
         ///**************************************************************************************///
 
-        wifi_hal_dbg_print("%s:%d: Send data to client.\n", __func__, __LINE__);
+        wifi_hal_stats_dbg_print("%s:%d: Send data to client.\n", __func__, __LINE__);
 
         // At first send the descriptor structure
         // Next send the descriptor scratch buffer (optional)
@@ -1089,7 +1089,7 @@ static void *rdk_hal_server_func(void *arg)
             ptr = (unsigned char *) &desc;
             while (target_bytes < sizeof(hal_ipc_processor_desc_t)) {
                 if ((nbytes = send(cli_sock, ptr, ((sizeof(hal_ipc_processor_desc_t) - target_bytes) > max_size) ? max_size : (sizeof(hal_ipc_processor_desc_t) - target_bytes), 0)) == -1) {
-                    wifi_hal_error_print("%s:%d:sending desc in chunks failed err: %d\n", __func__, __LINE__, errno);
+                    wifi_hal_stats_error_print("%s:%d:sending desc in chunks failed err: %d\n", __func__, __LINE__, errno);
                     // serv_processor function depending on descriptor type
                     // might allocate memory for client's response
                     // to desc.scratch_buf pointer and therefore desc.len (data length of descriptor)
@@ -1110,7 +1110,7 @@ static void *rdk_hal_server_func(void *arg)
             }
             nbytes = target_bytes;
         } else if ((nbytes = send(cli_sock, (unsigned char *)&desc, sizeof(hal_ipc_processor_desc_t), 0)) == -1) {
-            wifi_hal_error_print("%s:%d:sending desc failed err: %d\n", __func__, __LINE__, errno);
+            wifi_hal_stats_error_print("%s:%d:sending desc failed err: %d\n", __func__, __LINE__, errno);
             if (desc.len > sizeof(hal_ipc_processor_desc_t)) {
                 free(desc.scratch_buf);
             }
@@ -1125,7 +1125,7 @@ static void *rdk_hal_server_func(void *arg)
             tmp = desc.scratch_buf;
             while(target_bytes < desc.scratch_buf_size) {
                 if ((nbytes = send(cli_sock, (unsigned char *) tmp, ((desc.scratch_buf_size - target_bytes) > max_size) ? max_size : (desc.scratch_buf_size - target_bytes), 0)) == -1) {
-                    wifi_hal_error_print("%s:%d:sending desc in chunks failed err: %d\n", __func__, __LINE__, errno);
+                    wifi_hal_stats_error_print("%s:%d:sending desc in chunks failed err: %d\n", __func__, __LINE__, errno);
                     // condition if (desc.len > sizeof(hal_ipc_processor_desc_t)) means that
                     // we allocated memory in server_proc function
                     free(desc.scratch_buf);
@@ -1141,12 +1141,12 @@ static void *rdk_hal_server_func(void *arg)
             }
             nbytes = target_bytes;
 
-            wifi_hal_dbg_print("%s:%d: Response sent to client for api: %s bytes: %zu\n", __func__, __LINE__, desc.name, sizeof(hal_ipc_processor_desc_t) + nbytes);
+            wifi_hal_stats_dbg_print("%s:%d: Response sent to client for api: %s bytes: %zu\n", __func__, __LINE__, desc.name, sizeof(hal_ipc_processor_desc_t) + nbytes);
 
             free(desc.scratch_buf);
             close(cli_sock);
         } else {
-            wifi_hal_dbg_print("%s:%d: Response sent to client for api: %s bytes: %zu\n", __func__, __LINE__, desc.name, nbytes);
+            wifi_hal_stats_dbg_print("%s:%d: Response sent to client for api: %s bytes: %zu\n", __func__, __LINE__, desc.name, nbytes);
             close(cli_sock);
         }
 
@@ -1154,7 +1154,7 @@ static void *rdk_hal_server_func(void *arg)
 
     close(p_ipc_node->srv_sock);
 
-    wifi_hal_dbg_print("%s:%d: Exit.\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: Exit.\n", __func__, __LINE__);
 
     return NULL;
 }

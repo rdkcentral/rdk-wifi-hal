@@ -1786,11 +1786,11 @@ int get_security_mode_int_from_str(char *security_mode_str,char *mfp_str,wifi_se
     } else if (strcmp(security_mode_str, "wpa wpa2") == 0) {
         *security_mode = wifi_security_mode_wpa_wpa2_enterprise;
     } else {
-        wifi_hal_error_print("%s:%d: wifi security mode not found:[%s:%s]\r\n",__func__, __LINE__, security_mode_str,mfp_str);
+        wifi_hal_stats_error_print("%s:%d: wifi security mode not found:[%s:%s]\r\n",__func__, __LINE__, security_mode_str,mfp_str);
         return RETURN_ERR;
     }
 
-    wifi_hal_dbg_print("%s:%d: security mode %d string %s and mfp is %s\r\n",__func__, __LINE__, *security_mode,security_mode_str,mfp_str);
+    wifi_hal_stats_dbg_print("%s:%d: security mode %d string %s and mfp is %s\r\n",__func__, __LINE__, *security_mode,security_mode_str,mfp_str);
     return RETURN_OK;
 }
 
@@ -3235,20 +3235,20 @@ int create_ecomode_interfaces(void)
         for (j = 0; j < g_wifi_hal.num_radios; j++) {
            radio = &g_wifi_hal.radio_info[j];
            if (NULL == radio) {
-               wifi_hal_error_print("%s:%d: Failed in creating eco mode interfaces\n", __func__, __LINE__);
+               wifi_hal_stats_error_print("%s:%d: Failed in creating eco mode interfaces\n", __func__, __LINE__);
                return -1;
            }
            if (radio->rdk_radio_index == l_radio_interface_map[radioIndex].radio_index) {
                //Radio interface not in ECO mode [Added already in g_wifi_hal.radio_info after notification from driver]
                found = 1;
                radio->radio_presence = true;
-               wifi_hal_dbg_print("%s:%d: Found ECO Active mode radio , coming out\n", __func__, __LINE__);
+               wifi_hal_stats_dbg_print("%s:%d: Found ECO Active mode radio , coming out\n", __func__, __LINE__);
                break;
            }
         }
 
         if (!found) {
-          wifi_hal_dbg_print("%s:%d: Set up things for the ECO Sleeping mode radio\n", __func__, __LINE__);
+          wifi_hal_stats_dbg_print("%s:%d: Set up things for the ECO Sleeping mode radio\n", __func__, __LINE__);
           radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
           memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
           radio->radio_presence = false;
@@ -3267,14 +3267,14 @@ int create_ecomode_interfaces(void)
           for (vapIndex = 0; vapIndex < get_sizeof_interfaces_index_map(); vapIndex++)
           {
              wifi_interface_info_t *interface = NULL;
-              wifi_hal_dbg_print("%s:%d: Process %s  vap interface to add to the radio\n", __func__, __LINE__, interface_index_map[vapIndex].interface_name);
+              wifi_hal_stats_dbg_print("%s:%d: Process %s  vap interface to add to the radio\n", __func__, __LINE__, interface_index_map[vapIndex].interface_name);
               if (interface_index_map[vapIndex].rdk_radio_index != l_radio_interface_map[radioIndex].radio_index) {
                  continue;
               }
 
               interface = (wifi_interface_info_t *)malloc(sizeof(wifi_interface_info_t));
               if (interface == NULL) {
-                  wifi_hal_dbg_print("%s:%d: malloc failed! Continue\n", __func__, __LINE__);
+                  wifi_hal_stats_dbg_print("%s:%d: malloc failed! Continue\n", __func__, __LINE__);
                   continue;
               }
               memset(interface, 0, sizeof(wifi_interface_info_t));
@@ -3282,22 +3282,22 @@ int create_ecomode_interfaces(void)
               interface->index = interface_index_map[vapIndex].index;
               sprintf(interface->name, "%s", interface_index_map[vapIndex].interface_name);
               if (set_interface_properties(interface->phy_index , interface) != 0) {
-                  wifi_hal_info_print("%s:%d: Could not map interface name to index:%d\n", __func__, __LINE__, interface->phy_index);
+                  wifi_hal_stats_info_print("%s:%d: Could not map interface name to index:%d\n", __func__, __LINE__, interface->phy_index);
               }
               vap = &interface->vap_info;
-              wifi_hal_dbg_print("%s:%d: phy index: %d\tradio index: %d\tinterface index: %d name: %s  type:%d, mac:%02x:%02x:%02x:%02x:%02x:%02x vap index: %d vap name: %s\n",
+              wifi_hal_stats_dbg_print("%s:%d: phy index: %d\tradio index: %d\tinterface index: %d name: %s  type:%d, mac:%02x:%02x:%02x:%02x:%02x:%02x vap index: %d vap name: %s\n",
                                  __func__, __LINE__,radio->index, vap->radio_index, interface->index, interface->name, interface->type,interface->mac[0], interface->mac[1],
                                  interface->mac[2],interface->mac[3], interface->mac[4], interface->mac[5],vap->vap_index, vap->vap_name);
               hash_map_put(radio->interface_map, strdup(interface->name), interface);
               radio->capab.maxNumberVAPs++;
 
-              wifi_hal_dbg_print("%s:%d: Fetch next interface after the radio interface hash map [%s]\n", __func__, __LINE__, interface->name);
+              wifi_hal_stats_dbg_print("%s:%d: Fetch next interface after the radio interface hash map [%s]\n", __func__, __LINE__, interface->name);
            }
            // Build the sleeping radio capabilities manually based on the available info in the 'radio' to bringup webconfig,  Device.WiFi.**
            update_ecomode_radio_capabilities(radio);
        }
     }
-    wifi_hal_dbg_print("\n%s:%d: Number of radios %d\n", __func__, __LINE__, g_wifi_hal.num_radios);
+    wifi_hal_stats_dbg_print("\n%s:%d: Number of radios %d\n", __func__, __LINE__, g_wifi_hal.num_radios);
     return 0;
 }
 
@@ -3643,7 +3643,7 @@ wifi_steering_apConfig_t* steering_find_ap_cfg(int vap_index, uint32_t *g_idx)
 
             if (g_info->config.apIndex == vap_index) {
                 *g_idx = g_ptr->group_index;
-                wifi_hal_dbg_print("%s:%d: found group index %d for ap_index:%d\n", __func__, __LINE__, g_ptr->group_index, vap_index);
+                wifi_hal_stats_dbg_print("%s:%d: found group index %d for ap_index:%d\n", __func__, __LINE__, g_ptr->group_index, vap_index);
                 return &g_info->config;
             }
         }
@@ -3701,11 +3701,11 @@ void re_configure_steering_mac_list(wifi_interface_info_t *interface)
 
     vap = &interface->vap_info;
     if (vap->vap_mode != wifi_vap_mode_ap) {
-        wifi_hal_info_print("%s:%d: sta vap:%d does not support this\n", __func__, __LINE__, vap->vap_index);
+        wifi_hal_stats_info_print("%s:%d: sta vap:%d does not support this\n", __func__, __LINE__, vap->vap_index);
         return;
     } else if((vap->u.bss_info.mac_filter_enable == true) &&
                 (vap->u.bss_info.mac_filter_mode != wifi_mac_filter_mode_black_list)) {
-        wifi_hal_info_print("%s:%d: mac mode:%d for vap:%d\n", __func__, __LINE__, vap->u.bss_info.mac_filter_mode, vap->vap_index);
+        wifi_hal_stats_info_print("%s:%d: mac mode:%d for vap:%d\n", __func__, __LINE__, vap->u.bss_info.mac_filter_mode, vap->vap_index);
         return;
     }
 
@@ -4160,13 +4160,13 @@ void init_interface_map(void)
         init_static_interface_map();
     }
 
-    wifi_hal_info_print("%s:%d: Using %s Interface Map\n", __func__, __LINE__,
+    wifi_hal_stats_info_print("%s:%d: Using %s Interface Map\n", __func__, __LINE__,
         ((json_ret < 0) ? "STATIC" : "JSON"));
 
-    wifi_hal_info_print("%s:%d: Interface Index Map(%u):\n", __func__, __LINE__,
+    wifi_hal_stats_info_print("%s:%d: Interface Index Map(%u):\n", __func__, __LINE__,
         interface_index_map_size);
     for (i = 0; i < interface_index_map_size; i++) {
-        wifi_hal_info_print("\t[%u]={phy_index:%u, rdk_radio_index:%u, interface_name:%s, "
+        wifi_hal_stats_info_print("\t[%u]={phy_index:%u, rdk_radio_index:%u, interface_name:%s, "
                             "bridge_name:%s, vlan_id:%d, index:%u, vap_name:%s}\n",
             i, interface_index_map[i].phy_index, interface_index_map[i].rdk_radio_index,
             interface_index_map[i].interface_name, interface_index_map->bridge_name,
@@ -4174,10 +4174,10 @@ void init_interface_map(void)
             interface_index_map[i].vap_name);
     }
 
-    wifi_hal_info_print("%s:%d: Radio Interface Index Map(%u):\n", __func__, __LINE__,
+    wifi_hal_stats_info_print("%s:%d: Radio Interface Index Map(%u):\n", __func__, __LINE__,
         l_radio_interface_map_size);
     for (i = 0; i < l_radio_interface_map_size; i++) {
-        wifi_hal_info_print("\t[%u]={phy_index:%u, radio_index:%u, radio_name:%s, "
+        wifi_hal_stats_info_print("\t[%u]={phy_index:%u, radio_index:%u, radio_name:%s, "
                             "interface_name:%s}\n",
             i, l_radio_interface_map[i].phy_index, l_radio_interface_map[i].radio_index,
             l_radio_interface_map[i].radio_name, l_radio_interface_map[i].interface_name);

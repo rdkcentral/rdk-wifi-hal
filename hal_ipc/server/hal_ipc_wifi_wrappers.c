@@ -150,18 +150,18 @@ INT wifi_hal_getSSIDNameStatus( INT apIndex,
 INT wifi_hal_getApName( INT apIndex,
                         CHAR *output_string)
 {
-    wifi_hal_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
     if (apIndex >= get_total_num_of_vaps()) {
-        wifi_hal_dbg_print("%s:%d: Wrong vap_index:%d \n",__func__, __LINE__, apIndex);
+        wifi_hal_stats_dbg_print("%s:%d: Wrong vap_index:%d \n",__func__, __LINE__, apIndex);
         return RETURN_ERR;
     }
 
     if(get_interface_name_from_vap_index(apIndex, output_string) != RETURN_OK) {
-        wifi_hal_error_print("%s:%d:Failed to get ap name for ap index:%d\n", __func__, __LINE__, apIndex);
+        wifi_hal_stats_error_print("%s:%d:Failed to get ap name for ap index:%d\n", __func__, __LINE__, apIndex);
         return RETURN_ERR;
     }
 
-    wifi_hal_dbg_print("%s:%d: Requested index %d cloud name is %s.\n", __func__, __LINE__, apIndex, output_string);
+    wifi_hal_stats_dbg_print("%s:%d: Requested index %d cloud name is %s.\n", __func__, __LINE__, apIndex, output_string);
 
     return RETURN_OK;
 }
@@ -257,14 +257,14 @@ INT wifi_hal_getApAssociatedDeviceTxStatsResult(INT radioIndex,
 {
     int ret;
 
-    wifi_hal_info_print("%s:%d: Enter...radio_index:%d\n", __func__, __LINE__, radioIndex);
+    wifi_hal_stats_info_print("%s:%d: Enter...radio_index:%d\n", __func__, __LINE__, radioIndex);
 
     ret = wifi_getApAssociatedDeviceTxStatsResult(radioIndex, clientMacAddress, stats_array, output_array_size, handle);
     if (ret == RETURN_OK) {
         wifi_associated_dev_rate_info_tx_stats_t *stats_tx = *stats_array;
         int index = 0;
         for (index = 0; index < (int)*output_array_size; index++) {
-            wifi_hal_info_print("%s:%d index:%d Radio_Index:%d num of statistics tx array:%d nss:%d mcs:%d bw:%d flags:%lld bytes:%lld msdus:%lld mpdus:%lld ppdus:%lld retries:%lld attempts:%lld\r\n", __func__, __LINE__, index, radioIndex,
+            wifi_hal_stats_info_print("%s:%d index:%d Radio_Index:%d num of statistics tx array:%d nss:%d mcs:%d bw:%d flags:%lld bytes:%lld msdus:%lld mpdus:%lld ppdus:%lld retries:%lld attempts:%lld\r\n", __func__, __LINE__, index, radioIndex,
                    *output_array_size, stats_tx->nss, stats_tx->mcs, stats_tx->bw, stats_tx->flags,
                    stats_tx->bytes, stats_tx->msdus, stats_tx->mpdus, stats_tx->ppdus, stats_tx->retries, stats_tx->attempts);
             stats_tx++;
@@ -289,10 +289,10 @@ INT wifi_hal_steering_setGroup( UINT steeringgroupIndex,
                                 wifi_steering_apConfig_t *cfg_5)
 {
     if (steeringgroupIndex >= MAX_STEERING_GROUP_NUM) {
-        wifi_hal_error_print("%s:%d: Wrong steering group Index:%d\n", __func__, __LINE__, steeringgroupIndex);
+        wifi_hal_stats_error_print("%s:%d: Wrong steering group Index:%d\n", __func__, __LINE__, steeringgroupIndex);
         return RETURN_ERR;
     } else if (cfg_2 == NULL || cfg_5 == NULL) {
-        wifi_hal_error_print("%s:%d: Wrong steering group Index:%d config\n", __func__, __LINE__, steeringgroupIndex);
+        wifi_hal_stats_error_print("%s:%d: Wrong steering group Index:%d config\n", __func__, __LINE__, steeringgroupIndex);
         return RETURN_ERR;
     }
 
@@ -309,11 +309,11 @@ INT wifi_hal_steering_setGroup( UINT steeringgroupIndex,
     /* Macfilter deny mode set */
     steering_set_acl_mode(cfg_2->apIndex, wifi_mac_filter_mode_black_list);
     steering_set_acl_mode(cfg_5->apIndex, wifi_mac_filter_mode_black_list);
-    wifi_hal_info_print("Wi-Fi steering ApGroup %d CFG: apidx=%d, %d, %d, %d, %d\n",
+    wifi_hal_stats_info_print("Wi-Fi steering ApGroup %d CFG: apidx=%d, %d, %d, %d, %d\n",
                             steeringgroupIndex, cfg_2->apIndex,
                             cfg_2->utilCheckIntervalSec, cfg_2->utilAvgCount,
                             cfg_2->inactCheckIntervalSec, cfg_2->inactCheckThresholdSec);
-    wifi_hal_info_print("Wi-Fi steering ApGroup %d CFG: apidx=%d, %d, %d, %d, %d\n",
+    wifi_hal_stats_info_print("Wi-Fi steering ApGroup %d CFG: apidx=%d, %d, %d, %d, %d\n",
                             steeringgroupIndex, cfg_5->apIndex,
                             cfg_5->utilCheckIntervalSec, cfg_5->utilAvgCount,
                             cfg_5->inactCheckIntervalSec, cfg_5->inactCheckThresholdSec);
@@ -333,13 +333,13 @@ INT wifi_hal_steering_clientSet(UINT steeringgroupIndex,
 
     interface = get_interface_by_vap_index(apIndex);
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: WiFi interface not found:%d\n", __func__, __LINE__, apIndex);
+        wifi_hal_stats_error_print("%s:%d: WiFi interface not found:%d\n", __func__, __LINE__, apIndex);
         return RETURN_ERR;
     }
     pthread_mutex_lock(&g_wifi_hal.steering_data_lock);
     bm_client_info = steering_add_stalist(interface, NULL, client_mac, BM_STA_TYPE_CLIENT_SET);
     if (bm_client_info == NULL) {
-        wifi_hal_error_print("%s:%d: bm sta_list create failure for ap index %d\n", __func__, __LINE__, apIndex);
+        wifi_hal_stats_error_print("%s:%d: bm sta_list create failure for ap index %d\n", __func__, __LINE__, apIndex);
         pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
         return RETURN_ERR;
     } else {
@@ -347,12 +347,12 @@ INT wifi_hal_steering_clientSet(UINT steeringgroupIndex,
         memcpy(&bm_client_info->bm_client_cfg, config, sizeof(wifi_steering_clientConfig_t));
         if (!config->rssiProbeLWM && !config->rssiProbeHWM) {
             if (wifi_steering_del_mac_list(apIndex, bm_client_info) == RETURN_OK) {
-                wifi_hal_info_print("Remove MAC=%s from maclist for vap:%d\n", key, apIndex);
+                wifi_hal_stats_info_print("Remove MAC=%s from maclist for vap:%d\n", key, apIndex);
             }
         }
-        wifi_hal_info_print("%s:%d: Wi-Fi steering group:%d for vap:%d and client:%s\n", __func__, __LINE__,
+        wifi_hal_stats_info_print("%s:%d: Wi-Fi steering group:%d for vap:%d and client:%s\n", __func__, __LINE__,
                                 steeringgroupIndex, apIndex, key);
-        wifi_hal_info_print("rssiProbe HWM:%d-LWM:%d rssiAuthHWM:%d-LWM:%d rssiInactXing:%d"
+        wifi_hal_stats_info_print("rssiProbe HWM:%d-LWM:%d rssiAuthHWM:%d-LWM:%d rssiInactXing:%d"
                                 "rssiHighXing:%d-Low:%d authRejectReason:%d\n",
                                 config->rssiProbeHWM, config->rssiProbeLWM, config->rssiAuthHWM, config->rssiAuthLWM,
                                 config->rssiInactXing, config->rssiHighXing, config->rssiLowXing, config->authRejectReason);
@@ -399,12 +399,12 @@ INT wifi_hal_steering_clientDisconnect( UINT steeringgroupIndex,
                                         UINT reason)
 {
     wifi_interface_info_t *interface;
-    wifi_hal_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
-    wifi_hal_info_print("%s:%d: apIndex:%d steeringgroupIndex:%d type:%d reason:%d\n", __func__, __LINE__, apIndex, steeringgroupIndex, type, reason);
+    wifi_hal_stats_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
+    wifi_hal_stats_info_print("%s:%d: apIndex:%d steeringgroupIndex:%d type:%d reason:%d\n", __func__, __LINE__, apIndex, steeringgroupIndex, type, reason);
 
     interface = get_interface_by_vap_index(apIndex);
     if(!interface) {
-      wifi_hal_error_print("%s:%d:interface for ap index:%d not found\n", __func__, __LINE__, apIndex);
+      wifi_hal_stats_error_print("%s:%d:interface for ap index:%d not found\n", __func__, __LINE__, apIndex);
       return RETURN_ERR;
     }
 
@@ -413,7 +413,7 @@ INT wifi_hal_steering_clientDisconnect( UINT steeringgroupIndex,
         ap_sta_disconnect(&interface->u.ap.hapd, NULL, client_mac, reason);
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     } else {
-        wifi_hal_info_print("%s:%d: apIndex:%d unknown event type:%d\n", __func__, __LINE__, apIndex, type);
+        wifi_hal_stats_info_print("%s:%d: apIndex:%d unknown event type:%d\n", __func__, __LINE__, apIndex, type);
         return RETURN_ERR;
     }
 
@@ -583,19 +583,19 @@ struct ovs_radioname_cloudradioname_map cloud_radio_map[] = {
 //--------------------------------------------------------------------------------------------------
 INT wifi_hal_getRadioIfName(INT radioIndex, CHAR *output_string)
 {
-    wifi_hal_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
 
     if (radioIndex > g_wifi_hal.num_radios){
-        wifi_hal_dbg_print("%s:%d: radio index %d out of range.\n", __func__, __LINE__, radioIndex);
+        wifi_hal_stats_dbg_print("%s:%d: radio index %d out of range.\n", __func__, __LINE__, radioIndex);
         return -1;
     }
 
     if (!output_string){
-        wifi_hal_error_print("%s:%d: NULL pointer string passed.\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: NULL pointer string passed.\n", __func__, __LINE__);
         return -1;
     }
 
-    wifi_hal_dbg_print("%s:%d: Requested radio index %d GW name %s translated to cloud name %s .\n", __func__, __LINE__,
+    wifi_hal_stats_dbg_print("%s:%d: Requested radio index %d GW name %s translated to cloud name %s .\n", __func__, __LINE__,
                                 radioIndex, cloud_radio_map[radioIndex].gw_radio_name, cloud_radio_map[radioIndex].cloudradioname);
 
     strcpy(output_string, cloud_radio_map[radioIndex].cloudradioname);
@@ -608,12 +608,12 @@ INT wifi_hal_getApNumDevicesAssociated(INT apIndex, ULONG *output_ulong)
 {
     wifi_interface_info_t *interface = NULL;
 
-    wifi_hal_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
 
     interface = get_interface_by_vap_index(apIndex);
     if (!interface)
     {
-        wifi_hal_error_print("%s:%d: ERROR Interface for vap index %d doesn't exist.\n", __func__, __LINE__, apIndex);
+        wifi_hal_stats_error_print("%s:%d: ERROR Interface for vap index %d doesn't exist.\n", __func__, __LINE__, apIndex);
         return -1;
     }
 
@@ -621,7 +621,7 @@ INT wifi_hal_getApNumDevicesAssociated(INT apIndex, ULONG *output_ulong)
     *output_ulong = interface->u.ap.hapd.num_sta;
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-    wifi_hal_dbg_print("%s:%d: AP index %d, num assoc devs: %lu.\n", __func__, __LINE__, apIndex, *output_ulong);
+    wifi_hal_stats_dbg_print("%s:%d: AP index %d, num assoc devs: %lu.\n", __func__, __LINE__, apIndex, *output_ulong);
 
     return 0;
 }
