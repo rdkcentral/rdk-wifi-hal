@@ -4160,13 +4160,13 @@ void init_interface_map(void)
         init_static_interface_map();
     }
 
-    wifi_hal_stats_info_print("%s:%d: Using %s Interface Map\n", __func__, __LINE__,
+    wifi_hal_info_print("%s:%d: Using %s Interface Map\n", __func__, __LINE__,
         ((json_ret < 0) ? "STATIC" : "JSON"));
 
-    wifi_hal_stats_info_print("%s:%d: Interface Index Map(%u):\n", __func__, __LINE__,
+    wifi_hal_info_print("%s:%d: Interface Index Map(%u):\n", __func__, __LINE__,
         interface_index_map_size);
     for (i = 0; i < interface_index_map_size; i++) {
-        wifi_hal_stats_info_print("\t[%u]={phy_index:%u, rdk_radio_index:%u, interface_name:%s, "
+        wifi_hal_info_print("\t[%u]={phy_index:%u, rdk_radio_index:%u, interface_name:%s, "
                             "bridge_name:%s, vlan_id:%d, index:%u, vap_name:%s}\n",
             i, interface_index_map[i].phy_index, interface_index_map[i].rdk_radio_index,
             interface_index_map[i].interface_name, interface_index_map->bridge_name,
@@ -4174,10 +4174,10 @@ void init_interface_map(void)
             interface_index_map[i].vap_name);
     }
 
-    wifi_hal_stats_info_print("%s:%d: Radio Interface Index Map(%u):\n", __func__, __LINE__,
+    wifi_hal_info_print("%s:%d: Radio Interface Index Map(%u):\n", __func__, __LINE__,
         l_radio_interface_map_size);
     for (i = 0; i < l_radio_interface_map_size; i++) {
-        wifi_hal_stats_info_print("\t[%u]={phy_index:%u, radio_index:%u, radio_name:%s, "
+        wifi_hal_info_print("\t[%u]={phy_index:%u, radio_index:%u, radio_name:%s, "
                             "interface_name:%s}\n",
             i, l_radio_interface_map[i].phy_index, l_radio_interface_map[i].radio_index,
             l_radio_interface_map[i].radio_name, l_radio_interface_map[i].interface_name);
