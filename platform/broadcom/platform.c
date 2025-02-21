@@ -983,8 +983,6 @@ int nvram_get_current_ssid(char *l_ssid, int vap_index)
         }
     }
     strncpy(l_ssid, ssid, (len + 1));
-    wifi_hal_dbg_print("%s:%d vap[%d] ssid:%s nvram name:%s\r\n", __func__, __LINE__, vap_index,
-        l_ssid, nvram_name);
     return 0;
 }
 
