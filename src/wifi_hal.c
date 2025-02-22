@@ -2975,10 +2975,10 @@ static INT _wifi_hal_getNeighboringWiFiStatus(INT radioIndex, wifi_neighbor_ap2_
     wifi_interface_info_t *interface;
     int ret;
 
-    wifi_hal_dbg_print("%s:%d: [SCAN] == ENTER ==\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] == ENTER ==\n", __func__, __LINE__);
 
     if (!neighbor_ap_array || !output_array_size) {
-        wifi_hal_error_print("%s:%d: [SCAN] Invalid parameters\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] Invalid parameters\n", __func__, __LINE__);
         return WIFI_HAL_INVALID_ARGUMENTS;
     }
 
@@ -2986,20 +2986,20 @@ static INT _wifi_hal_getNeighboringWiFiStatus(INT radioIndex, wifi_neighbor_ap2_
 
     radio = get_radio_by_rdk_index(radioIndex);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d: [SCAN] radio for radio index:%d not found\n", __func__, __LINE__, radioIndex);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] radio for radio index:%d not found\n", __func__, __LINE__, radioIndex);
         return WIFI_HAL_ERROR;
     }
 
 #if OPTION_GET_CHANNELS_FROM_HOSTAP == 0
     interface = get_primary_interface(radio);
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: [SCAN] primary interface for radio '%s' not found\n", __func__, __LINE__, radio->name);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] primary interface for radio '%s' not found\n", __func__, __LINE__, radio->name);
         return WIFI_HAL_ERROR;
     }
 #else
     interface = get_private_vap_interface(radio);
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: [SCAN] private interface for radio '%s' not found\n", __func__, __LINE__, radio->name);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] private interface for radio '%s' not found\n", __func__, __LINE__, radio->name);
         return WIFI_HAL_ERROR;
     }
 #endif
@@ -3009,14 +3009,14 @@ static INT _wifi_hal_getNeighboringWiFiStatus(INT radioIndex, wifi_neighbor_ap2_
     if (interface->scan_state == WIFI_SCAN_STATE_ABORTED) {
         interface->scan_state = WIFI_SCAN_STATE_NONE;
         pthread_mutex_unlock(&interface->scan_state_mutex);
-        wifi_hal_error_print("%s:%d: [SCAN] Scan was aborted\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] Scan was aborted\n", __func__, __LINE__);
         return WIFI_HAL_ERROR;
     }
 
     if (interface->scan_state == WIFI_SCAN_STATE_ERROR) {
         interface->scan_state = WIFI_SCAN_STATE_NONE;
         pthread_mutex_unlock(&interface->scan_state_mutex);
-        wifi_hal_error_print("%s:%d: [SCAN] Error happened during scan\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] Error happened during scan\n", __func__, __LINE__);
         return WIFI_HAL_ERROR;
     }
 
@@ -3030,28 +3030,28 @@ static INT _wifi_hal_getNeighboringWiFiStatus(INT radioIndex, wifi_neighbor_ap2_
 
     if (interface->scan_state == WIFI_SCAN_STATE_NONE) {
         pthread_mutex_unlock(&interface->scan_state_mutex);
-        wifi_hal_dbg_print("%s:%d: [SCAN] Scan was not triggered\n", __func__, __LINE__);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] Scan was not triggered\n", __func__, __LINE__);
         return WIFI_HAL_ERROR;
     }
 
     if (interface->scan_state == WIFI_SCAN_STATE_STARTED) {
         pthread_mutex_unlock(&interface->scan_state_mutex);
-        wifi_hal_dbg_print("%s:%d: [SCAN] Scan is running, come later\n", __func__, __LINE__);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] Scan is running, come later\n", __func__, __LINE__);
         errno = EAGAIN;
         return WIFI_HAL_NOT_READY;
     }
 
 get_results:
     if (interface->scan_state == WIFI_SCAN_STATE_STARTED)
-        wifi_hal_dbg_print("%s:%d: [SCAN] Scan is running, but previous scan results are available\n", __func__, __LINE__);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] Scan is running, but previous scan results are available\n", __func__, __LINE__);
     else
-        wifi_hal_dbg_print("%s:%d: [SCAN] Scan results are available\n", __func__, __LINE__);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] Scan results are available\n", __func__, __LINE__);
 
     pthread_mutex_lock(&interface->scan_info_ap_mutex);
     ret = copy_scan_results(interface, neighbor_ap_array, output_array_size);
     pthread_mutex_unlock(&interface->scan_info_ap_mutex);
     if (ret != RETURN_OK) {
-        wifi_hal_error_print("%s:%d: [SCAN] copy_scan_results returned with error\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] copy_scan_results returned with error\n", __func__, __LINE__);
     }
 
     if (test_mode) {
@@ -3069,7 +3069,7 @@ get_results:
     if (ret != RETURN_OK)
         return WIFI_HAL_ERROR;
 
-    wifi_hal_dbg_print("%s:%d: [SCAN] SCAN results are ready | output_array_size:%d\n", __func__, __LINE__, *output_array_size);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] SCAN results are ready | output_array_size:%d\n", __func__, __LINE__, *output_array_size);
     return WIFI_HAL_SUCCESS;
 }
 
@@ -4093,16 +4093,16 @@ INT wifi_hal_getRadioTemperature(wifi_radio_index_t radioIndex,
 
     get_radio_phytemperature_fn = get_platform_get_radio_phytemperature_fn();
     if (get_radio_phytemperature_fn == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to get phytemperature platfrom cb\n", __func__,
+        wifi_hal_stats_error_print("%s:%d: Failed to get phytemperature platfrom cb\n", __func__,
             __LINE__);
         return RETURN_ERR;
     }
 
     if (get_radio_phytemperature_fn(radioIndex, radioPhyTemperature) < 0) {
-        wifi_hal_error_print("%s:%d: Failed to get radio temperature\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to get radio temperature\n", __func__, __LINE__);
         return RETURN_ERR;
     }
-    wifi_hal_dbg_print("%s:%d Temperature is %u\n", __func__, __LINE__, radioPhyTemperature->radio_Temperature);
+    wifi_hal_stats_dbg_print("%s:%d Temperature is %u\n", __func__, __LINE__, radioPhyTemperature->radio_Temperature);
     return RETURN_OK;
 }
 
