@@ -1148,6 +1148,8 @@ INT _wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif
 {
+    wifi_hal_error_print("%s:%d: Create VAP for NON-PLATFORM_RASPBERRYPI platfrom \n", __func__, __LINE__);
+
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface, *mbssid_tx_interface;
     wifi_vap_info_t *vap;
@@ -1507,7 +1509,6 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             radio->index);
         set_vap_params_fn(index, map);
     }
-
     return RETURN_OK;
 }
 
@@ -2096,7 +2097,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     wifi_radio_operationParam_t *radio_param;
     char country[8] = {0}, tmp_str[32] = {0}, chan_list_str[512] = {0};
     unsigned int freq_list[32], i;
-    ssid_t  ssid_list[8];
+    ssid_t  ssid_list[8] = { 0 };
 
     wifi_hal_dbg_print("%s:%d: index: %d mode: %d dwell time: %d\n", __func__, __LINE__, index,
         scan_mode, dwell_time);
@@ -2163,7 +2164,12 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     strcpy(ssid_list[0], vap->u.sta_info.ssid);
     wifi_hal_info_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
 
+#if defined(_PLATFORM_RASPBERRYPI_)
+    memset(ssid_list, 0, sizeof(ssid_list));
+    return (nl80211_start_scan(interface, 0, num, freq_list, dwell_time, 0, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+#else
     return (nl80211_start_scan(interface, 0, num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+#endif
 }
 
 /*****************************/
