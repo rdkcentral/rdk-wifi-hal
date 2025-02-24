@@ -158,7 +158,7 @@ static int wifi_ieee802_11_send_bss_trans_mgmt_request(struct hostapd_data *hapd
         pos += mbo_add_ie(pos, mbo_len + MBO_IE_HEADER, mbo_attrs, mbo_len);
     }
 
-    wifi_hal_stats_dbg_print("%s:%d: WNM: Send BSS Transition Management Request to "
+    wifi_hal_dbg_print("%s:%d: WNM: Send BSS Transition Management Request to "
         MACSTR " dialog_token=%u req_mode=0x%x disassoc_timer=%u "
         "validity_interval=%u, mbo_len=%zu\n", __func__, __LINE__,
         MAC2STR(addr), dialog_token,
@@ -208,14 +208,14 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
 #endif /* CONFIG_MBO */
 
     if (!enabled) {
-        wifi_hal_stats_dbg_print("%s:%d: Ignore BSS Transition Management Query from " MACSTR
+        wifi_hal_dbg_print("%s:%d: Ignore BSS Transition Management Query from " MACSTR
             " since BSS Transition Management is disabled\n", __func__, __LINE__, MAC2STR(addr));
         ret = WIFI_HAL_SUCCESS;
         goto exit;
     }
 
     if (len < sizeof(struct bss_tm_query)) {
-        wifi_hal_stats_error_print("%s:%d: WNM: Ignore too short BSS Transition Management Query from " MACSTR "\n", __func__, __LINE__, MAC2STR(addr));
+        wifi_hal_error_print("%s:%d: WNM: Ignore too short BSS Transition Management Query from " MACSTR "\n", __func__, __LINE__, MAC2STR(addr));
         goto exit;
     }
 
@@ -224,25 +224,25 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
 
     query = calloc(1, sizeof(wifi_BTMQuery_t));
     if (!query) {
-        wifi_hal_stats_error_print("%s:%d: WNM: query's memory allocation error\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: WNM: query's memory allocation error\n", __func__, __LINE__);
         goto exit;
     }
 
     request = calloc(1, sizeof(wifi_BTMRequest_t));
     if (!request) {
-        wifi_hal_stats_error_print("%s:%d: WNM: request's memory allocation error\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: WNM: request's memory allocation error\n", __func__, __LINE__);
         goto exit;
     }
 
     query->token = frm->dialog_token;
     query->queryReason = frm->query_reason;
 
-    wifi_hal_stats_dbg_print("%s:%d: WNM: BSS Transition Management Query from " MACSTR
+    wifi_hal_dbg_print("%s:%d: WNM: BSS Transition Management Query from " MACSTR
         " dialog_token=%u reason=%u len=%zu\n", __func__, __LINE__, MAC2STR(addr), query->token, query->queryReason, len);
 
     if (query->queryReason == WNM_BSS_TM_REASON_CANDIDATE_LIST_INCLUDED) {
         if (pos == end){
-            wifi_hal_stats_error_print("%s:%d: WNM: BSS Transition Management Query from " MACSTR ". "
+            wifi_hal_error_print("%s:%d: WNM: BSS Transition Management Query from " MACSTR ". "
                 "Reason is set to Preferred candidate list included but no candidate list found\n", __func__, __LINE__, MAC2STR(addr));
         } else {
             int nei_element_len;
@@ -254,19 +254,19 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
                     break;
 
                 if (end - pos < (1 + 1 + ETH_ALEN + 4 + 1 + 1 + 1) /* 15 */ ) {
-                    wifi_hal_stats_error_print("%s:%d: WNM: BSS TM Query, neighbor report element in candidate list is too short\n", __func__, __LINE__);
+                    wifi_hal_error_print("%s:%d: WNM: BSS TM Query, neighbor report element in candidate list is too short\n", __func__, __LINE__);
                     break;
                 }
 
                 if (*pos++ != WLAN_EID_NEIGHBOR_REPORT) {
-                    wifi_hal_stats_dbg_print("%s:%d: WNM: BSS Transition Management Query from " MACSTR ". "
+                    wifi_hal_dbg_print("%s:%d: WNM: BSS Transition Management Query from " MACSTR ". "
                     "Expected Neighbor report Element ID\n", __func__, __LINE__, MAC2STR(addr));
                     break;
                 }
 
                 nei_element_len = *pos++;
                 if (pos + nei_element_len > end) {
-                    wifi_hal_stats_dbg_print("%s:%d: WNM: BSS Transition Management Query from " MACSTR ". "
+                    wifi_hal_dbg_print("%s:%d: WNM: BSS Transition Management Query from " MACSTR ". "
                     "Expected Neighbor report invalid\n", __func__, __LINE__, MAC2STR(addr));
                     break;
                 }
@@ -318,14 +318,14 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
             #else
             if (RETURN_OK != callbacks->btm_callback[ap_index].query_callback(ap_index,
                     addr, query, sizeof(*request), request)) {
-                wifi_hal_stats_error_print("%s:%d: BTMQueryRequestCallback failed\n", __func__, __LINE__);
+                wifi_hal_error_print("%s:%d: BTMQueryRequestCallback failed\n", __func__, __LINE__);
                 goto exit;
             }
             #endif
 
             /* Send the btm request with data received by callback call */
             if (RETURN_OK != wifi_hal_setBTMRequest(ap_index, addr, request)) {
-                wifi_hal_stats_error_print("%s:%d: wifi_setBTMRequest() failed\n", __func__, __LINE__);
+                wifi_hal_error_print("%s:%d: wifi_setBTMRequest() failed\n", __func__, __LINE__);
                 goto exit;
             }
         }
@@ -407,14 +407,14 @@ static int handle_rx_bss_trans_mgmt_resp(wifi_interface_info_t *interface,
 #endif /* CONFIG_MBO */
 
     if (!enabled) {
-        wifi_hal_stats_dbg_print("%s:%d: Ignore BSS Transition Management Response from " MACSTR
+        wifi_hal_dbg_print("%s:%d: Ignore BSS Transition Management Response from " MACSTR
             " since BSS Transition Management is disabled\n", __func__, __LINE__, MAC2STR(addr));
         ret = WIFI_HAL_SUCCESS;
         goto exit;
     }
 
     if (len < sizeof(struct bss_tm_resp)) {
-        wifi_hal_stats_error_print("%s:%d: WNM: Ignore too short BSS Transition Management Response from " MACSTR "\n", __func__, __LINE__, MAC2STR(addr));
+        wifi_hal_error_print("%s:%d: WNM: Ignore too short BSS Transition Management Response from " MACSTR "\n", __func__, __LINE__, MAC2STR(addr));
         goto exit;
     }
 
@@ -423,27 +423,27 @@ static int handle_rx_bss_trans_mgmt_resp(wifi_interface_info_t *interface,
 
     resp = calloc(1, sizeof(wifi_BTMResponse_t));
     if (!resp) {
-        wifi_hal_stats_error_print("%s:%d: WNM: memory allocation error\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: WNM: memory allocation error\n", __func__, __LINE__);
         goto exit;
     }
     resp->token = frm->dialog_token;
     resp->status = frm->status_code;
     resp->terminationDelay = frm->bss_termination_delay;
 
-    wifi_hal_stats_dbg_print("%s:%d: WNM: BSS Transition Management Response from " MACSTR
+    wifi_hal_dbg_print("%s:%d: WNM: BSS Transition Management Response from " MACSTR
         " dialog_token=%u status_code=%u bss_termination_delay=%u\n", __func__, __LINE__, MAC2STR(addr),
             resp->token, resp->status, resp->terminationDelay);
 
     sta = ap_get_sta(hapd, addr);
     if (!sta) {
-        wifi_hal_stats_dbg_print("%s:%d: Station " MACSTR " not found for received BSS TM Response\n", __func__, __LINE__, MAC2STR(addr));
+        wifi_hal_dbg_print("%s:%d: Station " MACSTR " not found for received BSS TM Response\n", __func__, __LINE__, MAC2STR(addr));
         ret = WIFI_HAL_SUCCESS;
         goto exit;
     }
 
     if (resp->status == WNM_BSS_TM_ACCEPT) {
         if (end - pos < ETH_ALEN) {
-            wifi_hal_stats_error_print("%s:%d: WNM: not enough room for Target BSSID field\n", __func__, __LINE__);
+            wifi_hal_error_print("%s:%d: WNM: not enough room for Target BSSID field\n", __func__, __LINE__);
             goto exit;
         }
         sta->agreed_to_steer = 1;
@@ -455,10 +455,10 @@ static int handle_rx_bss_trans_mgmt_resp(wifi_interface_info_t *interface,
         eloop_cancel_timeout(ap_sta_reset_steer_flag_timer, hapd, sta);
         eloop_register_timeout(2, 0, ap_sta_reset_steer_flag_timer, hapd, sta);
 
-        wifi_hal_stats_dbg_print("%s:%d: WNM: Agreed to steer. Target BSSID: " MACSTR "\n", __func__, __LINE__, MAC2STR(resp->target));
+        wifi_hal_dbg_print("%s:%d: WNM: Agreed to steer. Target BSSID: " MACSTR "\n", __func__, __LINE__, MAC2STR(resp->target));
     } else {
         sta->agreed_to_steer = 0;
-        wifi_hal_stats_dbg_print("%s:%d: WNM: Disagreed to steer.\n", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d: WNM: Disagreed to steer.\n", __func__, __LINE__);
     }
 
     // - candidate list isn't supported at this moment
@@ -585,7 +585,7 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
     };
     struct hostapd_data *hapd = &interface->u.ap.hapd;
 
-    wifi_hal_stats_dbg_print("%s:%d: Request beacon: dest addr: " MACSTR ", mode: %d\n", __func__, __LINE__, MAC2STR(addr), mode);
+    wifi_hal_dbg_print("%s:%d: Request beacon: dest addr: " MACSTR ", mode: %d\n", __func__, __LINE__, MAC2STR(addr), mode);
 
     for (i = 0; i < hapd->iface->num_bss; i++) {
         sta = ap_get_sta(hapd->iface->bss[i], addr);
@@ -596,7 +596,7 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
     }
 
     if (!sta || !(sta->flags & WLAN_STA_AUTHORIZED)) {
-        wifi_hal_stats_error_print("%s:%d: Request beacon: Destination address is not connected\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: Request beacon: Destination address is not connected\n", __func__, __LINE__);
         return -1;
     }
 
@@ -607,12 +607,12 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
         || (mode == BEACON_REPORT_MODE_TABLE &&
         !(sta->rrm_enabled_capa[0] & WLAN_RRM_CAPS_BEACON_REPORT_TABLE)))
     {
-        wifi_hal_stats_error_print("%s:%d: Request beacon: Destination station does not support BEACON report (mode %d) in RRM\n", __func__, __LINE__, mode);
+        wifi_hal_error_print("%s:%d: Request beacon: Destination station does not support BEACON report (mode %d) in RRM\n", __func__, __LINE__, mode);
         return -1;
     }
 
     if (channel == 255 && !ap_ch_rep) {
-        wifi_hal_stats_error_print("%s:%d: Request beacon: channel set to 255, but no ap channel report data provided\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: Request beacon: channel set to 255, but no ap channel report data provided\n", __func__, __LINE__);
         return -1;
     }
 
@@ -720,7 +720,7 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
                     wpabuf_head(buf), wpabuf_len(buf));
     wpabuf_free(buf);
     if (ret) {
-        wifi_hal_stats_error_print("%s:%d: hostapd_drv_send_action() error\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: hostapd_drv_send_action() error\n", __func__, __LINE__);
         return -1;
     }
 

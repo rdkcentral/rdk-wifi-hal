@@ -98,7 +98,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 {
     wifi_hal_dbg_print("%s \n", __func__);
     if (operationParam == NULL) {
-        wifi_hal_stats_dbg_print("%s:%d Invalid Argument \n", __FUNCTION__, __LINE__);
+        wifi_hal_dbg_print("%s:%d Invalid Argument \n", __FUNCTION__, __LINE__);
         return -1;
     }
     char temp_buff[BUF_SIZE];
@@ -106,22 +106,22 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     wifi_radio_info_t *radio;
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
-        wifi_hal_stats_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
+        wifi_hal_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
         return RETURN_ERR;
     }
     if (radio->radio_presence == false) {
-        wifi_hal_stats_dbg_print("%s:%d Skip this radio %d. This is in sleeping mode\n", __FUNCTION__, __LINE__, index);
+        wifi_hal_dbg_print("%s:%d Skip this radio %d. This is in sleeping mode\n", __FUNCTION__, __LINE__, index);
         return 0;
     }
     if (radio->oper_param.countryCode != operationParam->countryCode) {
         memset(temp_buff, 0 ,sizeof(temp_buff));
         get_coutry_str_from_code(operationParam->countryCode, temp_buff);
         if (wifi_setRadioCountryCode(index, temp_buff) != RETURN_OK) {
-            wifi_hal_stats_dbg_print("%s:%d Failure in setting country code as %s in radio index %d\n", __FUNCTION__, __LINE__, temp_buff, index);
+            wifi_hal_dbg_print("%s:%d Failure in setting country code as %s in radio index %d\n", __FUNCTION__, __LINE__, temp_buff, index);
             return -1;
         }
         if (wifi_applyRadioSettings(index) != RETURN_OK) {
-            wifi_hal_stats_dbg_print("%s:%d Failure in applying Radio settings in radio index %d\n", __FUNCTION__, __LINE__, index);
+            wifi_hal_dbg_print("%s:%d Failure in applying Radio settings in radio index %d\n", __FUNCTION__, __LINE__, index);
             return -1;
         }
         //Updating nvram param
@@ -235,7 +235,7 @@ int platform_get_ssid_default(char *ssid, int vap_index){
 int platform_get_wps_pin_default(char *pin)
 {
     strcpy(pin, "88626277"); /* remove this and read the factory defaults below */
-    wifi_hal_stats_dbg_print("%s default wps pin:%s\n", __func__, pin);
+    wifi_hal_dbg_print("%s default wps pin:%s\n", __func__, pin);
     return 0;
 #if 0
     char value[BUFFER_LENGTH_WIFIDB] = {0};
@@ -290,16 +290,16 @@ int nvram_get_current_ssid(char *l_ssid, int vap_index)
     snprintf(nvram_name, sizeof(nvram_name), "%s_ssid", interface_name);
     ssid = wlcsm_nvram_get(nvram_name);
     if (ssid == NULL) {
-        wifi_hal_stats_error_print("%s:%d nvram ssid value is NULL\r\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d nvram ssid value is NULL\r\n", __func__, __LINE__);
         return -1;
     }
     len = strlen(ssid);
     if (len < 0 || len > 63) {
-        wifi_hal_stats_error_print("%s:%d invalid ssid length [%d], expected length is [0..63]\r\n", __func__, __LINE__, len);
+        wifi_hal_error_print("%s:%d invalid ssid length [%d], expected length is [0..63]\r\n", __func__, __LINE__, len);
         return -1;
     }
     strcpy(l_ssid, ssid);
-    wifi_hal_stats_dbg_print("%s:%d vap[%d] ssid:%s nvram name:%s\r\n", __func__, __LINE__, vap_index, l_ssid, nvram_name);
+    wifi_hal_dbg_print("%s:%d vap[%d] ssid:%s nvram name:%s\r\n", __func__, __LINE__, vap_index, l_ssid, nvram_name);
     return 0;
 }
 

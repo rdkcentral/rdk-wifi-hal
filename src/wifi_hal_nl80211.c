@@ -2943,7 +2943,7 @@ static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
     if (tb[NLMSGERR_ATTR_MSG]) {
         len = strnlen((char *) nla_data(tb[NLMSGERR_ATTR_MSG]),
                   nla_len(tb[NLMSGERR_ATTR_MSG]));
-        wifi_hal_dbg_print("%s:%d: kernel reports: %*s\n", __func__, __LINE__, len, (char *) nla_data(tb[NLMSGERR_ATTR_MSG]));
+        wifi_hal_stats_dbg_print("%s:%d: kernel reports: %*s\n", __func__, __LINE__, len, (char *) nla_data(tb[NLMSGERR_ATTR_MSG]));
     }
 
     return NL_SKIP;
@@ -2978,7 +2978,7 @@ struct nl_handle *nl_create_handle(struct nl_cb *cb, const char *dbg)
 
     handle = (struct nl_handle *)nl_socket_alloc_cb(cb);
     if (handle == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to allocate netlink callbacks (%s)\n", __func__, __LINE__, dbg);
+        wifi_hal_stats_error_print("%s:%d: Failed to allocate netlink callbacks (%s)\n", __func__, __LINE__, dbg);
         return NULL;
     }
 
@@ -2996,7 +2996,7 @@ struct nl_handle *nl_create_handle(struct nl_cb *cb, const char *dbg)
 
 
     if (genl_connect((struct nl_sock *)handle)) {
-        wifi_hal_error_print("%s:%d: Failed to connect to generic netlink (%s)\n", __func__, __LINE__, dbg);
+        wifi_hal_stats_error_print("%s:%d: Failed to connect to generic netlink (%s)\n", __func__, __LINE__, dbg);
         handle_destroy(handle);
         return NULL;
     }
@@ -3013,7 +3013,7 @@ static wifi_netlink_thread_info_t *create_nl80211_socket()
 
     netlink_info->nl_cb = nl_cb_alloc(NL_CB_DEFAULT);
     if (!netlink_info->nl_cb) {
-        wifi_hal_error_print("%s:%d: Failed to allocate netlink callbacks\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to allocate netlink callbacks\n", __func__, __LINE__);
         free(netlink_info);
         return NULL;
     }
@@ -3063,23 +3063,23 @@ static int nl80211_nlmsg_read(struct nl_sock *sock, struct nl_cb *cb)
     pfd.fd = nl_socket_get_fd(sock);
 
     while ((ret = poll(&pfd, one_fd, timeout_ms)) < 0 && errno == EINTR) {
-        wifi_hal_info_print("%s:%d: poll nl message interrupted, retry\n", __func__, __LINE__);
+        wifi_hal_stats_info_print("%s:%d: poll nl message interrupted, retry\n", __func__, __LINE__);
     }
 
     if (ret < 0) {
-        wifi_hal_error_print("%s:%d: failed to poll nl message, err %d (%s)\n", __func__, __LINE__,
+        wifi_hal_stats_error_print("%s:%d: failed to poll nl message, err %d (%s)\n", __func__, __LINE__,
             errno, strerror(errno));
         return -1;
     }
 
     if (ret == 0) {
-        wifi_hal_error_print("%s:%d: failed to poll nl message, timeout\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: failed to poll nl message, timeout\n", __func__, __LINE__);
         return -1;
     }
 
     ret = nl_recvmsgs(sock, cb);
     if (ret < 0) {
-        wifi_hal_error_print("%s:%d: failed to receive nl message, err %d (%s)\n", __func__,
+        wifi_hal_stats_error_print("%s:%d: failed to receive nl message, err %d (%s)\n", __func__,
             __LINE__, ret, nl_geterror(ret));
         return -1;
     }
@@ -3099,13 +3099,13 @@ static int execute_send_and_recv(struct nl_cb *cb_ctx,
     int err = -1, opt;
 
     if (!msg) {
-        wifi_hal_error_print("%s:%d: msg is null\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: msg is null\n", __func__, __LINE__);
         return -1;
     }
 
     cb = nl_cb_clone(cb_ctx);
     if (!cb) {
-        wifi_hal_error_print("%s:%d: failed to clone nl cb\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: failed to clone nl cb\n", __func__, __LINE__);
         goto out;
     }
 
@@ -3121,7 +3121,7 @@ static int execute_send_and_recv(struct nl_cb *cb_ctx,
 
     err = nl_send_auto_complete((struct nl_sock *)nl_handle, msg);
     if (err < 0) {
-        wifi_hal_error_print("%s:%d: failed to send nl message, err %d (%s)\n", __func__, __LINE__,
+        wifi_hal_stats_error_print("%s:%d: failed to send nl message, err %d (%s)\n", __func__, __LINE__,
             err, nl_geterror(err));
         goto out;
     }
@@ -3145,7 +3145,7 @@ static int execute_send_and_recv(struct nl_cb *cb_ctx,
     while (err > 0) {
         int res = nl80211_nlmsg_read((struct nl_sock *)nl_handle, cb);
         if (res < 0) {
-            wifi_hal_error_print("%s:%d: failed to read nl message\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: failed to read nl message\n", __func__, __LINE__);
             break;
         }
     }
@@ -3373,17 +3373,17 @@ struct nl_msg *nl80211_drv_vendor_cmd_msg(int nl80211_id, wifi_interface_info_t 
 
     msg = nl80211_drv_cmd_msg(nl80211_id, intf, flags, NL80211_CMD_VENDOR);
     if (msg == NULL) {
-        wifi_hal_error_print("%s:%d Failed to create vendor command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to create vendor command\n", __func__, __LINE__);
         return NULL;
     }
 
     if (nla_put_u32(msg, NL80211_ATTR_VENDOR_ID, vendor_id) < 0) {
-        wifi_hal_error_print("%s:%d Failed to put vendor id attribute\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to put vendor id attribute\n", __func__, __LINE__);
         goto error;
     }
 
     if (nla_put_u32(msg, NL80211_ATTR_VENDOR_SUBCMD, subcmd) < 0) {
-        wifi_hal_error_print("%s:%d Failed to put sub command attribute\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to put sub command attribute\n", __func__, __LINE__);
         goto error;
     }
 
