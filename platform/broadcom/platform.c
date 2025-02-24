@@ -126,16 +126,16 @@ static int get_ccspwifiagent_interface_name_from_vap_index(unsigned int vap_inde
     }
 
     if ((vap_index >= total_num_of_vaps) || (interface_name == NULL)) {
-        wifi_hal_stats_error_print("%s:%d: Wrong vap_index:%d \n",__func__, __LINE__, vap_index);
+        wifi_hal_error_print("%s:%d: Wrong vap_index:%d \n",__func__, __LINE__, vap_index);
         return RETURN_ERR;
     }
 
     l_interface_name = bss_nvifname[vap_index];
     if(l_interface_name != NULL) {
         strncpy(interface_name, l_interface_name, (strlen(l_interface_name) + 1));
-        wifi_hal_stats_dbg_print("%s:%d: VAP index %d: interface name %s\n", __func__, __LINE__, vap_index, interface_name);
+        wifi_hal_dbg_print("%s:%d: VAP index %d: interface name %s\n", __func__, __LINE__, vap_index, interface_name);
     } else {
-        wifi_hal_stats_error_print("%s:%d: Interface name not found:%d \n",__func__, __LINE__, vap_index);
+        wifi_hal_error_print("%s:%d: Interface name not found:%d \n",__func__, __LINE__, vap_index);
         return RETURN_ERR;
     }
     return RETURN_OK;
@@ -444,7 +444,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     wifi_radio_info_t *radio;
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
-        wifi_hal_stats_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
+        wifi_hal_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
         return RETURN_ERR;
     }
 
@@ -885,11 +885,11 @@ int platform_wps_event(wifi_wps_event_t data)
 #if defined(_SR213_PRODUCT_REQ_) && defined(FEATURE_RDKB_LED_MANAGER)
             // set led to blinking blue
             system("sysevent set led_event rdkb_wps_start");
-            wifi_hal_stats_dbg_print("%s:%d set wps led color to blinking blue \r\n", __func__, __LINE__);
+            wifi_hal_dbg_print("%s:%d set wps led color to blinking blue \r\n", __func__, __LINE__);
 #else
             // set wps led color to blue
             system("led_wps_active 1");
-            wifi_hal_stats_dbg_print("%s:%d set wps led color to blue\r\n", __func__, __LINE__);
+            wifi_hal_dbg_print("%s:%d set wps led color to blue\r\n", __func__, __LINE__);
 #endif // defined(_SR213_PRODUCT_REQ_) && defined(FEATURE_RDKB_LED_MANAGER)
             break;
 
@@ -900,16 +900,16 @@ int platform_wps_event(wifi_wps_event_t data)
         case WPS_EV_PBC_DISABLE:
 #if defined(_SR213_PRODUCT_REQ_) && defined(FEATURE_RDKB_LED_MANAGER)
             system("sysevent set led_event rdkb_wps_stop");
-            wifi_hal_stats_dbg_print("%s:%d set wps led color to solid white \r\n", __func__, __LINE__);
+            wifi_hal_dbg_print("%s:%d set wps led color to solid white \r\n", __func__, __LINE__);
 #else
             // set wps led color to white
             system("led_wps_active 0");
-            wifi_hal_stats_dbg_print("%s:%d set wps led color to white\r\n", __func__, __LINE__);
+            wifi_hal_dbg_print("%s:%d set wps led color to white\r\n", __func__, __LINE__);
 #endif //defined(_SR213_PRODUCT_REQ_) && defined(FEATURE_RDKB_LED_MANAGER)
             break;
 
         default:
-            wifi_hal_stats_info_print("%s:%d wps event[%d] not handle\r\n", __func__, __LINE__, data.event);
+            wifi_hal_info_print("%s:%d wps event[%d] not handle\r\n", __func__, __LINE__, data.event);
             break;
     }
 
@@ -1975,7 +1975,7 @@ int platform_set_gpio_config_for_ecomode(const int wl_idx, const bool eco_pwr_do
 {
     if (!check_edpdctl_enabled() && !check_dpd_feature_enabled())
     {
-        wifi_hal_stats_error_print("%s:%d  EDPD Feature control configuration NOT enabled\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d  EDPD Feature control configuration NOT enabled\n", __func__, __LINE__);
         return -1;
     }
 
@@ -1986,27 +1986,27 @@ int platform_set_gpio_config_for_ecomode(const int wl_idx, const bool eco_pwr_do
     rc = export_gpio(gpio_pin);
     if (rc != RETURN_OK)
     {
-        wifi_hal_stats_error_print("%s:%d Failed to export gpio %d \n", __func__, __LINE__, gpio_pin);
+        wifi_hal_error_print("%s:%d Failed to export gpio %d \n", __func__, __LINE__, gpio_pin);
         goto EXIT;
     }
 
     rc = set_gpio_direction(gpio_pin, GPIO_DIRECTION_OUT);
     if (rc != RETURN_OK)
     {
-        wifi_hal_stats_dbg_print("%s:%d Failed to set direction for gpio %d \n", __func__, __LINE__, gpio_pin);
+        wifi_hal_dbg_print("%s:%d Failed to set direction for gpio %d \n", __func__, __LINE__, gpio_pin);
         goto EXIT;
     }
 
     rc = write_gpio_value(gpio_pin, value);
     if (rc != RETURN_OK)
     {
-        wifi_hal_stats_error_print("%s:%d Failed to set value for gpio %d \n", __func__, __LINE__, gpio_pin);
+        wifi_hal_error_print("%s:%d Failed to set value for gpio %d \n", __func__, __LINE__, gpio_pin);
         goto EXIT;
     }
 
     unexport_gpio(gpio_pin);
 
-    wifi_hal_stats_dbg_print("%s:%d For wl%d, configured the gpio to %s the PCIe interface \n", __func__, __LINE__, wl_idx, (eco_pwr_down ? "power down" : "power up"));
+    wifi_hal_dbg_print("%s:%d For wl%d, configured the gpio to %s the PCIe interface \n", __func__, __LINE__, wl_idx, (eco_pwr_down ? "power down" : "power up"));
 EXIT:
     return rc;
 }
@@ -2976,12 +2976,12 @@ INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
 {
     wifi_interface_info_t *interface;
 
-    wifi_hal_stats_dbg_print("%s:%d: Set AP management frame for index: %d\n", __func__, __LINE__,
+    wifi_hal_dbg_print("%s:%d: Set AP management frame for index: %d\n", __func__, __LINE__,
         apIndex);
 
     interface = get_interface_by_vap_index(apIndex);
     if (interface == NULL) {
-        wifi_hal_stats_error_print("%s:%d: Failed to get interface for ap index: %d\n", __func__,
+        wifi_hal_error_print("%s:%d: Failed to get interface for ap index: %d\n", __func__,
             __LINE__, apIndex);
         return RETURN_ERR;
     }
@@ -3023,13 +3023,13 @@ static int get_rates(char *ifname, int *rates, size_t rates_size, unsigned int *
     wl_rateset_t rs;
 
     if (wl_ioctl(ifname, WLC_GET_CURR_RATESET, &rs, sizeof(wl_rateset_t)) < 0) {
-        wifi_hal_stats_error_print("%s:%d: failed to get rateset for %s, err %d (%s)\n", __func__,
+        wifi_hal_error_print("%s:%d: failed to get rateset for %s, err %d (%s)\n", __func__,
             __LINE__, ifname, errno, strerror(errno));
         return RETURN_ERR;
     }
 
     if (rates_size < rs.count) {
-        wifi_hal_stats_error_print("%s:%d: rates size %zu is less than %u\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d: rates size %zu is less than %u\n", __func__, __LINE__,
             rates_size, rs.count);
         rs.count = rates_size;
     }
@@ -3051,7 +3051,7 @@ static void platform_get_radio_caps_common(wifi_radio_info_t *radio,
     struct hostapd_iface *iface = &interface->u.ap.iface;
 
     if (get_rates(interface->name, rates, ARRAY_SZ(rates), &num_rates) != RETURN_OK) {
-        wifi_hal_stats_error_print("%s:%d: failed to get rates for %s\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d: failed to get rates for %s\n", __func__, __LINE__,
             interface->name);
         return;
     }
