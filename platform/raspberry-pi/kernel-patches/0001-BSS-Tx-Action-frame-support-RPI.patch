@@ -1,0 +1,152 @@
+From 7816e08ccdd7606bfd9e8138ad2ac70bda5be85a Mon Sep 17 00:00:00 2001
+From: Rakhil P E <rakhilpe001@gmail.com>
+Date: Mon, 23 Dec 2024 15:42:21 +0530
+Subject: [PATCH] Address the crash seen while sending action frame
+
+When an action frame was transmitted from a non-P2P interface,
+it resulted in a crash in kernel. This patch fixes the crash and
+sends out the action frame. Since there is lot of dependency on
+P2P interface while sending action frame in this driver, this patch
+only addresses sending of action frame but is not able to notify
+the TX status of frame sent.
+
+Signed-off-by: Amarnath Hullur Subramanyam <amarnath.hs@gmail.com>
+
+Added support for sending BSS Transition action frame
+
+Current RPI Kernel doesnt support sending BSS Transition action frame.
+Modified the code to add support for sending BSS Transition action
+frames as well.
+
+Signed-off-by: Rakhil P E <rakhilpe001@gmail.com>
+---
+ .../broadcom/brcm80211/brcmfmac/p2p.c         | 71 ++++++++++++++++++-
+ 1 file changed, 68 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/wireless/broadcom/brcm80211/brcmfmac/p2p.c b/drivers/net/wireless/broadcom/brcm80211/brcmfmac/p2p.c
+index 7376f9f37..c2dc274aa 100644
+--- a/drivers/net/wireless/broadcom/brcm80211/brcmfmac/p2p.c
++++ b/drivers/net/wireless/broadcom/brcm80211/brcmfmac/p2p.c
+@@ -93,6 +93,10 @@
+ #define P2PSD_ACTION_ID_GAS_CREQ	0x0c	/* GAS Comeback Request AF */
+ #define P2PSD_ACTION_ID_GAS_CRESP	0x0d	/* GAS Comeback Response AF */
+ 
++/* P2P BSS Transition related  */
++#define P2P_WNM_TRANS_AF_CATEGORY       0x0a   /* WNM Action Frame */
++#define P2P_BSS_TR_MGMT_RQ_ACTION       0x07   /* BSS Transition Management Request */
++
+ #define BRCMF_P2P_DISABLE_TIMEOUT	msecs_to_jiffies(500)
+ 
+ /* Mask for retry counter of custom dwell time */
+@@ -195,6 +199,28 @@ struct brcmf_p2psd_gas_pub_act_frame {
+ 	u8	query_data[];
+ };
+ 
++/**
++ * struct brcmf_p2p_bss_transition_action_frame - WiFi P2P BSS Transition Management Frame
++ *
++ * @category: P2P_WNM_TRANS_AF_CATEGORY
++ * @action: P2P_BSS_TR_MGMT_RQ_ACTION
++ * @dialog_token: nonzero, identifies req/rsp transaction
++ * @req_mode: indicating the type of transition request
++ * @disassoc_timer: time until disassociation
++ * @validity_interval:  transition request validity interval
++ * @elts: Variable length information elements.
++ */
++
++struct brcmf_p2p_bss_transition_action_frame {
++	u8	category;
++	u8	action;
++	u8	dialog_token;
++	u8	req_mode;
++	u8	disassoc_timer[2];
++	u8	validity_interval;
++	u8	elts[];
++};
++
+ /**
+  * struct brcmf_config_af_params - Action Frame Parameters for tx.
+  *
+@@ -264,6 +290,26 @@ static bool brcmf_p2p_is_p2p_action(void *frame, u32 frame_len)
+ 	return false;
+ }
+ 
++static bool brcmf_p2p_is_bss_transition_action(void *frame, u32 frame_len)
++{
++	struct brcmf_p2p_bss_transition_action_frame *pbss_tr_frm;
++
++	if (frame == NULL)
++		return false;
++
++	pbss_tr_frm = (struct brcmf_p2p_bss_transition_action_frame *)frame;
++	if (frame_len < sizeof(*pbss_tr_frm))
++	{
++		return false;
++	}
++
++	if (pbss_tr_frm->category == P2P_WNM_TRANS_AF_CATEGORY &&
++	    pbss_tr_frm->action == P2P_BSS_TR_MGMT_RQ_ACTION)
++		return true;
++
++	return false;
++}
++
+ /**
+  * brcmf_p2p_is_gas_action() - true if p2p gas action type frame.
+  *
+@@ -1563,6 +1609,11 @@ static s32 brcmf_p2p_tx_action_frame(struct brcmf_p2p_info *p2p,
+ 	else
+ 		vif = p2p->bss_idx[P2PAPI_BSSCFG_DEVICE].vif;
+ 
++	if (vif == NULL) {
++		vif = p2p->bss_idx[P2PAPI_BSSCFG_PRIMARY].vif;
++		bphy_err(drvr, "%s:%d Using Primary Interface Vif:%p\n", __func__,__LINE__,vif);
++	}
++
+ 	err = brcmf_fil_bsscfg_data_set(vif->ifp, "actframe", af_params,
+ 					sizeof(*af_params));
+ 	if (err) {
+@@ -1584,7 +1635,17 @@ static s32 brcmf_p2p_tx_action_frame(struct brcmf_p2p_info *p2p,
+ 		  (p2p->wait_for_offchan_complete) ?
+ 		   "off-channel" : "on-channel");
+ 
+-	wait_for_completion_timeout(&p2p->send_af_done, P2P_AF_MAX_WAIT_TIME);
++	/* Wait for completion timeout only if vif used is not primary BSSCFG vif.
++           A crash is seen if wait for completion is invoked when action frame is
++           sent on primary BSSCFG Vif. */
++	if (vif != p2p->bss_idx[P2PAPI_BSSCFG_PRIMARY].vif) {
++		wait_for_completion_timeout(&p2p->send_af_done,
++					    P2P_AF_MAX_WAIT_TIME);
++	} else {
++		set_bit(BRCMF_P2P_STATUS_ACTION_TX_COMPLETED, &p2p->status);
++		if (!p2p->wait_for_offchan_complete)
++			complete(&p2p->send_af_done);
++	}
+ 
+ 	if (test_bit(BRCMF_P2P_STATUS_ACTION_TX_COMPLETED, &p2p->status)) {
+ 		brcmf_dbg(TRACE, "TX action frame operation is success\n");
+@@ -1796,6 +1857,10 @@ bool brcmf_p2p_send_action_frame(struct brcmf_cfg80211_info *cfg,
+ 					   action_frame_len)) {
+ 		/* do not configure anything. it will be */
+ 		/* sent with a default configuration     */
++	} else if (brcmf_p2p_is_bss_transition_action(action_frame->data,
++					   action_frame_len)) {
++		/* do not configure anything. it will be */
++		/* sent with a default configuration     */
+ 	} else {
+ 		bphy_err(drvr, "Unknown Frame: category 0x%x, action 0x%x\n",
+ 			 category, action);
+@@ -1805,8 +1870,8 @@ bool brcmf_p2p_send_action_frame(struct brcmf_cfg80211_info *cfg,
+ 	/* if connecting on primary iface, sleep for a while before sending
+ 	 * af tx for VSDB
+ 	 */
+-	if (test_bit(BRCMF_VIF_STATUS_CONNECTING,
+-		     &p2p->bss_idx[P2PAPI_BSSCFG_PRIMARY].vif->sme_state))
++	if (p2p->bss_idx[P2PAPI_BSSCFG_PRIMARY].vif && test_bit(BRCMF_VIF_STATUS_CONNECTING,
++			&p2p->bss_idx[P2PAPI_BSSCFG_PRIMARY].vif->sme_state))
+ 		msleep(50);
+ 
+ 	/* if scan is ongoing, abort current scan. */
+-- 
+2.25.1
+

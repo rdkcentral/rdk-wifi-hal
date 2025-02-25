@@ -1,0 +1,55 @@
+From a6a13b2ba2e5715e278049ab77b2c93b5872843a Mon Sep 17 00:00:00 2001
+From: Rakhil P E <Rakhil_PuthiyaveettilEdachena@comcast.com>
+Date: Thu, 27 Feb 2025 19:10:08 +0530
+Subject: [PATCH] Modified the code to support sending all kind of action
+ frames. Current code was patches earlier to support only BSS Tx action
+ frames.
+
+Signed-off-by: Rakhil P E <rakhilpe001@gmail.com>
+---
+ .../wireless/broadcom/brcm80211/brcmfmac/p2p.c | 18 +++---------------
+ 1 file changed, 3 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/net/wireless/broadcom/brcm80211/brcmfmac/p2p.c b/drivers/net/wireless/broadcom/brcm80211/brcmfmac/p2p.c
+index c2dc274aa..574059fa1 100644
+--- a/drivers/net/wireless/broadcom/brcm80211/brcmfmac/p2p.c
++++ b/drivers/net/wireless/broadcom/brcm80211/brcmfmac/p2p.c
+@@ -290,24 +290,12 @@ static bool brcmf_p2p_is_p2p_action(void *frame, u32 frame_len)
+ 	return false;
+ }
+ 
+-static bool brcmf_p2p_is_bss_transition_action(void *frame, u32 frame_len)
++static bool brcmf_p2p_is_action_frame(void *frame, u32 frame_len)
+ {
+-	struct brcmf_p2p_bss_transition_action_frame *pbss_tr_frm;
+-
+ 	if (frame == NULL)
+ 		return false;
+ 
+-	pbss_tr_frm = (struct brcmf_p2p_bss_transition_action_frame *)frame;
+-	if (frame_len < sizeof(*pbss_tr_frm))
+-	{
+-		return false;
+-	}
+-
+-	if (pbss_tr_frm->category == P2P_WNM_TRANS_AF_CATEGORY &&
+-	    pbss_tr_frm->action == P2P_BSS_TR_MGMT_RQ_ACTION)
+-		return true;
+-
+-	return false;
++	return true;
+ }
+ 
+ /**
+@@ -1857,7 +1845,7 @@ bool brcmf_p2p_send_action_frame(struct brcmf_cfg80211_info *cfg,
+ 					   action_frame_len)) {
+ 		/* do not configure anything. it will be */
+ 		/* sent with a default configuration     */
+-	} else if (brcmf_p2p_is_bss_transition_action(action_frame->data,
++	} else if (brcmf_p2p_is_action_frame(action_frame->data,
+ 					   action_frame_len)) {
+ 		/* do not configure anything. it will be */
+ 		/* sent with a default configuration     */
+-- 
+2.25.1
+
