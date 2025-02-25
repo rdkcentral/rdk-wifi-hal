@@ -2492,6 +2492,9 @@ static int decode_bss_info_to_neighbor_ap_info(wifi_neighbor_ap2_t *ap, const wi
         case wifi_security_mode_wpa3_enterprise:
             str = "WPA3-Enterprise";
             break;
+        case wifi_security_mode_wpa3_compatibility:
+            str = "WPA3-Compatibility";
+            break;
         default:
             str = "?";
     }
@@ -3849,6 +3852,20 @@ void wifi_hal_apDisassociatedDevice_callback_register(wifi_apDisassociatedDevice
 
     callbacks->disassoc_cb[callbacks->num_disassoc_cbs] = func;
     callbacks->num_disassoc_cbs++;
+}
+
+void wifi_hal_stamode_callback_register(wifi_stamode_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+
+    if (callbacks == NULL || callbacks->num_stamode_cbs> MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+
+    callbacks->stamode_cb[callbacks->num_stamode_cbs] = func;
+    callbacks->num_stamode_cbs++;
 }
 
 void wifi_hal_radius_eap_failure_callback_register(wifi_radiusEapFailure_callback func)

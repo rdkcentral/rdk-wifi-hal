@@ -363,7 +363,7 @@ int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg
     }
 
     // security parameter values
-    if (bss_info->security.mode <= 0 || bss_info->security.mode > wifi_security_mode_enhanced_open ||
+    if (bss_info->security.mode <= 0 || bss_info->security.mode >  wifi_security_mode_wpa3_compatibility ||
             (bss_info->security.mode &(bss_info->security.mode - 1)) != 0) {
         ret = RETURN_ERR;
         snprintf(msg + strlen(msg), len - strlen(msg), " security mode: %d", bss_info->security.mode);
