@@ -26,6 +26,7 @@
 #define MAX_BUF_SIZE 300
 #define VAP_PREFIX "ath"
 #define RADIO_PREFIX "wifi"
+#define IPQ_XER5_MAX_NUM_RADIOS 2
 #define OUI_QCA "0x001374"
 #define RETRY_LIMIT 7
 
@@ -391,12 +392,12 @@ int is_interface_exists(const char *fname)
 //check if radio  present in info map
 int check_radio_index(uint8_t radio_index)
 {
-    radio_interface_mapping_t platform_map_t[MAX_NUM_RADIOS];
+    radio_interface_mapping_t platform_map_t[IPQ_XER5_MAX_NUM_RADIOS];
     uint8_t i = 0;
 
     get_radio_interface_info_map(platform_map_t);
 
-    for (i = 0; i < MAX_NUM_RADIOS ; i++) {
+    for (i = 0; i < IPQ_XER5_MAX_NUM_RADIOS  ; i++) {
         if (platform_map_t[i].radio_index == radio_index) {
 
             return 0;
@@ -415,7 +416,7 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
 
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
 
-    for (i = 0; i < MAX_NUM_RADIOS; i++) {
+    for (i = 0; i < IPQ_XER5_MAX_NUM_RADIOS ; i++) {
         if(i == RDK_2G_RADIO) {
             for (apIndex = 0; apIndex < MAX_NUM_VAP_PER_RADIO; apIndex++) {
                 if (isValidAPIndex(VAP_RADIO_2G[apIndex])) {
@@ -456,7 +457,7 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
 void getprivatevap2G(unsigned int *index)
 {
     unsigned int idx = 0;
-    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
+    wifi_interface_name_idex_map_t interface_map[(IPQ_XER5_MAX_NUM_RADIOS  * MAX_NUM_VAP_PER_RADIO)];
     if (index == NULL) {
         wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
         return;
@@ -476,7 +477,7 @@ void getprivatevap2G(unsigned int *index)
 void getprivatevap5G(unsigned int *index)
 {
     unsigned int idx = 0;
-    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
+    wifi_interface_name_idex_map_t interface_map[(IPQ_XER5_MAX_NUM_RADIOS  * MAX_NUM_VAP_PER_RADIO)];
     if (index == NULL) {
         wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
         return;
@@ -507,7 +508,7 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
 
     variant = operationParam->variant; channelWidth = operationParam->channelWidth;
     //wifi_interface_name_idex_map_t *interface_map;
-    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
+    wifi_interface_name_idex_map_t interface_map[(IPQ_XER5_MAX_NUM_RADIOS  * MAX_NUM_VAP_PER_RADIO)];
 
     get_wifi_interface_info_map(interface_map);
 
