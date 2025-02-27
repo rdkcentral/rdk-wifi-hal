@@ -1289,6 +1289,10 @@ int wifi_hal_parse_rm_beaon_report(unsigned int apIndex, char *buff, size_t len,
         wifi_hal_dbg_print("%s:%d: Measurement report mode 0x%x type %u\n", __func__, __LINE__,
             ie[3], ie[4]);
 
+        if (ie[3] != MEASUREMENT_REPORT_MODE_ACCEPT) {
+            wifi_hal_dbg_print("%s:%d: Invalid report\n", __func__, __LINE__);
+            return RETURN_ERR;
+        }
         /* Report type */
         switch (ie[4]) {
         case MEASURE_TYPE_BEACON:
