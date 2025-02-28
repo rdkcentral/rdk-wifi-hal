@@ -495,6 +495,7 @@ void getprivatevap5G(unsigned int *index)
 
 void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
+
     unsigned int apindex = 0;
     size_t len = 0;
     char cmd[DEFAULT_CMD_SIZE] = {0};
@@ -628,12 +629,10 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
     }
     while (fgets(buffer, sizeof(buffer), fp) != NULL) {
         strncpy(output, buffer, DEFAULT_CMD_SIZE);
-        output[strcspn(output, "\n")] = '\0';
     }
     pclose(fp);
 
-    len = strlen(output) > strlen(cmd) ? strlen(output) : strlen(cmd);
-    if (strncmp(output, cmd, len) != 0 ) {
+    if (strncmp(output, cmd, strlen(cmd)) != 0 ) {
         snprintf(tmp, DEFAULT_CMD_SIZE, "cfg80211tool %s%d mode %s",VAP_PREFIX,apindex,cmd);
         system(tmp);
     }
