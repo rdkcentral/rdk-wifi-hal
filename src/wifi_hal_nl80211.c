@@ -8395,7 +8395,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                     wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_PSK;
 #if HOSTAPD_VERSION >= 210
                     wpa_conf.wpa_key_mgmt_rsno = WPA_KEY_MGMT_SAE;
-#endif
+#endif /* HOSTAPD_VERSION >= 210 */
                     break;
                 default:
                     wifi_hal_info_print("%s:%d:Invalid security mode: %d in wifi_hal_connect\r\n", __func__, __LINE__, security->mode);
@@ -16286,7 +16286,7 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .get_mbssid_ie = wifi_drv_get_mbssid_ie,
     .get_mbssid_config = wifi_drv_get_mbssid_config,
     .get_sta_auth_type = wifi_drv_get_sta_auth_type,
-#endif
+#endif /* HOSTAPD_VERSION >= 210 */
 };
 
 #ifdef CONFIG_WIFI_EMULATOR
@@ -16444,6 +16444,6 @@ const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops = {
 #endif
 #if HOSTAPD_VERSION >= 210
     .get_sta_auth_type = wifi_drv_get_sta_auth_type,
-#endif
+#endif /* HOSTAPD_VERSION >= 210 */
 };
 #endif //CONFIG_WIFI_EMULATOR

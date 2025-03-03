@@ -483,7 +483,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
     conf->wpa_key_mgmt = 0;
 #if HOSTAPD_VERSION >= 210
     conf->wpa_key_mgmt_rsno = 0;
-#endif
+#endif /* HOSTAPD_VERSION >= 210 */
     conf->wpa = 0;
     memset(&test_ip, 0, sizeof(test_ip));
 
@@ -547,14 +547,14 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 #else
             conf->sae_pwe = 0;
 #endif /* CONFIG_IEEE80211BE*/
-#endif
+#endif /* HOSTAPD_VERSION >= 210 */
             break;
         case wifi_security_mode_wpa3_compatibility:
             conf->wpa_key_mgmt = WPA_KEY_MGMT_PSK;
-            conf->sae_pwe = 1;
 #if HOSTAPD_VERSION >= 210
             conf->wpa_key_mgmt_rsno = WPA_KEY_MGMT_SAE;
-#endif
+            conf->sae_pwe = 1;
+#endif /* HOSTAPD_VERSION >= 210 */
             conf->auth_algs = WPA_AUTH_ALG_SAE | WPA_AUTH_ALG_SHARED | WPA_AUTH_ALG_OPEN;
             break;
         default:
@@ -610,7 +610,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         conf->ieee80211w = (enum mfp_options) NO_MGMT_FRAME_PROTECTION;
 #if HOSTAPD_VERSION >= 210
         conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
-#endif
+#endif /* HOSTAPD_VERSION >= 210 */
         conf->sae_require_mfp = 1;
     }
 #endif
