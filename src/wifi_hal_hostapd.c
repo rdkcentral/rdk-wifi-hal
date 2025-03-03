@@ -481,6 +481,9 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 
     conf->ieee802_1x = 0;
     conf->wpa_key_mgmt = 0;
+#if HOSTAPD_VERSION >= 210
+    conf->wpa_key_mgmt_rsno = 0;
+#endif
     conf->wpa = 0;
     memset(&test_ip, 0, sizeof(test_ip));
 
@@ -546,6 +549,14 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 #endif /* CONFIG_IEEE80211BE*/
 #endif
             break;
+        case wifi_security_mode_wpa3_compatibility:
+            conf->wpa_key_mgmt = WPA_KEY_MGMT_PSK;
+            conf->sae_pwe = 1;
+#if HOSTAPD_VERSION >= 210
+            conf->wpa_key_mgmt_rsno = WPA_KEY_MGMT_SAE;
+#endif
+            conf->auth_algs = WPA_AUTH_ALG_SAE | WPA_AUTH_ALG_SHARED | WPA_AUTH_ALG_OPEN;
+            break;
         default:
             conf->wpa_key_mgmt = -1;
             break;
@@ -595,6 +606,13 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->sae_require_mfp = 0;
             break;
     }
+    if(sec->mode == wifi_security_mode_wpa3_compatibility) {
+        conf->ieee80211w = (enum mfp_options) NO_MGMT_FRAME_PROTECTION;
+#if HOSTAPD_VERSION >= 210
+        conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
+#endif
+        conf->sae_require_mfp = 1;
+    }
 #endif
 
     wifi_hal_dbg_print("%s:%d: security:%d mfp:%d wpa_key_mgmt:%d 11w:%d\n",
@@ -617,6 +635,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         case wifi_security_mode_wpa3_enterprise:
         case wifi_security_mode_wpa3_transition:
         case wifi_security_mode_enhanced_open:
+        case wifi_security_mode_wpa3_compatibility:
             conf->wpa = 2;
             break;
 
@@ -670,7 +689,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
     conf->wpa_group_rekey = sec->rekey_interval;
     conf->wpa_group_rekey_set = 1;
 
-    wifi_hal_dbg_print("%s:%d: wpa_gmk_rekey:%d wpa_group_rekey:%d\n", __func__, __LINE__, conf->wpa_gmk_rekey, conf->wpa_group_rekey);
+    wifi_hal_dbg_print("%s:%d: wpa_gmk_rekey:%d wpa_group_rekey:%d wpa:%d \n", __func__, __LINE__, conf->wpa_gmk_rekey, conf->wpa_group_rekey, conf->wpa);
 
     conf->wpa_strict_rekey = sec->strict_rekey;
 
@@ -2477,7 +2496,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         ctx->cancel_auth_timeout = wpa_sm_sta_cancel_auth_timeout;
 #ifdef CONFIG_WIFI_EMULATOR
         if((sec->mode == wifi_security_mode_wpa3_personal) || (sec->mode == wifi_security_mode_wpa3_enterprise) ||
-                (sec->mode == wifi_security_mode_wpa3_transition)) {
+                (sec->mode == wifi_security_mode_wpa3_transition) || (sec->mode == wifi_security_mode_wpa3_compatibility)) {
             ctx->get_state = wpa_sm_supplicant_sta_get_state;
             ctx->cancel_auth_timeout = wpa_sm_supplicant_sta_cancel_auth_timeout;
         }
@@ -2597,6 +2616,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                 sel = (WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w);
             } else if (sec->mode == wifi_security_mode_wpa3_enterprise) {
                 sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w);
+            } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
+                sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE);
             } else {
                 wifi_hal_error_print("Unsupported security mode : 0x%x\n", sec->mode);
                 return;
