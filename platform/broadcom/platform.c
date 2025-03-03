@@ -971,11 +971,18 @@ int nvram_get_current_ssid(char *l_ssid, int vap_index)
     }
     len = strlen(ssid);
     if (len < 0 || len > 63) {
-        wifi_hal_error_print("%s:%d invalid ssid length [%d], expected length is [0..63]\r\n", __func__, __LINE__, len);
+        wifi_hal_error_print("%s:%d invalid ssid length [%d], expected length is [0..63]\r\n",
+            __func__, __LINE__, len);
         return -1;
     }
+    for (int i = 0; i < len; i++) {
+        if (!((ssid[i] >= ' ') && (ssid[i] <= '~'))) {
+            wifi_hal_error_print("%s:%d: Invalid character %c in SSID\r\n", __func__, __LINE__,
+                ssid[i]);
+            return -1;
+        }
+    }
     strncpy(l_ssid, ssid, (len + 1));
-    wifi_hal_dbg_print("%s:%d vap[%d] ssid:%s nvram name:%s\r\n", __func__, __LINE__, vap_index, l_ssid, nvram_name);
     return 0;
 }
 
@@ -2886,10 +2893,6 @@ static int get_radio_diagnostics(wifi_interface_info_t *interface,
     int ret = RETURN_ERR;
 
     wifi_hal_dbg_print("%s:%d Entering\n", __func__, __LINE__);
-    /* Test code  to trigger reinterface */
-    wifi_hal_dbg_print("%s:%d [AH]: Triggering reinterface enable start\n", __func__, __LINE__);
-    nl80211_retry_interface_enable(interface, true);
-    wifi_hal_dbg_print("%s:%d [AH]: Triggering reinterface enable done\n", __func__, __LINE__);
     msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
         RDK_VENDOR_NL80211_SUBCMD_GET_RADIO_INFO);
     if (msg == NULL) {
