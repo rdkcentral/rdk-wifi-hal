@@ -81,6 +81,7 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
     system("brctl addif brlan0 wifi0");
     system("brctl addif brlan0 wifi1");
+    system("brctl addif brlan0 wifi2");
     return 0;
 }
 
