@@ -139,10 +139,12 @@ void prepare_interface_fdset(wifi_hal_priv_t *priv)
 {
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
-    wifi_vap_info_t *vap;
     unsigned int i;
+#ifndef EAPOL_OVER_NL
+    wifi_vap_info_t *vap;
     int sock_fd;
-
+#endif
+    
     FD_ZERO(&priv->drv_rfds);
     FD_SET(priv->nl_event_fd, &priv->drv_rfds);
     FD_SET(priv->link_fd, &priv->drv_rfds);
@@ -153,9 +155,9 @@ void prepare_interface_fdset(wifi_hal_priv_t *priv)
 
         while (interface != NULL) {
             if (interface->vap_configured == true && interface->bridge_configured == true) {
-                vap = &interface->vap_info;
 #ifndef EAPOL_OVER_NL
-                sock_fd = (vap->vap_mode == wifi_vap_mode_ap) ?
+                vap = &interface->vap_info;
+    		sock_fd = (vap->vap_mode == wifi_vap_mode_ap) ?
                                     interface->u.ap.br_sock_fd:interface->u.sta.sta_sock_fd;
                 FD_SET(sock_fd, &priv->drv_rfds);
 #endif
@@ -13124,10 +13126,7 @@ int process_bss_frame(struct nl_msg *msg, void *arg)
 {
     wifi_interface_info_t *interface;
     struct genlmsghdr *gnlh;
-    struct nlattr *tb[NL80211_ATTR_MAX + 1], *attr;
-    unsigned int len;
-    unsigned char cat;
-    wifi_vap_info_t *vap;
+    struct nlattr *tb[NL80211_ATTR_MAX + 1];
 
     gnlh = nlmsg_data(nlmsg_hdr(msg));
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
@@ -13595,8 +13594,7 @@ static int spurious_frame_register_handler(struct nl_msg *msg, void *arg)
 #ifdef EAPOL_OVER_NL
 int nl80211_register_bss_frames(wifi_interface_info_t *interface)
 {
-    struct nl_msg *msg = NULL;
-    int ret = 0, err = 1;
+    int err = 1;
 
     if (interface->bss_frames_registered == 1) {
         wifi_hal_info_print("%s:%d: bss frames handler already registered for %s\n", __func__,
@@ -13631,14 +13629,14 @@ int nl80211_register_bss_frames(wifi_interface_info_t *interface)
      * operations are blocked. Try to increase the buffer to make
      * this less likely to occur.
      */
-    err = nl_socket_set_buffer_size(interface->bss_nl_connect_event, NL_SOCK_MAX_BUF_SIZE, 0);
+    err = nl_socket_set_buffer_size((struct nl_sock *)interface->bss_nl_connect_event, NL_SOCK_MAX_BUF_SIZE, 0);
     if (err < 0) {
         wifi_hal_error_print("nl80211: Could not set nl_socket RX buffer size: %s",
                 nl_geterror(err));
         /* continue anyway with the default (smaller) buffer */
     }
 
-    nl_socket_set_nonblocking(interface->bss_nl_connect_event);
+    nl_socket_set_nonblocking((struct nl_sock *)interface->bss_nl_connect_event);
 
     interface->bss_nl_connect_event_fd = nl_socket_get_fd((struct nl_sock *)
             interface->bss_nl_connect_event);
@@ -13739,10 +13737,12 @@ error:
 int wifi_drv_set_operstate(void *priv, int state)
 {
     wifi_interface_info_t *interface;
-    struct sockaddr_ll sockaddr;
     wifi_vap_info_t *vap;
+#ifndef EAPOL_OVER_NL
+    struct sockaddr_ll sockaddr;    
     int sock_fd;
     const char *ifname;
+#endif
 
     interface = (wifi_interface_info_t *)priv;
     vap = &interface->vap_info;
@@ -14121,7 +14121,7 @@ void* wifi_drv_init(struct hostapd_data *hapd, struct wpa_init_params *params)
 #ifdef EAPOL_OVER_NL
     if (nl80211_register_bss_frames(interface) != 0) {
         wifi_hal_error_print("%s:%d: Failed to register for bss frames\n", __func__, __LINE__);
-        return -1;
+        return NULL;
     }
 #endif
 
