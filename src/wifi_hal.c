@@ -1517,7 +1517,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     __LINE__, interface->name);
                 wifi_drv_set_operstate(interface, 1);
             } else {
-                wifi_hal_info_print("%s:%d: interface:%s set up\n", __func__, __LINE__,
+                wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__,
                     interface->name);
                 nl80211_interface_enable(interface->name, false);
             }
