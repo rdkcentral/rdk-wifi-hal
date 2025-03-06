@@ -739,13 +739,26 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         }
 
         char output[256] = {0};
+        memset(output, '\0', sizeof(output));
         _syscmd("sh /usr/sbin/deviceinfo.sh -eip", output, sizeof(output));
-
-        //own_ip_addr
-        if (inet_aton(output, &conf->own_ip_addr.u.v4)) {
-            conf->own_ip_addr.af = AF_INET;
+        if(output[strlen(output) - 1] == '\n' || output[strlen(output) - 1] == ' ') {
+            output[strlen(output) - 1] = '\0';
         }
-
+        if (inet_pton(AF_INET, (const char *)output, &conf->erouter_ipv4.u.v4))
+        {
+            conf->erouter_ipv4.af = AF_INET;
+        }
+#ifdef CONFIG_IPV6
+        memset(output, '\0', sizeof(output));
+        _syscmd("sh /usr/sbin/deviceinfo.sh -eipv6", output, sizeof(output));
+        if(output[strlen(output) - 1] == '\n' || output[strlen(output) - 1] == ' ') {
+            output[strlen(output) - 1] = '\0';
+        }
+        if (inet_pton(AF_INET6, (const char *)output, &conf->erouter_ipv6.u.v6))
+        {
+            conf->erouter_ipv6.af = AF_INET6;
+        }
+#endif
         // nas_identifier
         memset(output, '\0', sizeof(output));
         _syscmd("sh /usr/sbin/deviceinfo.sh -emac", output, sizeof(output));
