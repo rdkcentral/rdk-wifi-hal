@@ -3799,6 +3799,66 @@ int nl80211_interface_enable(const char *ifname, bool enable)
     return res;
 }
 
+int nl80211_retry_interface_enable(wifi_interface_info_t *interface, bool enable)
+{
+    /* This function is required only for Raspberry PI platform when interfacing
+      with Canakit dongle. In other platforms it does not do anything but returns
+      success */
+#ifdef _PLATFORM_RASPBERRYPI_
+    /* Bring down the primary interface and then enable the secondary interface*/
+    wifi_interface_info_t *primary_interface = NULL;
+    wifi_radio_info_t *radio = NULL;
+    int ret = 0;
+
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d interface is NULL.\n", __func__, __LINE__);
+        return -1;
+    }
+
+    radio = get_radio_by_rdk_index(interface->rdk_radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d Radio of interface:%s is NULL.\n", __func__, __LINE__,
+            interface->name);
+        return -1;
+    }
+
+    primary_interface = get_primary_interface(radio);
+    if (primary_interface == NULL) {
+        wifi_hal_error_print("%s:%d primary interface of interface:%s is NULL.\n", __func__,
+            __LINE__, interface->name);
+        return -1;
+    }
+
+    ret = nl80211_interface_enable(primary_interface->name, false);
+    if (ret != 0) {
+        wifi_hal_error_print("%s:%d unable to disable primary interface:%s\n", __func__, __LINE__,
+            primary_interface->name);
+        return ret;
+    }
+
+    ret = nl80211_interface_enable(interface->name, enable);
+    if (ret != 0) {
+        wifi_hal_error_print("%s:%d unable to %s interface:%s\n", __func__, __LINE__,
+            enable ? "enable" : "disable", interface->name);
+        /* Don't return here, enable the primary_interface and then return*/
+    }
+
+    ret = nl80211_interface_enable(primary_interface->name, true);
+    if (ret != 0) {
+        wifi_hal_error_print("%s:%d unable to enable primary interface:%s\n", __func__, __LINE__,
+            primary_interface->name);
+        return ret;
+    }
+    wifi_hal_dbg_print("%s:%d %s of interface:%s successful.\n", __func__, __LINE__,
+        enable ? "enable" : "disable", interface->name);
+    return ret;
+#else
+    wifi_hal_dbg_print("%s:%d Interface:%s do nothing, return success.\n", __func__, __LINE__,
+        interface->name);
+    return 0;
+#endif
+}
+
 static int phy_info_rates(wifi_radio_info_t *radio, struct hostapd_hw_modes *mode, enum nl80211_band band, struct nlattr *tb)
 {
     static struct nla_policy rate_policy[NL80211_BITRATE_ATTR_MAX + 1] = {
@@ -6540,8 +6600,9 @@ int nl80211_init_primary_interfaces()
 
         interface = get_private_vap_interface(radio);
         if (interface == NULL) {
-            wifi_hal_info_print("%s:%d: INFO: updating dev:%d no private vap interfaces exist\n", __func__, __LINE__, radio->index);
-            return 0;
+            wifi_hal_info_print("%s:%d: INFO: updating dev:%d no private vap interfaces exist "
+                                "using primary interface\n", __func__, __LINE__, radio->index);
+            interface = primary_interface;
         }
 
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_INTERFACE);
@@ -6937,6 +6998,9 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
     }
     else {
         interface = get_private_vap_interface(radio);
+        if (interface == NULL) {
+            interface = get_primary_interface(radio);
+        }
     }
 
     if (!interface) {
@@ -6982,6 +7046,9 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
             }
             else {
                 interface = get_private_vap_interface(radio);
+                if (interface == NULL) {
+                    interface = get_primary_interface(radio);
+                }
             }
 
             if (!interface) {
@@ -7023,7 +7090,13 @@ Exit:
         interface = hash_map_get_first(radio->interface_map);
         while (interface != NULL) {
             if (interface->bss_started) {
-                nl80211_interface_enable(interface->name, true);
+                if (nl80211_interface_enable(interface->name, true) != 0) {
+                    ret = nl80211_retry_interface_enable(interface, true);
+                    if (ret != 0) {
+                        wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n",
+                            __func__, __LINE__, ret);
+                    }
+                }
                 if (update_hostap_interface_params(interface) != RETURN_OK) {
                     wifi_hal_error_print("%s:%d - Failed to update_hostap_interface_params\n", __func__, __LINE__);
                     return RETURN_ERR;
@@ -7410,7 +7483,8 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
         wifi_hal_dbg_print("%s:%d: [SCAN] scan found %u (total)\n", __func__, __LINE__, total_ap_count);
     }
 
-    if (callbacks->scan_result_callback != NULL && interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+    if (callbacks->scan_result_callback != NULL &&
+        interface->vap_info.vap_mode == wifi_vap_mode_sta && ssid_found_count) {
         if (ssid_found_count < count) {
             wifi_bss_info_t* new_bss = realloc(bss, ssid_found_count * sizeof(wifi_bss_info_t));
             if (!new_bss) {
@@ -8353,8 +8427,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             wpa_conf.wpa_key_mgmt = key_mgmt;
         }
 
-        wifi_hal_dbg_print("update_wpa_sm_params%x %x %x\n", data.group_cipher, data.pairwise_cipher,
-                key_mgmt);
+        wifi_hal_dbg_print("%s:%d: %x %x %x\n", __func__, __LINE__, data.group_cipher,
+            data.pairwise_cipher, key_mgmt);
     } else {
         if (security->mode == wifi_security_mode_none) {
             wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_NONE;

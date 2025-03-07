@@ -394,6 +394,12 @@ int update_hostap_data(wifi_interface_info_t *interface)
 
     vap = &interface->vap_info;
 
+    if (vap->vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(vap->vap_index)) {
+        wifi_hal_error_print("%s:%d: Not an AP based VAP. Returning error\n", __func__,
+            __LINE__);
+        return RETURN_ERR;
+    }
+
     radio = get_radio_by_rdk_index(vap->radio_index);
     iconf = &radio->iconf;
 
@@ -2587,8 +2593,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, key_mgmt);
         }
 
-        wifi_hal_dbg_print("update_wpa_sm_params%x %x %x\n", data.group_cipher, data.pairwise_cipher,
-            key_mgmt);
+        wifi_hal_dbg_print("%s:%d:%x %x %x\n", __func__, __LINE__, data.group_cipher,
+            data.pairwise_cipher, key_mgmt);
     } else {
         if (sec->mode == wifi_security_mode_none) {
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, WPA_KEY_MGMT_NONE);
