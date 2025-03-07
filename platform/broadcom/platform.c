@@ -190,7 +190,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     wifi_neighbor_ap2_t *combined_data;
     uint existing_count = *data_count;
 
-    wifi_hal_dbg_print("%s:%d: Entered with radio_index = %u\n", __func__, __LINE__, radio_index);
+    wifi_hal_stats_dbg_print("%s:%d: Entered with radio_index = %u\n", __func__, __LINE__, radio_index);
     snprintf(file_path, sizeof(file_path), "/dev/shm/wifi_neighbor_ap_emu_%u", radio_index);
 
     if (access(file_path, F_OK) != 0) {
@@ -199,27 +199,27 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
 
     sem = sem_open(SEM_NAME, 0);
     if (sem == SEM_FAILED) {
-        wifi_hal_error_print("%s:%d: Semaphore does not exist, emulation likely disabled.\n",
+        wifi_hal_stats_error_print("%s:%d: Semaphore does not exist, emulation likely disabled.\n",
             __func__, __LINE__);
         return RETURN_ERR;
     }
 
     if (sem_wait(sem) == -1) {
-        wifi_hal_error_print("%s:%d: Failed to acquire semaphore\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to acquire semaphore\n", __func__, __LINE__);
         sem_close(sem);
         return RETURN_ERR;
     }
 
     fp = fopen(file_path, "rb");
     if (fp == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to open file\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to open file\n", __func__, __LINE__);
         sem_post(sem);
         sem_close(sem);
         return RETURN_ERR;
     }
 
     if (fread(&neighbor_header, sizeof(emu_neighbor_stats_t), 1, fp) != 1) {
-        wifi_hal_error_print("%s:%d: Failed to read header data\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to read header data\n", __func__, __LINE__);
         fclose(fp);
         sem_post(sem);
         sem_close(sem);
@@ -229,7 +229,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     combined_data = malloc(
         (existing_count + neighbor_header.neighbor_count) * sizeof(wifi_neighbor_ap2_t));
     if (combined_data == NULL) {
-        wifi_hal_error_print("%s:%d: Memory allocation for combined_data failed\n", __func__,
+        wifi_hal_stats_error_print("%s:%d: Memory allocation for combined_data failed\n", __func__,
             __LINE__);
         fclose(fp);
         sem_post(sem);
@@ -244,7 +244,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
 
     if (fread(combined_data + existing_count, sizeof(wifi_neighbor_ap2_t),
             neighbor_header.neighbor_count, fp) != neighbor_header.neighbor_count) {
-        wifi_hal_error_print("%s:%d: Failed to read neighbor data:\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to read neighbor data:\n", __func__, __LINE__);
         free(combined_data);
         fclose(fp);
         sem_post(sem);
@@ -255,7 +255,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     *neighbor_ap_array = malloc(
         (existing_count + neighbor_header.neighbor_count) * sizeof(wifi_neighbor_ap2_t));
     if (*neighbor_ap_array == NULL) {
-        wifi_hal_error_print("%s:%d: Memory allocation for neighbor_ap_array failed\n", __func__,
+        wifi_hal_stats_error_print("%s:%d: Memory allocation for neighbor_ap_array failed\n", __func__,
             __LINE__);
         free(combined_data);
         fclose(fp);
@@ -270,7 +270,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     free(combined_data);
 
     if (sem_post(sem) == -1) {
-        wifi_hal_error_print("%s:%d: Failed to release semaphore\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to release semaphore\n", __func__, __LINE__);
     }
 
     fclose(fp);
@@ -288,7 +288,7 @@ INT wifi_getNeighboringWiFiStatus(INT radio_index, wifi_neighbor_ap2_t **neighbo
     UINT *output_array_size)
 {
     int ret;
-    ret = wifi_hal_getNeighboringWiFiStatus(radio_index, neighbor_ap_array, output_array_size);
+    ret = wifi_hal_stats_getNeighboringWiFiStatus(radio_index, neighbor_ap_array, output_array_size);
     if (ret == WIFI_HAL_NOT_READY) {
         return ret;
     } else if (ret == RETURN_ERR) {
@@ -297,7 +297,7 @@ INT wifi_getNeighboringWiFiStatus(INT radio_index, wifi_neighbor_ap2_t **neighbo
     }
 #if defined WIFI_EMULATOR_CHANGE
     if (get_emu_neighbor_stats(radio_index, neighbor_ap_array, output_array_size) != RETURN_OK) {
-        wifi_hal_error_print("%s:%d: get_emu_neighbor_stats failed\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: get_emu_neighbor_stats failed\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 #endif
