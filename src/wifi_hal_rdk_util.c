@@ -52,6 +52,10 @@
 #include <openssl/rand.h>
 #include <aes_siv.h>
 #include <wifi_hal_rdk_framework.h>
+#include "wifi_hal_priv.h"
+#include <cjson/cJSON.h>
+#include <sys/types.h>
+#include <ifaddrs.h>
 
 /* WPS_METHOD_LIMIT */
 /* WIFI_ONBOARDINGMETHODS_USBFLASHDRIVE | WIFI_ONBOARDINGMETHODS_ETHERNET | WIFI_ONBOARDINGMETHODS_LABEL | WIFI_ONBOARDINGMETHODS_DISPLAY | WIFI_ONBOARDINGMETHODS_EXTERNALNFCTOKEN | WIFI_ONBOARDINGMETHODS_INTEGRATEDNFCTOKEN | WIFI_ONBOARDINGMETHODS_NFCINTERFACE | WIFI_ONBOARDINGMETHODS_PUSHBUTTON | WIFI_ONBOARDINGMETHODS_PIN | WIFI_ONBOARDINGMETHODS_PHYSICALPUSHBUTTON | WIFI_ONBOARDINGMETHODS_PHYSICALDISPLAY | WIFI_ONBOARDINGMETHODS_VIRTUALPUSHBUTTON |WIFI_ONBOARDINGMETHODS_VIRTUALDISPLAY | WIFI_ONBOARDINGMETHODS_EASYCONNECT  = 0x7FFF */ 
@@ -443,4 +447,117 @@ time_t get_boot_time_in_sec(void)
 
     clock_gettime(CLOCK_MONOTONIC, &tv_now);
     return tv_now.tv_sec;
+}
+
+cJSON *json_open_file(const char *file_name)
+{
+    FILE *fp;
+    cJSON *json = NULL;
+    size_t len;
+    char *buff;
+
+    fp = fopen(file_name, "r");
+    if (fp == NULL) {
+        wifi_hal_error_print("%s:%d: Failed (err=%d, msg=%s) to open file:%s\n", __func__, __LINE__,
+            errno, strerror(errno), file_name);
+        return json;
+    }
+    fseek(fp, 0, SEEK_END);
+    len = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    buff = malloc(len);
+    if (buff == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate %zu bytes for json file\n", __func__,
+            __LINE__, len);
+        return NULL;
+    }
+    len = fread(buff, 1, len, fp);
+    json = cJSON_ParseWithLength(buff, len);
+    if (json == NULL) {
+        const char *const error_ptr = cJSON_GetErrorPtr();
+        wifi_hal_error_print("%s:%d: Error json file parse: %s\n", __func__, __LINE__,
+            (error_ptr ? error_ptr : "UNKNOWN"));
+    }
+    free(buff);
+    fclose(fp);
+    return json;
+}
+
+int json_parse_string(const char* file_name, const char *item_name, char *val, size_t len)
+{
+    cJSON *item;
+    cJSON *json;
+
+    json = json_open_file(file_name);
+    if (json == NULL) {
+        return -1;
+    }
+
+    item = cJSON_GetObjectItem(json, item_name);
+    if (!cJSON_IsString(item)) {
+        wifi_hal_error_print("%s:%d: (%s) does "
+                             "not exist or is not a string\n",
+            __func__, __LINE__, item_name);
+        cJSON_Delete(json);
+        return -1;
+    }
+    strncpy(val, cJSON_GetStringValue(item), len);
+    val[len-1] = '\0';
+
+    cJSON_Delete(json);
+    return 0;
+}
+
+int json_parse_integer(const char* file_name, const char *item_name, int *val)
+{
+    cJSON *item;
+    cJSON *json;
+
+    json = json_open_file(file_name);
+    if (json == NULL) {
+        *val = -1;
+        return -1;
+    }
+
+    item = cJSON_GetObjectItem(json, item_name);
+    if (item == NULL || cJSON_IsNumber(item) == false) {
+        wifi_hal_error_print("%s:%d: (%s) does "
+                             "not exist or is not a number.\n",
+            __func__, __LINE__, item_name);
+        cJSON_Delete(json);
+        *val = -1;
+        return -1;
+    }
+    *val = (int)item->valuedouble;
+
+    cJSON_Delete(json);
+    return 0;
+}
+
+/* This routine will take mac address from the user and returns associated interfacename */
+bool get_ifname_from_mac(const mac_address_t *mac, char *ifname)
+{
+    struct ifaddrs *ifaddr = NULL, *tmp = NULL;
+    struct sockaddr *addr;
+    struct sockaddr_ll *ll_addr;
+    bool found = false;
+
+    if (getifaddrs(&ifaddr) != 0) {
+        wifi_hal_error_print("%s:%d: Failed to get interface information\n", __func__, __LINE__);
+        return found;
+    }
+    tmp = ifaddr;
+    while (tmp != NULL) {
+        addr = tmp->ifa_addr;
+        ll_addr = (struct sockaddr_ll*)tmp->ifa_addr;
+        if ((addr != NULL) && (addr->sa_family == AF_PACKET) && (memcmp(ll_addr->sll_addr, mac, sizeof(mac_address_t)) == 0)) {
+            strncpy(ifname, tmp->ifa_name, strlen(tmp->ifa_name));
+            found = true;
+            break;
+        }
+        tmp = tmp->ifa_next;
+    }
+    freeifaddrs(ifaddr);
+    return found;
 }

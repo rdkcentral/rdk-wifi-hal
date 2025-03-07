@@ -38,6 +38,8 @@ Licensed under the BSD-3 License
 #define MAX_BUF_SIZE 128
 #define MAX_CMD_SIZE 1024
 #define RPI_LEN_32 32
+#define MAX_KEYPASSPHRASE_LEN 129
+#define MAX_SSID_LEN 33
 #define INVALID_KEY                      "12345678"
 
 int wifi_nvram_defaultRead(char *in,char *out);
@@ -86,6 +88,17 @@ int wifi_nvram_defaultRead(char *in,char *out)
     position++;
     strncpy(out,position,strlen(position)+1);
     return 0; 
+}
+
+static int json_parse_backhaul_keypassphrase(char *backhaul_keypassphrase)
+{
+    return json_parse_string(EM_CFG_FILE, "Backhaul_KeyPassphrase", backhaul_keypassphrase,
+        MAX_KEYPASSPHRASE_LEN);
+}
+
+static int json_parse_backhaul_ssid(char *backhaul_ssid)
+{
+    return json_parse_string(EM_CFG_FILE, "Backhaul_SSID", backhaul_ssid, MAX_SSID_LEN);
 }
 
 int platform_pre_init()
@@ -158,21 +171,40 @@ int nvram_get_current_security_mode(wifi_security_modes_t *security_mode,int vap
 
 int platform_get_keypassphrase_default(char *password, int vap_index)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);  
-    /*password is not sensitive,won't grant access to real devices*/ 
-    wifi_nvram_defaultRead("rpi_wifi_password",password);
+    wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
+    /* if the vap_index is that of mesh STA then try to obtain the ssid from
+       /nvram/EasymeshCfg.json file */
+    if (is_wifi_hal_vap_mesh_sta(vap_index)) {
+        if (!json_parse_backhaul_keypassphrase(password)) {
+            wifi_hal_dbg_print("%s:%d, read password from jSON file\n", __func__, __LINE__);
+            return 0;
+        }
+    }
+    /*password is not sensitive,won't grant access to real devices*/
+    wifi_nvram_defaultRead("rpi_wifi_password", password);
     if (strlen(password) == 0) {
-       wifi_hal_error_print("%s:%d nvram default password not found, "
-           "enforced alternative default password\n", __func__, __LINE__);
-       strncpy(password, INVALID_KEY, strlen(INVALID_KEY) + 1);
+        wifi_hal_error_print("%s:%d nvram default password not found, "
+                             "enforced alternative default password\n",
+            __func__, __LINE__);
+        strncpy(password, INVALID_KEY, strlen(INVALID_KEY) + 1);
     }
     return 0;
 }
 
 int platform_get_ssid_default(char *ssid, int vap_index)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);   
-    sprintf(ssid,"RPI_RDKB-AP%d",vap_index);
+    int ret = 0;
+
+    wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
+    /* if the vap_index is that of mesh STA or mesh backhaul then try to obtain the ssid from
+       /nvram/EasymeshCfg.json file */
+    if (is_wifi_hal_vap_mesh_sta(vap_index)) {
+        if (!json_parse_backhaul_ssid(ssid)) {
+            wifi_hal_dbg_print("%s:%d, read SSID:%s from jSON file\n", __func__, __LINE__, ssid);
+            return 0;
+        }
+    }
+    sprintf(ssid, "RPI_RDKB-AP%d", vap_index);
     return 0;
 }
 
@@ -219,7 +251,7 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
 int platform_flags_init(int *flags)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
     *flags = PLATFORM_FLAGS_STA_INACTIVITY_TIMER;
     return 0;
 }
