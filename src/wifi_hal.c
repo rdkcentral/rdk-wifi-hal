@@ -1706,7 +1706,7 @@ static int chann_to_freq(unsigned char chan)
         return 5000 + 5 * chan;
     }
 
-    wifi_hal_error_print("%s:%d: Failed to convert channel %u to frequency\n", __func__, __LINE__,
+    wifi_hal_stats_error_print("%s:%d: Failed to convert channel %u to frequency\n", __func__, __LINE__,
         chan);
 
     return 0;
@@ -2098,19 +2098,19 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     unsigned int freq_list[32], i;
     ssid_t  ssid_list[8];
 
-    wifi_hal_dbg_print("%s:%d: index: %d mode: %d dwell time: %d\n", __func__, __LINE__, index,
+    wifi_hal_stats_dbg_print("%s:%d: index: %d mode: %d dwell time: %d\n", __func__, __LINE__, index,
         scan_mode, dwell_time);
 
     RADIO_INDEX_ASSERT(index);
 
     if (dwell_time < 0) {
-        wifi_hal_error_print("%s:%d: invalide dwell time: %d\n", __func__, __LINE__, dwell_time);
+        wifi_hal_stats_error_print("%s:%d: invalide dwell time: %d\n", __func__, __LINE__, dwell_time);
         return WIFI_HAL_INVALID_ARGUMENTS;
     }
 
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d:Could not find radio for index: %d\n", __func__, __LINE__, index);
+        wifi_hal_stats_error_print("%s:%d:Could not find radio for index: %d\n", __func__, __LINE__, index);
         return RETURN_ERR; 
     }
 
@@ -2127,7 +2127,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     }
 
     if (found == false) {
-        wifi_hal_error_print("%s:%d:Could not find sta interface on radio index: %d, start scan failure\n", 
+        wifi_hal_stats_error_print("%s:%d:Could not find sta interface on radio index: %d, start scan failure\n", 
             __func__, __LINE__, index);
         return RETURN_ERR;
     }
@@ -2139,11 +2139,11 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
         num = 1;
     } else if (scan_mode == WIFI_RADIO_SCAN_MODE_OFFCHAN) {
         if ((num == 0) || (chan_list == NULL)) {
-            wifi_hal_error_print("%s:%d: Channels not speified for offchannel scan mode\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: Channels not speified for offchannel scan mode\n", __func__, __LINE__);
             return RETURN_ERR; 
         }
     } else {
-        wifi_hal_error_print("%s:%d: Incorrect scan mode\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Incorrect scan mode\n", __func__, __LINE__);
         return RETURN_ERR; 
     }
 
@@ -2161,7 +2161,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     }
 
     strcpy(ssid_list[0], vap->u.sta_info.ssid);
-    wifi_hal_info_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
+    wifi_hal_stats_info_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
 
     return (nl80211_start_scan(interface, 0, num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
 }

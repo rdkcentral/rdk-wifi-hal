@@ -7347,7 +7347,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     wifi_finish_data_t *finish_data = (wifi_finish_data_t *)arg;
     wifi_interface_info_t   *interface = (wifi_interface_info_t *)finish_data->arg;
 
-    wifi_hal_dbg_print("%s:%d: [SCAN] ENTER\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] ENTER\n", __func__, __LINE__);
 
     *finish_data->err = 0;
 
@@ -7361,7 +7361,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     count = hash_map_count(interface->scan_info_map);
     if (count == 0) {
         pthread_mutex_unlock(&interface->scan_info_mutex);
-        wifi_hal_dbg_print("%s:%d: [SCAN] No Scan results...\n", __func__, __LINE__);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] No Scan results...\n", __func__, __LINE__);
         bss = NULL;
         if (callbacks->scan_result_callback != NULL) {
             callbacks->scan_result_callback(interface->vap_info.radio_index, &bss, &count);
@@ -7372,7 +7372,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     bss = calloc(count, sizeof(wifi_bss_info_t));
     if (!bss) {
         pthread_mutex_unlock(&interface->scan_info_mutex);
-        wifi_hal_error_print("%s:%d: [SCAN] memory allocation error!\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] memory allocation error!\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -7388,7 +7388,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
             scan_info = hash_map_get_next(interface->scan_info_map, scan_info);
         }
         pthread_mutex_unlock(&interface->scan_info_mutex);
-        wifi_hal_dbg_print("%s:%d: [SCAN] scan found %u results with ssid:%s\n", __func__, __LINE__, ssid_found_count, interface->vap_info.u.sta_info.ssid);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan found %u results with ssid:%s\n", __func__, __LINE__, ssid_found_count, interface->vap_info.u.sta_info.ssid);
     }
     else {
         // AP mode: copy all
@@ -7406,8 +7406,8 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
         pthread_mutex_lock(&interface->scan_info_ap_mutex);
         total_ap_count = hash_map_count(interface->scan_info_ap_map[0]);
         pthread_mutex_unlock(&interface->scan_info_ap_mutex);
-        wifi_hal_dbg_print("%s:%d: [SCAN] scan found %u (w/o hidden SSID's)\n", __func__, __LINE__, ssid_found_count);
-        wifi_hal_dbg_print("%s:%d: [SCAN] scan found %u (total)\n", __func__, __LINE__, total_ap_count);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan found %u (w/o hidden SSID's)\n", __func__, __LINE__, ssid_found_count);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan found %u (total)\n", __func__, __LINE__, total_ap_count);
     }
 
     if (callbacks->scan_result_callback != NULL && interface->vap_info.vap_mode == wifi_vap_mode_sta) {
@@ -7415,7 +7415,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
             wifi_bss_info_t* new_bss = realloc(bss, ssid_found_count * sizeof(wifi_bss_info_t));
             if (!new_bss) {
                 // - error, but not critical, original array still is valid
-                wifi_hal_error_print("%s:%d: [SCAN] memory re-allocation error!\n", __func__, __LINE__);
+                wifi_hal_stats_error_print("%s:%d: [SCAN] memory re-allocation error!\n", __func__, __LINE__);
             }
             else
                 bss = new_bss;
@@ -7437,13 +7437,13 @@ int nl80211_get_scan_results(wifi_interface_info_t *interface)
     wifi_finish_data_t scan_results_data = {};
     enum scan_state_type_e scan_state;
 
-    wifi_hal_dbg_print("%s:%d: [SCAN] scan results available for interface '%s'\n", __func__, __LINE__, interface->name);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan results available for interface '%s'\n", __func__, __LINE__, interface->name);
 
     pthread_mutex_lock(&interface->scan_state_mutex);
     scan_state = interface->scan_state;
     pthread_mutex_unlock(&interface->scan_state_mutex);
     if (scan_state != WIFI_SCAN_STATE_STARTED) {
-        wifi_hal_dbg_print("%s:%d: [SCAN] received scan results ready not started by us\n", __func__, __LINE__);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] received scan results ready not started by us\n", __func__, __LINE__);
     }
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, NLM_F_DUMP, NL80211_CMD_GET_SCAN);
@@ -7451,7 +7451,7 @@ int nl80211_get_scan_results(wifi_interface_info_t *interface)
         pthread_mutex_lock(&interface->scan_state_mutex);
         interface->scan_state = WIFI_SCAN_STATE_ERROR;
         pthread_mutex_unlock(&interface->scan_state_mutex);
-        wifi_hal_error_print("%s:%d: [SCAN] nl80211_drv_cmd_msg() returned ERROR ==> Abort!\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] nl80211_drv_cmd_msg() returned ERROR ==> Abort!\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
@@ -7462,7 +7462,7 @@ int nl80211_get_scan_results(wifi_interface_info_t *interface)
         pthread_mutex_lock(&interface->scan_state_mutex);
         interface->scan_state = WIFI_SCAN_STATE_ERROR;
         pthread_mutex_unlock(&interface->scan_state_mutex);
-        wifi_hal_error_print("%s:%d: [SCAN] Scan command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
+        wifi_hal_stats_error_print("%s:%d: [SCAN] Scan command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
         return RETURN_ERR;
     }
 
@@ -7486,7 +7486,7 @@ int nl80211_get_scan_results(wifi_interface_info_t *interface)
     }
     pthread_mutex_unlock(&interface->scan_state_mutex);
 
-    wifi_hal_dbg_print("%s:%d: [SCAN] scan results collected\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan results collected\n", __func__, __LINE__);
     return RETURN_OK;
 }
 
@@ -8600,14 +8600,14 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
     if (num_ssid && ssid_list) {
         struct nlattr *ssids = nla_nest_start(msg, NL80211_ATTR_SCAN_SSIDS);
         if (ssids == NULL) {
-            wifi_hal_error_print("%s:%d: [SCAN] nl message build failure (ssid's)\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: [SCAN] nl message build failure (ssid's)\n", __func__, __LINE__);
             goto failure;
         }
 
         for (i = 0; i < num_ssid; i++) {
-            wifi_hal_dbg_print("%s:%d: [SCAN] Added scan ssid '%s'\n", __func__, __LINE__, ssid_list[i]);
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] Added scan ssid '%s'\n", __func__, __LINE__, ssid_list[i]);
             if (nla_put(msg, i + 1, wifi_strnlen(ssid_list[i], SSID_MAX_LEN), ssid_list[i])) {
-                wifi_hal_error_print("%s:%d: [SCAN] nl message build failure (ssid's)\n", __func__, __LINE__);
+                wifi_hal_stats_error_print("%s:%d: [SCAN] nl message build failure (ssid's)\n", __func__, __LINE__);
                 goto failure;
             }
         }
@@ -8617,15 +8617,15 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
     if (num_freq && freq_list) {
         struct nlattr *freqs = nla_nest_start(msg, NL80211_ATTR_SCAN_FREQUENCIES);
         if (freqs == NULL) {
-            wifi_hal_error_print("%s:%d: [SCAN] nl message build failure (freq's)\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: [SCAN] nl message build failure (freq's)\n", __func__, __LINE__);
             goto failure;
         }
         for (i = 0; i < num_freq; i++) {
             if (0 == freq_list[i]) // <-- break the loop if freq is 0
                 break;
-            wifi_hal_dbg_print("%s:%d: [SCAN] Added scan frequency %u MHz\n", __func__, __LINE__, freq_list[i]);
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] Added scan frequency %u MHz\n", __func__, __LINE__, freq_list[i]);
             if (nla_put_u32(msg, i + 1, freq_list[i])) {
-                wifi_hal_error_print("%s:%d: [SCAN] nl message build failure (freq's)\n", __func__, __LINE__);
+                wifi_hal_stats_error_print("%s:%d: [SCAN] nl message build failure (freq's)\n", __func__, __LINE__);
                 goto failure;
             }
         }
@@ -8634,19 +8634,19 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
 
     /* In case that flags are present, update msg with it */
     if (flags != 0) {
-        wifi_hal_dbg_print("%s:%d: [SCAN] set SCAN flags (0x%x)\n", __func__, __LINE__, flags);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] set SCAN flags (0x%x)\n", __func__, __LINE__, flags);
         if (nla_put_u32(msg, NL80211_ATTR_SCAN_FLAGS, flags)) {
-            wifi_hal_error_print("%s:%d: [SCAN] nl message build failure (flags)\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: [SCAN] nl message build failure (flags)\n", __func__, __LINE__);
             goto failure;
         }
     }
 
     ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
     if (ret) {
-        wifi_hal_error_print("%s:%d: [SCAN] TRIGGER_SCAN command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
+        wifi_hal_stats_error_print("%s:%d: [SCAN] TRIGGER_SCAN command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
         return -1;
     }
-    wifi_hal_dbg_print("%s:%d: [SCAN] scan started successfully\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan started successfully\n", __func__, __LINE__);
     return 0;
 
 failure:
@@ -9124,7 +9124,7 @@ static void parse_he_capa(const uint8_t type, uint8_t len, const uint8_t *data,
     (void)ie_buffer;
 
     if (len <= 7) {
-        wifi_hal_error_print("%s:%d: [SCAN] length of he capabilities elem is %hhu <= 7\n", __func__, __LINE__, len);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] length of he capabilities elem is %hhu <= 7\n", __func__, __LINE__, len);
         return;
     }
 
@@ -9161,7 +9161,7 @@ static void parse_he_oper(const uint8_t type, uint8_t len, const uint8_t *data,
     (void)ie_buffer;
 
     if (len <= 4) {
-        wifi_hal_error_print("%s:%d: [SCAN] length of he capabilities elem is %hhu <= 4\n", __func__, __LINE__, len);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] length of he capabilities elem is %hhu <= 4\n", __func__, __LINE__, len);
         return;
     }
 
@@ -9201,10 +9201,10 @@ static void parse_he_oper(const uint8_t type, uint8_t len, const uint8_t *data,
                     break;
 
                 default:
-                    wifi_hal_error_print("%s:%d: [SCAN] illegal 'Values in the range 4 to 255 are reserved.'\n", __func__, __LINE__);
+                    wifi_hal_stats_error_print("%s:%d: [SCAN] illegal 'Values in the range 4 to 255 are reserved.'\n", __func__, __LINE__);
             }
         } else
-            wifi_hal_error_print("%s:%d: [SCAN] VHT oper info present bit is on, by len is %hu\n", __func__, __LINE__, len);
+            wifi_hal_stats_error_print("%s:%d: [SCAN] VHT oper info present bit is on, by len is %hu\n", __func__, __LINE__, len);
     }
 
     bss->supp_standards |= WIFI_80211_VARIANT_AX;
@@ -9221,7 +9221,7 @@ static void parse_eht_capa(const uint8_t type, uint8_t len, const uint8_t *data,
     (void)ie_buffer;
 
     if (len <= 3) {
-        wifi_hal_error_print("%s:%d: [SCAN] length of eht capabilities elem is %hhu <= 3\n", __func__, __LINE__, len);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] length of eht capabilities elem is %hhu <= 3\n", __func__, __LINE__, len);
         return;
     }
 
@@ -9252,11 +9252,11 @@ static void parse_extension_tag(const uint8_t type, uint8_t len, const uint8_t *
                 const struct parse_ies_data *ie_buffer, wifi_bss_info_t *bss)
 {
     if (len == 0) {
-        wifi_hal_error_print("%s:%d: [SCAN] length of extension elem is 0\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] length of extension elem is 0\n", __func__, __LINE__);
         return;
     }
 
-    wifi_hal_dbg_print("%s:%d: [SCAN] Extension TagNumber=%d\n", __func__, __LINE__, data[0]);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] Extension TagNumber=%d\n", __func__, __LINE__, data[0]);
 
     switch (data[0]) {
         case WLAN_EID_EXT_HE_CAPABILITIES:
@@ -9445,12 +9445,12 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
     if (tb[NL80211_ATTR_BSS] == NULL) {
-        wifi_hal_error_print("%s:%d: [SCAN] bss attribute not present\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] bss attribute not present\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     if (nla_parse_nested(bss, NL80211_BSS_MAX, tb[NL80211_ATTR_BSS], bss_policy) != 0) {
-        wifi_hal_error_print("%s:%d: [SCAN] nested bss attribute not present\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] nested bss attribute not present\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -9465,9 +9465,9 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     if (bss[NL80211_BSS_INFORMATION_ELEMENTS]) {
         ie = nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
         len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
-        wifi_hal_dbg_print("[SCAN] BSSID: %s, IE LEN %d\n", bssid_str, len);
+        wifi_hal_stats_dbg_print("[SCAN] BSSID: %s, IE LEN %d\n", bssid_str, len);
         if (len > 512) {
-            wifi_hal_error_print("[Wrong NL SCAN output] BSSID: %s, IE LEN %d\n", bssid_str, len);
+            wifi_hal_stats_error_print("[Wrong NL SCAN output] BSSID: %s, IE LEN %d\n", bssid_str, len);
             return NL_SKIP;
         }
     } else {
@@ -9487,7 +9487,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     //   The scan_info_ap_map contains all SSID's including hidden (with empty SSID name)
     scan_info_ap = (wifi_bss_info_t *)calloc(1, sizeof(wifi_bss_info_t));
     if (!scan_info_ap) {
-        wifi_hal_error_print("%s:%d: [SCAN] memory allocation error!\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] memory allocation error!\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -9549,12 +9549,12 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     }
 
 #ifndef NO_NL80211_BSS_NOISE
-    wifi_hal_dbg_print("noise attribute: %p\n", bss[NL80211_BSS_NOISE]);
+    wifi_hal_stats_dbg_print("noise attribute: %p\n", bss[NL80211_BSS_NOISE]);
     // - noise
     if (bss[NL80211_BSS_NOISE]) {
         uint8_t noise = nla_get_u8(bss[NL80211_BSS_NOISE]);
         scan_info_ap->noise = noise;
-        wifi_hal_dbg_print("noise: %d\n", noise);
+        wifi_hal_stats_dbg_print("noise: %d\n", noise);
     }
 #else
     // wifi_hal_dbg_print("WARNING: NL80211_BSS_NOISE is not defined! Need to update header nl80211.h\n");
@@ -9574,7 +9574,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
 
     if (vap->vap_mode == wifi_vap_mode_sta) {
         if (strcmp(scan_info_ap->ssid, vap->u.sta_info.ssid) == 0) {
-            wifi_hal_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d on freq:%d for ssid:%s\n", __func__, __LINE__,
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d on freq:%d for ssid:%s\n", __func__, __LINE__,
                         to_mac_str(bssid, bssid_str), scan_info_ap->rssi, scan_info_ap->freq, scan_info_ap->ssid);
             memcpy(vap->u.sta_info.bssid, bssid, sizeof(bssid_t));
 #ifdef CONFIG_WIFI_EMULATOR
@@ -9620,7 +9620,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
             if (scan_info == NULL) {
                 pthread_mutex_unlock(&interface->scan_info_mutex);
                 free(scan_info_ap);
-                wifi_hal_error_print("%s:%d: [SCAN] memory allocation error!\n", __func__, __LINE__);
+                wifi_hal_stats_error_print("%s:%d: [SCAN] memory allocation error!\n", __func__, __LINE__);
                 return NL_SKIP;
             }
 
@@ -9628,7 +9628,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
                 pthread_mutex_unlock(&interface->scan_info_mutex);
                 free(scan_info);
                 free(scan_info_ap);
-                wifi_hal_error_print("%s:%d: [SCAN] map adding error!\n", __func__, __LINE__);
+                wifi_hal_stats_error_print("%s:%d: [SCAN] map adding error!\n", __func__, __LINE__);
                 return NL_SKIP;
             }
         }
@@ -9641,7 +9641,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     pthread_mutex_lock(&interface->scan_info_ap_mutex);
     if (hash_map_put(interface->scan_info_ap_map[0], strdup(key), scan_info_ap)) {
         pthread_mutex_unlock(&interface->scan_info_ap_mutex);
-        wifi_hal_error_print("%s:%d: map adding error!\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: map adding error!\n", __func__, __LINE__);
         free(scan_info_ap);
         return NL_SKIP;
     }
