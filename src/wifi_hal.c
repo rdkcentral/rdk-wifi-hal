@@ -130,6 +130,10 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     bool is_band_found = false;
     unsigned int radio_band = 0;
     char output[256] = {0};
+    mac_addr_str_t al_ctrl_mac;
+    char ifname[100] = {0};
+    int ret = 0, colocated_mode;
+    bool interface_found = false;
     NULL_PTR_ASSERT(hal);
 
     hal->version.major = WIFI_HAL_MAJOR;
@@ -193,7 +197,6 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
         output[strlen(output) - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.al_1905_mac);
-    wifi_hal_error_print("serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s eth0=%s Line=%d\n",hal->wifi_prop.serialNo,hal->wifi_prop.manufacturerModel,hal->wifi_prop.software_version,hal->wifi_prop.manufacturer,output,__LINE__);
 #elif (defined (_PLATFORM_RASPBERRYPI_))
    /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
@@ -232,8 +235,62 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
         output[strlen(output) - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.al_1905_mac);
-    wifi_hal_error_print("serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s eth0=%s Line=%d\n",hal->wifi_prop.serialNo,hal->wifi_prop.manufacturerModel,hal->wifi_prop.software_version,hal->wifi_prop.manufacturer,output,__LINE__);
 #endif
+
+    /* Read the al_mac address from EM_CFG_FILE */
+    ret = json_parse_string(EM_CFG_FILE, "Al_MAC_ADDR", al_ctrl_mac, sizeof(al_ctrl_mac));
+    if (ret == 0) {
+        to_mac_bytes(al_ctrl_mac, hal->wifi_prop.al_1905_mac);
+        wifi_hal_dbg_print("%s:%d al_mac %s read from json file:%s.\n", __func__, __LINE__,
+            al_ctrl_mac, EM_CFG_FILE);
+    } else {
+        wifi_hal_error_print("%s:%d: Unable to read al_mac from json file:%s, error:%d\n", __func__,
+            __LINE__, EM_CFG_FILE, ret);
+        memset(hal->wifi_prop.al_1905_mac, 0, sizeof(hal->wifi_prop.al_1905_mac));
+        hal->wifi_prop.colocated_mode = -1;
+    }
+
+    /* Read the collocated mode from EM_CFG_FILE*/
+    ret = json_parse_integer(EM_CFG_FILE, "Colocated_Mode", &colocated_mode);
+    if (ret == 0) {
+        hal->wifi_prop.colocated_mode = colocated_mode;
+        interface_found = get_ifname_from_mac((mac_address_t *)hal->wifi_prop.al_1905_mac, ifname);
+        /* Based on the value of colocated_mode and the interface obtained from almac_address
+           Configure the vap_name appropriately */
+        if (interface_found == true) {
+            if (strncmp(ifname, "eth", strlen("eth")) != 0 &&
+                strncmp(ifname, "lo", strlen("lo")) != 0 &&
+                strncmp(ifname, "lan", strlen("lan")) != 0 &&
+                strncmp(ifname, "brlan", strlen("brlan")) != 0) {
+                /* interface is not an ethernet and not an loopback interface */
+                if (configure_vap_name_basedon_colocated_mode(ifname,
+                        hal->wifi_prop.colocated_mode) != 0) {
+                    wifi_hal_error_print(
+                        "%s:%d Error configuring vapname for interface:%s, colocated_mode:%d",
+                        __func__, __LINE__, ifname, hal->wifi_prop.colocated_mode);
+                    hal->wifi_prop.colocated_mode = -1;
+                }
+            } else {
+                /* almac_address is either ethernet or loopback, nothing to be done*/
+            }
+        } else {
+            /* al_mac address configured is incorrect, reset the al_1905_mac to 0*/
+            wifi_hal_error_print("%s:%d: No interface found for al_mac address:%s\n", __func__,
+                __LINE__, to_mac_str(hal->wifi_prop.al_1905_mac, al_ctrl_mac));
+            memset(hal->wifi_prop.al_1905_mac, 0, sizeof(hal->wifi_prop.al_1905_mac));
+            hal->wifi_prop.colocated_mode = -1;
+        }
+    } else {
+        wifi_hal_error_print("%s:%d: Unable to read colocated_mode from json file:%s, error:%d\n",
+            __func__, __LINE__, EM_CFG_FILE, ret);
+        hal->wifi_prop.colocated_mode = -1;
+    }
+
+    wifi_hal_info_print("%s:%d: serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s "
+                        "al_mac_addr=%s colocated_mode:%d\n",
+        __func__, __LINE__, hal->wifi_prop.serialNo, hal->wifi_prop.manufacturerModel,
+        hal->wifi_prop.software_version, hal->wifi_prop.manufacturer,
+        to_mac_str(hal->wifi_prop.al_1905_mac, al_ctrl_mac), hal->wifi_prop.colocated_mode);
 
     for (i = 0; i < hal->wifi_prop.numRadios; i++) {
         radio_band = 0;
@@ -395,10 +452,11 @@ INT wifi_hal_init()
         interface = hash_map_get_first(radio->interface_map);
 
         while (interface != NULL) {
-            update_hostap_data(interface);
-            update_hostap_iface(interface);
-            update_hostap_iface_flags(interface);
-            init_hostap_hw_features(interface);
+            if (update_hostap_data(interface) == RETURN_OK) {
+                update_hostap_iface(interface);
+                update_hostap_iface_flags(interface);
+                init_hostap_hw_features(interface);
+            }
             interface = hash_map_get_next(radio->interface_map, interface);
         }
     }
@@ -683,7 +741,13 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                     interface->vap_info.u.bss_info.enabled, radio->configured,
                     radio->oper_param.enable);
                 if (radio->oper_param.enable && interface->vap_info.u.bss_info.enabled) {
-                    nl80211_interface_enable(interface->name, true);
+                    if (nl80211_interface_enable(interface->name, true) != 0) {
+                        ret = nl80211_retry_interface_enable(interface, true);
+                        if (ret != 0) {
+                            wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n",
+                                __func__, __LINE__, ret);
+                        }
+                    }
                     if (update_hostap_interface_params(interface) != RETURN_OK) {
                         return RETURN_ERR;
                     }
@@ -1155,6 +1219,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     platform_create_vap_t set_vap_params_fn;
     unsigned int i;
     char msg[2048];
+    int ret = 0;
 #ifdef NL80211_ACL
     int set_acl = 0;
 #else
@@ -1278,7 +1343,13 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         if (radio->configured && radio->oper_param.enable) {
             wifi_hal_info_print("%s:%d: interface:%s set up\n", __func__, __LINE__,
                 interface->name);
-            nl80211_interface_enable(interface->name, true);
+            if (nl80211_interface_enable(interface->name, true) != 0) {
+                ret = nl80211_retry_interface_enable(interface, true);
+                if (ret != 0) {
+                    wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n", __func__,
+                        __LINE__, ret);
+                }
+            }
         }
 
         if (vap->vap_mode == wifi_vap_mode_ap) {

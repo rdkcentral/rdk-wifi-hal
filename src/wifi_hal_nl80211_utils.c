@@ -4147,4 +4147,69 @@ void init_interface_map(void)
             l_radio_interface_map[i].radio_name, l_radio_interface_map[i].interface_name);
     }
 }
+
+void concat_band_to_vap_name(wifi_vap_name_t vap_name, unsigned int rdk_radio_index)
+{
+    switch (rdk_radio_index) {
+    case 0:
+        strncat((char *)vap_name, "2g", strlen("2g") + 1);
+        break;
+    case 1:
+        strncat((char *)vap_name, "5g", strlen("5g") + 1);
+        break;
+    case 2:
+        strncat((char *)vap_name, "6g", strlen("6g") + 1);
+        break;
+    default:
+        wifi_hal_error_print("%s:%d: Invalid rdk_radio_index:%d for vap_name:%s\n", __func__,
+            __LINE__, rdk_radio_index, vap_name);
+    }
+}
+
+int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
+{
+    unsigned int index = 0;
+    wifi_interface_info_t *interface = NULL;
+    for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
+        if (strncmp(interface_index_map[index].interface_name, ifname, strlen(ifname)) == 0) {
+            switch (colocated_mode) {
+            case 0:
+                strcpy((char *)interface_index_map[index].vap_name, "mesh_sta_");
+                concat_band_to_vap_name((char *)interface_index_map[index].vap_name,
+                    interface_index_map[index].rdk_radio_index);
+                break;
+            case 1:
+                /* Check the interface should be either fronthaul or backhaul */
+                if (is_wifi_hal_vap_private(interface_index_map[index].index) == false &&
+                    is_wifi_hal_vap_mesh_backhaul(interface_index_map[index].index) == false) {
+                    /* Error case */
+                    wifi_hal_error_print(
+                        "%s:%d: Invalid vap_name:%s for ifname:%s for colocated_mode:%d\n",
+                        __func__, __LINE__, interface_index_map[index].vap_name, ifname,
+                        colocated_mode);
+                    return -1;
+                }
+                break;
+            default:
+                /* Error case */
+                wifi_hal_error_print("%s:%d: Invalid colocated_mode:%d for ifname:%s\n", __func__,
+                    __LINE__, colocated_mode, ifname);
+                return -1;
+            }
+            wifi_hal_dbg_print("%s:%d: vap_name:%s configured for ifname:%s vap_index:%d\n",
+                __func__, __LINE__, interface_index_map[index].vap_name, ifname,
+                interface_index_map[index].index);
+            if (colocated_mode == 0) {
+                interface = get_interface_by_vap_index(interface_index_map[index].index);
+                if (interface != NULL && interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+                    memset(&interface->u, 0, sizeof(interface->u));
+                }
+            }
+            return 0;
+        }
+    }
+    wifi_hal_error_print("%s:%d: Interface:%s not present in interface_index_map\n", __func__,
+        __LINE__, ifname);
+    return -1;
+}
 #endif /* CONFIG_WIFI_EMULATOR */

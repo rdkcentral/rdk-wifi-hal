@@ -102,6 +102,8 @@ extern "C" {
     #define HOSTAPD_VERSION 209
 #endif
 
+#define EM_CFG_FILE "/nvram/EasymeshCfg.json"
+
 #ifdef CONFIG_WIFI_EMULATOR
 #define MAX_NUM_SIMULATED_CLIENT (MAX_NUM_RADIOS*100)
 #endif
@@ -851,6 +853,7 @@ int     nl80211_create_bridge(const char *if_name, const char *br_name);
 int     nl80211_remove_from_bridge(const char *if_name);
 int     nl80211_update_interface(wifi_interface_info_t *interface);
 int     nl80211_interface_enable(const char *ifname, bool enable);
+int     nl80211_retry_interface_enable(wifi_interface_info_t *interface, bool enable);
 void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *event);
 int     nl80211_connect_sta(wifi_interface_info_t *interface);
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
@@ -1063,6 +1066,10 @@ time_t get_boot_time_in_sec(void);
 int get_total_num_of_vaps(void);
 int wifi_setQamPlus(void *priv);
 int wifi_setApRetrylimit(void *priv);
+int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode);
+int json_parse_string(const char* file_name, const char *item_name, char *val, size_t len);
+int json_parse_integer(const char* file_name, const char *item_name, int *val);
+bool get_ifname_from_mac(const mac_address_t *mac, char *ifname);
 
 #ifdef CONFIG_IEEE80211BE
 int wifi_drv_set_ap_mlo(struct nl_msg *msg, void *priv, struct wpa_driver_ap_params *params);
