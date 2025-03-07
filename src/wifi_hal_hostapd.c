@@ -745,30 +745,6 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         }
 
         char output[256] = {0};
-  /*      memset(output, '\0', sizeof(output));
-        _syscmd("sh /usr/sbin/deviceinfo.sh -eip", output, sizeof(output));
-        if(output[strlen(output) - 1] == '\n' || output[strlen(output) - 1] == ' ') {
-            output[strlen(output) - 1] = '\0';
-            wifi_hal_info_print("%s:%d SREESH Value of erouter_ipv4 IP = %s\n",__func__,__LINE__,output);
-        }
-        if (inet_pton(AF_INET, (const char *)output, &conf->radius->erouter_ipv4.u.v4))
-        {
-            conf->radius->erouter_ipv4.af = AF_INET;
-            wifi_hal_info_print("%s:%d SREESH erouter_ipv4 IPv4 FAMILY has been set\n",__func__,__LINE__);
-        }
-#ifdef CONFIG_IPV6
-        memset(output, '\0', sizeof(output));
-        _syscmd("sh /usr/sbin/deviceinfo.sh -eipv6", output, sizeof(output));
-        if(output[strlen(output) - 1] == '\n' || output[strlen(output) - 1] == ' ') {
-            output[strlen(output) - 1] = '\0';
-            wifi_hal_info_print("%s:%d SREESH Value of erouter_ipv6 IP = %s\n",__func__,__LINE__,output);
-        }
-        if (inet_pton(AF_INET6, (const char *)output, &conf->radius->erouter_ipv6.u.v6))
-        {
-            conf->radius->erouter_ipv6.af = AF_INET6;
-            wifi_hal_info_print("%s:%d SREESH erouter_ipv6 IPv6 FAMILY has been set\n",__func__,__LINE__);
-        }
-#endif    */
         // nas_identifier
         memset(output, '\0', sizeof(output));
         _syscmd("sh /usr/sbin/deviceinfo.sh -emac", output, sizeof(output));
