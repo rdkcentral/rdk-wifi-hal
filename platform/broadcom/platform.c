@@ -288,11 +288,11 @@ INT wifi_getNeighboringWiFiStatus(INT radio_index, wifi_neighbor_ap2_t **neighbo
     UINT *output_array_size)
 {
     int ret;
-    ret = wifi_hal_stats_getNeighboringWiFiStatus(radio_index, neighbor_ap_array, output_array_size);
+    ret = wifi_hal_getNeighboringWiFiStatus(radio_index, neighbor_ap_array, output_array_size);
     if (ret == WIFI_HAL_NOT_READY) {
         return ret;
     } else if (ret == RETURN_ERR) {
-        wifi_hal_error_print("%s:%d: wifi_hal_getNeighboringWiFiStatus failed\n", __func__,
+        wifi_hal_stats_error_print("%s:%d: wifi_hal_getNeighboringWiFiStatus failed\n", __func__,
             __LINE__);
     }
 #if defined WIFI_EMULATOR_CHANGE
