@@ -7088,7 +7088,7 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
             neighbor_data = mmap(0, file_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
             if (neighbor_data != MAP_FAILED) {
                 if (munmap(neighbor_data, file_size) == -1) {
-                    wifi_hal_error_print("%s:%d: Failed to unmap memory: %s\n", __func__, __LINE__,
+                    wifi_hal_stats_error_print("%s:%d: Failed to unmap memory: %s\n", __func__, __LINE__,
                         strerror(errno));
                 }
             }
@@ -7452,7 +7452,7 @@ int wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state,
     wifi_hal_stats_dbg_print("%s:%d: value of vap index %d emu_enable %d and count is %d\n", __func__, __LINE__, vap_index, emu_state, count);
     interface = malloc(sizeof(wifi_interface_info_t));
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to allocate memory for interface\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to allocate memory for interface\n", __func__, __LINE__);
         return -1;
     }
     memset(interface, 0, sizeof(wifi_interface_info_t));
@@ -8238,7 +8238,7 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
 
     ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
     if (ret) {
-        wifi_hal_error_print("%s:%d: [SCAN] TRIGGER_SCAN command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
+        wifi_hal_stats_error_print("%s:%d: [SCAN] TRIGGER_SCAN command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
         return -1;
     }
     wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan started successfully\n", __func__, __LINE__);
