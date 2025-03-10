@@ -507,7 +507,7 @@ int platform_set_acs_exclusion_list(unsigned int radioIndex, hash_map_t *radioma
         int result = wifi_channelBandwidth_from_str(str, &bandwidth);
         if (result == 0) {
             wifi_hal_info_print("%s:%d SREESH String %s corresponds to bandwidth: 0x%x\n",__func__,__LINE__,str, bandwidth);
-            wifi_channels_list_per_bandwdith *chans_per_band = hash_map_get(radiomap,str);
+            wifi_channels_list_per_bandwidth *chans_per_band = hash_map_get(radiomap,str);
             if(chans_per_band != NULL)
             {
                 wifi_hal_info_print("%s:%d SREESH Value of num_channels_list = %d\n",__func__,__LINE__,chans_per_band->num_channels_list);
