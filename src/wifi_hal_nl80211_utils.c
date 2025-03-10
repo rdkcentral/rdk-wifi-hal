@@ -378,6 +378,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -409,6 +410,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -440,6 +442,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -471,6 +474,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -502,6 +506,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -534,6 +539,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -570,6 +576,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -601,6 +608,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -632,6 +640,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -663,6 +672,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -694,6 +704,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -1256,18 +1267,6 @@ static const wifi_enum_to_str_map_t wifi_variant_Map[] =
     {WIFI_80211_VARIANT_AX, "ax"},
 #ifdef CONFIG_IEEE80211BE
     {WIFI_80211_VARIANT_BE, "be"},
-#endif /* CONFIG_IEEE80211BE */
-};
-
-static const wifi_enum_to_str_map_t wifi_bandwidth_Map[] =
-{
-    {WIFI_CHANNELBANDWIDTH_20MHZ,    "20MHz" },
-    {WIFI_CHANNELBANDWIDTH_40MHZ,    "40MHz" },
-    {WIFI_CHANNELBANDWIDTH_80MHZ,    "80MHz" },
-    {WIFI_CHANNELBANDWIDTH_160MHZ,   "160MHz" },
-    {WIFI_CHANNELBANDWIDTH_80_80MHZ, "80+80MHz" },
-#ifdef CONFIG_IEEE80211BE
-    {WIFI_CHANNELBANDWIDTH_320MHZ,   "320MHz" },
 #endif /* CONFIG_IEEE80211BE */
 };
 
@@ -3120,6 +3119,11 @@ platform_set_txpower_t get_platform_set_txpower_fn()
     return driver_info.platform_set_txpower_fn;
 }
 
+platform_set_acs_exclusion_list_t get_platform_acs_exclusion_list_fn()
+{
+    return driver_info.platform_set_acs_exclusion_list_fn;
+}
+
 platform_get_ApAclDeviceNum_t get_platform_ApAclDeviceNum_fn()
 {
     return driver_info.platform_get_ApAclDeviceNum_fn;
@@ -3628,6 +3632,17 @@ int wifi_bitrate_to_str(char *dest, size_t dest_size, wifi_bitrate_t bitrate)
     return wifi_enum_bitmap_to_str(dest, dest_size,
         wifi_bitrate_Map, ARRAY_SIZE(wifi_bitrate_Map),
         "", (int)bitrate);
+}
+
+int wifi_channelBandwidth_from_str(const char *str, wifi_channelBandwidth_t *bandwidth)
+{
+    for (size_t i = 0; i < ARRAY_SIZE(wifi_bandwidth_Map); i++) {
+        if (strcasecmp(str, wifi_bandwidth_Map[i].str_val) == 0) {
+            *bandwidth = (wifi_channelBandwidth_t)wifi_bandwidth_Map[i].enum_val;
+            return 0;
+        }
+    }
+    return -1; 
 }
 
 /* return AP-config pointer as well as group index */

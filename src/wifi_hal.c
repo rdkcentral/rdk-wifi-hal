@@ -31,6 +31,7 @@
 #include <netpacket/packet.h>
 #include <net/ethernet.h>
 #include "wifi_hal.h"
+#include "collection.h"
 #include "wifi_hal_priv.h"
 #include <assert.h>
 #include "hostapd/eap_register.h"
@@ -1671,6 +1672,13 @@ INT wifi_hal_getRadioVapInfoMap(wifi_radio_index_t index, wifi_vap_info_map_t *m
     map->num_vaps = itr;
 
     return RETURN_OK;
+}
+
+//Wrapper to call platform.c function
+INT wifi_hal_set_acs_keep_out_chans(hash_map_t *radio_map, int radioIndex)
+{
+    wifi_hal_info_print("%s:%d SREESH Enter\n",__func__,__LINE__);
+    return wifi_drv_set_acs_exclusion_list(radioIndex, radio_map);
 }
 
 INT wifi_hal_getScanResults(wifi_radio_index_t index, wifi_channel_t *channel, wifi_bss_info_t **bss, UINT *num_bss)

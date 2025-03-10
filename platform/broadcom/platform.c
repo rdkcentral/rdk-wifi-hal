@@ -1,5 +1,7 @@
 #include <stddef.h>
 #include "wifi_hal.h"
+#include "typedefs.h"
+#include "bcmwifi_channels.h"
 #include "wifi_hal_priv.h"
 #if defined(WLDM_21_2)
 #include "wlcsm_lib_api.h"
@@ -69,6 +71,7 @@ static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
 #define BUFFER_LENGTH_WIFIDB 256
 #define BUFLEN_128  128
 #define BUFLEN_256 256
+#define ACS_MAX_VECTOR_LEN  (256 * 7) /* Max Possible non operable (Exclude) chanspecs in a radio is 256*/
 #define WIFI_BLASTER_DEFAULT_PKTSIZE 1470
 
 typedef struct wl_runtime_params {
@@ -141,6 +144,48 @@ static int get_ccspwifiagent_interface_name_from_vap_index(unsigned int vap_inde
     return RETURN_OK;
 }
 #endif
+
+unsigned int convert_channelBandwidth_to_bcmwifibandwidth(wifi_channelBandwidth_t chanWidth)
+{
+    wifi_hal_info_print("%s:%d SREESH Enter with bandwidth 0x%x\n",__func__,__LINE__,chanWidth);
+    switch(chanWidth)
+    {
+        case WIFI_CHANNELBANDWIDTH_20MHZ:
+            return WL_CHANSPEC_BW_20;
+        case WIFI_CHANNELBANDWIDTH_40MHZ:
+            return WL_CHANSPEC_BW_40;
+        case WIFI_CHANNELBANDWIDTH_80MHZ:
+            return WL_CHANSPEC_BW_80;
+        case WIFI_CHANNELBANDWIDTH_160MHZ:
+            return WL_CHANSPEC_BW_160;
+        case WIFI_CHANNELBANDWIDTH_80_80MHZ: //Made obselete by Broadcom
+            return WL_CHANSPEC_BW_8080;
+#ifdef CONFIG_IEEE80211BE
+        case WIFI_CHANNELBANDWIDTH_320MHZ:
+            return WL_CHANSPEC_BW_320;
+#endif
+        default:
+            wifi_hal_info_print("%s:%d SREESH Unable to find matching Broadcom bandwidth for incoming bandwidth = 0x%x\n",__func__,__LINE__,chanWidth);
+    }
+    return UINT_MAX;
+}
+
+unsigned int convert_radioindex_to_bcmband(unsigned int radioIndex)
+{
+    wifi_hal_info_print("%s:%d SREESH Enter radioIndex %u\n",__func__,__LINE__,radioIndex);
+    switch(radioIndex)
+    {
+        case 0:
+            return WL_CHANSPEC_BAND_2G;
+        case 1:
+            return WL_CHANSPEC_BAND_5G;
+        case 2:
+            return WL_CHANSPEC_BAND_6G;
+        default:
+            wifi_hal_info_print("%s:%d SREESH There is no matching Broadcom Band for our OneWifi band\n",__func__,__LINE__);
+    }
+    return UINT_MAX;
+}
 
 static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map)
 {
@@ -429,6 +474,78 @@ static int disable_dfs_auto_channel_change(int radio_index, int disable)
     }
 #endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) */
     return 0;
+}
+
+void convert_from_channellist_to_chspeclist(unsigned int bw, unsigned int band,wifi_channels_list_t chanlist, char* output_chanlist)
+{
+    wifi_hal_info_print("%s:%d SREESH Enter with bw = 0x%x band = 0x%x num_channels = %d\n",__func__,__LINE__,bw,band,chanlist.num_channels);
+    int channel_list[chanlist.num_channels];
+    memcpy(channel_list,chanlist.channels_list,sizeof(channel_list));
+    for(int i=0;i<chanlist.num_channels;i++)
+    {
+        char buff[8];
+        chanspec_t chspec = wf_channel2chspec(channel_list[i],bw,band);
+        snprintf(buff,sizeof(buff),"0x%x,",chspec);
+        wifi_hal_info_print("%s:%d SREESH Value of input channel in int = %u and as hex buff = %s and as chspec = 0x%x\n",__func__,__LINE__,channel_list[i],buff,chspec);
+        strcat(output_chanlist, buff);
+    }
+    wifi_hal_info_print("%s:%d SREESH Value of output_chanlist = %s\n",__func__,__LINE__,output_chanlist);
+}
+
+int platform_set_acs_exclusion_list(unsigned int radioIndex, hash_map_t *radiomap)
+{
+    unsigned int bw;
+    unsigned int band;
+    char buff[ACS_MAX_VECTOR_LEN + 2];
+    char excl_chan_string[20];
+    snprintf(excl_chan_string,sizeof(excl_chan_string),"wl%u_acs_excl_chans",radioIndex);
+    wifi_hal_info_print("%s:%d SREESH Enter and excl_chan_string = %s\n",__func__,__LINE__,excl_chan_string);
+    for (size_t i = 0; i < ARRAY_SIZE(wifi_bandwidth_Map); i++) {
+        wifi_channelBandwidth_t bandwidth;
+        const char *str = wifi_bandwidth_Map[i].str_val;
+        wifi_hal_info_print("%s:%d SREESH Testing string: %s\n",__func__,__LINE__,str);
+        int result = wifi_channelBandwidth_from_str(str, &bandwidth);
+        if (result == 0) {
+            wifi_hal_info_print("%s:%d SREESH String %s corresponds to bandwidth: 0x%x\n",__func__,__LINE__,str, bandwidth);
+            wifi_channels_list_per_bandwdith *chans_per_band = hash_map_get(radiomap,str);
+            if(chans_per_band != NULL)
+            {
+                wifi_hal_info_print("%s:%d SREESH Value of num_channels_list = %d\n",__func__,__LINE__,chans_per_band->num_channels_list);
+                for(int i=0;i < chans_per_band->num_channels_list; i++)
+                {
+                    wifi_channels_list_t chanlist = chans_per_band->channels_list[i];
+                    wifi_hal_info_print("%s:%d SREESH %dth channel list and value of chanlist.num_channels = %d\n",__func__,__LINE__,i,chanlist.num_channels);
+                    for(int j=0;j < chanlist.num_channels; j++)
+                    {
+                        wifi_hal_info_print("%s:%d SREESH %d\t",__func__,__LINE__,chanlist.channels_list[j]);
+                    }
+                    wifi_hal_info_print("\n");
+                    bw = convert_channelBandwidth_to_bcmwifibandwidth(bandwidth);
+                    band = convert_radioindex_to_bcmband(radioIndex);
+                    wifi_hal_info_print("%s:%d SREESH Value of BRCM bw 0x%x and BRCM band = 0x%x\n",__func__,__LINE__,bw,band);
+                    if(bw != UINT_MAX && band != UINT_MAX)
+                    {
+                        convert_from_channellist_to_chspeclist(bw,band,chanlist,buff);
+                    }
+                    else
+                    {
+                        wifi_hal_info_print("%s:%d SREESH bw or band are zero and hence exiting\n",__func__,__LINE__);
+                        return RETURN_ERR;
+                    }
+                }
+            }
+            else
+            {
+                wifi_hal_info_print("%s:%d SREESH No hash map entry for bandwidth: 0x%x\n",__func__,__LINE__,bandwidth);
+            }
+        } else {
+            wifi_hal_info_print("%s:%d SREESH Error: String %s not found in bandwidth map\n",__func__,__LINE__,str);
+            return RETURN_ERR;
+        }
+    }
+    wifi_hal_info_print("%s:%d SREESH Successfully setting the nvram param acs_excl_chans for the output string = %s\n",__func__,__LINE__,buff);
+    set_string_nvram_param(excl_chan_string,buff);
+    return RETURN_OK;
 }
 
 int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
