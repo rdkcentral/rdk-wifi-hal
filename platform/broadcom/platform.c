@@ -500,6 +500,12 @@ int platform_set_acs_exclusion_list(unsigned int radioIndex, hash_map_t *radioma
     char excl_chan_string[20];
     snprintf(excl_chan_string,sizeof(excl_chan_string),"wl%u_acs_excl_chans",radioIndex);
     wifi_hal_info_print("%s:%d SREESH Enter and excl_chan_string = %s\n",__func__,__LINE__,excl_chan_string);
+    if(radiomap == NULL)
+    {
+        wifi_hal_info_print("%s:%d SREESH About to do nvram unset as radiomap is NULL\n",__func__,__LINE__);
+        nvram_unset(excl_chan_string);
+        return RETURN_OK;
+    }
     for (size_t i = 0; i < ARRAY_SIZE(wifi_bandwidth_Map); i++) {
         wifi_channelBandwidth_t bandwidth;
         const char *str = wifi_bandwidth_Map[i].str_val;
@@ -545,6 +551,7 @@ int platform_set_acs_exclusion_list(unsigned int radioIndex, hash_map_t *radioma
     }
     wifi_hal_info_print("%s:%d SREESH Successfully setting the nvram param acs_excl_chans for the output string = %s\n",__func__,__LINE__,buff);
     set_string_nvram_param(excl_chan_string,buff);
+    nvram_commit();
     return RETURN_OK;
 }
 
