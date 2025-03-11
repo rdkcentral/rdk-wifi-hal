@@ -7420,7 +7420,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     wifi_finish_data_t *finish_data = (wifi_finish_data_t *)arg;
     wifi_interface_info_t   *interface = (wifi_interface_info_t *)finish_data->arg;
 
-    wifi_hal_dbg_print("%s:%d: [SCAN] ENTER\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] ENTER\n", __func__, __LINE__);
 
     *finish_data->err = 0;
 
@@ -7434,7 +7434,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     count = hash_map_count(interface->scan_info_map);
     if (count == 0) {
         pthread_mutex_unlock(&interface->scan_info_mutex);
-        wifi_hal_dbg_print("%s:%d: [SCAN] No Scan results...\n", __func__, __LINE__);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] No Scan results...\n", __func__, __LINE__);
         bss = NULL;
         if (callbacks->scan_result_callback != NULL) {
             callbacks->scan_result_callback(interface->vap_info.radio_index, &bss, &count);
@@ -7445,7 +7445,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     bss = calloc(count, sizeof(wifi_bss_info_t));
     if (!bss) {
         pthread_mutex_unlock(&interface->scan_info_mutex);
-        wifi_hal_error_print("%s:%d: [SCAN] memory allocation error!\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] memory allocation error!\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -7461,7 +7461,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
             scan_info = hash_map_get_next(interface->scan_info_map, scan_info);
         }
         pthread_mutex_unlock(&interface->scan_info_mutex);
-        wifi_hal_dbg_print("%s:%d: [SCAN] scan found %u results with ssid:%s\n", __func__, __LINE__, ssid_found_count, interface->vap_info.u.sta_info.ssid);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan found %u results with ssid:%s\n", __func__, __LINE__, ssid_found_count, interface->vap_info.u.sta_info.ssid);
     }
     else {
         // AP mode: copy all
@@ -7479,8 +7479,8 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
         pthread_mutex_lock(&interface->scan_info_ap_mutex);
         total_ap_count = hash_map_count(interface->scan_info_ap_map[0]);
         pthread_mutex_unlock(&interface->scan_info_ap_mutex);
-        wifi_hal_dbg_print("%s:%d: [SCAN] scan found %u (w/o hidden SSID's)\n", __func__, __LINE__, ssid_found_count);
-        wifi_hal_dbg_print("%s:%d: [SCAN] scan found %u (total)\n", __func__, __LINE__, total_ap_count);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan found %u (w/o hidden SSID's)\n", __func__, __LINE__, ssid_found_count);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan found %u (total)\n", __func__, __LINE__, total_ap_count);
     }
 
     if (callbacks->scan_result_callback != NULL &&
@@ -7489,7 +7489,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
             wifi_bss_info_t* new_bss = realloc(bss, ssid_found_count * sizeof(wifi_bss_info_t));
             if (!new_bss) {
                 // - error, but not critical, original array still is valid
-                wifi_hal_error_print("%s:%d: [SCAN] memory re-allocation error!\n", __func__, __LINE__);
+                wifi_hal_stats_error_print("%s:%d: [SCAN] memory re-allocation error!\n", __func__, __LINE__);
             }
             else
                 bss = new_bss;
@@ -7511,13 +7511,13 @@ int nl80211_get_scan_results(wifi_interface_info_t *interface)
     wifi_finish_data_t scan_results_data = {};
     enum scan_state_type_e scan_state;
 
-    wifi_hal_dbg_print("%s:%d: [SCAN] scan results available for interface '%s'\n", __func__, __LINE__, interface->name);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan results available for interface '%s'\n", __func__, __LINE__, interface->name);
 
     pthread_mutex_lock(&interface->scan_state_mutex);
     scan_state = interface->scan_state;
     pthread_mutex_unlock(&interface->scan_state_mutex);
     if (scan_state != WIFI_SCAN_STATE_STARTED) {
-        wifi_hal_dbg_print("%s:%d: [SCAN] received scan results ready not started by us\n", __func__, __LINE__);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] received scan results ready not started by us\n", __func__, __LINE__);
     }
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, NLM_F_DUMP, NL80211_CMD_GET_SCAN);
@@ -7525,7 +7525,7 @@ int nl80211_get_scan_results(wifi_interface_info_t *interface)
         pthread_mutex_lock(&interface->scan_state_mutex);
         interface->scan_state = WIFI_SCAN_STATE_ERROR;
         pthread_mutex_unlock(&interface->scan_state_mutex);
-        wifi_hal_error_print("%s:%d: [SCAN] nl80211_drv_cmd_msg() returned ERROR ==> Abort!\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] nl80211_drv_cmd_msg() returned ERROR ==> Abort!\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
@@ -7536,7 +7536,7 @@ int nl80211_get_scan_results(wifi_interface_info_t *interface)
         pthread_mutex_lock(&interface->scan_state_mutex);
         interface->scan_state = WIFI_SCAN_STATE_ERROR;
         pthread_mutex_unlock(&interface->scan_state_mutex);
-        wifi_hal_error_print("%s:%d: [SCAN] Scan command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
+        wifi_hal_stats_error_print("%s:%d: [SCAN] Scan command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
         return RETURN_ERR;
     }
 
@@ -7560,7 +7560,7 @@ int nl80211_get_scan_results(wifi_interface_info_t *interface)
     }
     pthread_mutex_unlock(&interface->scan_state_mutex);
 
-    wifi_hal_dbg_print("%s:%d: [SCAN] scan results collected\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan results collected\n", __func__, __LINE__);
     return RETURN_OK;
 }
 
@@ -7599,12 +7599,12 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
 
     sem = sem_open(SEM_NAME, O_CREAT, 0666, 1);
     if (sem == SEM_FAILED) {
-        wifi_hal_error_print("%s:%d: Failed to open semaphore\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to open semaphore\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
     if (sem_wait(sem) == -1) {
-        wifi_hal_error_print("%s:%d: Failed to acquire semaphore\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to acquire semaphore\n", __func__, __LINE__);
         sem_close(sem);
         return RETURN_ERR;
     }
@@ -7616,7 +7616,7 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
             neighbor_data = mmap(0, file_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
             if (neighbor_data != MAP_FAILED) {
                 if (munmap(neighbor_data, file_size) == -1) {
-                    wifi_hal_error_print("%s:%d: Failed to unmap memory: %s\n", __func__, __LINE__,
+                    wifi_hal_stats_error_print("%s:%d: Failed to unmap memory: %s\n", __func__, __LINE__,
                         strerror(errno));
                 }
             }
@@ -7624,10 +7624,10 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
         }
 
         if (remove(file_path) != 0) {
-            wifi_hal_error_print("%s:%d: Failed to remove the file: %s\n", __func__, __LINE__,
+            wifi_hal_stats_error_print("%s:%d: Failed to remove the file: %s\n", __func__, __LINE__,
                 file_path);
         }
-        wifi_hal_dbg_print("%s:%d: Emulation disabled; data cleared.\n", __func__, __LINE__);
+        wifi_hal_stats_dbg_print("%s:%d: Emulation disabled; data cleared.\n", __func__, __LINE__);
 
         sem_post(sem);
         sem_close(sem);
@@ -7638,14 +7638,14 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
 
     fd = open(file_path, O_CREAT | O_RDWR, 0666);
     if (fd == -1) {
-        wifi_hal_error_print("%s:%d: Failed to open file: %s\n", __func__, __LINE__, file_path);
+        wifi_hal_stats_error_print("%s:%d: Failed to open file: %s\n", __func__, __LINE__, file_path);
         sem_post(sem);
         sem_close(sem);
         return RETURN_ERR;
     }
 
     if (ftruncate(fd, file_size) == -1) {
-        wifi_hal_error_print("%s:%d: Failed to set file size\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to set file size\n", __func__, __LINE__);
         close(fd);
         sem_post(sem);
         sem_close(sem);
@@ -7654,7 +7654,7 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
 
     neighbor_data = mmap(0, file_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (neighbor_data == MAP_FAILED) {
-        wifi_hal_error_print("%s:%d: Failed to map file\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to map file\n", __func__, __LINE__);
         close(fd);
         sem_post(sem);
         sem_close(sem);
@@ -7667,7 +7667,7 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
     memcpy(neighbor_data->data, neighbor_stats, count * sizeof(wifi_neighbor_ap2_t));
 
     if (sem_post(sem) == -1) {
-        wifi_hal_error_print("%s:%d: Failed to release semaphore\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to release semaphore\n", __func__, __LINE__);
     }
 
     close(fd);
@@ -7683,11 +7683,11 @@ int wifi_hal_emu_set_radio_diag_stats(unsigned int radio_index, bool emu_state,
     struct nlattr *nlattr_vendor = NULL, *nlattr_radio_info = NULL;
     wifi_interface_info_t *interface;
 
-    wifi_hal_dbg_print("%s:%d: value of radio index %d emu_enable %d and count is %d\n", __func__,
+    wifi_hal_stats_dbg_print("%s:%d: value of radio index %d emu_enable %d and count is %d\n", __func__,
         __LINE__, radio_index, emu_state, count);
     interface = malloc(sizeof(wifi_interface_info_t));
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to allocate memory for interface\n", __func__,
+        wifi_hal_stats_error_print("%s:%d: Failed to allocate memory for interface\n", __func__,
             __LINE__);
         return -1;
     }
@@ -7698,7 +7698,7 @@ int wifi_hal_emu_set_radio_diag_stats(unsigned int radio_index, bool emu_state,
     msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
         RDK_VENDOR_NL80211_SUBCMD_SET_RADIO_INFO);
     if (msg == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
         free(interface);
         return -1;
     }
@@ -7855,9 +7855,9 @@ static void wl_cfgvendor_get_station_bw(wifi_associated_dev3_t *sta_info, u8 *bw
 }
 static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, bool emu_state, wifi_associated_dev3_t *stats, unsigned int count, wifi_interface_info_t *interface)
 {
-    wifi_hal_dbg_print("%s:%d: value of vap index %d emu_enable %d and count is %d\n", __func__, __LINE__, vap_index, emu_state, count);
+    wifi_hal_stats_dbg_print("%s:%d: value of vap index %d emu_enable %d and count is %d\n", __func__, __LINE__, vap_index, emu_state, count);
     if (stats == NULL) {
-        wifi_hal_error_print("%s:%d: Stats is NULL\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Stats is NULL\n", __func__, __LINE__);
         return -1;
     }
 
@@ -7881,7 +7881,7 @@ static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, boo
         // Create the vendor-specific command message
         msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST, RDK_VENDOR_NL80211_SUBCMD_SET_STATION_EMU);
         if (msg == NULL) {
-            wifi_hal_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
             return -1;
         }
         /*
@@ -7896,32 +7896,32 @@ static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, boo
 
         nlattr_vendor = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
         if (nla_put_u32(msg, RDK_VENDOR_ATTR_EMU_ENABLE, emu_state) < 0) {
-            wifi_hal_error_print("%s:%d: Failed to set emu enable\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: Failed to set emu enable\n", __func__, __LINE__);
             nlmsg_free(msg);
             return -1;
         }
 
         if (nla_put_u32(msg, RDK_VENDOR_ATTR_VAP_INDEX, vap_index) < 0) {
-            wifi_hal_error_print("%s:%d: Failed to set vap index\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: Failed to set vap index\n", __func__, __LINE__);
             nlmsg_free(msg);
             return -1;
         }
 
         if (nla_put_u32(msg, RDK_VENDOR_ATTR_STA_NUM, i) < 0) {
-            wifi_hal_error_print("%s:%d: Failed to RDK_VENDOR_ATTR_STA_NUM \n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: Failed to RDK_VENDOR_ATTR_STA_NUM \n", __func__, __LINE__);
             nlmsg_free(msg);
             return -1;
         }
 
         if (nla_put(msg, RDK_VENDOR_ATTR_MAC, ETHER_ADDR_LEN, stats[i].cli_MACAddress) < 0) {
-            wifi_hal_error_print("%s:%d: Failed to add station mac attribute for vap index %d\n", __func__, __LINE__, vap_index);
+            wifi_hal_stats_error_print("%s:%d: Failed to add station mac attribute for vap index %d\n", __func__, __LINE__, vap_index);
             nlmsg_free(msg);
             return -1;
         }
 
         nlattr_sta_info = nla_nest_start(msg, RDK_VENDOR_ATTR_STA_INFO);
         if (!nlattr_sta_info) {
-            wifi_hal_error_print("%s:%d: Failed to add station list attribute for vap index %d\n", __func__, __LINE__, vap_index);
+            wifi_hal_stats_error_print("%s:%d: Failed to add station list attribute for vap index %d\n", __func__, __LINE__, vap_index);
             nlmsg_free(msg);
             return -1;
         }
@@ -7960,7 +7960,7 @@ static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, boo
         nla_nest_end(msg, nlattr_vendor);
 
         if (nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL) != 0) {
-            wifi_hal_error_print("%s:%d: Failed to send NL command for vap index %d\n", __func__, __LINE__, vap_index);
+            wifi_hal_stats_error_print("%s:%d: Failed to send NL command for vap index %d\n", __func__, __LINE__, vap_index);
             return -1;
         }
     }
@@ -7972,20 +7972,20 @@ int wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state,
     struct nlattr *nlattr_vendor = NULL;
     wifi_interface_info_t *interface;
 
-    wifi_hal_dbg_print("%s:%d: value of vap index %d emu_enable %d and count is %d\n", __func__, __LINE__, vap_index, emu_state, count);
+    wifi_hal_stats_dbg_print("%s:%d: value of vap index %d emu_enable %d and count is %d\n", __func__, __LINE__, vap_index, emu_state, count);
     interface = malloc(sizeof(wifi_interface_info_t));
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to allocate memory for interface\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to allocate memory for interface\n", __func__, __LINE__);
         return -1;
     }
     memset(interface, 0, sizeof(wifi_interface_info_t));
     interface->index = interface_index;
     interface->phy_index = phy_index;
-    wifi_hal_dbg_print("%s:%d: value of index %d and phy_index is %d \n", __func__, __LINE__, interface->index, interface->phy_index);
+    wifi_hal_stats_dbg_print("%s:%d: value of index %d and phy_index is %d \n", __func__, __LINE__, interface->index, interface->phy_index);
     // Create the vendor-specific command message
     msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST, RDK_VENDOR_NL80211_SUBCMD_SET_STATION_LIST_EMU);
     if (msg == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
         free(interface);
         return -1;
     }
@@ -8000,14 +8000,14 @@ int wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state,
 
     nlattr_vendor = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
     if (nla_put_u32(msg, RDK_VENDOR_ATTR_EMU_ENABLE, emu_state) < 0) {
-        wifi_hal_error_print("%s:%d: Failed to set emu enable\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to set emu enable\n", __func__, __LINE__);
         nlmsg_free(msg);
         free(interface);
         return -1;
     }
 
     if (nla_put_u32(msg, RDK_VENDOR_ATTR_VAP_INDEX, vap_index) < 0) {
-        wifi_hal_error_print("%s:%d: Failed to set vap index\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to set vap index\n", __func__, __LINE__);
         nlmsg_free(msg);
         free(interface);
         return -1;
@@ -8015,7 +8015,7 @@ int wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state,
 
     if (emu_state) {
         if (nla_put_u32(msg, RDK_VENDOR_ATTR_STA_NUM, count) < 0) {
-            wifi_hal_error_print("%s:%d: Failed to RDK_VENDOR_ATTR_STA_NUM \n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: Failed to RDK_VENDOR_ATTR_STA_NUM \n", __func__, __LINE__);
             nlmsg_free(msg);
             free(interface);
             return -1;
@@ -8024,14 +8024,14 @@ int wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state,
     nla_nest_end(msg, nlattr_vendor);
 
     if (nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL) != 0) {
-        wifi_hal_error_print("%s:%d: Failed to send NL command for vap index %d\n", __func__, __LINE__, vap_index);
+        wifi_hal_stats_error_print("%s:%d: Failed to send NL command for vap index %d\n", __func__, __LINE__, vap_index);
         free(interface);
         return -1;
     }
 
     if (emu_state) {
         if (wifi_hal_emu_set_assoc_clients_stats_data(vap_index, emu_state, stats, count, interface) != 0) {
-            wifi_hal_error_print("%s:%d: Failed to send assoc client data for vap index %d\n", __func__, __LINE__, vap_index);
+            wifi_hal_stats_error_print("%s:%d: Failed to send assoc client data for vap index %d\n", __func__, __LINE__, vap_index);
             free(interface);
             return -1;
         }
@@ -8103,20 +8103,20 @@ int wifi_hal_emu_set_radio_channel_stats(unsigned int radio_index, bool emu_stat
     struct nlattr *nlattr_vendor = NULL, *nlattr_survey = NULL, *nlattr_channel = NULL;
     wifi_interface_info_t *interface;
 
-    wifi_hal_dbg_print("%s:%d: value of radio index %d emu_enable %d and count is %d\n", __func__, __LINE__, radio_index, emu_state, count);
+    wifi_hal_stats_dbg_print("%s:%d: value of radio index %d emu_enable %d and count is %d\n", __func__, __LINE__, radio_index, emu_state, count);
     interface = malloc(sizeof(wifi_interface_info_t));
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to allocate memory for interface\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to allocate memory for interface\n", __func__, __LINE__);
         return -1;
     }
     memset(interface, 0, sizeof(wifi_interface_info_t));
     interface->index = interface_index;
     interface->phy_index = phy_index;
-    wifi_hal_dbg_print("%s:%d: value of index %d and phy_index is %d \n", __func__, __LINE__, interface->index, interface->phy_index);
+    wifi_hal_stats_dbg_print("%s:%d: value of index %d and phy_index is %d \n", __func__, __LINE__, interface->index, interface->phy_index);
     // Create the vendor-specific command message
     msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST, RDK_VENDOR_NL80211_SUBCMD_SET_SURVEY_EMU);
     if (msg == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
         free(interface);
         return -1;
     }
@@ -8137,14 +8137,14 @@ int wifi_hal_emu_set_radio_channel_stats(unsigned int radio_index, bool emu_stat
 
     nlattr_vendor = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
     if (nla_put_u32(msg, RDK_VENDOR_ATTR_EMU_ENABLE, emu_state) < 0) {
-        wifi_hal_error_print("%s:%d: Failed to set emu enable\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to set emu enable\n", __func__, __LINE__);
         nlmsg_free(msg);
         free(interface);
         return -1;
     }
 
     if (nla_put_u32(msg, RDK_VENDOR_ATTR_RADIO_INDEX, radio_index) < 0) {
-        wifi_hal_error_print("%s:%d: Failed to set radio index\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to set radio index\n", __func__, __LINE__);
         nlmsg_free(msg);
         free(interface);
         return -1;
@@ -8152,7 +8152,7 @@ int wifi_hal_emu_set_radio_channel_stats(unsigned int radio_index, bool emu_stat
 
     if (emu_state) {
         if (nla_put_u32(msg, RDK_VENDOR_ATTR_STA_NUM, count) < 0) {
-            wifi_hal_error_print("%s:%d: Failed to RDK_VENDOR_ATTR_STA_NUM \n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: Failed to RDK_VENDOR_ATTR_STA_NUM \n", __func__, __LINE__);
             nlmsg_free(msg);
             free(interface);
             return -1;
@@ -8173,7 +8173,7 @@ int wifi_hal_emu_set_radio_channel_stats(unsigned int radio_index, bool emu_stat
                 return -1;
             }
 
-            wifi_hal_dbg_print("%s:%d: Channel %u: Noise %d, Radar Noise %d, Max RSSI %d, Non-80211 Noise %d, Utilization %u, Utilization Total %llu, Utilization Busy %llu, Utilization Busy TX %llu, Utilization Busy RX %llu, Utilization Busy Self %llu, Utilization Busy Ext %llu\n",
+            wifi_hal_stats_dbg_print("%s:%d: Channel %u: Noise %d, Radar Noise %d, Max RSSI %d, Non-80211 Noise %d, Utilization %u, Utilization Total %llu, Utilization Busy %llu, Utilization Busy TX %llu, Utilization Busy RX %llu, Utilization Busy Self %llu, Utilization Busy Ext %llu\n",
                 __func__, __LINE__, chan_stat[i].ch_number, chan_stat[i].ch_noise, chan_stat[i].ch_radar_noise, chan_stat[i].ch_max_80211_rssi,
                 chan_stat[i].ch_non_80211_noise, chan_stat[i].ch_utilization, chan_stat[i].ch_utilization_total, chan_stat[i].ch_utilization_busy,
                 chan_stat[i].ch_utilization_busy_tx, chan_stat[i].ch_utilization_busy_rx,
@@ -8207,7 +8207,7 @@ int wifi_hal_emu_set_radio_channel_stats(unsigned int radio_index, bool emu_stat
     nla_nest_end(msg, nlattr_vendor);
 
     if (nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL) != 0) {
-        wifi_hal_error_print("%s:%d: Failed to send NL command for radio index %d\n", __func__, __LINE__, radio_index);
+        wifi_hal_stats_error_print("%s:%d: Failed to send NL command for radio index %d\n", __func__, __LINE__, radio_index);
         free(interface);
         return -1;
     }
@@ -8674,14 +8674,14 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
     if (num_ssid && ssid_list) {
         struct nlattr *ssids = nla_nest_start(msg, NL80211_ATTR_SCAN_SSIDS);
         if (ssids == NULL) {
-            wifi_hal_error_print("%s:%d: [SCAN] nl message build failure (ssid's)\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: [SCAN] nl message build failure (ssid's)\n", __func__, __LINE__);
             goto failure;
         }
 
         for (i = 0; i < num_ssid; i++) {
-            wifi_hal_dbg_print("%s:%d: [SCAN] Added scan ssid '%s'\n", __func__, __LINE__, ssid_list[i]);
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] Added scan ssid '%s'\n", __func__, __LINE__, ssid_list[i]);
             if (nla_put(msg, i + 1, wifi_strnlen(ssid_list[i], SSID_MAX_LEN), ssid_list[i])) {
-                wifi_hal_error_print("%s:%d: [SCAN] nl message build failure (ssid's)\n", __func__, __LINE__);
+                wifi_hal_stats_error_print("%s:%d: [SCAN] nl message build failure (ssid's)\n", __func__, __LINE__);
                 goto failure;
             }
         }
@@ -8691,15 +8691,15 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
     if (num_freq && freq_list) {
         struct nlattr *freqs = nla_nest_start(msg, NL80211_ATTR_SCAN_FREQUENCIES);
         if (freqs == NULL) {
-            wifi_hal_error_print("%s:%d: [SCAN] nl message build failure (freq's)\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: [SCAN] nl message build failure (freq's)\n", __func__, __LINE__);
             goto failure;
         }
         for (i = 0; i < num_freq; i++) {
             if (0 == freq_list[i]) // <-- break the loop if freq is 0
                 break;
-            wifi_hal_dbg_print("%s:%d: [SCAN] Added scan frequency %u MHz\n", __func__, __LINE__, freq_list[i]);
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] Added scan frequency %u MHz\n", __func__, __LINE__, freq_list[i]);
             if (nla_put_u32(msg, i + 1, freq_list[i])) {
-                wifi_hal_error_print("%s:%d: [SCAN] nl message build failure (freq's)\n", __func__, __LINE__);
+                wifi_hal_stats_error_print("%s:%d: [SCAN] nl message build failure (freq's)\n", __func__, __LINE__);
                 goto failure;
             }
         }
@@ -8708,19 +8708,19 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
 
     /* In case that flags are present, update msg with it */
     if (flags != 0) {
-        wifi_hal_dbg_print("%s:%d: [SCAN] set SCAN flags (0x%x)\n", __func__, __LINE__, flags);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] set SCAN flags (0x%x)\n", __func__, __LINE__, flags);
         if (nla_put_u32(msg, NL80211_ATTR_SCAN_FLAGS, flags)) {
-            wifi_hal_error_print("%s:%d: [SCAN] nl message build failure (flags)\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: [SCAN] nl message build failure (flags)\n", __func__, __LINE__);
             goto failure;
         }
     }
 
     ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
     if (ret) {
-        wifi_hal_error_print("%s:%d: [SCAN] TRIGGER_SCAN command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
+        wifi_hal_stats_error_print("%s:%d: [SCAN] TRIGGER_SCAN command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
         return -1;
     }
-    wifi_hal_dbg_print("%s:%d: [SCAN] scan started successfully\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan started successfully\n", __func__, __LINE__);
     return 0;
 
 failure:
@@ -9198,7 +9198,7 @@ static void parse_he_capa(const uint8_t type, uint8_t len, const uint8_t *data,
     (void)ie_buffer;
 
     if (len <= 7) {
-        wifi_hal_error_print("%s:%d: [SCAN] length of he capabilities elem is %hhu <= 7\n", __func__, __LINE__, len);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] length of he capabilities elem is %hhu <= 7\n", __func__, __LINE__, len);
         return;
     }
 
@@ -9235,7 +9235,7 @@ static void parse_he_oper(const uint8_t type, uint8_t len, const uint8_t *data,
     (void)ie_buffer;
 
     if (len <= 4) {
-        wifi_hal_error_print("%s:%d: [SCAN] length of he capabilities elem is %hhu <= 4\n", __func__, __LINE__, len);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] length of he capabilities elem is %hhu <= 4\n", __func__, __LINE__, len);
         return;
     }
 
@@ -9275,10 +9275,10 @@ static void parse_he_oper(const uint8_t type, uint8_t len, const uint8_t *data,
                     break;
 
                 default:
-                    wifi_hal_error_print("%s:%d: [SCAN] illegal 'Values in the range 4 to 255 are reserved.'\n", __func__, __LINE__);
+                    wifi_hal_stats_error_print("%s:%d: [SCAN] illegal 'Values in the range 4 to 255 are reserved.'\n", __func__, __LINE__);
             }
         } else
-            wifi_hal_error_print("%s:%d: [SCAN] VHT oper info present bit is on, by len is %hu\n", __func__, __LINE__, len);
+            wifi_hal_stats_error_print("%s:%d: [SCAN] VHT oper info present bit is on, by len is %hu\n", __func__, __LINE__, len);
     }
 
     bss->supp_standards |= WIFI_80211_VARIANT_AX;
@@ -9295,7 +9295,7 @@ static void parse_eht_capa(const uint8_t type, uint8_t len, const uint8_t *data,
     (void)ie_buffer;
 
     if (len <= 3) {
-        wifi_hal_error_print("%s:%d: [SCAN] length of eht capabilities elem is %hhu <= 3\n", __func__, __LINE__, len);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] length of eht capabilities elem is %hhu <= 3\n", __func__, __LINE__, len);
         return;
     }
 
@@ -9326,11 +9326,11 @@ static void parse_extension_tag(const uint8_t type, uint8_t len, const uint8_t *
                 const struct parse_ies_data *ie_buffer, wifi_bss_info_t *bss)
 {
     if (len == 0) {
-        wifi_hal_error_print("%s:%d: [SCAN] length of extension elem is 0\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] length of extension elem is 0\n", __func__, __LINE__);
         return;
     }
 
-    wifi_hal_dbg_print("%s:%d: [SCAN] Extension TagNumber=%d\n", __func__, __LINE__, data[0]);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] Extension TagNumber=%d\n", __func__, __LINE__, data[0]);
 
     switch (data[0]) {
         case WLAN_EID_EXT_HE_CAPABILITIES:
@@ -9519,12 +9519,12 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
     if (tb[NL80211_ATTR_BSS] == NULL) {
-        wifi_hal_error_print("%s:%d: [SCAN] bss attribute not present\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] bss attribute not present\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     if (nla_parse_nested(bss, NL80211_BSS_MAX, tb[NL80211_ATTR_BSS], bss_policy) != 0) {
-        wifi_hal_error_print("%s:%d: [SCAN] nested bss attribute not present\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] nested bss attribute not present\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -9539,9 +9539,9 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     if (bss[NL80211_BSS_INFORMATION_ELEMENTS]) {
         ie = nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
         len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
-        wifi_hal_dbg_print("[SCAN] BSSID: %s, IE LEN %d\n", bssid_str, len);
+        wifi_hal_stats_dbg_print("[SCAN] BSSID: %s, IE LEN %d\n", bssid_str, len);
         if (len > 512) {
-            wifi_hal_error_print("[Wrong NL SCAN output] BSSID: %s, IE LEN %d\n", bssid_str, len);
+            wifi_hal_stats_error_print("[Wrong NL SCAN output] BSSID: %s, IE LEN %d\n", bssid_str, len);
             return NL_SKIP;
         }
     } else {
@@ -9561,7 +9561,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     //   The scan_info_ap_map contains all SSID's including hidden (with empty SSID name)
     scan_info_ap = (wifi_bss_info_t *)calloc(1, sizeof(wifi_bss_info_t));
     if (!scan_info_ap) {
-        wifi_hal_error_print("%s:%d: [SCAN] memory allocation error!\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] memory allocation error!\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -9623,12 +9623,12 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     }
 
 #ifndef NO_NL80211_BSS_NOISE
-    wifi_hal_dbg_print("noise attribute: %p\n", bss[NL80211_BSS_NOISE]);
+    wifi_hal_stats_dbg_print("noise attribute: %p\n", bss[NL80211_BSS_NOISE]);
     // - noise
     if (bss[NL80211_BSS_NOISE]) {
         uint8_t noise = nla_get_u8(bss[NL80211_BSS_NOISE]);
         scan_info_ap->noise = noise;
-        wifi_hal_dbg_print("noise: %d\n", noise);
+        wifi_hal_stats_dbg_print("noise: %d\n", noise);
     }
 #else
     // wifi_hal_dbg_print("WARNING: NL80211_BSS_NOISE is not defined! Need to update header nl80211.h\n");
@@ -9648,7 +9648,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
 
     if (vap->vap_mode == wifi_vap_mode_sta) {
         if (strcmp(scan_info_ap->ssid, vap->u.sta_info.ssid) == 0) {
-            wifi_hal_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d on freq:%d for ssid:%s\n", __func__, __LINE__,
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d on freq:%d for ssid:%s\n", __func__, __LINE__,
                         to_mac_str(bssid, bssid_str), scan_info_ap->rssi, scan_info_ap->freq, scan_info_ap->ssid);
             memcpy(vap->u.sta_info.bssid, bssid, sizeof(bssid_t));
 #ifdef CONFIG_WIFI_EMULATOR
@@ -9694,7 +9694,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
             if (scan_info == NULL) {
                 pthread_mutex_unlock(&interface->scan_info_mutex);
                 free(scan_info_ap);
-                wifi_hal_error_print("%s:%d: [SCAN] memory allocation error!\n", __func__, __LINE__);
+                wifi_hal_stats_error_print("%s:%d: [SCAN] memory allocation error!\n", __func__, __LINE__);
                 return NL_SKIP;
             }
 
@@ -9702,7 +9702,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
                 pthread_mutex_unlock(&interface->scan_info_mutex);
                 free(scan_info);
                 free(scan_info_ap);
-                wifi_hal_error_print("%s:%d: [SCAN] map adding error!\n", __func__, __LINE__);
+                wifi_hal_stats_error_print("%s:%d: [SCAN] map adding error!\n", __func__, __LINE__);
                 return NL_SKIP;
             }
         }
@@ -9715,7 +9715,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     pthread_mutex_lock(&interface->scan_info_ap_mutex);
     if (hash_map_put(interface->scan_info_ap_map[0], strdup(key), scan_info_ap)) {
         pthread_mutex_unlock(&interface->scan_info_ap_mutex);
-        wifi_hal_error_print("%s:%d: map adding error!\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: map adding error!\n", __func__, __LINE__);
         free(scan_info_ap);
         return NL_SKIP;
     }

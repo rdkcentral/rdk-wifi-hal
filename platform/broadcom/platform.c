@@ -190,7 +190,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     wifi_neighbor_ap2_t *combined_data;
     uint existing_count = *data_count;
 
-    wifi_hal_dbg_print("%s:%d: Entered with radio_index = %u\n", __func__, __LINE__, radio_index);
+    wifi_hal_stats_dbg_print("%s:%d: Entered with radio_index = %u\n", __func__, __LINE__, radio_index);
     snprintf(file_path, sizeof(file_path), "/dev/shm/wifi_neighbor_ap_emu_%u", radio_index);
 
     if (access(file_path, F_OK) != 0) {
@@ -199,27 +199,27 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
 
     sem = sem_open(SEM_NAME, 0);
     if (sem == SEM_FAILED) {
-        wifi_hal_error_print("%s:%d: Semaphore does not exist, emulation likely disabled.\n",
+        wifi_hal_stats_error_print("%s:%d: Semaphore does not exist, emulation likely disabled.\n",
             __func__, __LINE__);
         return RETURN_ERR;
     }
 
     if (sem_wait(sem) == -1) {
-        wifi_hal_error_print("%s:%d: Failed to acquire semaphore\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to acquire semaphore\n", __func__, __LINE__);
         sem_close(sem);
         return RETURN_ERR;
     }
 
     fp = fopen(file_path, "rb");
     if (fp == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to open file\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to open file\n", __func__, __LINE__);
         sem_post(sem);
         sem_close(sem);
         return RETURN_ERR;
     }
 
     if (fread(&neighbor_header, sizeof(emu_neighbor_stats_t), 1, fp) != 1) {
-        wifi_hal_error_print("%s:%d: Failed to read header data\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to read header data\n", __func__, __LINE__);
         fclose(fp);
         sem_post(sem);
         sem_close(sem);
@@ -229,7 +229,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     combined_data = malloc(
         (existing_count + neighbor_header.neighbor_count) * sizeof(wifi_neighbor_ap2_t));
     if (combined_data == NULL) {
-        wifi_hal_error_print("%s:%d: Memory allocation for combined_data failed\n", __func__,
+        wifi_hal_stats_error_print("%s:%d: Memory allocation for combined_data failed\n", __func__,
             __LINE__);
         fclose(fp);
         sem_post(sem);
@@ -244,7 +244,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
 
     if (fread(combined_data + existing_count, sizeof(wifi_neighbor_ap2_t),
             neighbor_header.neighbor_count, fp) != neighbor_header.neighbor_count) {
-        wifi_hal_error_print("%s:%d: Failed to read neighbor data:\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to read neighbor data:\n", __func__, __LINE__);
         free(combined_data);
         fclose(fp);
         sem_post(sem);
@@ -255,7 +255,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     *neighbor_ap_array = malloc(
         (existing_count + neighbor_header.neighbor_count) * sizeof(wifi_neighbor_ap2_t));
     if (*neighbor_ap_array == NULL) {
-        wifi_hal_error_print("%s:%d: Memory allocation for neighbor_ap_array failed\n", __func__,
+        wifi_hal_stats_error_print("%s:%d: Memory allocation for neighbor_ap_array failed\n", __func__,
             __LINE__);
         free(combined_data);
         fclose(fp);
@@ -270,7 +270,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     free(combined_data);
 
     if (sem_post(sem) == -1) {
-        wifi_hal_error_print("%s:%d: Failed to release semaphore\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: Failed to release semaphore\n", __func__, __LINE__);
     }
 
     fclose(fp);
@@ -292,12 +292,12 @@ INT wifi_getNeighboringWiFiStatus(INT radio_index, wifi_neighbor_ap2_t **neighbo
     if (ret == WIFI_HAL_NOT_READY) {
         return ret;
     } else if (ret == RETURN_ERR) {
-        wifi_hal_error_print("%s:%d: wifi_hal_getNeighboringWiFiStatus failed\n", __func__,
+        wifi_hal_stats_error_print("%s:%d: wifi_hal_getNeighboringWiFiStatus failed\n", __func__,
             __LINE__);
     }
 #if defined WIFI_EMULATOR_CHANGE
     if (get_emu_neighbor_stats(radio_index, neighbor_ap_array, output_array_size) != RETURN_OK) {
-        wifi_hal_error_print("%s:%d: get_emu_neighbor_stats failed\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d: get_emu_neighbor_stats failed\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 #endif
@@ -2114,24 +2114,24 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
 
     if (nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0),
         NULL) < 0) {
-        wifi_hal_error_print("%s:%d Failed to parse vendor data\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse vendor data\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     if (tb[NL80211_ATTR_VENDOR_DATA] == NULL) {
-        wifi_hal_error_print("%s:%d Vendor data is missing\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Vendor data is missing\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     nlattr = tb[NL80211_ATTR_VENDOR_DATA];
     if (nla_parse(tb_vendor, RDK_VENDOR_ATTR_MAX, nla_data(nlattr), nla_len(nlattr),
         sta_policy) < 0) {
-        wifi_hal_error_print("%s:%d Failed to parse vendor attribute\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse vendor attribute\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     if (tb_vendor[RDK_VENDOR_ATTR_STA_NUM] == NULL) {
-        wifi_hal_error_print("%s:%d STA number data is missing\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d STA number data is missing\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -2144,19 +2144,19 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
     sta_list->macs = calloc(sta_list->num, sizeof(mac_address_t));
 
     if (tb_vendor[RDK_VENDOR_ATTR_STA_LIST] == NULL) {
-        wifi_hal_error_print("%s:%d STA list data is missing\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d STA list data is missing\n", __func__, __LINE__);
         goto error;
     }
 
     i = 0;
     nla_for_each_nested(nlattr, tb_vendor[RDK_VENDOR_ATTR_STA_LIST], rem_mac) {
         if (i >= sta_list->num) {
-            wifi_hal_error_print("%s:%d STA list overflow\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d STA list overflow\n", __func__, __LINE__);
             goto error;
         }
 
         if (nla_len(nlattr) != sizeof(mac_address_t)) {
-            wifi_hal_error_print("%s:%d Wrong MAC address len\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d Wrong MAC address len\n", __func__, __LINE__);
             goto error;
         }
 
@@ -2166,7 +2166,7 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
     }
 
     if (i != sta_list->num) {
-        wifi_hal_error_print("%s:%d Failed to receive all stations\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to receive all stations\n", __func__, __LINE__);
         goto error;
     }
 
@@ -2187,13 +2187,13 @@ static int get_sta_list(wifi_interface_info_t *interface, sta_list_t *sta_list)
     msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
         RDK_VENDOR_NL80211_SUBCMD_GET_STATION_LIST);
     if (msg == NULL) {
-        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
     ret = nl80211_send_and_recv(msg, get_sta_list_handler, sta_list, NULL, NULL);
     if (ret) {
-        wifi_hal_error_print("%s:%d Failed to send NL message\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to send NL message\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
@@ -2294,25 +2294,25 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
 
     if (nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0),
         NULL) < 0) {
-        wifi_hal_error_print("%s:%d Failed to parse vendor data\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse vendor data\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     if (tb[NL80211_ATTR_VENDOR_DATA] == NULL) {
-        wifi_hal_error_print("%s:%d Vendor data is missing\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Vendor data is missing\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     nlattr = tb[NL80211_ATTR_VENDOR_DATA];
     if (nla_parse(tb_vendor, RDK_VENDOR_ATTR_MAX, nla_data(nlattr), nla_len(nlattr),
         vendor_policy) < 0) {
-        wifi_hal_error_print("%s:%d Failed to parse vendor attribute\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse vendor attribute\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     for (i = 0; i <= RDK_VENDOR_ATTR_MAX; i++) {
         if (vendor_policy[i].type != 0 && tb_vendor[i] == NULL) {
-            wifi_hal_error_print("%s:%d Vendor attribute %d is missing\n", __func__,
+            wifi_hal_stats_error_print("%s:%d Vendor attribute %d is missing\n", __func__,
                 __LINE__, i);
             return NL_SKIP;
         }
@@ -2323,7 +2323,7 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
 
     if (nla_parse_nested(tb_sta_info, RDK_VENDOR_ATTR_STA_INFO_MAX,
         tb_vendor[RDK_VENDOR_ATTR_STA_INFO], sta_info_policy)) {
-        wifi_hal_error_print("%s:%d Failed to parse sta info attribute\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse sta info attribute\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -2479,7 +2479,7 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
         memset(stats->cli_MLDAddr, 0, sizeof(stats->cli_MLDAddr));
     }
 
-    wifi_hal_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu\n", __func__, __LINE__, 
+    wifi_hal_stats_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu\n", __func__, __LINE__, 
             stats->cli_DataFramesSentAck, stats->cli_DataFramesSentNoAck,
            stats->cli_PacketsSent, stats->cli_BytesSent);
 
@@ -2501,7 +2501,7 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
     stats->cli_PacketsSent = stats->cli_DataFramesSentAck + stats->cli_DataFramesSentNoAck;
 
-    wifi_hal_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu\n", __func__, __LINE__, 
+    wifi_hal_stats_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu\n", __func__, __LINE__, 
             stats->cli_DataFramesSentAck, stats->cli_DataFramesSentNoAck,
             stats->cli_PacketsSent, stats->cli_BytesSent);
 
@@ -2518,13 +2518,13 @@ static int get_sta_stats(wifi_interface_info_t *interface, mac_address_t mac,
     msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
         RDK_VENDOR_NL80211_SUBCMD_GET_STATION);
     if (msg == NULL) {
-        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
     nlattr = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
     if (nla_put(msg, RDK_VENDOR_ATTR_MAC, ETHER_ADDR_LEN, mac) < 0) {
-        wifi_hal_error_print("%s:%d Failed to put mac address\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to put mac address\n", __func__, __LINE__);
         nlmsg_free(msg);
         return RETURN_ERR;
     }
@@ -2532,7 +2532,7 @@ static int get_sta_stats(wifi_interface_info_t *interface, mac_address_t mac,
 
     ret = nl80211_send_and_recv(msg, get_sta_stats_handler, stats, NULL, NULL);
     if (ret) {
-        wifi_hal_error_print("%s:%d Failed to send NL message\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to send NL message\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
@@ -2549,14 +2549,14 @@ INT wifi_getApAssociatedDeviceDiagnosticResult3(INT apIndex,
 
     interface = get_interface_by_vap_index(apIndex);
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d Failed to get interface for index %d\n", __func__, __LINE__,
+        wifi_hal_stats_error_print("%s:%d Failed to get interface for index %d\n", __func__, __LINE__,
             apIndex);
         return RETURN_ERR;
     }
 
     ret = get_sta_list(interface, &sta_list);
     if (ret != RETURN_OK) {
-        wifi_hal_error_print("%s:%d Failed to get sta list\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to get sta list\n", __func__, __LINE__);
         goto exit;
     }
 
@@ -2567,7 +2567,7 @@ INT wifi_getApAssociatedDeviceDiagnosticResult3(INT apIndex,
     for (i = 0; i < sta_list.num; i++) {
         ret = get_sta_stats(interface, sta_list.macs[i], &(*associated_dev_array)[i]);
         if (ret != RETURN_OK) {
-            wifi_hal_error_print("%s:%d Failed to get sta stats\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d Failed to get sta stats\n", __func__, __LINE__);
             free(*associated_dev_array);
             *associated_dev_array = NULL;
             *output_array_size = 0;
@@ -2611,24 +2611,24 @@ static int get_channel_stats_handler(struct nl_msg *msg, void *arg)
 
     if (nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0),
         NULL) < 0) {
-        wifi_hal_error_print("%s:%d Failed to parse vendor data\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse vendor data\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     if (tb[NL80211_ATTR_VENDOR_DATA] == NULL) {
-        wifi_hal_error_print("%s:%d Vendor data is missing\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Vendor data is missing\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     nlattr = tb[NL80211_ATTR_VENDOR_DATA];
     if (nla_parse(tb_vendor, RDK_VENDOR_ATTR_MAX, nla_data(nlattr), nla_len(nlattr),
         vendor_policy) < 0) {
-        wifi_hal_error_print("%s:%d Failed to parse vendor attribute\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse vendor attribute\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     if (tb_vendor[RDK_VENDOR_ATTR_SURVEY_INFO] == NULL) {
-        wifi_hal_error_print("%s:%d Survey info attribute is missing\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Survey info attribute is missing\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -2636,14 +2636,14 @@ static int get_channel_stats_handler(struct nl_msg *msg, void *arg)
 
         if (nla_parse(survey_info, RDK_VENDOR_ATTR_SURVEY_INFO_MAX, nla_data(nlattr),
             nla_len(nlattr), survey_policy)) {
-            wifi_hal_error_print("%s:%d: Failed to parse survey info attibutes\n", __func__,
+            wifi_hal_stats_error_print("%s:%d: Failed to parse survey info attibutes\n", __func__,
                 __LINE__);
             return NL_SKIP;
         }
 
         for (i = 0; i <= RDK_VENDOR_ATTR_SURVEY_INFO_MAX; i++) {
             if (survey_policy[i].type != 0 && survey_info[i] == NULL) {
-                wifi_hal_error_print("%s:%d Survey info attribute %d is missing\n", __func__,
+                wifi_hal_stats_error_print("%s:%d Survey info attribute %d is missing\n", __func__,
                     __LINE__, i);
                 return NL_SKIP;
             }
@@ -2651,7 +2651,7 @@ static int get_channel_stats_handler(struct nl_msg *msg, void *arg)
 
         freq = nla_get_u32(survey_info[RDK_VENDOR_ATTR_SURVEY_INFO_FREQUENCY]);
         if (ieee80211_freq_to_chan(freq, &channel) == NUM_HOSTAPD_MODES) {
-            wifi_hal_error_print("%s:%d Failed to convert frequency %u to channel\n", __func__,
+            wifi_hal_stats_error_print("%s:%d Failed to convert frequency %u to channel\n", __func__,
                 __LINE__, freq);
             return NL_SKIP;
         }
@@ -2698,13 +2698,13 @@ static int get_channel_stats(wifi_interface_info_t *interface,
     msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
         RDK_VENDOR_NL80211_SUBCMD_GET_SURVEY);
     if (msg == NULL) {
-        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
     ret = nl80211_send_and_recv(msg, get_channel_stats_handler, &stats, NULL, NULL);
     if (ret) {
-        wifi_hal_error_print("%s:%d Failed to send NL message\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to send NL message\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
@@ -2717,24 +2717,24 @@ INT wifi_getRadioChannelStats(INT radioIndex, wifi_channelStats_t *input_output_
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
 
-    wifi_hal_dbg_print("%s:%d: Get radio stats for index: %d\n", __func__, __LINE__,
+    wifi_hal_stats_dbg_print("%s:%d: Get radio stats for index: %d\n", __func__, __LINE__,
         radioIndex);
 
     radio = get_radio_by_rdk_index(radioIndex);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+        wifi_hal_stats_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
             radioIndex);
         return RETURN_ERR;
     }
 
     interface = get_primary_interface(radio);
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to get interface for radio index: %d\n", __func__,
+        wifi_hal_stats_error_print("%s:%d: Failed to get interface for radio index: %d\n", __func__,
             __LINE__, radioIndex);
         return RETURN_ERR;
     }
     if (get_channel_stats(interface, input_output_channelStats_array, array_size)) {
-        wifi_hal_error_print("%s:%d: Failed to get channel stats for radio index: %d\n", __func__,
+        wifi_hal_stats_error_print("%s:%d: Failed to get channel stats for radio index: %d\n", __func__,
             __LINE__, radioIndex);
         return RETURN_ERR;
     }
@@ -2780,38 +2780,38 @@ static int get_radio_diag_handler(struct nl_msg *msg, void *arg)
 
     if (nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL) <
         0) {
-        wifi_hal_error_print("%s:%d Failed to parse vendor data\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse vendor data\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     if (tb[NL80211_ATTR_VENDOR_DATA] == NULL) {
-        wifi_hal_error_print("%s:%d Vendor data is missing\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Vendor data is missing\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     nlattr = tb[NL80211_ATTR_VENDOR_DATA];
     if (nla_parse(tb_vendor, RDK_VENDOR_ATTR_MAX, nla_data(nlattr), nla_len(nlattr),
             vendor_policy) < 0) {
-        wifi_hal_error_print("%s:%d Failed to parse vendor attribute\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse vendor attribute\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     for (i = 0; i <= RDK_VENDOR_ATTR_MAX; i++) {
         if (vendor_policy[i].type != 0 && tb_vendor[i] == NULL) {
-            wifi_hal_error_print("%s:%d Vendor attribute %d is missing\n", __func__, __LINE__, i);
+            wifi_hal_stats_error_print("%s:%d Vendor attribute %d is missing\n", __func__, __LINE__, i);
             return NL_SKIP;
         }
     }
 
     if (nla_parse_nested(tb_radio_info, RDK_VENDOR_ATTR_STA_INFO_MAX,
             tb_vendor[RDK_VENDOR_ATTR_RADIO_INFO], radio_diag_policy)) {
-        wifi_hal_error_print("%s:%d Failed to parse radio info attribute\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse radio info attribute\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     for (i = 0; i <= RDK_VENDOR_ATTR_RADIO_INFO_MAX; i++) {
         if (radio_diag_policy[i].type != 0 && tb_radio_info[i] == NULL) {
-            wifi_hal_error_print("%s:%d radio info attribute %d is missing\n", __func__, __LINE__,
+            wifi_hal_stats_error_print("%s:%d radio info attribute %d is missing\n", __func__, __LINE__,
                 i);
             return NL_SKIP;
         }
@@ -2860,7 +2860,7 @@ static int get_radio_diag_handler(struct nl_msg *msg, void *arg)
     radioTrafficStats->radio_StatisticsStartTime = nla_get_u64(
         tb_radio_info[RDK_VENDOR_ATTR_RADIO_INFO_STATS_START_TIME]);
 
-    wifi_hal_dbg_print(
+    wifi_hal_stats_dbg_print(
         "%s:%d radio_BytesSent %lu radio_BytesReceived %lu radio_PacketsSent %lu "
         "radio_PacketsReceived %lu radio_ErrorsSent %lu radio_ErrorsReceived %lu "
         "radio_DiscardPacketsSent %lu radio_DiscardPacketsReceived %lu radio_PLCPErrorCount %lu "
@@ -2892,16 +2892,16 @@ static int get_radio_diagnostics(wifi_interface_info_t *interface,
     struct nl_msg *msg;
     int ret = RETURN_ERR;
 
-    wifi_hal_dbg_print("%s:%d Entering\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d Entering\n", __func__, __LINE__);
     msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
         RDK_VENDOR_NL80211_SUBCMD_GET_RADIO_INFO);
     if (msg == NULL) {
-        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
         return RETURN_ERR;
     }
     ret = nl80211_send_and_recv(msg, get_radio_diag_handler, radioTrafficStats, NULL, NULL);
     if (ret) {
-        wifi_hal_error_print("%s:%d Failed to send NL message\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to send NL message\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
@@ -2913,24 +2913,24 @@ INT wifi_getRadioTrafficStats2(INT radioIndex, wifi_radioTrafficStats2_t *radioT
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
 
-    wifi_hal_dbg_print("%s:%d: Get radio traffic stats for index: %d\n", __func__, __LINE__,
+    wifi_hal_stats_dbg_print("%s:%d: Get radio traffic stats for index: %d\n", __func__, __LINE__,
         radioIndex);
 
     radio = get_radio_by_rdk_index(radioIndex);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+        wifi_hal_stats_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
             radioIndex);
         return RETURN_ERR;
     }
 
     interface = get_primary_interface(radio);
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to get interface for radio index: %d\n", __func__,
+        wifi_hal_stats_error_print("%s:%d: Failed to get interface for radio index: %d\n", __func__,
             __LINE__, radioIndex);
         return RETURN_ERR;
     }
     if (get_radio_diagnostics(interface, radioTrafficStats)) {
-        wifi_hal_error_print("%s:%d: Failed to get radio diagnostics stats for radio index: %d\n",
+        wifi_hal_stats_error_print("%s:%d: Failed to get radio diagnostics stats for radio index: %d\n",
             __func__, __LINE__, radioIndex);
         return RETURN_ERR;
     }
