@@ -953,6 +953,10 @@ int wifi_drv_set_ap_mlo(struct nl_msg *msg, void *priv, struct wpa_driver_ap_par
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb);
 int update_hostap_mlo(wifi_interface_info_t *interface);
 #endif /* CONFIG_IEEE80211BE */
+
+wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio);
+void wifi_hal_configure_mbssid(wifi_radio_info_t *radio);
+
 #ifdef __cplusplus
 }
 #endif

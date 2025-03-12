@@ -1112,7 +1112,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif
 {
     wifi_radio_info_t *radio;
-    wifi_interface_info_t *interface;
+    wifi_interface_info_t *interface, *mbssid_tx_interface;
     wifi_vap_info_t *vap;
     platform_pre_create_vap_t pre_set_vap_params_fn;
     platform_create_vap_t set_vap_params_fn;
@@ -1378,6 +1378,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
             // set the vap mode on the interface
             interface->vap_info.vap_mode = vap->vap_mode;
+
+            mbssid_tx_interface = wifi_hal_get_mbssid_tx_interface(radio);
+            if (mbssid_tx_interface != NULL && mbssid_tx_interface != interface) {
+                wifi_hal_configure_mbssid(radio);
+            }
 
         } else if (vap->vap_mode == wifi_vap_mode_sta) {
 #ifdef CONFIG_WIFI_EMULATOR

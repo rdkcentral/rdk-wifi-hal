@@ -1568,6 +1568,11 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT
 
+#if HOSTAPD_VERSION >= 210
+    iface->mbssid_max_interfaces = radio->driver_data.capa.mbssid_max_interfaces;
+    iface->ema_max_periodicity = radio->driver_data.capa.ema_max_periodicity;
+#endif /* HOSTAPD_VERSION >= 210 */
+
     iface->drv_flags |= WPA_DRIVER_FLAGS_EAPOL_TX_STATUS;
     iface->drv_flags |= WPA_DRIVER_FLAGS_AP_MLME;
     iface->drv_flags |= WPA_DRIVER_FLAGS_AP_CSA;
@@ -2015,6 +2020,10 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     if (param->channelWidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
         iconf->vht_capab |= VHT_CAP_SUPP_CHAN_WIDTH_160MHZ;
     }
+
+#if HOSTAPD_VERSION >= 210
+    iconf->mbssid = param->band == WIFI_FREQUENCY_6_BAND ? MBSSID_ENABLED : MBSSID_DISABLED;
+#endif
 
     //validate_config_params
     if (hostapd_config_check(iconf, 1) < 0) {
@@ -2794,4 +2803,48 @@ int start_bss(wifi_interface_info_t *interface)
     }
 
     return ret;
+}
+
+wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio)
+{
+#if HOSTAPD_VERSION >= 210
+    struct hostapd_data *bss;
+    wifi_interface_info_t *interface_iter;
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    hash_map_foreach(radio->interface_map, interface_iter) {
+        if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap) {
+            continue;
+        }
+
+        bss = &interface_iter->u.ap.hapd;
+        if (bss->iconf == NULL || bss->iconf->mbssid == MBSSID_DISABLED || bss->conf == NULL) {
+            continue;
+        }
+
+        if (bss->started) {
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+    return interface_iter;
+#else
+    return NULL;
+#endif /* HOSTAPD_VERSION >= 210 */
+}
+
+void wifi_hal_configure_mbssid(wifi_radio_info_t *radio)
+{
+    wifi_interface_info_t *tx_interface = wifi_hal_get_mbssid_tx_interface(radio);
+
+    if (tx_interface == NULL) {
+        return;
+    }
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    if (tx_interface->beacon_set) {
+        ieee802_11_set_beacon(&tx_interface->u.ap.hapd);
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }

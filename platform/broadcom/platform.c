@@ -3026,8 +3026,6 @@ static void platform_get_radio_caps_common(wifi_radio_info_t *radio,
 static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
     // Set values from driver beacon, NL values are not valid.
-    static const u8 ext_cap[] = { 0x85, 0x00, 0x08, 0x02, 0x01, 0x00, 0x00, 0x40, 0x00, 0x40,
-        0x20 };
     static const u8 ht_mcs[16] = { 0xff, 0xff, 0xff, 0xff };
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT)
     static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
@@ -3045,14 +3043,6 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     struct hostapd_iface *iface = &interface->u.ap.iface;
 
     radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD;
-
-    free(radio->driver_data.extended_capa);
-    radio->driver_data.extended_capa = malloc(sizeof(ext_cap));
-    memcpy(radio->driver_data.extended_capa, ext_cap, sizeof(ext_cap));
-    free(radio->driver_data.extended_capa_mask);
-    radio->driver_data.extended_capa_mask = malloc(sizeof(ext_cap));
-    memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
-    radio->driver_data.extended_capa_len = sizeof(ext_cap);
 
     for (int i = 0; i < iface->num_hw_features; i++) {
         iface->hw_features[i].ht_capab = 0x11ef;
@@ -3077,8 +3067,6 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
 
 static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
-    static const u8 ext_cap[] = { 0x84, 0x00, 0x08, 0x02, 0x01, 0x00, 0x00, 0x40, 0x00, 0x40,
-        0x20 };
     static const u8 ht_mcs[16] = { 0xff, 0xff, 0xff, 0xff };
     static const u8 vht_mcs[8] = { 0xaa, 0xff, 0x00, 0x00, 0xaa, 0xff, 0x00, 0x20 };
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT)
@@ -3099,14 +3087,6 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     struct hostapd_iface *iface = &interface->u.ap.iface;
 
     radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD | WPA_DRIVER_FLAGS_DFS_OFFLOAD;
-
-    free(radio->driver_data.extended_capa);
-    radio->driver_data.extended_capa = malloc(sizeof(ext_cap));
-    memcpy(radio->driver_data.extended_capa, ext_cap, sizeof(ext_cap));
-    free(radio->driver_data.extended_capa_mask);
-    radio->driver_data.extended_capa_mask = malloc(sizeof(ext_cap));
-    memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
-    radio->driver_data.extended_capa_len = sizeof(ext_cap);
 
     for (int i = 0; i < iface->num_hw_features; i++) {
         iface->hw_features[i].ht_capab = 0x01ef;
@@ -3147,8 +3127,6 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
 
 static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
-    static const u8 ext_cap[] = { 0x84, 0x00, 0x48, 0x02, 0x01, 0x00, 0x00, 0x40, 0x00, 0x40,
-        0x21 };
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT)
     static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x02, 0x1b, 0x95,
@@ -3159,18 +3137,6 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
         0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
 #endif // TCXB7_PORT || TCXB8_PORT
     struct hostapd_iface *iface = &interface->u.ap.iface;
-
-    free(radio->driver_data.extended_capa);
-    radio->driver_data.extended_capa = malloc(sizeof(ext_cap));
-    memcpy(radio->driver_data.extended_capa, ext_cap, sizeof(ext_cap));
-    free(radio->driver_data.extended_capa_mask);
-    radio->driver_data.extended_capa_mask = malloc(sizeof(ext_cap));
-    memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
-    radio->driver_data.extended_capa_len = sizeof(ext_cap);
-
-    // MBSSID is not supported
-    radio->driver_data.extended_capa[WLAN_EXT_CAPAB_MULTIPLE_BSSID / 8] &=
-        ~(1 << (WLAN_EXT_CAPAB_MULTIPLE_BSSID % 8));
 
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT)
