@@ -436,11 +436,3 @@ int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg
 
     return ret;
 }
-
-time_t get_boot_time_in_sec(void)
-{
-    struct timespec tv_now;
-
-    clock_gettime(CLOCK_MONOTONIC, &tv_now);
-    return tv_now.tv_sec;
-}

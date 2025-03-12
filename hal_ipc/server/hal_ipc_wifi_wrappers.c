@@ -288,37 +288,9 @@ INT wifi_hal_steering_setGroup( UINT steeringgroupIndex,
                                 wifi_steering_apConfig_t *cfg_2,
                                 wifi_steering_apConfig_t *cfg_5)
 {
-    if (steeringgroupIndex >= MAX_STEERING_GROUP_NUM) {
-        wifi_hal_error_print("%s:%d: Wrong steering group Index:%d\n", __func__, __LINE__, steeringgroupIndex);
-        return RETURN_ERR;
-    } else if (cfg_2 == NULL || cfg_5 == NULL) {
-        wifi_hal_error_print("%s:%d: Wrong steering group Index:%d config\n", __func__, __LINE__, steeringgroupIndex);
-        return RETURN_ERR;
-    }
-
-    wifi_bm_steering_group_t *p_steer_group;
-    p_steer_group = &g_wifi_hal.bm_steer_groups[steeringgroupIndex];
-
-    pthread_mutex_lock(&g_wifi_hal.steering_data_lock);
-    p_steer_group->group_index = steeringgroupIndex;
-    p_steer_group->group_enable = true;
-    memset(p_steer_group->bm_group_info, 0, (MAX_NUM_RADIOS * sizeof(wifi_bm_steering_group_info_t)));
-    memcpy(&p_steer_group->bm_group_info[0].config, cfg_2, sizeof(wifi_steering_apConfig_t));
-    memcpy(&p_steer_group->bm_group_info[1].config, cfg_5, sizeof(wifi_steering_apConfig_t));
-
-    /* Macfilter deny mode set */
-    steering_set_acl_mode(cfg_2->apIndex, wifi_mac_filter_mode_black_list);
-    steering_set_acl_mode(cfg_5->apIndex, wifi_mac_filter_mode_black_list);
-    wifi_hal_info_print("Wi-Fi steering ApGroup %d CFG: apidx=%d, %d, %d, %d, %d\n",
-                            steeringgroupIndex, cfg_2->apIndex,
-                            cfg_2->utilCheckIntervalSec, cfg_2->utilAvgCount,
-                            cfg_2->inactCheckIntervalSec, cfg_2->inactCheckThresholdSec);
-    wifi_hal_info_print("Wi-Fi steering ApGroup %d CFG: apidx=%d, %d, %d, %d, %d\n",
-                            steeringgroupIndex, cfg_5->apIndex,
-                            cfg_5->utilCheckIntervalSec, cfg_5->utilAvgCount,
-                            cfg_5->inactCheckIntervalSec, cfg_5->inactCheckThresholdSec);
-    pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
-    return RETURN_OK;
+    wifi_hal_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: \tNOTICE: EMTPY FUNCTION.\n", __func__, __LINE__);
+    return 0;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -326,40 +298,9 @@ INT wifi_hal_steering_clientSet(UINT steeringgroupIndex,
                                 INT apIndex, mac_address_t client_mac,
                                 wifi_steering_clientConfig_t *config)
 {
-    wifi_interface_info_t *interface = NULL;
-    mac_addr_str_t sta_mac_str;
-    char *key = NULL;
-    bm_sta_list_t *bm_client_info = NULL;
-
-    interface = get_interface_by_vap_index(apIndex);
-    if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: WiFi interface not found:%d\n", __func__, __LINE__, apIndex);
-        return RETURN_ERR;
-    }
-    pthread_mutex_lock(&g_wifi_hal.steering_data_lock);
-    bm_client_info = steering_add_stalist(interface, NULL, client_mac, BM_STA_TYPE_CLIENT_SET);
-    if (bm_client_info == NULL) {
-        wifi_hal_error_print("%s:%d: bm sta_list create failure for ap index %d\n", __func__, __LINE__, apIndex);
-        pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
-        return RETURN_ERR;
-    } else {
-        key = to_mac_str(client_mac, sta_mac_str);
-        memcpy(&bm_client_info->bm_client_cfg, config, sizeof(wifi_steering_clientConfig_t));
-        if (!config->rssiProbeLWM && !config->rssiProbeHWM) {
-            if (wifi_steering_del_mac_list(apIndex, bm_client_info) == RETURN_OK) {
-                wifi_hal_info_print("Remove MAC=%s from maclist for vap:%d\n", key, apIndex);
-            }
-        }
-        wifi_hal_info_print("%s:%d: Wi-Fi steering group:%d for vap:%d and client:%s\n", __func__, __LINE__,
-                                steeringgroupIndex, apIndex, key);
-        wifi_hal_info_print("rssiProbe HWM:%d-LWM:%d rssiAuthHWM:%d-LWM:%d rssiInactXing:%d"
-                                "rssiHighXing:%d-Low:%d authRejectReason:%d\n",
-                                config->rssiProbeHWM, config->rssiProbeLWM, config->rssiAuthHWM, config->rssiAuthLWM,
-                                config->rssiInactXing, config->rssiHighXing, config->rssiLowXing, config->authRejectReason);
-    }
-    pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
-
-    return RETURN_OK;
+    wifi_hal_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: \tNOTICE: EMTPY FUNCTION.\n", __func__, __LINE__);
+    return 0;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -368,9 +309,7 @@ INT wifi_hal_steering_clientRemove( UINT steeringgroupIndex,
                                     mac_address_t client_mac)
 {
     wifi_interface_info_t *interface = NULL;
-    bm_sta_list_t *bm_client_info = NULL;
-    mac_addr_str_t sta_mac_str;
-    char *key = NULL;
+    wifi_hal_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
 
     interface = get_interface_by_vap_index(apIndex);
     if(!interface) {
@@ -378,16 +317,6 @@ INT wifi_hal_steering_clientRemove( UINT steeringgroupIndex,
       return RETURN_ERR;
     }
 
-    key = to_mac_str(client_mac, sta_mac_str);
-    pthread_mutex_lock(&g_wifi_hal.steering_data_lock);
-    bm_client_info = hash_map_get(interface->bm_sta_map, key);
-    if (bm_client_info != NULL) {
-        wifi_hal_info_print("%s:%d: remove client info:%s vap:%d\n", __func__, __LINE__, key, apIndex);
-        /* remove from the deny list */
-        wifi_steering_del_mac_list(apIndex, bm_client_info);
-        steering_del_stalist(interface, bm_client_info->mac_addr, BM_STA_TYPE_CLIENT_SET);
-    }
-    pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
     return nl80211_kick_device(interface, client_mac);
 }
 
@@ -459,7 +388,7 @@ INT wifi_hal_getAssociationReqIEs(  UINT apIndex,
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     station = ap_get_sta(&interface->u.ap.hapd, (const u8 *) clientMacAddress);
     if (req_ies_size < station->assoc_req_len) {
-      wifi_hal_error_print("%s:%d: req_ies_size %u is too small (should be at least %u)\n", __func__, __LINE__, req_ies_size, station->assoc_req_len);
+      wifi_hal_error_print("%s:%d: req_ies_size %u is too small (should be at least %zu)\n", __func__, __LINE__, req_ies_size, station->assoc_req_len);
       pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
       return RETURN_ERR;
     }

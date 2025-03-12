@@ -50,9 +50,7 @@ static unsigned int interface_index_map_size;
 
 static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #ifdef RASPBERRY_PI_PORT
-#if defined(PLATFORM_LINUX)
-    {0, 0,  "wlan0",     "brlan0",    0,    0,     "private_ssid_2g"},
-#else
+#if !defined(PLATFORM_LINUX)
     {0, 0,  "wlan0",     "brlan0",    0,    0,     "private_ssid_2g"},
     {1, 1,  "wlan1",     "brlan0",    0,    1,      "private_ssid_5g"},
     {0, 0,  "wlan2",     "brlan1",    0,    2,      "iot_ssid_2g"},
@@ -69,6 +67,8 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {1, 1,  "wlan13",    "brlan3",    0,    13,     "mesh_backhaul_5g"},
     {0, 0,  "wlan14",    "brlan2",    0,    14,     "mesh_sta_2g"},
     {1, 1,  "wlan15",    "brlan2",    0,    15,     "mesh_sta_5g"},
+#else
+    {0, 0,  "wlan0",     "brlan0",    0,    0,     "private_ssid_5g"},
 #endif
 #endif
 
@@ -1742,7 +1742,7 @@ int get_security_mode_str_from_int(wifi_security_modes_t security_mode, unsigned
         }
 #else
         strcpy(security_mode_str, "sae");
-#endif
+#endif /* CONFIG_IEEE80211BE */
         break;
 
     case wifi_security_mode_wpa3_transition:
@@ -1762,7 +1762,7 @@ int get_security_mode_str_from_int(wifi_security_modes_t security_mode, unsigned
         }
 #else
         strcpy(security_mode_str, "psk2 sae");
-#endif
+#endif /* CONFIG_IEEE80211BE */
         break;
 
     case wifi_security_mode_wpa_enterprise:
@@ -1806,23 +1806,17 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
                 wifi_hal_error_print("%s:%d NULL pointer!\n", __FUNCTION__, __LINE__);
                 return RETURN_ERR;
             }
-            int has_gcmp256 = 0;
-            if (wifi_vap_mode_ap == interface->vap_info.vap_mode) {
+            unsigned char has_gcmp256 = 0;
+            if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
                 const wifi_security_modes_t security_mode = interface->vap_info.u.bss_info.security.mode;
                 switch (security_mode) {
-                    case wifi_security_mode_none:
-                    case wifi_security_mode_wpa_wpa2_personal:
-                    case wifi_security_mode_wpa2_personal:
-                    case wifi_security_mode_wpa3_transition:
-                    case wifi_security_mode_wpa_enterprise:
-                    case wifi_security_mode_wpa2_enterprise:
-                    case wifi_security_mode_wpa_wpa2_enterprise:
-                    case wifi_security_mode_wpa3_enterprise:
-                    case wifi_security_mode_enhanced_open:
-                        break;
-                    default:
-                        has_gcmp256 = !interface->u.ap.conf.disable_11be;
-                        break;
+                case wifi_security_mode_wpa3_personal:
+                case wifi_security_mode_wpa3_transition:
+                case wifi_security_mode_wpa3_enterprise:
+                    has_gcmp256 = !interface->u.ap.conf.disable_11be;
+                    break;
+                default:
+                    break;
                 }
             }
             if (has_gcmp256) {
@@ -1833,7 +1827,7 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
         }
 #else
         strcpy(encryption_mode_str, "aes");
-#endif
+#endif /* CONFIG_IEEE80211BE */
         break;
 
     case wifi_encryption_aes_tkip:
@@ -1886,25 +1880,35 @@ int pick_akm_suite(int sel)
     if (0) {
 #ifdef CONFIG_IEEE80211R
     } else if (sel & WPA_KEY_MGMT_FT_PSK) {
-        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT FT/PSK", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT FT/PSK\n", __func__, __LINE__);
         return  WPA_KEY_MGMT_FT_PSK;
 #endif /* CONFIG_IEEE80211R */
+#ifdef CONFIG_SAE
+#ifdef CONFIG_IEEE80211BE
+    } else if (sel & WPA_KEY_MGMT_SAE_EXT_KEY) {
+        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT SAE_EXT\n", __func__, __LINE__);
+        return WPA_KEY_MGMT_SAE_EXT_KEY;
+#endif /* CONFIG_IEEE80211BE */
+    } else if (sel & WPA_KEY_MGMT_SAE) {
+        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT SAE\n", __func__, __LINE__);
+        return WPA_KEY_MGMT_SAE;
+#endif
 #ifdef CONFIG_IEEE80211W
     } else if (sel & WPA_KEY_MGMT_IEEE8021X_SHA256) {
-        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT 802.1X with SHA256", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT 802.1X with SHA256\n", __func__, __LINE__);
         return  WPA_KEY_MGMT_IEEE8021X_SHA256;
     } else if (sel & WPA_KEY_MGMT_PSK_SHA256) {
-        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT PSK with SHA256", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT PSK with SHA256\n", __func__, __LINE__);
         return  WPA_KEY_MGMT_PSK_SHA256;
 #endif /* CONFIG_IEEE80211W */
     } else if (sel & WPA_KEY_MGMT_IEEE8021X) {
-       wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT 802.1X", __func__, __LINE__);
+       wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT 802.1X\n", __func__, __LINE__);
        return WPA_KEY_MGMT_IEEE8021X;
     } else if (sel & WPA_KEY_MGMT_PSK) {
-        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT WPA-PSK", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT WPA-PSK\n", __func__, __LINE__);
         return WPA_KEY_MGMT_PSK;
     } else {
-        wifi_hal_dbg_print("%s:%d: WPA: Failed to select authenticated key management type", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d: WPA: Failed to select authenticated key management type\n", __func__, __LINE__);
         return -1;
     }
 }
@@ -3111,7 +3115,7 @@ int create_ecomode_interfaces(void)
           radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
           memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
           radio->radio_presence = false;
-          radio->index =  l_radio_interface_map[radioIndex].radio_index; // Random index values causes set_interface_properties failing in update vap info
+          radio->index =  l_radio_interface_map[radioIndex].phy_index;
           radio->rdk_radio_index = l_radio_interface_map[radioIndex].radio_index;
           radio->capab.index = radio->index;
           sprintf(radio->name, "%s", l_radio_interface_map[radioIndex].radio_name);
@@ -3399,11 +3403,51 @@ fail:
     return RETURN_ERR;
 }
 
-int wifi_ieee80211Variant_to_str(char *dest, size_t dest_size, wifi_ieee80211Variant_t variant)
+int wifi_ieee80211Variant_to_str(char *dest, size_t dest_size, wifi_ieee80211Variant_t variant,
+    const char *str)
 {
-    return wifi_enum_bitmap_to_str(dest, dest_size,
-        wifi_variant_Map, ARRAY_SIZE(wifi_variant_Map),
-        "802.11", (int)variant);
+    const char *mode;
+
+    if (*str != '\0') {
+        return wifi_enum_bitmap_to_str(dest, dest_size, wifi_variant_Map,
+            ARRAY_SIZE(wifi_variant_Map), str, (int)variant);
+    } else {
+        if ((dest != NULL) && (dest_size != 0)) {
+            *dest = '\0';
+
+            if (variant & WIFI_80211_VARIANT_A) {
+                mode = "a";
+                str_list_append(dest, dest_size, mode);
+            }
+            if (variant & WIFI_80211_VARIANT_B) {
+                mode = "b";
+                str_list_append(dest, dest_size, mode);
+            }
+            if (variant & WIFI_80211_VARIANT_G) {
+                mode = "g";
+                str_list_append(dest, dest_size, mode);
+            }
+            if (variant &
+                (WIFI_80211_VARIANT_N | WIFI_80211_VARIANT_AC | WIFI_80211_VARIANT_AX |
+                    WIFI_80211_VARIANT_BE)) {
+                if (variant & WIFI_80211_VARIANT_BE) {
+                    mode = "be";
+                } else if (variant & WIFI_80211_VARIANT_AX) {
+                    mode = "ax";
+                } else if (variant & WIFI_80211_VARIANT_AC) {
+                    mode = "ac";
+                } else {
+                    mode = "n";
+                }
+                str_list_append(dest, dest_size, mode);
+            }
+        } else {
+            wifi_hal_error_print("%s:%d: NULL or zero-size buffer\n", __func__, __LINE__);
+            return RETURN_ERR;
+        }
+    }
+
+    return RETURN_OK;
 }
 
 int wifi_channelBandwidth_to_str(char *dest, size_t dest_size, wifi_channelBandwidth_t bandwidth)
@@ -3418,109 +3462,6 @@ int wifi_bitrate_to_str(char *dest, size_t dest_size, wifi_bitrate_t bitrate)
     return wifi_enum_bitmap_to_str(dest, dest_size,
         wifi_bitrate_Map, ARRAY_SIZE(wifi_bitrate_Map),
         "", (int)bitrate);
-}
-
-/* return AP-config pointer as well as group index */
-wifi_steering_apConfig_t* steering_find_ap_cfg(int vap_index, uint32_t *g_idx)
-{
-    int i, j;
-    wifi_bm_steering_group_t      *g_ptr;
-    wifi_bm_steering_group_info_t *g_info;
-
-    for (i = 0; i < MAX_STEERING_GROUP_NUM; i++)
-    {
-        g_ptr = &g_wifi_hal.bm_steer_groups[i];
-
-        if (!g_ptr->group_enable) {
-            continue;
-        }
-
-        for (j = 0; j < MAX_NUM_RADIOS; j++) {
-            g_info = &g_ptr->bm_group_info[j];
-
-            if (g_info->config.apIndex == vap_index) {
-                *g_idx = g_ptr->group_index;
-                wifi_hal_dbg_print("%s:%d: found group index %d for ap_index:%d\n", __func__, __LINE__, g_ptr->group_index, vap_index);
-                return &g_info->config;
-            }
-        }
-    }
-    return NULL;
-}
-
-int wifi_steering_add_mac_list(uint32_t vap_index, bm_sta_list_t *sta_info)
-{
-    mac_addr_str_t sta_mac_str;
-    char *key;
-    int ret;
-
-    sta_info->is_acl_set = true;
-    /* re-configure macmode etc. in case the run-time setting is cleared by ApplySetting */
-    /* Macfilter deny mode set */
-    ret = steering_set_acl_mode(vap_index, wifi_mac_filter_mode_black_list);
-    if (ret != RETURN_OK)
-    {
-        return ret;
-    }
-
-    key = to_mac_str(sta_info->mac_addr, sta_mac_str);
-    ret = wifi_hal_addApAclDevice(vap_index, key);
-
-    wifi_hal_info_print("status:%d: add sta:%s to maclist on vap_index:%d\n", ret, key, vap_index);
-    return ret;
-}
-
-int wifi_steering_del_mac_list(uint32_t vap_index, bm_sta_list_t *sta_info)
-{
-    int ret;
-    mac_addr_str_t sta_mac_str;
-    char *key;
-
-    key = to_mac_str(sta_info->mac_addr, sta_mac_str);
-    if (sta_info->is_acl_set != true) {
-        wifi_hal_error_print("steering mac filter acl is not configured for sta:%s on vap_index:%d\n", key, vap_index);
-        return RETURN_ERR;
-    }
-
-    ret = wifi_hal_delApAclDevice(vap_index, key);
-
-    sta_info->is_acl_set = false;
-    wifi_hal_info_print("status:%d del sta:%s from maclist on vap_index:%d\n", ret, key, vap_index);
-    return ret;
-}
-
-void re_configure_steering_mac_list(wifi_interface_info_t *interface)
-{
-    wifi_vap_info_t *vap;
-    bm_sta_list_t *ptr = NULL;
-    mac_addr_str_t sta_mac_str;
-    char *key;
-
-    vap = &interface->vap_info;
-    if (vap->vap_mode != wifi_vap_mode_ap) {
-        wifi_hal_info_print("%s:%d: sta vap:%d does not support this\n", __func__, __LINE__, vap->vap_index);
-        return;
-    } else if((vap->u.bss_info.mac_filter_enable == true) &&
-                (vap->u.bss_info.mac_filter_mode != wifi_mac_filter_mode_black_list)) {
-        wifi_hal_info_print("%s:%d: mac mode:%d for vap:%d\n", __func__, __LINE__, vap->u.bss_info.mac_filter_mode, vap->vap_index);
-        return;
-    }
-
-    pthread_mutex_lock(&g_wifi_hal.steering_data_lock);
-    ptr = hash_map_get_first(interface->bm_sta_map);
-    while (ptr != NULL) {
-        if ((ptr->is_acl_set == true) && (ptr->vap_index == vap->vap_index)) {
-            if (vap->u.bss_info.mac_filter_enable == false) {
-                /* Inside this function, If mac filter is not enabled.
-                 *  So, Forcefully we will enable mac filter and macmode */
-                steering_set_acl_mode(vap->vap_index, wifi_mac_filter_mode_black_list);
-            }
-            key = to_mac_str(ptr->mac_addr, sta_mac_str);
-            wifi_hal_addApAclDevice(ptr->vap_index, key);
-        }
-        ptr = hash_map_get_next(interface->bm_sta_map, ptr);
-    }
-    pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
 }
 
 #ifdef CONFIG_WIFI_EMULATOR

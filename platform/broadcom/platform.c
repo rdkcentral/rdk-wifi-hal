@@ -7,12 +7,12 @@
 #include "nvram_api.h"
 #endif // defined(WLDM_21_2)
 #include "wlcsm_lib_wl.h"
-#if defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#if defined (ENABLED_EDPD)
 #include <fcntl.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#endif // defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#endif // defined (ENABLED_EDPD)
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) 
 #include <rdk_nl80211_hal.h>
@@ -88,13 +88,13 @@ static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char
 int sta_disassociated(int ap_index, char *mac, int reason);
 int sta_deauthenticated(int ap_index, char *mac, int reason);
 int sta_associated(int ap_index, wifi_associated_dev_t *associated_dev);
-#if defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#if defined (ENABLED_EDPD)
 static int check_edpdctl_enabled();
 static int check_dpd_feature_enabled();
 static int enable_echo_feature_and_power_control_configs(void);
 int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down);
 int platform_set_gpio_config_for_ecomode(const int wl_idx, const bool eco_pwr_down);
-#endif // defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#endif // defined (ENABLED_EDPD)
 
 #ifndef NEWPLATFORM_PORT
 static char const *bss_nvifname[] = {
@@ -287,11 +287,13 @@ INT wifi_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, INT d
 INT wifi_getNeighboringWiFiStatus(INT radio_index, wifi_neighbor_ap2_t **neighbor_ap_array,
     UINT *output_array_size)
 {
-    if (wifi_hal_getNeighboringWiFiStatus(radio_index, neighbor_ap_array, output_array_size) !=
-        RETURN_OK) {
+    int ret;
+    ret = wifi_hal_getNeighboringWiFiStatus(radio_index, neighbor_ap_array, output_array_size);
+    if (ret == WIFI_HAL_NOT_READY) {
+        return ret;
+    } else if (ret == RETURN_ERR) {
         wifi_hal_error_print("%s:%d: wifi_hal_getNeighboringWiFiStatus failed\n", __func__,
             __LINE__);
-        return RETURN_ERR;
     }
 #if defined WIFI_EMULATOR_CHANGE
     if (get_emu_neighbor_stats(radio_index, neighbor_ap_array, output_array_size) != RETURN_OK) {
@@ -299,7 +301,7 @@ INT wifi_getNeighboringWiFiStatus(INT radio_index, wifi_neighbor_ap2_t **neighbo
         return RETURN_ERR;
     }
 #endif
-    return RETURN_OK;
+    return ret;
 }
 
 int sta_disassociated(int ap_index, char *mac, int reason)
@@ -417,7 +419,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         return RETURN_ERR;
     }
 
-#if defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#if defined (ENABLED_EDPD)
     int ret = 0;
     if (operationParam->EcoPowerDown) {
         /* Enable eco mode feature and power control configurations. */
@@ -432,23 +434,26 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
            wifi_hal_dbg_print("%s:%d: Failed to enable ECO mode for radio index:%d\n", __func__, __LINE__, index);
         }
 
+#ifdef _SR213_PRODUCT_REQ_
         //Disconnect the GPIO
         ret = platform_set_gpio_config_for_ecomode(index, true);
         if (ret != RETURN_OK) {
             wifi_hal_dbg_print("%s:%d: Failed to disconnect gpio for radio index:%d\n", __func__, __LINE__, index);
         }
+#endif
     } else {
         /* Enable eco mode feature and power control configurations. */
         ret = enable_echo_feature_and_power_control_configs();
         if (ret != RETURN_OK) {
             wifi_hal_error_print("%s:%d: Failed to enable EDPD ECO Mode feature\n", __func__, __LINE__);
         }
-
+#ifdef _SR213_PRODUCT_REQ_
         //Connect the GPIO
         ret = platform_set_gpio_config_for_ecomode(index, false);
         if (ret != RETURN_OK) {
             wifi_hal_dbg_print("%s:%d: Failed to connect gpio for radio index:%d\n", __func__, __LINE__, index);
         }
+#endif
 
         //Disable ECO mode for radio
         ret = platform_set_ecomode_for_radio(index, false);
@@ -456,7 +461,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
             wifi_hal_dbg_print("%s:%d: Failed to disable ECO mode for radio index:%d\n", __func__, __LINE__, index);
         }
     }
-#endif // defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#endif // defined (ENABLED_EDPD)
 
     if (radio->radio_presence == false) {
         wifi_hal_dbg_print("%s:%d Skip this radio %d. This is in sleeping mode\n", __FUNCTION__, __LINE__, index);
@@ -503,6 +508,10 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         }
     }
 
+#if defined(CONFIG_IEEE80211BE) && defined(SCXER10_PORT)
+    platform_set_eht(index, (operationParam->variant & WIFI_80211_VARIANT_BE) ? true : false);
+#endif
+
     snprintf(param_name, sizeof(param_name), "wl%d_reg_mode", index);
     if (operationParam->DfsEnabled) {
         set_string_nvram_param(param_name, "h");
@@ -514,10 +523,6 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         /* sometimes spectrum management is not enabled by nvram */
         enable_spect_management(index, operationParam->DfsEnabled);
     }
-
-#if defined(CONFIG_IEEE80211BE) && defined(SCXER10_PORT)
-    platform_set_eht(index, (operationParam->variant & WIFI_80211_VARIANT_BE) ? true : false);
-#endif
 
     return 0;
 }
@@ -1145,8 +1150,8 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
 
     if (enable) {
         assoc_ctrl = ASSOC_HOSTAP_FULL_CTRL;
-    } else if (radio->oper_param.band != WIFI_FREQUENCY_6_BAND &&
-        is_wifi_hal_vap_hotspot_open(vap_index) && is_wifi_hal_vap_hotspot_secure(vap_index)) {
+    } else if (is_wifi_hal_vap_hotspot_open(vap_index) ||
+        is_wifi_hal_vap_hotspot_secure(vap_index)) {
         assoc_ctrl = ASSOC_HOSTAP_STATUS_CTRL;
     } else {
         assoc_ctrl = ASSOC_DRIVER_CTRL;
@@ -1338,6 +1343,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
     
             prepare_param_name(param_name, interface_name, "_bcnprs_txpwr_offset");
             set_decimal_nvram_param(param_name, abs(map->vap_array[index].u.bss_info.mgmtPowerControl));
+            wifi_setApManagementFramePowerControl(map->vap_array[index].vap_index, map->vap_array[index].u.bss_info.mgmtPowerControl);
 
         } else if (map->vap_array[index].vap_mode == wifi_vap_mode_sta) {
 
@@ -1705,7 +1711,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
 
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT 
 
-#if defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#if defined (ENABLED_EDPD)
 /* EDPD - WLAN Power down control support APIs. */
 #define GPIO_PIN_24G_RADIO 101
 #define GPIO_PIN_5G_RADIO 102
@@ -1713,7 +1719,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
 #define GPIO_UNEXPORT_PATH "/sys/class/gpio/unexport"
 #define GPIO_DIRECTION_PATH "/sys/class/gpio/gpio%d/direction"
 #define GPIO_VALUE_PATH "/sys/class/gpio/gpio%d/value"
-#define ECOMODE_SCRIPT_FILE "/etc/init/wifi.sh"
+#define ECOMODE_SCRIPT_FILE "/etc/sky/wifi.sh"
 #define GPIO_DIRECTION_OUT "out"
 #define BUFLEN_2 2
 
@@ -1738,7 +1744,7 @@ static int enable_echo_feature_and_power_control_configs(void)
         wifi_hal_dbg_print("%s:%d cmd [%s] unsuccessful \n", __func__, __LINE__, cmd);
     }
 
-    snprintf(cmd, sizeof(cmd), "%s dpden 1", ECOMODE_SCRIPT_FILE);
+    snprintf(cmd, sizeof(cmd), " /etc/sky/wifi.sh dpden 1");
     rc = system(cmd);
     if (rc == 0) {
         wifi_hal_dbg_print("%s:%d cmd [%s] successful \n", __func__, __LINE__, cmd);
@@ -2004,7 +2010,7 @@ int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down)
 
     return rc;
 }
-#endif // defined (ENABLED_EDPD) && defined(_SR213_PRODUCT_REQ_)
+#endif // defined (ENABLED_EDPD)
 
 int platform_set_txpower(void* priv, uint txpower)
 {
@@ -2890,6 +2896,68 @@ INT wifi_getRadioTrafficStats2(INT radioIndex, wifi_radioTrafficStats2_t *radioT
 
     return RETURN_OK;
 }
+
+static int set_ap_pwr(wifi_interface_info_t *interface, INT *power)
+{
+    struct nlattr *nlattr;
+    struct nl_msg *msg;
+    int ret = RETURN_ERR;
+
+    msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0,
+                                     OUI_COMCAST,
+                                     RDK_VENDOR_NL80211_SUBCMD_SET_MGT_FRAME_PWR);
+
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    nlattr = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+
+    if (nla_put(msg, RDK_VENDOR_ATTR_MGT_FRAME_PWR_LEVEL, sizeof(*power), power) < 0) {
+        wifi_hal_error_print("%s:%d Failed to put AP power\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return RETURN_ERR;
+    }
+    nla_nest_end(msg, nlattr);
+
+    ret = nl80211_send_and_recv(msg, NULL, power, NULL, NULL);
+
+    if (ret) {
+        wifi_hal_error_print("%s:%d Failed to send NL message: %d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
+        return RETURN_ERR;
+    }
+
+    return RETURN_OK;
+}
+
+INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
+{
+    wifi_interface_info_t *interface;
+
+    wifi_hal_dbg_print("%s:%d: Set AP management frame for index: %d\n", __func__, __LINE__,
+        apIndex);
+
+    interface = get_interface_by_vap_index(apIndex);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get interface for ap index: %d\n", __func__,
+            __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+    if (set_ap_pwr(interface, &dBm)) {
+        wifi_hal_error_print("%s:%d: Failed to set ap power for ap index: %d\n", __func__,
+            __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+
+    return RETURN_OK;
+}
+
+INT wifi_getRadioTransmitPower(INT radioIndex, ULONG *tx_power)
+{
+    return wifi_hal_getRadioTransmitPower(radioIndex, tx_power);
+}
+
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT
 
 int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)

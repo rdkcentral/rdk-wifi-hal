@@ -990,7 +990,7 @@ static void *rdk_hal_server_func(void *arg)
         if (sizeof(hal_ipc_processor_desc_t) > max_size) {
             while (target_bytes < sizeof(hal_ipc_processor_desc_t)) {
                 if (((nbytes = recv(cli_sock, ptr, (sizeof(hal_ipc_processor_desc_t) - target_bytes > max_size) ? max_size : (sizeof(hal_ipc_processor_desc_t) - target_bytes), 0)) == -1) || (nbytes == 0)) {
-                    wifi_hal_error_print("%s:%d:receiving command response failed err: %d data len:%d\n", __func__, __LINE__, errno, nbytes);
+                    wifi_hal_error_print("%s:%d:receiving command response failed err: %d data len:%zu\n", __func__, __LINE__, errno, nbytes);
                     close(cli_sock);
                     break_cycle = 1;
                     break;
@@ -1003,7 +1003,7 @@ static void *rdk_hal_server_func(void *arg)
             }
         } else {
             if (((nbytes = recv(cli_sock, (unsigned char *) &desc, sizeof(hal_ipc_processor_desc_t), 0)) == -1) || (nbytes == 0)) {
-                wifi_hal_error_print("%s:%d:receiving command response failed err: %d data len:%d\n", __func__, __LINE__, errno, nbytes);
+                wifi_hal_error_print("%s:%d:receiving command response failed err: %d data len:%zu\n", __func__, __LINE__, errno, nbytes);
                 close(cli_sock);
                 continue;
             }
@@ -1033,7 +1033,7 @@ static void *rdk_hal_server_func(void *arg)
             if (desc.scratch_buf_size > max_size) {
                 while (target_bytes < desc.scratch_buf_size) {
                     if (((nbytes = recv(cli_sock, (unsigned char *)tmp, (desc.scratch_buf_size - target_bytes) > max_size ? max_size : (desc.scratch_buf_size - target_bytes), 0)) == -1) || (nbytes == 0)) {
-                        wifi_hal_error_print("%s:%d:receiving desc scratch buf in chunks failed err: %d data len:%d\n", __func__, __LINE__, errno, nbytes);
+                        wifi_hal_error_print("%s:%d:receiving desc scratch buf in chunks failed err: %d data len:%zu\n", __func__, __LINE__, errno, nbytes);
                         free(desc.scratch_buf);
                         close(cli_sock);
                         break_cycle = 1;
@@ -1047,7 +1047,7 @@ static void *rdk_hal_server_func(void *arg)
                 nbytes = target_bytes;
             } else {
                 if (((nbytes = recv(cli_sock, (unsigned char *)tmp, desc.scratch_buf_size, 0)) == -1) || (nbytes == 0)) {
-                    wifi_hal_error_print("%s:%d:receiving command response failed err: %d data len:%d\n", __func__, __LINE__, errno, nbytes);
+                    wifi_hal_error_print("%s:%d:receiving command response failed err: %d data len:%zu\n", __func__, __LINE__, errno, nbytes);
                     free(desc.scratch_buf);
                     close(cli_sock);
                     continue;
@@ -1059,7 +1059,7 @@ static void *rdk_hal_server_func(void *arg)
             desc.scratch_buf_size = 0;
         }
 
-        wifi_hal_dbg_print("%s:%d: Received command to execute: %s, bytes: %d, expected: %d\n", __func__, __LINE__, desc.name, sizeof(hal_ipc_processor_desc_t) + nbytes, desc.len);
+        wifi_hal_dbg_print("%s:%d: Received command to execute: %s, bytes: %zu, expected: %d\n", __func__, __LINE__, desc.name, sizeof(hal_ipc_processor_desc_t) + nbytes, desc.len);
 
         assert((sizeof(hal_ipc_processor_desc_t) + nbytes) == desc.len);
         ///**************************************************************************************///
@@ -1141,12 +1141,12 @@ static void *rdk_hal_server_func(void *arg)
             }
             nbytes = target_bytes;
 
-            wifi_hal_dbg_print("%s:%d: Response sent to client for api: %s bytes: %d\n", __func__, __LINE__, desc.name, sizeof(hal_ipc_processor_desc_t) + nbytes);
+            wifi_hal_dbg_print("%s:%d: Response sent to client for api: %s bytes: %zu\n", __func__, __LINE__, desc.name, sizeof(hal_ipc_processor_desc_t) + nbytes);
 
             free(desc.scratch_buf);
             close(cli_sock);
         } else {
-            wifi_hal_dbg_print("%s:%d: Response sent to client for api: %s bytes: %d\n", __func__, __LINE__, desc.name, nbytes);
+            wifi_hal_dbg_print("%s:%d: Response sent to client for api: %s bytes: %zu\n", __func__, __LINE__, desc.name, nbytes);
             close(cli_sock);
         }
 

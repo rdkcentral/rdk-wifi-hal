@@ -466,7 +466,11 @@ INT wifi_anqpSendResponse(UINT apIndex, mac_address_t sta, unsigned char token, 
                 memcpy(anqp_info->info, elem->data, elem->len);
 
                 memcpy(next_pos, anqp_info, sizeof(wifi_anqp_element_format_t) + anqp_info->len);
-                next_pos += sizeof(anqp_info) + anqp_info->len;
+#if defined(_64BIT_ARCH_SUPPORT_)                
+		next_pos += sizeof(wifi_anqp_element_format_t) + anqp_info->len;
+#else
+		next_pos += sizeof(anqp_info) + anqp_info->len;
+#endif
                 if (anqp_info)
                 {
                     wifi_anqp_dbg_print(1, "%s:%d: freeing anqp_info:    \n", __func__, __LINE__);
