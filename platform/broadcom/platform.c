@@ -1690,17 +1690,6 @@ int nvram_get_mgmt_frame_power_control(int vap_index, int* output_dbm)
     return RETURN_OK;
 }
 
-#if defined(_SR213_PRODUCT_REQ_)
-
-int platform_get_radio_phytemperature(wifi_radio_index_t index,
-    wifi_radioTemperature_t *radioPhyTemperature)
-{
-    // no wl_iovar_getint API
-    return RETURN_OK;
-}
-
-#endif // _SR213_PRODUCT_REQ_
-
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) 
 
 static int get_radio_phy_temp_handler(struct nl_msg *msg, void *arg)
@@ -1797,7 +1786,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
     return RETURN_OK;
 }
 
-#elif defined (TCHCBRV2_PORT)
+#elif defined (TCHCBRV2_PORT) || defined(_SR213_PRODUCT_REQ_)
 
 int platform_get_radio_phytemperature(wifi_radio_index_t index,
     wifi_radioTemperature_t *radioPhyTemperature)
