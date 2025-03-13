@@ -1725,6 +1725,10 @@ INT wifi_hal_set_acs_keep_out_chans(hash_map_t *radio_map, int radioIndex)
             return RETURN_ERR;
         }
     }
+    size_t len = strlen(buff);
+    if(len > 0) {
+        buff[len-1] = '\0';
+    }
     wifi_hal_info_print("%s:%d SREESH Successfully setting the nvram param acs_excl_chans for the output string = %s\n",__func__,__LINE__,buff);
     return wifi_drv_set_acs_exclusion_list(radioIndex, buff);
 }

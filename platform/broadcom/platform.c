@@ -488,10 +488,6 @@ void convert_from_channellist_to_chspeclist(unsigned int bw, unsigned int band,w
         wifi_hal_info_print("%s:%d SREESH Value of input channel in int = %u and as hex buff = %s and as chspec = 0x%x\n",__func__,__LINE__,channel_list[i],buff,chspec);
         strcat(output_chanlist, buff);
     }
-    size_t len = strlen(output_chanlist);
-    if(len > 0) {
-        output_chanlist[len-1] = '\0';
-    }
     wifi_hal_info_print("%s:%d SREESH Value of output_chanlist = %s\n",__func__,__LINE__,output_chanlist);
 }
 
