@@ -492,66 +492,41 @@ void convert_from_channellist_to_chspeclist(unsigned int bw, unsigned int band,w
     wifi_hal_info_print("%s:%d SREESH Value of output_chanlist = %s\n",__func__,__LINE__,output_chanlist);
 }
 
-int platform_set_acs_exclusion_list(unsigned int radioIndex, hash_map_t *radiomap)
+int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t chanlist, char* buff)
 {
-    unsigned int bw;
-    unsigned int band;
-    char buff[ACS_MAX_VECTOR_LEN + 2];
+    wifi_hal_info_print("\n");
+    unsigned int bw = convert_channelBandwidth_to_bcmwifibandwidth(bandwidth);
+    unsigned int band = convert_radioindex_to_bcmband(radioIndex);
+    wifi_hal_info_print("%s:%d SREESH Value of BRCM bw 0x%x and BRCM band = 0x%x\n",__func__,__LINE__,bw,band);
+    if(bw != UINT_MAX && band != UINT_MAX)
+    {
+        convert_from_channellist_to_chspeclist(bw,band,chanlist,buff);
+    }
+    else
+    {
+        wifi_hal_info_print("%s:%d SREESH bw or band are zero and hence exiting\n",__func__,__LINE__);
+        return RETURN_ERR;
+    }
+    return RETURN_OK;
+}
+
+int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
+{
+    wifi_hal_info_print("%s:%d SREESH Enter with radioIndex = %u and str = %s\n",__func__,__LINE__,radioIndex,str != NULL ? str : "NULL");
     char excl_chan_string[20];
     snprintf(excl_chan_string,sizeof(excl_chan_string),"wl%u_acs_excl_chans",radioIndex);
     wifi_hal_info_print("%s:%d SREESH Enter and excl_chan_string = %s\n",__func__,__LINE__,excl_chan_string);
-    if(radiomap == NULL)
+    if(str != NULL)
     {
-        wifi_hal_info_print("%s:%d SREESH About to do nvram unset as radiomap is NULL\n",__func__,__LINE__);
+        wifi_hal_info_print("%s:%d SREESH Setting the exclusion list as str is not NULL\n",__func__,__LINE__);
+        set_string_nvram_param(excl_chan_string,str);
+        nvram_commit();
+    }
+    else
+    {
+        wifi_hal_info_print("%s:%d SREESH Do nvram unset of the exclusion list as str is NULL\n",__func__,__LINE__);
         nvram_unset(excl_chan_string);
-        return RETURN_OK;
     }
-    for (size_t i = 0; i < ARRAY_SIZE(wifi_bandwidth_Map); i++) {
-        wifi_channelBandwidth_t bandwidth;
-        const char *str = wifi_bandwidth_Map[i].str_val;
-        wifi_hal_info_print("%s:%d SREESH Testing string: %s\n",__func__,__LINE__,str);
-        int result = wifi_channelBandwidth_from_str(str, &bandwidth);
-        if (result == 0) {
-            wifi_hal_info_print("%s:%d SREESH String %s corresponds to bandwidth: 0x%x\n",__func__,__LINE__,str, bandwidth);
-            wifi_channels_list_per_bandwidth *chans_per_band = hash_map_get(radiomap,str);
-            if(chans_per_band != NULL)
-            {
-                wifi_hal_info_print("%s:%d SREESH Value of num_channels_list = %d\n",__func__,__LINE__,chans_per_band->num_channels_list);
-                for(int i=0;i < chans_per_band->num_channels_list; i++)
-                {
-                    wifi_channels_list_t chanlist = chans_per_band->channels_list[i];
-                    wifi_hal_info_print("%s:%d SREESH %dth channel list and value of chanlist.num_channels = %d\n",__func__,__LINE__,i,chanlist.num_channels);
-                    for(int j=0;j < chanlist.num_channels; j++)
-                    {
-                        wifi_hal_info_print("%s:%d SREESH %d\t",__func__,__LINE__,chanlist.channels_list[j]);
-                    }
-                    wifi_hal_info_print("\n");
-                    bw = convert_channelBandwidth_to_bcmwifibandwidth(bandwidth);
-                    band = convert_radioindex_to_bcmband(radioIndex);
-                    wifi_hal_info_print("%s:%d SREESH Value of BRCM bw 0x%x and BRCM band = 0x%x\n",__func__,__LINE__,bw,band);
-                    if(bw != UINT_MAX && band != UINT_MAX)
-                    {
-                        convert_from_channellist_to_chspeclist(bw,band,chanlist,buff);
-                    }
-                    else
-                    {
-                        wifi_hal_info_print("%s:%d SREESH bw or band are zero and hence exiting\n",__func__,__LINE__);
-                        return RETURN_ERR;
-                    }
-                }
-            }
-            else
-            {
-                wifi_hal_info_print("%s:%d SREESH No hash map entry for bandwidth: 0x%x\n",__func__,__LINE__,bandwidth);
-            }
-        } else {
-            wifi_hal_info_print("%s:%d SREESH Error: String %s not found in bandwidth map\n",__func__,__LINE__,str);
-            return RETURN_ERR;
-        }
-    }
-    wifi_hal_info_print("%s:%d SREESH Successfully setting the nvram param acs_excl_chans for the output string = %s\n",__func__,__LINE__,buff);
-    set_string_nvram_param(excl_chan_string,buff);
-    nvram_commit();
     return RETURN_OK;
 }
 

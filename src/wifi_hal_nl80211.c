@@ -15210,6 +15210,20 @@ int wifi_drv_set_acs_exclusion_list(unsigned int radioIndex, hash_map_t *radio_m
     }
 }
 
+int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t chanlist, char* buff)
+{
+    wifi_hal_info_print("%s:%d SREESH Enter\n",__func__,__LINE__);
+    platform_get_chanspec_list_t platform_get_chanspec_list_fn = get_platform_chanspec_list_fn();
+    if(platform_get_chanspec_list_fn != NULL)
+    {
+        wifi_hal_info_print("%s:%d SREESH Calling the platform function inside wifi_hal_nl80211.c\n",__func__,__LINE__);
+        return platform_get_chanspec_list_fn(radioIndex,bandwidth,chanlist,buff);
+    } else {
+        wifi_hal_info_print("%s:%d SREESH NOT Calling the platform function inside wifi_hal_nl80211.c\n",__func__,__LINE__);
+        return 0;
+    }
+}
+
 int wifi_drv_getApAclDeviceNum(int vap_index, uint *acl_count)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
