@@ -4190,6 +4190,7 @@ void init_interface_map(void)
             l_radio_interface_map[i].radio_name, l_radio_interface_map[i].interface_name);
     }
 }
+#endif /* CONFIG_WIFI_EMULATOR */
 
 void concat_band_to_vap_name(wifi_vap_name_t vap_name, unsigned int rdk_radio_index)
 {
@@ -4255,4 +4256,3 @@ int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
         __LINE__, ifname);
     return -1;
 }
-#endif /* CONFIG_WIFI_EMULATOR */
