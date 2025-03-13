@@ -623,6 +623,15 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
             sprintf(cmd, "acs_cli2 -i wl%d mode 2 &", index);
             system(cmd);
 
+            memset(cmd, 0 ,sizeof(cmd));
+            sprintf(cmd, "wl%d_acs_excl_chans", index);
+            char* buff = nvram_get(cmd);
+            if(buff != NULL && (strcmp(buff,"") != 0))
+            {
+                wifi_hal_info_print("%s:%d SREESH Value of exclusion list = %s\n",__func__,__LINE__,buff);
+                sprintf(cmd, "acs_cli2 -i wl%d set acs_excl_chans %s &", index, buff);
+                system(cmd);
+            }
             /* Run acsd2 autochannel */
             memset(cmd, 0 ,sizeof(cmd));
             sprintf(cmd, "acs_cli2 -i wl%d autochannel &", index);
