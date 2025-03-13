@@ -220,6 +220,7 @@ extern "C" {
 
 #define SSID_MAX_LEN                32
 #define MAX_STEERING_GROUP_NUM      8
+#define ACS_MAX_VECTOR_LEN  (256 * 7) /* Max Possible non operable (Exclude) chanspecs in a radio is 256*/
 
 /* use one sta table for different type lists:
  * ASSOC:     the STA is associated
@@ -1162,7 +1163,7 @@ extern int platform_sync_done(void* priv);
 extern int platform_update_radio_presence(void);
 extern int platform_set_txpower(void* priv, uint txpower);
 extern int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff);
-extern int platform_set_acs_exclusion_list(unsigned int radioIndex, hash_map_t *radiomap);
+extern int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str);
 extern int platform_get_vendor_oui(char* vendor_oui, int vendor_oui_len);
 extern int platform_set_neighbor_report(uint apIndex, uint add, mac_address_t mac);
 extern int platform_get_radio_phytemperature(wifi_radio_index_t index, wifi_radioTemperature_t *radioPhyTemperature);

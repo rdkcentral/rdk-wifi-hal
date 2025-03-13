@@ -71,7 +71,6 @@ static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
 #define BUFFER_LENGTH_WIFIDB 256
 #define BUFLEN_128  128
 #define BUFLEN_256 256
-#define ACS_MAX_VECTOR_LEN  (256 * 7) /* Max Possible non operable (Exclude) chanspecs in a radio is 256*/
 #define WIFI_BLASTER_DEFAULT_PKTSIZE 1470
 
 typedef struct wl_runtime_params {
