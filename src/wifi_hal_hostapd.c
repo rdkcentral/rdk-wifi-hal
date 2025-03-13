@@ -745,13 +745,6 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         }
 
         char output[256] = {0};
-        _syscmd("sh /usr/sbin/deviceinfo.sh -eip", output, sizeof(output));
-
-        //own_ip_addr
-        if (inet_aton(output, &conf->own_ip_addr.u.v4)) {
-            conf->own_ip_addr.af = AF_INET;
-        }
-
         // nas_identifier
         memset(output, '\0', sizeof(output));
         _syscmd("sh /usr/sbin/deviceinfo.sh -emac", output, sizeof(output));
