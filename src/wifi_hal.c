@@ -31,6 +31,7 @@
 #include <netpacket/packet.h>
 #include <net/ethernet.h>
 #include "wifi_hal.h"
+#include "collection.h"
 #include "wifi_hal_priv.h"
 #include <assert.h>
 #include "hostapd/eap_register.h"
@@ -1671,6 +1672,47 @@ INT wifi_hal_getRadioVapInfoMap(wifi_radio_index_t index, wifi_vap_info_map_t *m
     map->num_vaps = itr;
 
     return RETURN_OK;
+}
+
+
+INT wifi_hal_set_acs_keep_out_chans(hash_map_t *radio_map, int radioIndex)
+{
+    char buff[ACS_MAX_VECTOR_LEN + 2];
+    char excl_chan_string[20];
+    memset(buff,0,sizeof(buff));
+    snprintf(excl_chan_string,sizeof(excl_chan_string),"wl%u_acs_excl_chans",radioIndex);
+    if(radio_map == NULL)
+    {
+        return wifi_drv_set_acs_exclusion_list(radioIndex, NULL);
+    }
+    for (size_t i = 0; i < ARRAY_SIZE(wifi_bandwidth_Map); i++) {
+        wifi_channelBandwidth_t bandwidth;
+        const char *str = wifi_bandwidth_Map[i].str_val;
+        int result = wifi_channelBandwidth_from_str(str, &bandwidth);
+        if (result == 0) {
+            wifi_channels_list_per_bandwidth *chans_per_band = hash_map_get(radio_map,str);
+            if(chans_per_band != NULL)
+            {
+                for(int i=0;i < chans_per_band->num_channels_list; i++)
+                {
+                    wifi_channels_list_t chanlist = chans_per_band->channels_list[i];
+                    if(wifi_drv_get_chspc_configs(radioIndex, bandwidth, chanlist, buff) != 0)
+                    {
+                        wifi_hal_error_print("%s:%d Unable to retrieve configs for radioIndex = %u bandwidth = 0x%x\n",__func__,__LINE__,radioIndex, bandwidth);
+                        return RETURN_ERR;
+                    }
+                }
+            }
+        } else {
+            wifi_hal_info_print("%s:%d Error: String %s not found in bandwidth map\n",__func__,__LINE__,str);
+            return RETURN_ERR;
+        }
+    }
+    size_t len = strlen(buff);
+    if(len > 0) {
+        buff[len-1] = '\0';
+    }
+    return wifi_drv_set_acs_exclusion_list(radioIndex, buff);
 }
 
 INT wifi_hal_getScanResults(wifi_radio_index_t index, wifi_channel_t *channel, wifi_bss_info_t **bss, UINT *num_bss)

@@ -226,6 +226,18 @@ int platform_get_channel_bandwidth(wifi_radio_index_t index,  wifi_channelBandwi
     return 0;
 }
 
+int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff)
+{
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    return 0;
+}
+
+int platform_set_acs_exclusion_list(wifi_radio_index_t index,char *buff)
+{
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    return 0;
+}
+
 int platform_update_radio_presence(void)
 {
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
