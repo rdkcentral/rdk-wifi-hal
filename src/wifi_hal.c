@@ -673,6 +673,20 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     RADIO_INDEX_ASSERT(index);
     NULL_PTR_ASSERT(operationParam);
 
+#ifdef CONFIG_WIFI_EMULATOR
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
+        return RETURN_ERR;
+    }
+
+    radio->configured = true;
+    radio->oper_param.enable = true;
+    memcpy((unsigned char *)&radio->oper_param, (unsigned char *)operationParam,
+        sizeof(wifi_radio_operationParam_t));
+
+    return RETURN_OK;
+#endif
     if ((op_class = get_op_class_from_radio_params(operationParam)) == -1) {
         wifi_hal_error_print("%s:%d:Could not find country code for radio index:%d\n", __func__, __LINE__, index);
         return WIFI_HAL_INVALID_ARGUMENTS; // RDKB-47696: Passing invalid channel should return WIFI_HAL_INVALID_ARGUMENTS(-4)
