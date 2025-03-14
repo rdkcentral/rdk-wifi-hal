@@ -1720,6 +1720,26 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     return RETURN_OK;
 }
 
+static int hostapd_for_each_interface_adapter(struct hapd_interfaces *interfaces,
+    int (*cb)(struct hostapd_iface *iface, void *ctx), void *ctx)
+{
+    wifi_radio_info_t *radio;
+    unsigned int i;
+    int ret;
+
+    for (i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = &g_wifi_hal.radio_info[i];
+
+        interfaces = &radio->interfaces;
+        ret = hostapd_for_each_interface(interfaces, cb, ctx);
+        if (ret != 0) {
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
 int update_hostap_interfaces(wifi_radio_info_t *radio)
 {
     struct hapd_interfaces *interfaces;
@@ -1733,7 +1753,7 @@ int update_hostap_interfaces(wifi_radio_info_t *radio)
     }
 
     interfaces = &radio->interfaces;
-    interfaces->for_each_interface = hostapd_for_each_interface;
+    interfaces->for_each_interface = &hostapd_for_each_interface_adapter;
     interfaces->iface = radio->iface;
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
