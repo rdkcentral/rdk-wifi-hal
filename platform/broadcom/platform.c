@@ -477,7 +477,6 @@ static int disable_dfs_auto_channel_change(int radio_index, int disable)
 
 void convert_from_channellist_to_chspeclist(unsigned int bw, unsigned int band,wifi_channels_list_t chanlist, char* output_chanlist)
 {
-    wifi_hal_info_print("%s:%d SREESH Enter with bw = 0x%x band = 0x%x num_channels = %d\n",__func__,__LINE__,bw,band,chanlist.num_channels);
     int channel_list[chanlist.num_channels];
     memcpy(channel_list,chanlist.channels_list,sizeof(channel_list));
     for(int i=0;i<chanlist.num_channels;i++)
@@ -485,25 +484,20 @@ void convert_from_channellist_to_chspeclist(unsigned int bw, unsigned int band,w
         char buff[8];
         chanspec_t chspec = wf_channel2chspec(channel_list[i],bw,band);
         snprintf(buff,sizeof(buff),"0x%x,",chspec);
-        wifi_hal_info_print("%s:%d SREESH Value of input channel in int = %u and as hex buff = %s and as chspec = 0x%x\n",__func__,__LINE__,channel_list[i],buff,chspec);
         strcat(output_chanlist, buff);
     }
-    wifi_hal_info_print("%s:%d SREESH Value of output_chanlist = %s\n",__func__,__LINE__,output_chanlist);
 }
 
 int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t chanlist, char* buff)
 {
-    wifi_hal_info_print("\n");
     unsigned int bw = convert_channelBandwidth_to_bcmwifibandwidth(bandwidth);
     unsigned int band = convert_radioindex_to_bcmband(radioIndex);
-    wifi_hal_info_print("%s:%d SREESH Value of BRCM bw 0x%x and BRCM band = 0x%x\n",__func__,__LINE__,bw,band);
     if(bw != UINT_MAX && band != UINT_MAX)
     {
         convert_from_channellist_to_chspeclist(bw,band,chanlist,buff);
     }
     else
     {
-        wifi_hal_info_print("%s:%d SREESH bw or band are zero and hence exiting\n",__func__,__LINE__);
         return RETURN_ERR;
     }
     return RETURN_OK;
@@ -511,19 +505,15 @@ int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t 
 
 int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
 {
-    wifi_hal_info_print("%s:%d SREESH Enter with radioIndex = %u and str = %s\n",__func__,__LINE__,radioIndex,str != NULL ? str : "NULL");
     char excl_chan_string[20];
     snprintf(excl_chan_string,sizeof(excl_chan_string),"wl%u_acs_excl_chans",radioIndex);
-    wifi_hal_info_print("%s:%d SREESH Enter and excl_chan_string = %s\n",__func__,__LINE__,excl_chan_string);
     if(str != NULL)
     {
-        wifi_hal_info_print("%s:%d SREESH Setting the exclusion list as str is not NULL\n",__func__,__LINE__);
         set_string_nvram_param(excl_chan_string,str);
         nvram_commit();
     }
     else
     {
-        wifi_hal_info_print("%s:%d SREESH Do nvram unset of the exclusion list as str is NULL\n",__func__,__LINE__);
         nvram_unset(excl_chan_string);
     }
     return RETURN_OK;

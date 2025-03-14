@@ -15199,13 +15199,11 @@ int wifi_drv_set_offload_mode(void *priv, enum offload_mode offload_mode)
 
 int wifi_drv_set_acs_exclusion_list(unsigned int radioIndex, char* str)
 {
-    wifi_hal_info_print("%s:%d SREESH Enter\n",__func__,__LINE__);
+    wifi_hal_dbg_print("%s:%d Enter\n",__func__,__LINE__);
     platform_set_acs_exclusion_list_t platform_set_acs_exclusion_list_fn = get_platform_acs_exclusion_list_fn();
     if (platform_set_acs_exclusion_list_fn != NULL){
-        wifi_hal_info_print("%s:%d SREESH Calling the platform function inside wifi_hal_nl80211.c\n",__func__,__LINE__);
        return platform_set_acs_exclusion_list_fn(radioIndex, str);
     } else {
-        wifi_hal_info_print("%s:%d SREESH NOT Calling the platform function inside wifi_hal_nl80211.c\n",__func__,__LINE__);
         return 0;
     }
 }
@@ -15216,10 +15214,8 @@ int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t 
     platform_get_chanspec_list_t platform_get_chanspec_list_fn = get_platform_chanspec_list_fn();
     if(platform_get_chanspec_list_fn != NULL)
     {
-        wifi_hal_info_print("%s:%d SREESH Calling the platform function inside wifi_hal_nl80211.c\n",__func__,__LINE__);
         return platform_get_chanspec_list_fn(radioIndex,bandwidth,chanlist,buff);
     } else {
-        wifi_hal_info_print("%s:%d SREESH NOT Calling the platform function inside wifi_hal_nl80211.c\n",__func__,__LINE__);
         return 0;
     }
 }

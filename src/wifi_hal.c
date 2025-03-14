@@ -1674,54 +1674,37 @@ INT wifi_hal_getRadioVapInfoMap(wifi_radio_index_t index, wifi_vap_info_map_t *m
     return RETURN_OK;
 }
 
-//Wrapper to call platform.c function
+
 INT wifi_hal_set_acs_keep_out_chans(hash_map_t *radio_map, int radioIndex)
 {
-    wifi_hal_info_print("%s:%d SREESH Enter\n",__func__,__LINE__);
     char buff[ACS_MAX_VECTOR_LEN + 2];
     char excl_chan_string[20];
     memset(buff,0,sizeof(buff));
     snprintf(excl_chan_string,sizeof(excl_chan_string),"wl%u_acs_excl_chans",radioIndex);
-    wifi_hal_info_print("%s:%d SREESH Enter and excl_chan_string = %s\n",__func__,__LINE__,excl_chan_string);
     if(radio_map == NULL)
     {
-        wifi_hal_info_print("%s:%d SREESH About to do nvram unset as radiomap is NULL\n",__func__,__LINE__);
         return wifi_drv_set_acs_exclusion_list(radioIndex, NULL);
     }
     for (size_t i = 0; i < ARRAY_SIZE(wifi_bandwidth_Map); i++) {
         wifi_channelBandwidth_t bandwidth;
         const char *str = wifi_bandwidth_Map[i].str_val;
-        wifi_hal_info_print("%s:%d SREESH Testing string: %s\n",__func__,__LINE__,str);
         int result = wifi_channelBandwidth_from_str(str, &bandwidth);
         if (result == 0) {
-            wifi_hal_info_print("%s:%d SREESH String %s corresponds to bandwidth: 0x%x\n",__func__,__LINE__,str, bandwidth);
             wifi_channels_list_per_bandwidth *chans_per_band = hash_map_get(radio_map,str);
             if(chans_per_band != NULL)
             {
-                wifi_hal_info_print("%s:%d SREESH Value of num_channels_list = %d\n",__func__,__LINE__,chans_per_band->num_channels_list);
                 for(int i=0;i < chans_per_band->num_channels_list; i++)
                 {
                     wifi_channels_list_t chanlist = chans_per_band->channels_list[i];
-                    wifi_hal_info_print("%s:%d SREESH %dth channel list and value of chanlist.num_channels = %d\n",__func__,__LINE__,i,chanlist.num_channels);
-                    for(int j=0;j < chanlist.num_channels; j++)
-                    {
-                        wifi_hal_info_print("%s:%d SREESH %d\t",__func__,__LINE__,chanlist.channels_list[j]);
-                    }
                     if(wifi_drv_get_chspc_configs(radioIndex, bandwidth, chanlist, buff) != 0)
                     {
-                        wifi_hal_info_print("%s:%d SREESH Unable to retrieve configs for radioIndex = %u bandwidth = 0x%x\n",__func__,__LINE__,radioIndex, bandwidth);
-                    }
-                    else{
-                        wifi_hal_error_print("%s:%d SREESH Able to retrieve configs\n",__func__,__LINE__);
+                        wifi_hal_error_print("%s:%d Unable to retrieve configs for radioIndex = %u bandwidth = 0x%x\n",__func__,__LINE__,radioIndex, bandwidth);
+                        return RETURN_ERR;
                     }
                 }
             }
-            else
-            {
-                wifi_hal_info_print("%s:%d SREESH No hash map entry for bandwidth: 0x%x\n",__func__,__LINE__,bandwidth);
-            }
         } else {
-            wifi_hal_info_print("%s:%d SREESH Error: String %s not found in bandwidth map\n",__func__,__LINE__,str);
+            wifi_hal_info_print("%s:%d Error: String %s not found in bandwidth map\n",__func__,__LINE__,str);
             return RETURN_ERR;
         }
     }
@@ -1729,7 +1712,6 @@ INT wifi_hal_set_acs_keep_out_chans(hash_map_t *radio_map, int radioIndex)
     if(len > 0) {
         buff[len-1] = '\0';
     }
-    wifi_hal_info_print("%s:%d SREESH Successfully setting the nvram param acs_excl_chans for the output string = %s\n",__func__,__LINE__,buff);
     return wifi_drv_set_acs_exclusion_list(radioIndex, buff);
 }
 
