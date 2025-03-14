@@ -146,7 +146,6 @@ static int get_ccspwifiagent_interface_name_from_vap_index(unsigned int vap_inde
 
 unsigned int convert_channelBandwidth_to_bcmwifibandwidth(wifi_channelBandwidth_t chanWidth)
 {
-    wifi_hal_info_print("%s:%d SREESH Enter with bandwidth 0x%x\n",__func__,__LINE__,chanWidth);
     switch(chanWidth)
     {
         case WIFI_CHANNELBANDWIDTH_20MHZ:
@@ -164,14 +163,13 @@ unsigned int convert_channelBandwidth_to_bcmwifibandwidth(wifi_channelBandwidth_
             return WL_CHANSPEC_BW_320;
 #endif
         default:
-            wifi_hal_info_print("%s:%d SREESH Unable to find matching Broadcom bandwidth for incoming bandwidth = 0x%x\n",__func__,__LINE__,chanWidth);
+            wifi_hal_error_print("%s:%d Unable to find matching Broadcom bandwidth for incoming bandwidth = 0x%x\n",__func__,__LINE__,chanWidth);
     }
     return UINT_MAX;
 }
 
 unsigned int convert_radioindex_to_bcmband(unsigned int radioIndex)
 {
-    wifi_hal_info_print("%s:%d SREESH Enter radioIndex %u\n",__func__,__LINE__,radioIndex);
     switch(radioIndex)
     {
         case 0:
@@ -181,7 +179,7 @@ unsigned int convert_radioindex_to_bcmband(unsigned int radioIndex)
         case 2:
             return WL_CHANSPEC_BAND_6G;
         default:
-            wifi_hal_info_print("%s:%d SREESH There is no matching Broadcom Band for our OneWifi band\n",__func__,__LINE__);
+            wifi_hal_info_print("%s:%d There is no matching Broadcom Band for radioIndex %u\n",__func__,__LINE__,radioIndex);
     }
     return UINT_MAX;
 }
