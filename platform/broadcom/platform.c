@@ -3238,7 +3238,7 @@ int platform_get_radio_caps(wifi_radio_index_t index)
                 (EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_ALL_TO_ALL |
                     EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_ALL_TO_ONE) |
                 ((0 << 4) & EHT_ML_MLD_CAPA_SRS_SUPP) |
-                ((RDK_VENDOR_MAX_NUM_MLD_LINKS - 1) & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK));
+                ((MAX_NUM_MLD_LINKS - 1) & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK));
 #endif /* CONFIG_IEEE80211BE */
 
     for (interface = hash_map_get_first(radio->interface_map); interface != NULL;
@@ -3611,6 +3611,12 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
 {
     (void)msg;
 
+    *msg_mlo = NULL;
+
+/*
+ *  `SERCOMMXER10` does not support the nl mlo vendor commands.
+ */
+#ifndef SCXER10_PORT
     wifi_interface_info_t *interface;
     struct hostapd_bss_config *conf;
     struct hostapd_data *hapd;
@@ -3627,7 +3633,6 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
      * `RDK_VENDOR_NL80211_SUBCMD_SET_MLD` we can't send this message for config -1 (`link_id=-1`).
      */
     if (!params->mld_ap && (u8)hapd->mld_link_id == (u8)-1) {
-        *msg_mlo = NULL;
         wifi_hal_dbg_print("%s:%d skip Non-MLO iface:%s:\n", __func__, __LINE__, conf->iface);
         return 0;
     }
@@ -3657,7 +3662,6 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
     int fd;
     snprintf(fname_buff, sizeof(fname_buff), "/tmp/.mld_%s", conf->iface);
     if ((fd = open(fname_buff, O_WRONLY | O_CREAT | O_EXCL, 0)) == -1) {
-        *msg_mlo = NULL;
         wifi_hal_dbg_print("%s:%d skip double apply for the iface:%s:\n", __func__, __LINE__,
             conf->iface);
         return 0;
@@ -3706,6 +3710,7 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
         return -1;
     }
     nla_nest_end(*msg_mlo, nlattr_vendor);
+#endif /* SCXER10_PORT */
 
     return 0;
 }
@@ -3756,7 +3761,7 @@ static unsigned char platform_get_mld_unit_for_ap(int ap_index)
 static unsigned char platform_get_link_id_for_radio_index(unsigned int radio_index, unsigned int ap_index)
 {
     int mlo_config[4];
-    unsigned char res = -1;
+    unsigned char res = NL80211_DRV_LINK_ID_NA;
 
 #ifndef CONFIG_NO_MLD_ONLY_PRIVATE
     if (!is_wifi_hal_vap_private(ap_index)) {
@@ -3824,7 +3829,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     hapd->mld = NULL;
 
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
-    conf->mld_ap = (!conf->disable_11be && (hapd->mld_link_id < RDK_VENDOR_MAX_NUM_MLD_LINKS));
+    conf->mld_ap = (!conf->disable_11be && (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
 
     if (conf->mld_ap) {
         unsigned char is_mlo_ap;
