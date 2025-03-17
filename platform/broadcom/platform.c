@@ -1,7 +1,9 @@
 #include <stddef.h>
 #include "wifi_hal.h"
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 #include "typedefs.h"
 #include "bcmwifi_channels.h"
+#endif
 #include "wifi_hal_priv.h"
 #if defined(WLDM_21_2)
 #include "wlcsm_lib_api.h"
@@ -144,6 +146,7 @@ static int get_ccspwifiagent_interface_name_from_vap_index(unsigned int vap_inde
 }
 #endif
 
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 unsigned int convert_channelBandwidth_to_bcmwifibandwidth(wifi_channelBandwidth_t chanWidth)
 {
     switch(chanWidth)
@@ -183,6 +186,20 @@ unsigned int convert_radioindex_to_bcmband(unsigned int radioIndex)
     }
     return UINT_MAX;
 }
+
+void convert_from_channellist_to_chspeclist(unsigned int bw, unsigned int band,wifi_channels_list_t chanlist, char* output_chanlist)
+{
+    int channel_list[chanlist.num_channels];
+    memcpy(channel_list,chanlist.channels_list,sizeof(channel_list));
+    for(int i=0;i<chanlist.num_channels;i++)
+    {
+        char buff[8];
+        chanspec_t chspec = wf_channel2chspec(channel_list[i],bw,band);
+        snprintf(buff,sizeof(buff),"0x%x,",chspec);
+        strcat(output_chanlist, buff);
+    }
+}
+#endif
 
 static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map)
 {
@@ -473,21 +490,9 @@ static int disable_dfs_auto_channel_change(int radio_index, int disable)
     return 0;
 }
 
-void convert_from_channellist_to_chspeclist(unsigned int bw, unsigned int band,wifi_channels_list_t chanlist, char* output_chanlist)
-{
-    int channel_list[chanlist.num_channels];
-    memcpy(channel_list,chanlist.channels_list,sizeof(channel_list));
-    for(int i=0;i<chanlist.num_channels;i++)
-    {
-        char buff[8];
-        chanspec_t chspec = wf_channel2chspec(channel_list[i],bw,band);
-        snprintf(buff,sizeof(buff),"0x%x,",chspec);
-        strcat(output_chanlist, buff);
-    }
-}
-
 int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t chanlist, char* buff)
 {
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
     unsigned int bw = convert_channelBandwidth_to_bcmwifibandwidth(bandwidth);
     unsigned int band = convert_radioindex_to_bcmband(radioIndex);
     if(bw != UINT_MAX && band != UINT_MAX)
@@ -498,11 +503,13 @@ int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t 
     {
         return RETURN_ERR;
     }
+#endif
     return RETURN_OK;
 }
 
 int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
 {
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
     char excl_chan_string[20];
     snprintf(excl_chan_string,sizeof(excl_chan_string),"wl%u_acs_excl_chans",radioIndex);
     if(str != NULL)
@@ -514,6 +521,7 @@ int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
     {
         nvram_unset(excl_chan_string);
     }
+#endif
     return RETURN_OK;
 }
 
