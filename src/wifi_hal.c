@@ -31,7 +31,6 @@
 #include <netpacket/packet.h>
 #include <net/ethernet.h>
 #include "wifi_hal.h"
-#include "collection.h"
 #include "wifi_hal_priv.h"
 #include <assert.h>
 #include "hostapd/eap_register.h"
@@ -1674,43 +1673,44 @@ INT wifi_hal_getRadioVapInfoMap(wifi_radio_index_t index, wifi_vap_info_map_t *m
     return RETURN_OK;
 }
 
-
-INT wifi_hal_set_acs_keep_out_chans(hash_map_t *radio_map, int radioIndex)
+INT wifi_hal_set_acs_keep_out_chans(wifi_radio_operationParam_t *wifi_radio_oper_param,
+    int radioIndex)
 {
     char buff[ACS_MAX_VECTOR_LEN + 2];
     char excl_chan_string[20];
-    memset(buff,0,sizeof(buff));
-    snprintf(excl_chan_string,sizeof(excl_chan_string),"wl%u_acs_excl_chans",radioIndex);
-    if(radio_map == NULL)
-    {
+    memset(buff, 0, sizeof(buff));
+    snprintf(excl_chan_string, sizeof(excl_chan_string), "wl%u_acs_excl_chans", radioIndex);
+    if (!wifi_radio_oper_param) {
+        wifi_hal_error_print("%s:%d SREESH Null radio operation parameter\n", __func__, __LINE__);
         return wifi_drv_set_acs_exclusion_list(radioIndex, NULL);
     }
-    for (size_t i = 0; i < ARRAY_SIZE(wifi_bandwidth_Map); i++) {
-        wifi_channelBandwidth_t bandwidth;
-        const char *str = wifi_bandwidth_Map[i].str_val;
-        int result = wifi_channelBandwidth_from_str(str, &bandwidth);
-        if (result == 0) {
-            wifi_channels_list_per_bandwidth *chans_per_band = hash_map_get(radio_map,str);
-            if(chans_per_band != NULL)
-            {
-                for(int i=0;i < chans_per_band->num_channels_list; i++)
-                {
-                    wifi_channels_list_t chanlist = chans_per_band->channels_list[i];
-                    if(wifi_drv_get_chspc_configs(radioIndex, bandwidth, chanlist, buff) != 0)
-                    {
-                        wifi_hal_error_print("%s:%d Unable to retrieve configs for radioIndex = %u bandwidth = 0x%x\n",__func__,__LINE__,radioIndex, bandwidth);
-                        return RETURN_ERR;
-                    }
-                }
+    for (size_t i = 0; i < MAX_NUM_CHANNELBANDWIDTH_SUPPORTED; i++) {
+        wifi_channels_list_per_bandwidth *chans_per_band = 
+            &radio_oper_param->channels_per_bandwidth[i];
+            wifi_hal_info_print("%s:%d SREESH num_channels_list %d for radio %d\n",
+                               __func__, __LINE__, chans_per_band->num_channels_list, radioIndex);
+        if (chans_per_band->num_channels_list == 0) {
+            wifi_hal_info_print("%s:%d SREESH No channels for radio %d and continuing\n",__func__, __LINE__, radioIndex);
+            continue;
+        }
+        wifi_channelBandwidth_t bandwidth = chans_per_band->chanwidth;
+        for (int j = 0; j < chans_per_band->num_channels_list; j++) {
+            wifi_channels_list_t chanlist = chans_per_band->channels_list[j];
+            for(int k = 0; k < chanlist.num_channels; k++) {
+                wifi_hal_info_print("%s:%d SREESH Adding channel %u for radio %d bandwidth 0x%x\n",
+                                   __func__, __LINE__, chanlist.channels[k], radioIndex, bandwidth);
             }
-        } else {
-            wifi_hal_info_print("%s:%d Error: String %s not found in bandwidth map\n",__func__,__LINE__,str);
-            return RETURN_ERR;
+            if (wifi_drv_get_chspc_configs(radioIndex, bandwidth, 
+                                         chanlist, buff) != 0) {
+                wifi_hal_error_print("%s:%d SREESH Failed for radio %u bandwidth 0x%x\n",
+                                   __func__, __LINE__, radioIndex, bandwidth);
+                return RETURN_ERR;
+            }
         }
     }
     size_t len = strlen(buff);
-    if(len > 0) {
-        buff[len-1] = '\0';
+    if (len > 0) {
+        buff[len - 1] = '\0';
     }
     return wifi_drv_set_acs_exclusion_list(radioIndex, buff);
 }
