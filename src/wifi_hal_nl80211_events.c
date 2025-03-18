@@ -344,6 +344,9 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     event.tx_status.data = nla_data(frame);
     event.tx_status.data_len = nla_len(frame);
     event.tx_status.ack = ack != NULL;
+#if HOSTAPD_VERSION >= 211
+    event.tx_status.link_id = NL80211_DRV_LINK_ID_NA;
+#endif /* HOSTAPD_VERSION >= 211 */
 
    if (event.tx_status.type  == WLAN_FC_TYPE_MGMT &&
      (event.tx_status.stype == WLAN_FC_STYPE_AUTH ||
