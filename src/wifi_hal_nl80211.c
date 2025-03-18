@@ -8255,6 +8255,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     security = &vap->u.sta_info.security;
 
 #ifdef CONFIG_WIFI_EMULATOR
+    struct wpa_bss *bss;
     wifi_radio_info_t *radio;
     wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s\n", __func__, __LINE__,
         to_mac_str(backhaul->bssid, bssid_str), backhaul->freq, backhaul->ssid);
@@ -8306,7 +8307,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         (security->mode == wifi_security_mode_wpa3_enterprise)) {
         interface->wpa_s.current_ssid->ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
         if (interface->wpa_s.conf->sae_groups == NULL) {
-            interface->wpa_s.conf->sae_groups = (int *)malloc(MAX_SAE_GROUP);
+            interface->wpa_s.conf->sae_groups =
+                os_malloc(sizeof(*interface->wpa_s.conf->sae_groups) * MAX_SAE_GROUP);
             if (interface->wpa_s.conf->sae_groups == NULL) {
                 wifi_hal_error_print("%s:%d: NULL pointer\n", __func__, __LINE__);
                 free(interface->wpa_s.current_bss);
@@ -8314,7 +8316,11 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                 return -1;
             }
         }
-        memset(interface->wpa_s.conf->sae_groups, 0, MAX_SAE_GROUP);
+
+	interface->wpa_s.conf->sae_groups[0] = 19;
+	interface->wpa_s.conf->sae_groups[1] = 20;
+	interface->wpa_s.conf->sae_groups[2] = 21;
+	interface->wpa_s.conf->sae_groups[3] = -1;
     }
     if (interface->wpa_s.current_ssid->ssid == NULL) {
         interface->wpa_s.current_ssid->ssid = malloc(strlen(backhaul->ssid) + 1);
@@ -8400,10 +8406,28 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     if (interface->ie != NULL) {
         memcpy(curr_bss + 1, interface->ie, interface->ie_len);
     }
+
+    if (radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
+        interface->wpa_s.conf->sae_pwe = 1;
+
+        interface->wpa_s.current_ssid->pt = sae_derive_pt(interface->wpa_s.conf->sae_groups,
+            interface->wpa_s.current_ssid->ssid,
+            interface->wpa_s.current_ssid->ssid_len,
+            interface->wpa_s.current_ssid->sae_password,
+            os_strlen(interface->wpa_s.current_ssid->sae_password),
+            interface->wpa_s.current_ssid->sae_password_id);
+    }
+
     interface->wpa_s.driver = &g_wpa_supplicant_driver_nl80211_ops;
     memcpy(interface->wpa_s.conf->ssid, interface->wpa_s.current_ssid, sizeof(struct wpa_ssid));
     memcpy(interface->wpa_s.bssid, backhaul->bssid, ETH_ALEN);
     dl_list_add(&interface->wpa_s.bss, &interface->wpa_s.current_bss->list);
+
+    bss = wpa_bss_get_bssid_latest(&interface->wpa_s, backhaul->bssid);
+    if (bss) { 
+        memcpy(bss + 1, interface->ie, interface->ie_len);
+    }
+
     sme_send_authentication(&interface->wpa_s, curr_bss, interface->wpa_s.current_ssid, 1);
     return 0;
 #else
