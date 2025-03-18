@@ -1686,7 +1686,7 @@ INT wifi_hal_set_acs_keep_out_chans(wifi_radio_operationParam_t *wifi_radio_oper
     }
     for (size_t i = 0; i < MAX_NUM_CHANNELBANDWIDTH_SUPPORTED; i++) {
         wifi_channels_list_per_bandwidth *chans_per_band = 
-            &radio_oper_param->channels_per_bandwidth[i];
+            &wifi_radio_oper_param->channels_per_bandwidth[i];
             wifi_hal_info_print("%s:%d SREESH num_channels_list %d for radio %d\n",
                                __func__, __LINE__, chans_per_band->num_channels_list, radioIndex);
         if (chans_per_band->num_channels_list == 0) {
@@ -1698,7 +1698,7 @@ INT wifi_hal_set_acs_keep_out_chans(wifi_radio_operationParam_t *wifi_radio_oper
             wifi_channels_list_t chanlist = chans_per_band->channels_list[j];
             for(int k = 0; k < chanlist.num_channels; k++) {
                 wifi_hal_info_print("%s:%d SREESH Adding channel %u for radio %d bandwidth 0x%x\n",
-                                   __func__, __LINE__, chanlist.channels[k], radioIndex, bandwidth);
+                                   __func__, __LINE__, chanlist.channels_list[k], radioIndex, bandwidth);
             }
             if (wifi_drv_get_chspc_configs(radioIndex, bandwidth, 
                                          chanlist, buff) != 0) {
