@@ -716,11 +716,9 @@ void dpp_build_config(wifi_device_dpp_context_t *ctx, char* str)
         if (out)
         {
             printf("%s\n",out);
-
             /*let input string have json */
             strcpy(str, out);
             free(out);
-            out = NULL;
         }
 	
 	return;
