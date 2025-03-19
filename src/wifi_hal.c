@@ -1681,28 +1681,22 @@ INT wifi_hal_set_acs_keep_out_chans(wifi_radio_operationParam_t *wifi_radio_oper
     memset(buff, 0, sizeof(buff));
     snprintf(excl_chan_string, sizeof(excl_chan_string), "wl%u_acs_excl_chans", radioIndex);
     if (!wifi_radio_oper_param) {
-        wifi_hal_error_print("%s:%d SREESH Null radio operation parameter\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d Null radio operation parameter, hence clearing entries\n", __func__, __LINE__);
         return wifi_drv_set_acs_exclusion_list(radioIndex, NULL);
     }
     for (size_t i = 0; i < MAX_NUM_CHANNELBANDWIDTH_SUPPORTED; i++) {
         wifi_channels_list_per_bandwidth *chans_per_band = 
             &wifi_radio_oper_param->channels_per_bandwidth[i];
-            wifi_hal_info_print("%s:%d SREESH num_channels_list %d for radio %d\n",
-                               __func__, __LINE__, chans_per_band->num_channels_list, radioIndex);
         if (chans_per_band->num_channels_list == 0) {
-            wifi_hal_info_print("%s:%d SREESH No channels for radio %d and continuing\n",__func__, __LINE__, radioIndex);
+            wifi_hal_info_print("%s:%d No channels for radio %d and continuing\n",__func__, __LINE__, radioIndex);
             continue;
         }
         wifi_channelBandwidth_t bandwidth = chans_per_band->chanwidth;
         for (int j = 0; j < chans_per_band->num_channels_list; j++) {
             wifi_channels_list_t chanlist = chans_per_band->channels_list[j];
-            for(int k = 0; k < chanlist.num_channels; k++) {
-                wifi_hal_info_print("%s:%d SREESH Adding channel %u for radio %d bandwidth 0x%x\n",
-                                   __func__, __LINE__, chanlist.channels_list[k], radioIndex, bandwidth);
-            }
             if (wifi_drv_get_chspc_configs(radioIndex, bandwidth, 
                                          chanlist, buff) != 0) {
-                wifi_hal_error_print("%s:%d SREESH Failed for radio %u bandwidth 0x%x\n",
+                wifi_hal_error_print("%s:%d Failed for radio %u bandwidth 0x%x\n",
                                    __func__, __LINE__, radioIndex, bandwidth);
                 return RETURN_ERR;
             }

@@ -1281,6 +1281,18 @@ static const wifi_enum_to_str_map_t wifi_variant_Map[] =
 #endif /* CONFIG_IEEE80211BE */
 };
 
+static const wifi_enum_to_str_map_t wifi_bandwidth_Map[] =
+{
+    {WIFI_CHANNELBANDWIDTH_20MHZ,    "20MHz" },
+    {WIFI_CHANNELBANDWIDTH_40MHZ,    "40MHz" },
+    {WIFI_CHANNELBANDWIDTH_80MHZ,    "80MHz" },
+    {WIFI_CHANNELBANDWIDTH_160MHZ,   "160MHz" },
+    {WIFI_CHANNELBANDWIDTH_80_80MHZ, "80+80MHz" },
+#ifdef CONFIG_IEEE80211BE
+    {WIFI_CHANNELBANDWIDTH_320MHZ,   "320MHz" },
+#endif /* CONFIG_IEEE80211BE */
+};
+
 static const wifi_enum_to_str_map_t wifi_bitrate_Map[] =
 {
     {WIFI_BITRATE_DEFAULT, "default" },
