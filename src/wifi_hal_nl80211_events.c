@@ -237,6 +237,10 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
         }
         nl80211_parse_wmm_params(tb[NL80211_ATTR_STA_WME], &event.assoc_info.wmm_params);
     }
+
+    event.assoc_info.beacon_ies = interface->ie;
+    event.assoc_info.beacon_ies_len = interface->ie_len;
+
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC, &event);
     return;
 }
