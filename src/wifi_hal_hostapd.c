@@ -1068,6 +1068,7 @@ int update_hostap_bss(wifi_interface_info_t *interface)
 
 #ifdef CONFIG_IEEE80211BE
     conf->disable_11be = !radio->iconf.ieee80211be;
+    conf->mld_ap = vap->u.bss_info.mld_info.common_info.mld_enable;
 #endif /* CONFIG_IEEE80211BE */
 
     strcpy(conf->iface, interface->name);
