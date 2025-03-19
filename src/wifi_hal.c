@@ -1685,7 +1685,7 @@ INT wifi_hal_set_acs_keep_out_chans(wifi_radio_operationParam_t *wifi_radio_oper
         return wifi_drv_set_acs_exclusion_list(radioIndex, NULL);
     }
     for (size_t i = 0; i < MAX_NUM_CHANNELBANDWIDTH_SUPPORTED; i++) {
-        wifi_channels_list_per_bandwidth *chans_per_band = 
+        wifi_channels_list_per_bandwidth_t *chans_per_band = 
             &wifi_radio_oper_param->channels_per_bandwidth[i];
         if (chans_per_band->num_channels_list == 0) {
             continue;
