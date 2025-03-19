@@ -520,6 +520,7 @@ int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
     else
     {
         nvram_unset(excl_chan_string);
+        nvram_commit();
     }
 #endif
     return RETURN_OK;
