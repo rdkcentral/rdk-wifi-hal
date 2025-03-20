@@ -1691,6 +1691,8 @@ int get_security_mode_int_from_str(char *security_mode_str,char *mfp_str,wifi_se
         *security_mode = wifi_security_mode_wpa3_enterprise;
     } else if (strcmp(security_mode_str, "wpa wpa2") == 0) {
         *security_mode = wifi_security_mode_wpa_wpa2_enterprise;
+    } else if (strstr(security_mode_str, "psk2") && strstr(security_mode_str, "sae") && !strcmp(mfp_str, "0")) {
+        *security_mode = wifi_security_mode_wpa3_compatibility;
     } else {
         wifi_hal_error_print("%s:%d: wifi security mode not found:[%s:%s]\r\n",__func__, __LINE__, security_mode_str,mfp_str);
         return RETURN_ERR;
@@ -1781,6 +1783,10 @@ int get_security_mode_str_from_int(wifi_security_modes_t security_mode, unsigned
         strcpy(security_mode_str, "wpa wpa2");
         break;
 
+    case wifi_security_mode_wpa3_compatibility:
+        strcpy(security_mode_str, "psk2 sae");
+        break;
+
     default:
         wifi_hal_error_print("%s:%d: wifi security mode not found:[%d]\r\n",__func__, __LINE__, security_mode);
         return RETURN_ERR;
@@ -1813,6 +1819,7 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
                 case wifi_security_mode_wpa3_personal:
                 case wifi_security_mode_wpa3_transition:
                 case wifi_security_mode_wpa3_enterprise:
+                case wifi_security_mode_wpa3_compatibility:
                     has_gcmp256 = !interface->u.ap.conf.disable_11be;
                     break;
                 default:
