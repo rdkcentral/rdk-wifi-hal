@@ -788,7 +788,7 @@ INT wifi_hal_getRadioVapInfoMap(wifi_radio_index_t index, wifi_vap_info_map_t *m
 INT wifi_hal_setApWpsButtonPush(INT apIndex);
 INT wifi_hal_setApWpsPin(INT ap_index, char *wps_pin);
 INT wifi_hal_setApWpsCancel(INT ap_index);
-INT wifi_hal_set_acs_exclusion_list(wifi_radio_operationParam_t *wifi_radio_oper_param, int radioIndex);
+INT wifi_hal_set_acs_keep_out_chans(wifi_radio_operationParam_t *wifi_radio_oper_param, int radioIndex);
 INT wifi_hal_sendDataFrame(int vap_id, unsigned char *dmac, unsigned char *data_buff, int data_len, BOOL insert_llc, int protocal, int priority);
 #ifdef WIFI_HAL_VERSION_3_PHASE2
 INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress);
