@@ -1,15 +1,73 @@
 #include <stddef.h>
 #include "wifi_hal.h"
 #include "wifi_hal_priv.h"
-#include "secure_wrapper.h"
 #include "wlcsm_lib_api.h"
 #include "rdkconfig.h"
 #define BUFFER_LENGTH_WIFIDB 256
 #define BUFLEN_128  128
 
+/*
+If include secure_wrapper.h, will need to convert other system calls with v_secure_system calls
+#include <secure_wrapper.h>
+*/
+int v_secure_system(const char *command, ...);
+FILE *v_secure_popen(const char *direction, const char *command, ...);
+int v_secure_pclose(FILE *);
+
+typedef struct wl_runtime_params {
+    char *param_name;
+    char *param_val;
+}wl_runtime_params_t;
+
+static wl_runtime_params_t g_wl_runtime_params[] = {
+    {"he color_collision", "0x7"}
+};
+
+static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map);
+
+
 /* API to get encrypted default psk and ssid. */
 static int get_default_encrypted_password (char* password);
 static int get_default_encrypted_ssid (char* ssid);
+
+static void set_wl_runtime_configs(const wifi_vap_info_map_t *vap_map)
+{
+
+    if (NULL == vap_map) {
+        wifi_hal_error_print("%s:%d: Invalid parameter error!!\n", __func__, __LINE__);
+        return;
+    }
+
+    int wl_elems_index = 0;
+    int radio_index = 0;
+    int vap_index = 0;
+    char sys_cmd[128] = { 0 };
+    char interface_name[8] = { 0 };
+    wifi_vap_info_t *vap = NULL;
+    int no_of_elems = sizeof(g_wl_runtime_params) / sizeof(wl_runtime_params_t);
+
+    /* Traverse through each radios and its vaps, and set configurations for private interfaces. */
+    for (radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+        if (vap_map != NULL) {
+            for (vap_index = 0; vap_index < vap_map->num_vaps; vap_index++) {
+                vap = &vap_map->vap_array[vap_index];
+                if (is_wifi_hal_vap_private(vap->vap_index)) {
+                    memset(interface_name, 0, sizeof(interface_name));
+                    get_interface_name_from_vap_index(vap->vap_index, interface_name);
+                    for (wl_elems_index = 0; wl_elems_index < no_of_elems; wl_elems_index++) {
+                        sprintf(sys_cmd, "wl -i %s %s %s", interface_name,
+                            g_wl_runtime_params[wl_elems_index].param_name,
+                            g_wl_runtime_params[wl_elems_index].param_val);
+                        wifi_hal_info_print("%s:%d: wl sys_cmd = %s \n", __func__, __LINE__,
+                            sys_cmd);
+                        v_secure_system(sys_cmd);
+                    }
+                }
+            }
+            vap_map++;
+        }
+    }
+}
 
 /* Get default encrypted PSK key. */
 static int get_default_encrypted_password (char* password) {
@@ -77,6 +135,8 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
 
     wifi_hal_info_print("%s:%d: start_wifi_apps\n", __func__, __LINE__);
     v_secure_system("wifi_setup.sh start_wifi_apps");
+    //set runtime configs using wl command.
+    set_wl_runtime_configs(vap_map);
 
     return 0;
 }
