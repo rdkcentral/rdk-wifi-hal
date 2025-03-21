@@ -673,6 +673,21 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     RADIO_INDEX_ASSERT(index);
     NULL_PTR_ASSERT(operationParam);
 
+#ifdef CONFIG_WIFI_EMULATOR
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
+        return RETURN_ERR;
+    }
+
+    radio->configured = true;
+    radio->oper_param.enable = true;
+    memcpy((unsigned char *)&radio->oper_param, (unsigned char *)operationParam,
+        sizeof(wifi_radio_operationParam_t));
+
+    return RETURN_OK;
+#endif
+
     if ((op_class = get_op_class_from_radio_params(operationParam)) == -1) {
         wifi_hal_error_print("%s:%d:Could not find country code for radio index:%d\n", __func__, __LINE__, index);
         return WIFI_HAL_INVALID_ARGUMENTS; // RDKB-47696: Passing invalid channel should return WIFI_HAL_INVALID_ARGUMENTS(-4)
@@ -1673,6 +1688,41 @@ INT wifi_hal_getRadioVapInfoMap(wifi_radio_index_t index, wifi_vap_info_map_t *m
     return RETURN_OK;
 }
 
+INT wifi_hal_set_acs_keep_out_chans(wifi_radio_operationParam_t *wifi_radio_oper_param,
+    int radioIndex)
+{
+    char buff[ACS_MAX_VECTOR_LEN + 2];
+    char excl_chan_string[20];
+    memset(buff, 0, sizeof(buff));
+    snprintf(excl_chan_string, sizeof(excl_chan_string), "wl%u_acs_excl_chans", radioIndex);
+    if (!wifi_radio_oper_param) {
+        wifi_hal_error_print("%s:%d Null radio operation parameter, hence clearing entries\n", __func__, __LINE__);
+        return wifi_drv_set_acs_exclusion_list(radioIndex, NULL);
+    }
+    for (size_t i = 0; i < MAX_NUM_CHANNELBANDWIDTH_SUPPORTED; i++) {
+        wifi_channels_list_per_bandwidth_t *chans_per_band = 
+            &wifi_radio_oper_param->channels_per_bandwidth[i];
+        if (chans_per_band->num_channels_list == 0) {
+            continue;
+        }
+        wifi_channelBandwidth_t bandwidth = chans_per_band->chanwidth;
+        for (int j = 0; j < chans_per_band->num_channels_list; j++) {
+            wifi_channels_list_t chanlist = chans_per_band->channels_list[j];
+            if (wifi_drv_get_chspc_configs(radioIndex, bandwidth, 
+                                         chanlist, buff) != 0) {
+                wifi_hal_error_print("%s:%d Failed for radio %u bandwidth 0x%x\n",
+                                   __func__, __LINE__, radioIndex, bandwidth);
+                return RETURN_ERR;
+            }
+        }
+    }
+    size_t len = strlen(buff);
+    if (len > 0) {
+        buff[len - 1] = '\0';
+    }
+    return wifi_drv_set_acs_exclusion_list(radioIndex, buff);
+}
+
 INT wifi_hal_getScanResults(wifi_radio_index_t index, wifi_channel_t *channel, wifi_bss_info_t **bss, UINT *num_bss)
 {
     wifi_radio_info_t *radio;
@@ -1765,22 +1815,6 @@ INT wifi_hal_getScanResults(wifi_radio_index_t index, wifi_channel_t *channel, w
     pthread_mutex_unlock(&interface->scan_info_mutex);
 
     return RETURN_OK;
-}
-
-static int chann_to_freq(unsigned char chan)
-{
-    if (chan >= MIN_CHANNEL_2G && chan <= MAX_CHANNEL_2G) {
-        return 2407 + 5 * chan;
-    }
-
-    if (chan >= MIN_CHANNEL_5G && chan <= MAX_CHANNEL_5G) {
-        return 5000 + 5 * chan;
-    }
-
-    wifi_hal_stats_error_print("%s:%d: Failed to convert channel %u to frequency\n", __func__, __LINE__,
-        chan);
-
-    return 0;
 }
 
 #ifdef WIFI_HAL_VERSION_3_PHASE2
@@ -2221,9 +2255,8 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     get_coutry_str_from_code(radio_param->countryCode, country);
 
     for (i = 0; i < num; i++) {
-        //freq_list[i] = ieee80211_chan_to_freq(country, radio_param->op_class, (scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN)? radio_param->channel:chan_list[i]);
-        freq_list[i] = chann_to_freq((scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN) ?
-            radio_param->channel : chan_list[i]);
+        freq_list[i] = ieee80211_chan_to_freq(country, radio_param->op_class,
+            (scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN)? radio_param->channel:chan_list[i]);
         if (freq_list[i] == 0) {
             return RETURN_ERR;
         }

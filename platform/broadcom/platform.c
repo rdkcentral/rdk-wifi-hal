@@ -1,5 +1,9 @@
 #include <stddef.h>
 #include "wifi_hal.h"
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
+#include "typedefs.h"
+#include "bcmwifi_channels.h"
+#endif
 #include "wifi_hal_priv.h"
 #if defined(WLDM_21_2)
 #include "wlcsm_lib_api.h"
@@ -139,6 +143,61 @@ static int get_ccspwifiagent_interface_name_from_vap_index(unsigned int vap_inde
         return RETURN_ERR;
     }
     return RETURN_OK;
+}
+#endif
+
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
+unsigned int convert_channelBandwidth_to_bcmwifibandwidth(wifi_channelBandwidth_t chanWidth)
+{
+    switch(chanWidth)
+    {
+        case WIFI_CHANNELBANDWIDTH_20MHZ:
+            return WL_CHANSPEC_BW_20;
+        case WIFI_CHANNELBANDWIDTH_40MHZ:
+            return WL_CHANSPEC_BW_40;
+        case WIFI_CHANNELBANDWIDTH_80MHZ:
+            return WL_CHANSPEC_BW_80;
+        case WIFI_CHANNELBANDWIDTH_160MHZ:
+            return WL_CHANSPEC_BW_160;
+        case WIFI_CHANNELBANDWIDTH_80_80MHZ: //Made obselete by Broadcom
+            return WL_CHANSPEC_BW_8080;
+#ifdef CONFIG_IEEE80211BE
+        case WIFI_CHANNELBANDWIDTH_320MHZ:
+            return WL_CHANSPEC_BW_320;
+#endif
+        default:
+            wifi_hal_error_print("%s:%d Unable to find matching Broadcom bandwidth for incoming bandwidth = 0x%x\n",__func__,__LINE__,chanWidth);
+    }
+    return UINT_MAX;
+}
+
+unsigned int convert_radioindex_to_bcmband(unsigned int radioIndex)
+{
+    switch(radioIndex)
+    {
+        case 0:
+            return WL_CHANSPEC_BAND_2G;
+        case 1:
+            return WL_CHANSPEC_BAND_5G;
+        case 2:
+            return WL_CHANSPEC_BAND_6G;
+        default:
+            wifi_hal_info_print("%s:%d There is no matching Broadcom Band for radioIndex %u\n",__func__,__LINE__,radioIndex);
+    }
+    return UINT_MAX;
+}
+
+void convert_from_channellist_to_chspeclist(unsigned int bw, unsigned int band,wifi_channels_list_t chanlist, char* output_chanlist)
+{
+    int channel_list[chanlist.num_channels];
+    memcpy(channel_list,chanlist.channels_list,sizeof(channel_list));
+    for(int i=0;i<chanlist.num_channels;i++)
+    {
+        char buff[8];
+        chanspec_t chspec = wf_channel2chspec(channel_list[i],bw,band);
+        snprintf(buff,sizeof(buff),"0x%x,",chspec);
+        strcat(output_chanlist, buff);
+    }
 }
 #endif
 
@@ -431,6 +490,42 @@ static int disable_dfs_auto_channel_change(int radio_index, int disable)
     return 0;
 }
 
+int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t chanlist, char* buff)
+{
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
+    unsigned int bw = convert_channelBandwidth_to_bcmwifibandwidth(bandwidth);
+    unsigned int band = convert_radioindex_to_bcmband(radioIndex);
+    if(bw != UINT_MAX && band != UINT_MAX)
+    {
+        convert_from_channellist_to_chspeclist(bw,band,chanlist,buff);
+    }
+    else
+    {
+        return RETURN_ERR;
+    }
+#endif
+    return RETURN_OK;
+}
+
+int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
+{
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
+    char excl_chan_string[20];
+    snprintf(excl_chan_string,sizeof(excl_chan_string),"wl%u_acs_excl_chans",radioIndex);
+    if(str != NULL)
+    {
+        set_string_nvram_param(excl_chan_string,str);
+        nvram_commit();
+    }
+    else
+    {
+        nvram_unset(excl_chan_string);
+        nvram_commit();
+    }
+#endif
+    return RETURN_OK;
+}
+
 int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
     if ((index < 0) || (operationParam == NULL)) {
@@ -523,6 +618,17 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
             wifi_hal_dbg_print("%s():%d Enabling autoChannel in radio index %d\n", __FUNCTION__, __LINE__, index);
             sprintf(cmd, "acs_cli2 -i wl%d mode 2 &", index);
             system(cmd);
+
+            memset(cmd, 0 ,sizeof(cmd));
+            sprintf(cmd, "wl%d_acs_excl_chans", index);
+            char chanbuff[ACS_MAX_VECTOR_LEN];
+	        memset(chanbuff,0,sizeof(chanbuff));
+	        char *buff = nvram_get(cmd);
+            if(buff != NULL && (strcmp(buff,"") != 0))
+            {
+                sprintf(chanbuff, "acs_cli2 -i wl%d set acs_excl_chans %s &", index, buff);
+                system(chanbuff);
+            }
 
             /* Run acsd2 autochannel */
             memset(cmd, 0 ,sizeof(cmd));

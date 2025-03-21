@@ -220,6 +220,7 @@ extern "C" {
 
 #define SSID_MAX_LEN                32
 #define MAX_STEERING_GROUP_NUM      8
+#define ACS_MAX_VECTOR_LEN  (256 * 7) /* Max Possible non operable (Exclude) chanspecs in a radio is 256*/
 
 /* use one sta table for different type lists:
  * ASSOC:     the STA is associated
@@ -648,6 +649,8 @@ typedef int    (* platform_update_radio_presence_t)();
 typedef int    (* platform_set_txpower_t)(void* priv, uint txpower);
 typedef int    (* platform_set_offload_mode_t)(void* priv, uint offload_mode);
 typedef int    (* platform_get_ApAclDeviceNum_t)(int vap_index, uint *acl_count);
+typedef int    (* platform_get_chanspec_list_t)(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff);
+typedef int    (* platform_set_acs_exclusion_list_t)(unsigned int radioIndex, char* str);
 typedef int    (* platform_get_vendor_oui_t)(char* vendor_oui, int vendor_oui_len);
 typedef int    (* platform_set_neighbor_report_t)(uint apIndex, uint add, mac_address_t mac);
 typedef int    (* platform_get_radio_phytemperature_t)(wifi_radio_index_t index, wifi_radioTemperature_t *radioPhyTemperature);
@@ -715,6 +718,8 @@ typedef struct {
     platform_set_txpower_t            platform_set_txpower_fn;
     platform_set_offload_mode_t       platform_set_offload_mode_fn;
     platform_get_ApAclDeviceNum_t     platform_get_ApAclDeviceNum_fn;
+    platform_get_chanspec_list_t      platform_get_chanspec_list_fn;
+    platform_set_acs_exclusion_list_t platform_set_acs_exclusion_list_fn;
     platform_get_vendor_oui_t         platform_get_vendor_oui_fn;
     platform_set_neighbor_report_t    platform_set_neighbor_report_fn;
     platform_get_radio_phytemperature_t platform_get_radio_phytemperature_fn;
@@ -783,6 +788,7 @@ INT wifi_hal_getRadioVapInfoMap(wifi_radio_index_t index, wifi_vap_info_map_t *m
 INT wifi_hal_setApWpsButtonPush(INT apIndex);
 INT wifi_hal_setApWpsPin(INT ap_index, char *wps_pin);
 INT wifi_hal_setApWpsCancel(INT ap_index);
+INT wifi_hal_set_acs_keep_out_chans(wifi_radio_operationParam_t *wifi_radio_oper_param, int radioIndex);
 INT wifi_hal_sendDataFrame(int vap_id, unsigned char *dmac, unsigned char *data_buff, int data_len, BOOL insert_llc, int protocal, int priority);
 #ifdef WIFI_HAL_VERSION_3_PHASE2
 INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress);
@@ -839,6 +845,7 @@ int create_ecomode_interfaces(void);
 void update_ecomode_radio_capabilities(wifi_radio_info_t *radio);
 int convert_string_to_int(int **int_list, char *val);
 int print_rate_list(int *list);
+int wifi_channelBandwidth_from_str(const char *str, wifi_channelBandwidth_t *bandwidth);
 int convert_string_mcs_to_int(char *string_mcs);
 int init_nl80211();
 void wifi_hal_nl80211_wps_pbc(unsigned int ap_index);
@@ -1050,6 +1057,8 @@ int nvram_get_mgmt_frame_power_control(int vap_index, int* output_dbm);
 int nl80211_set_regulatory_domain(wifi_countrycode_type_t country_code);
 int platform_get_channel_bandwidth(wifi_radio_index_t index, wifi_channelBandwidth_t *channelWidth);
 int wifi_drv_getApAclDeviceNum(int vap_index, uint *acl_count);
+int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char* buff);
+int wifi_drv_set_acs_exclusion_list(unsigned int radioIndex, char* str);
 int platform_get_acl_num(int vap_index, uint *acl_hal_count);
 int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode);
 
@@ -1143,6 +1152,8 @@ extern int platform_free_aid(void* priv, u16* aid);
 extern int platform_sync_done(void* priv);
 extern int platform_update_radio_presence(void);
 extern int platform_set_txpower(void* priv, uint txpower);
+extern int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff);
+extern int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str);
 extern int platform_get_vendor_oui(char* vendor_oui, int vendor_oui_len);
 extern int platform_set_neighbor_report(uint apIndex, uint add, mac_address_t mac);
 extern int platform_get_radio_phytemperature(wifi_radio_index_t index, wifi_radioTemperature_t *radioPhyTemperature);
@@ -1196,6 +1207,8 @@ platform_sync_done_t                get_platform_sync_done_fn();
 platform_update_radio_presence_t    get_platform_update_radio_presence_fn();
 platform_set_txpower_t              get_platform_set_txpower_fn();
 platform_get_ApAclDeviceNum_t get_platform_ApAclDeviceNum_fn();
+platform_get_chanspec_list_t        get_platform_chanspec_list_fn();
+platform_set_acs_exclusion_list_t   get_platform_acs_exclusion_list_fn();
 platform_get_vendor_oui_t           get_platform_vendor_oui_fn();
 platform_set_neighbor_report_t      get_platform_set_neighbor_report_fn();
 platform_get_radio_phytemperature_t get_platform_get_radio_phytemperature_fn();
