@@ -463,7 +463,7 @@ static int enable_spect_management(int radio_index, int enable)
 
 static int disable_dfs_auto_channel_change(int radio_index, int disable)
 {
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT)
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     char radio_dev[IFNAMSIZ];
 
     snprintf(radio_dev, sizeof(radio_dev), "wl%d", radio_index);
@@ -486,7 +486,7 @@ static int disable_dfs_auto_channel_change(int radio_index, int disable)
             __LINE__, radio_dev, errno, strerror(errno));
         return -1;
     }
-#endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) */
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
     return 0;
 }
 
@@ -1244,7 +1244,7 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     return 0;
 }
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT)
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 
 #define ASSOC_DRIVER_CTRL 0
 #define ASSOC_HOSTAP_STATUS_CTRL 1
@@ -1321,7 +1321,7 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
 
     return RETURN_OK;
 }
-#endif // TCXB7_PORT || TCXB8_PORT
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
 int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 {
@@ -1363,10 +1363,13 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
         set_decimal_nvram_param(param_name, 1);
 
         if (map->vap_array[index].vap_mode == wifi_vap_mode_ap) {
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT)
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+            wifi_hal_info_print("%s:%d: vap_index:%d, hostap_mgt_frame_ctrl:%d\n", __func__,
+                __LINE__, map->vap_array[index].vap_index,
+                map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl);
             platform_set_hostap_ctrl(radio, map->vap_array[index].vap_index,
                 map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl);
-#endif
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
             prepare_param_name(param_name, interface_name, "_akm");
             memset(temp_buff, 0 ,sizeof(temp_buff));
             if (get_security_mode_str_from_int(map->vap_array[index].u.bss_info.security.mode, map->vap_array[index].vap_index, temp_buff) == RETURN_OK) {

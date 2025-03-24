@@ -14601,7 +14601,7 @@ int wifi_drv_commit(void *priv)
     return 0;
 }
 
-#if defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT)
+#if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 //Selects a Non-DFS Channel from the list of available channels
 short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg0_idx, u8 *oper_centr_freq_seg1_idx,
                                               int *secondary_channel)
@@ -14625,7 +14625,7 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
 
     return chan->chan;
 }
-#endif /* defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT) */
+#endif /* defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) */
 
 #if defined(CMXB7_PORT)
 //To set a channel in the primary interface of the radio
@@ -14738,7 +14738,7 @@ int nl80211_interface_reenable(wifi_radio_info_t *radio, int freq)
 }
 #endif /* defined(CMXB7_PORT) */
 
-#if defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT)
+#if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 //To Notify OneWiFi about channel change
 int dfs_chan_change_event(int radio_index, u8 channel, int bw, u8 op_class) {
     wifi_channel_change_event_t radio_channel_param;
@@ -14758,7 +14758,7 @@ int dfs_chan_change_event(int radio_index, u8 channel, int bw, u8 op_class) {
 
     return 0;
 }
-#endif /* defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT) */
+#endif /* defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) */
 
 //To Disable and enable primary interface of the radio
 int reenable_prim_interface(wifi_radio_info_t *radio) {
@@ -15105,7 +15105,7 @@ int nl80211_dfs_nop_finished (wifi_interface_info_t *interface, int freq, int ht
 int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int ht_enabled,
                                int sec_chan_offset, int bandwidth, int bw, int cf1, int cf2)
 {
-#if defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT)
+#if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     wifi_radio_info_t *radio;
     wifi_radio_operationParam_t radio_param;
     u8 oper_centr_freq_seg0_idx = 0;
@@ -15168,7 +15168,7 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
     }
 
     dfs_chan_change_event(interface->vap_info.radio_index, radio->oper_param.channel, radio->oper_param.channelWidth, radio->oper_param.op_class);
-#endif /* defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT) */
+#endif /* defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) */
     return RETURN_OK;
 }
 
