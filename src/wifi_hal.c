@@ -3785,6 +3785,19 @@ INT wifi_vapstatus_callback_register(wifi_vapstatus_callback func) {
     return RETURN_OK;
 }
 
+void wifi_hal_ap_max_client_rejection_callback_register(wifi_apMaxClientRejection_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+
+    if (callbacks == NULL) {
+        return;
+    }
+
+    callbacks->max_cli_rejection_cb = func;
+}
+
 void wifi_hal_apDisassociatedDevice_callback_register(wifi_apDisassociatedDevice_callback func)
 {
     wifi_device_callbacks_t *callbacks;

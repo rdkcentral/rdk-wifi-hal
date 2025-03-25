@@ -394,14 +394,13 @@ typedef struct wifi_interface_info_t {
     mac_address_t   mac;
     unsigned int type;
     unsigned int interface_status;
-    bool    primary;
-    wifi_vap_info_t     vap_info;
-    bool    vap_initialized;
-    bool    bss_started;
-   
-    bool    vap_configured; // important flag, flag = true means that hostap is configured for this and 
-                            // interface is ready to receive 802.11 data frames
-    bool    bridge_configured;
+    bool primary;
+    wifi_vap_info_t vap_info;
+    bool vap_initialized;
+    bool bss_started;
+    bool vap_configured; // important flag, flag = true means that hostap is configured for this and
+                         // interface is ready to receive 802.11 data frames
+    bool bridge_configured;
     struct nl_handle *nl_event;
     int nl_event_fd;
     struct nl_cb *nl_cb;
@@ -711,6 +710,7 @@ void wifi_hal_apDisassociatedDevice_callback_register(wifi_apDisassociatedDevice
 void wifi_hal_radiusEapFailure_callback_register(wifi_radiusEapFailure_callback func);
 void wifi_hal_radiusFallback_failover_callback_register(wifi_radiusFallback_failover_callback func);
 void wifi_hal_apDeAuthEvent_callback_register(wifi_apDeAuthEvent_callback func);
+void wifi_hal_ap_max_client_rejection_callback_register(wifi_apMaxClientRejection_callback func);
 INT wifi_hal_BTMQueryRequest_callback_register(UINT apIndex,
                                             wifi_BTMQueryRequest_callback btmQueryCallback,
                                             wifi_BTMResponse_callback btmResponseCallback);

@@ -73,7 +73,7 @@
 #include <rdk_nl80211_hal.h>
 #endif
 
-
+#define AP_UNABLE_TO_HANDLE_ADDITIONAL_ASSOCIATIONS 17
 #define OVS_MODULE "/sys/module/openvswitch"
 #define ONEWIFI_TESTSUITE_TMPFILE "/tmp/onewifi_testsuite_configured"
 
@@ -9506,6 +9506,8 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
     int res, interface_freq;
     mac_addr_str_t src_mac_str, dst_mac_str;
     char country[8];
+    wifi_device_callbacks_t *callbacks;
+    callbacks = get_hal_device_callbacks();
 
     interface = (wifi_interface_info_t *)priv;
     vap = &interface->vap_info;
@@ -9521,6 +9523,14 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
 
     mgmt = (struct ieee80211_mgmt *) data;
     fc = le_to_host16(mgmt->frame_control);
+
+    if (WLAN_FC_GET_STYPE(fc) == WLAN_FC_STYPE_AUTH &&
+        mgmt->u.auth.status_code == AP_UNABLE_TO_HANDLE_ADDITIONAL_ASSOCIATIONS &&
+        callbacks->max_cli_rejection_cb != NULL) {
+        mac_addr_str_t mac_str;
+        callbacks->max_cli_rejection_cb(interface->vap_info.vap_index,
+            to_mac_str(mgmt->da, mac_str), AP_UNABLE_TO_HANDLE_ADDITIONAL_ASSOCIATIONS);
+    }
 
     if (WLAN_FC_GET_TYPE(fc) == WLAN_FC_TYPE_MGMT) {
         switch (WLAN_FC_GET_STYPE(fc)) {
