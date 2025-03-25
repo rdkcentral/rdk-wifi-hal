@@ -1206,7 +1206,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             memcpy(vap->u.bss_info.bssid, interface->mac, sizeof(vap->u.bss_info.bssid));
         } else {
             wifi_hal_info_print("%s:%d: vap_enable_status:%d\n", __func__, __LINE__, vap->u.sta_info.enabled);
-#ifndef CONFIG_WIFI_EMULATOR
+#if  !defined(CONFIG_WIFI_EMULATOR) && !defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
             memcpy(vap->u.sta_info.mac, interface->mac, sizeof(vap->u.sta_info.mac));
 #else
             mac_addr_str_t sta_mac_str;
@@ -1215,7 +1215,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             memcpy(interface->vap_info.u.sta_info.mac, vap->u.sta_info.mac, sizeof(mac_address_t));
             key = to_mac_str(interface->vap_info.u.sta_info.mac, sta_mac_str);
             wifi_hal_dbg_print("%s:%d: sta mac is : %s\n", __func__, __LINE__, key);
-#endif
+#endif //!defined(CONFIG_WIFI_EMULATOR) || !defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
         }
         memcpy((unsigned char *)&interface->vap_info, (unsigned char *)vap, sizeof(wifi_vap_info_t));
 
@@ -1385,7 +1385,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
 
         } else if (vap->vap_mode == wifi_vap_mode_sta) {
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
             if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
@@ -1413,7 +1413,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     interface->name);
                 nl80211_interface_enable(interface->name, false);
             }
-#endif
+#endif //CONFIG_WIFI_EMULATOR || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
         }
 #if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
         if (set_acl == 1) {
