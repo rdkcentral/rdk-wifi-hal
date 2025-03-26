@@ -1470,7 +1470,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     iface->basic_rates = radio->basic_rates[band];
 
     get_coutry_str_from_code(param->countryCode, country);
-    iface->freq = ieee80211_chan_to_freq(country, param->op_class, param->channel);
+    iface->freq = ieee80211_chan_to_freq(country, param->operatingClass, param->channel);
 
 #if defined(CONFIG_HW_CAPABILITIES)
     iface->current_mode = get_hw_mode(iface);
@@ -1614,9 +1614,9 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 
     hostapd_set_oper_centr_freq_seg0_idx(interface->u.ap.hapd.iconf, seg0);
 
-    global_op_class = (unsigned int) country_to_global_op_class(country, (unsigned char)param->op_class);
+    global_op_class = (unsigned int) country_to_global_op_class(country, (unsigned char)param->operatingClass);
     wifi_hal_info_print("%s:%d:interface name:%s country:%s op class:%d global op class:%d channel:%d frequency:%d center_freq1:%d\n", __func__, __LINE__, 
-        interface->name, country, param->op_class, global_op_class, param->channel, iface->freq, cf1);
+        interface->name, country, param->operatingClass, global_op_class, param->channel, iface->freq, cf1);
     if (interface->u.ap.iface_initialized == false) {
         dl_list_init(&iface->sta_seen);
         interface->u.ap.iface_initialized = true;
@@ -1982,7 +1982,7 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     iconf->acs = param->autoChannelEnabled;
     iconf->channel = param->channel;
 #if HOSTAPD_VERSION >= 210
-    iconf->op_class = param->op_class;
+    iconf->op_class = param->operatingClass;
 #endif
 
     get_coutry_str_from_oper_params(param, iconf->country);

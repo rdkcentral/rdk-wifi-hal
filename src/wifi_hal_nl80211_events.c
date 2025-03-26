@@ -912,7 +912,7 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     if (wifi_chan_event_type == WIFI_EVENT_CHANNELS_CHANGED) {
         radio_param->channel = channel;
         radio_param->channelWidth = l_channel_width;
-        radio_param->op_class = op_class;
+        radio_param->operatingClass = op_class;
 
         ch_switch_update_hostap_config(radio, channel, op_class, freq, cf1, cf2,
             hostap_channel_width, l_channel_width);

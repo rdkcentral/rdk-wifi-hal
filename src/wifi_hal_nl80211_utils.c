@@ -2234,7 +2234,7 @@ int get_bw80_center_freq(wifi_radio_operationParam_t *param, const char *country
 
     for (i = 0; i < num_channels; i++) {
         if (param->channel <= (channels[i]+6)) {
-            freq = ieee80211_chan_to_freq(country, param->op_class, channels[i]);
+            freq = ieee80211_chan_to_freq(country, param->operatingClass, channels[i]);
             break;
         }
     }
@@ -2263,7 +2263,7 @@ int get_bw160_center_freq(wifi_radio_operationParam_t *param, const char *countr
 
     for (i = 0; i < num_channels; i++) {
         if (param->channel <= (channels[i]+14)) {
-            freq = ieee80211_chan_to_freq(country, param->op_class, channels[i]);
+            freq = ieee80211_chan_to_freq(country, param->operatingClass, channels[i]);
             break;
         }
     }
@@ -2288,7 +2288,7 @@ int get_bw320_center_freq(wifi_radio_operationParam_t *param, const char *countr
 
     for (i = 0; i < num_channels; i++) {
         if (param->channel <= (channels[i] + next_channel_start)) {
-            freq = ieee80211_chan_to_freq(country, param->op_class, channels[i]);
+            freq = ieee80211_chan_to_freq(country, param->operatingClass, channels[i]);
             break;
         }
     }
