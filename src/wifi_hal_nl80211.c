@@ -6824,9 +6824,9 @@ static int nl80211_fill_chandef(struct nl_msg *msg, wifi_radio_info_t *radio, wi
     param = &radio->oper_param;
 
     get_coutry_str_from_code(param->countryCode, country);
-    freq = ieee80211_chan_to_freq(country, param->op_class, param->channel);
+    freq = ieee80211_chan_to_freq(country, param->operatingClass, param->channel);
     freq1 = freq;
-    wifi_hal_dbg_print("%s:%d: index= %d Country = %s, country code = %d, channel = :%d op_class = %d \n", __func__, __LINE__, radio->index, country, param->countryCode, param->channel, param->op_class);
+    wifi_hal_dbg_print("%s:%d: index= %d Country = %s, country code = %d, channel = :%d op_class = %d \n", __func__, __LINE__, radio->index, country, param->countryCode, param->channel, param->operatingClass);
     switch (param->channelWidth) {
         case WIFI_CHANNELBANDWIDTH_20MHZ:
             width = NL80211_CHAN_WIDTH_20;
@@ -6891,7 +6891,7 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
 
     param = &radio->oper_param;
     get_coutry_str_from_code(param->countryCode, country);
-    freq = ieee80211_chan_to_freq(country, param->op_class, param->channel);
+    freq = ieee80211_chan_to_freq(country, param->operatingClass, param->channel);
     freq1 = freq;
     sec_chan_offset = get_sec_channel_offset(radio, freq);
 
@@ -6949,7 +6949,7 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
     os_memset(&csa_settings.freq_params, 0, sizeof(struct hostapd_freq_params));
 
     csa_settings.freq_params.mode = radio->iconf.hw_mode;
-    csa_settings.freq_params.freq = ieee80211_chan_to_freq(country, param->op_class, param->channel);
+    csa_settings.freq_params.freq = ieee80211_chan_to_freq(country, param->operatingClass, param->channel);
     csa_settings.freq_params.channel = param->channel;
     csa_settings.freq_params.ht_enabled = radio->iconf.ieee80211n;
     csa_settings.freq_params.vht_enabled = radio->iconf.ieee80211ac;
@@ -10686,7 +10686,7 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
 
     get_coutry_str_from_code(radio_param->countryCode, country);
 
-    interface_freq = ieee80211_chan_to_freq(country, radio_param->op_class,
+    interface_freq = ieee80211_chan_to_freq(country, radio_param->operatingClass,
           radio_param->channel);
 
 
@@ -10962,7 +10962,7 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
 
     get_coutry_str_from_code(radio_param->countryCode, country);
 
-    freq = ieee80211_chan_to_freq(country, radio_param->op_class, radio_param->channel);
+    freq = ieee80211_chan_to_freq(country, radio_param->operatingClass, radio_param->channel);
 
     if (ieee80211_freq_to_chan(freq, &channel) ==
           HOSTAPD_MODE_IEEE80211AD) {
@@ -14809,7 +14809,7 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
 
     param = &radio->oper_param;
     get_coutry_str_from_code(radio->oper_param.countryCode, country);
-    freq = ieee80211_chan_to_freq(country, radio->oper_param.op_class, radio->oper_param.channel);
+    freq = ieee80211_chan_to_freq(country, radio->oper_param.operatingClass, radio->oper_param.channel);
     freq1 = freq;
     sec_chan_offset = get_sec_channel_offset(radio, freq);
 
@@ -14866,7 +14866,7 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     wifi_hal_info_print("%s:%d iface_freq:%d freq:%d freq1:%d chan:%u seg0:%u sec_chan_offset:%d opclass:%u \n",__FUNCTION__, __LINE__, interface->u.ap.iface.freq, freq, freq1,
-                         radio->oper_param.channel, seg0, sec_chan_offset, radio->oper_param.op_class);
+                         radio->oper_param.channel, seg0, sec_chan_offset, radio->oper_param.operatingClass);
 
     update_hostap_iface(interface);
 
@@ -14902,7 +14902,7 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
 
     if(res == 0) {
         wifi_hal_info_print("nl80211-%s:%d hostapd_handle_dfs success \n", __func__, __LINE__);
-        dfs_chan_change_event(interface->vap_info.radio_index, radio->oper_param.channel, radio->oper_param.channelWidth, radio->oper_param.op_class);
+        dfs_chan_change_event(interface->vap_info.radio_index, radio->oper_param.channel, radio->oper_param.channelWidth, radio->oper_param.operatingClass);
         nl80211_dfs_cac_started(interface, freq, radio->iconf.ieee80211n, sec_chan_offset, radio->oper_param.channelWidth,
                                 hostapd_get_oper_chwidth(interface->u.ap.hapd.iconf), freq1, 0);
         return RETURN_OK;
@@ -14933,7 +14933,7 @@ int set_freq_and_interface_enable(wifi_interface_info_t *interface, wifi_radio_i
     char country[8];
 
     get_coutry_str_from_code(radio->oper_param.countryCode, country);
-    freq = ieee80211_chan_to_freq(country, radio->oper_param.op_class, radio->oper_param.channel);
+    freq = ieee80211_chan_to_freq(country, radio->oper_param.operatingClass, radio->oper_param.channel);
     sec_chan_offset = get_sec_channel_offset(radio, freq);
 
     ht_enabled = radio->iconf.ieee80211n;
@@ -14954,7 +14954,7 @@ int set_freq_and_interface_enable(wifi_interface_info_t *interface, wifi_radio_i
         return RETURN_ERR;
     }
 
-    dfs_chan_change_event(interface->vap_info.radio_index, radio->oper_param.channel, radio->oper_param.channelWidth, radio->oper_param.op_class);
+    dfs_chan_change_event(interface->vap_info.radio_index, radio->oper_param.channel, radio->oper_param.channelWidth, radio->oper_param.operatingClass);
 #endif
     return RETURN_OK;
 }
@@ -14986,7 +14986,7 @@ int nl80211_dfs_cac_started(wifi_interface_info_t *interface, int freq, int ht_e
        radio_channel_param.sub_event = WIFI_EVENT_RADAR_CAC_STARTED;
        radio_channel_param.channel = radio->oper_param.channel;
        radio_channel_param.channelWidth = radio->oper_param.channelWidth;
-       radio_channel_param.op_class = radio->oper_param.op_class;
+       radio_channel_param.op_class = radio->oper_param.operatingClass;
        callbacks->channel_change_event_callback(radio_channel_param);
     }
 
@@ -15177,7 +15177,7 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
         wifi_hal_error_print("%s:%d update_channel_flags failed \n", __func__, __LINE__);
     }
 
-    dfs_chan_change_event(interface->vap_info.radio_index, radio->oper_param.channel, radio->oper_param.channelWidth, radio->oper_param.op_class);
+    dfs_chan_change_event(interface->vap_info.radio_index, radio->oper_param.channel, radio->oper_param.channelWidth, radio->oper_param.operatingClass);
 #endif /* defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT) */
     return RETURN_OK;
 }
@@ -15458,7 +15458,7 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
 
         tbtt_count_pos = eid++;
         *eid++ = RNR_TBTT_INFO_LEN;
-        *eid++ = radio->oper_param.op_class;
+        *eid++ = radio->oper_param.operatingClass;
         *eid++ = radio->oper_param.channel;
         len += RNR_TBTT_HEADER_LEN;
 
