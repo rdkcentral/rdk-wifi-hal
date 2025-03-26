@@ -1626,7 +1626,7 @@ int platform_flags_init(int *flags)
 
 int platform_get_aid(void* priv, u16* aid, const u8* addr)
 {
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined (XB10_PORT)
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) || defined(XB10_PORT)
     int ret;
     sta_info_t sta_info;
     wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
@@ -1642,7 +1642,7 @@ int platform_get_aid(void* priv, u16* aid, const u8* addr)
     *aid = sta_info.aid;
 
     wifi_hal_dbg_print("%s:%d sta aid %d\n", __func__, __LINE__, *aid);
-#endif // TCXB7_PORT || TCXB8_PORT
+#endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) || defined(XB10_PORT)
     return 0;
 }
 
