@@ -28,7 +28,7 @@
 #include <unistd.h>
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT 
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT)
 #undef ENABLE
 #undef BW_20MHZ
 #undef BW_40MHZ
@@ -1364,7 +1364,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 
         if (map->vap_array[index].vap_mode == wifi_vap_mode_ap) {
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
-            wifi_hal_info_print("%s:%d: vap_index:%d, hostap_mgt_frame_ctrl:%d\n", __func__,
+            wifi_hal_dbg_print("%s:%d: vap_index:%d, hostap_mgt_frame_ctrl:%d\n", __func__,
                 __LINE__, map->vap_array[index].vap_index,
                 map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl);
             platform_set_hostap_ctrl(radio, map->vap_array[index].vap_index,
