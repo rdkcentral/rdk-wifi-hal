@@ -2117,11 +2117,9 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
         iconf->vht_capab |= VHT_CAP_SUPP_CHAN_WIDTH_160MHZ;
     }
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT)
 #if HOSTAPD_VERSION >= 210
     iconf->mbssid = param->band == WIFI_FREQUENCY_6_BAND ? MBSSID_ENABLED : MBSSID_DISABLED;
 #endif /* HOSTAPD_VERSION >= 210 */
-#endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) */
 
     //validate_config_params
     if (hostapd_config_check(iconf, 1) < 0) {
