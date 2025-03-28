@@ -1127,7 +1127,7 @@ static int get_control_side_band(wifi_radio_index_t index, wifi_radio_operationP
     radio = get_radio_by_rdk_index(index);
     get_coutry_str_from_code(operationParam->countryCode, country);
 
-    freq = ieee80211_chan_to_freq(country, operationParam->op_class, operationParam->channel);
+    freq = ieee80211_chan_to_freq(country, operationParam->operatingClass, operationParam->channel);
     sec_chan_offset = get_sec_channel_offset(radio, freq);
 
     return sec_chan_offset;

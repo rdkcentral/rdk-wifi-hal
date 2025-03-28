@@ -784,3 +784,15 @@ INT wifi_getApManagementFramePowerControl(INT apIndex, INT *output_dBm)
 {
     return 0;
 }
+
+UINT wifi_freq_to_op_class(UINT freq)
+{
+    u8 op_class, channel;
+
+    if (ieee80211_freq_to_channel_ext(freq, 0, 0, &op_class, &channel) == NUM_HOSTAPD_MODES){
+        wifi_hal_error_print("%s:%d Failed to get op class for freq : %d\n", __func__, __LINE__, freq);
+        return RETURN_ERR;
+    }
+
+    return op_class;
+}
