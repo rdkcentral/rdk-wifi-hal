@@ -1256,6 +1256,9 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
     char buf[128] = {0};
     char interface_name[8] = {0};
     struct maclist *maclist = (struct maclist *)buf;
+#if defined(XB10_PORT) || defined(SCXER10_PORT)
+    int mbssid_num_frames = 1;
+#endif // defined(XB10_PORT) || defined(SCXER10_PORT)
 
     if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
         wifi_hal_error_print("%s:%d failed to get interface name for vap index: %d, err: %d (%s)\n",
@@ -1318,6 +1321,16 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
             __func__, __LINE__, assoc_ctrl, interface_name, errno, strerror(errno));
         return RETURN_ERR;
     }
+
+#if defined(XB10_PORT) || defined(SCXER10_PORT)
+    // supported by driver version 23.2.1
+    if (wl_iovar_set(interface_name, "mbssid_num_frames", &mbssid_num_frames,
+            sizeof(mbssid_num_frames)) < 0) {
+       wifi_hal_error_print("%s:%d failed to set mbssid_num_frames %d for %s, err: %d (%s)\n",
+            __func__, __LINE__, mbssid_num_frames, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+#endif // defined(XB10_PORT) || defined(SCXER10_PORT)
 
     if (wl_ioctl(interface_name, WLC_UP, NULL, 0) < 0) {
          wifi_hal_error_print("%s:%d failed to set interface up for %s, err: %d (%s)\n", __func__,
@@ -1627,7 +1640,7 @@ int platform_flags_init(int *flags)
 
 int platform_get_aid(void* priv, u16* aid, const u8* addr)
 {
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined (XB10_PORT)
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) || defined(XB10_PORT)
     int ret;
     sta_info_t sta_info;
     wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
@@ -1643,7 +1656,7 @@ int platform_get_aid(void* priv, u16* aid, const u8* addr)
     *aid = sta_info.aid;
 
     wifi_hal_dbg_print("%s:%d sta aid %d\n", __func__, __LINE__, *aid);
-#endif // TCXB7_PORT || TCXB8_PORT
+#endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) || defined(XB10_PORT)
     return 0;
 }
 

@@ -12086,6 +12086,8 @@ int process_bss_frame(struct nl_msg *msg, void *arg)
 }
 #endif
 
+// MBSSID config disabled due to kernel error. Not required by drivers yet.
+#if 0
 static int nl80211_mbssid(struct nl_msg *msg, struct wpa_driver_ap_params *params)
 {
 #if HOSTAPD_VERSION >= 210
@@ -12144,6 +12146,7 @@ static int nl80211_mbssid(struct nl_msg *msg, struct wpa_driver_ap_params *param
 
     return 0;
 }
+#endif
 
 int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
 {
@@ -12340,9 +12343,11 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
 #endif /* CONFIG_SAE */
 #endif /* HOSTAPD_VERSION */
 
+#if 0
     if (nl80211_mbssid(msg, params) < 0) {
         return -1;
     }
+#endif
 
 #ifdef CONFIG_IEEE80211BE
     ret = nl80211_drv_mlo_msg(msg, &msg_mlo, interface, params);
