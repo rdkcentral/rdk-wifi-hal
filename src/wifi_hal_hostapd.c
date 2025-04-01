@@ -1345,6 +1345,11 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 #ifdef CONFIG_IEEE80211AX
     struct he_capabilities *drv_he_cap;
 #endif
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    struct eht_capabilities *drv_eht_cap;
+#endif // HOSTAPD_VERSION >= 211
+#endif // CONFIG_IEEE80211BE
 
     if (interface == NULL) {
         return RETURN_ERR;
@@ -1650,6 +1655,18 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     }
 #endif
 #endif
+
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    drv_eht_cap = &iface->current_mode->eht_capab[IEEE80211_MODE_AP];
+    iface->conf->eht_phy_capab.su_beamformer = !!(
+        drv_eht_cap->phy_cap[EHT_PHYCAP_SU_BEAMFORMER_IDX] & EHT_PHYCAP_SU_BEAMFORMER);
+    iface->conf->eht_phy_capab.su_beamformee = !!(
+        drv_eht_cap->phy_cap[EHT_PHYCAP_SU_BEAMFORMEE_IDX] & EHT_PHYCAP_SU_BEAMFORMEE);
+    iface->conf->eht_phy_capab.mu_beamformer = !!(
+        drv_eht_cap->phy_cap[EHT_PHYCAP_MU_BEAMFORMER_IDX] & EHT_PHYCAP_MU_BEAMFORMER_MASK);
+#endif // HOSTAPD_VERSION >= 211
+#endif // CONFIG_IEEE80211BE
 
     if(preassoc_supp_rates) {
       os_free(preassoc_supp_rates);
