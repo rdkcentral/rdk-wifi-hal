@@ -711,10 +711,15 @@ INT wifi_getApInterworkingServiceEnable(INT apIndex, BOOL *output_bool)
     return 0;
 }
 
+INT wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
+{
+    int res = wifi_hal_send_mgmt_frame(apIndex, MacAddr, frame, len, frequency, wait);
+    return (res == 0) ? WIFI_HAL_SUCCESS : WIFI_HAL_ERROR;
+}
+
 INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCHAR *frame, UINT len)
 {
-    wifi_hal_send_mgmt_frame(apIndex, MacAddr, frame, len, frequency);
-    return RETURN_OK;
+    return wifi_sendActionFrameExt(apIndex, MacAddr, frequency, 0, frame, len);
 }
 
 INT wifi_setDownStreamGroupAddress(INT apIndex, BOOL disabled)

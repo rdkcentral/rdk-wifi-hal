@@ -9785,7 +9785,7 @@ int nl80211_update_beacon_params(wifi_interface_info_t *interface)
 }
 
 static int nl80211_send_frame_cmd(wifi_interface_info_t *interface,
-                                  unsigned int freq,
+                                  unsigned int freq, unsigned int wait,
                                   const u8 *buf, size_t buf_len,
                                   int save_cookie, int no_ack,
                                   const u16 *csa_offs,
@@ -9800,6 +9800,8 @@ static int nl80211_send_frame_cmd(wifi_interface_info_t *interface,
 
     if (!(msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_FRAME)) ||
         (freq && nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ, freq)) ||
+	    (wait && nla_put_u32(msg, NL80211_ATTR_DURATION, wait)) ||
+	    ((freq != 0) && nla_put_flag(msg, NL80211_ATTR_OFFCHANNEL_TX_OK)) ||
         (no_ack && nla_put_flag(msg, NL80211_ATTR_DONT_WAIT_FOR_ACK)) ||
         (csa_offs && nla_put(msg, NL80211_ATTR_CSA_C_OFFSETS_TX,
                              csa_offs_len * sizeof(u16), csa_offs)) ||
@@ -10579,7 +10581,7 @@ int wifi_drv_send_action(void *priv,
         // *csa_offs = <csa offset data>
     }
 
-    ret = nl80211_send_frame_cmd(interface, freq, buf, 24 + data_len,
+    ret = nl80211_send_frame_cmd(interface, freq, wait_time, buf, 24 + data_len,
             use_cookie, no_ack, csa_offs, csa_offs_len);
 
     free(csa_offs);
@@ -10760,7 +10762,7 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
 send_frame_cmd:
 
     //wifi_hal_dbg_print("nl80211: send_mlme -> send_frame_cmd\n");
-    res = nl80211_send_frame_cmd(interface, freq, data, data_len,
+    res = nl80211_send_frame_cmd(interface, freq, wait, data, data_len,
               use_cookie, noack, csa_offs, csa_offs_len);
 
     return res;
