@@ -1706,6 +1706,29 @@ int platform_update_radio_presence(void)
 
 int platform_get_acl_num(int vap_index, uint *acl_count)
 {
+    char interface_name[8];
+    char cmd[32] = {0};
+    char buf[3] = {0};
+    FILE *fp = NULL;
+    int acl_num_entries = 0;
+    get_interface_name_from_vap_index(vap_index, interface_name);
+    wifi_hal_error_print("%s:%d SREESH Value of interface name = %s\n",__func__,__LINE__,interface_name);
+    snprintf(cmd, sizeof(cmd), "wl -i %s mac|wc -l", interface_name);
+    if ((fp = popen(cmd, "r")) != NULL)
+       {
+           if (fgets(buf, sizeof(buf), fp) != NULL)
+           {
+	      acl_num_entries = atoi(buf);
+	      wifi_hal_info_print("%s:%d Number of ACL entries = %d\n",__func__,__LINE__,acl_num_entries);
+	   }
+	   else
+	   {
+              wifi_hal_info_print("%s:%d fgets has returned NULL\n",__func__,__LINE__);
+	      pclose(pipe);
+              return EXIT_FAILURE;
+	   }
+           pclose(pipe);
+       }
     return 0;
 }
 
