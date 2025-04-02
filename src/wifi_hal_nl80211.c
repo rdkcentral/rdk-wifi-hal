@@ -13955,6 +13955,29 @@ int wifi_drv_set_offload_mode(void *priv, enum offload_mode offload_mode)
 #endif
 }
 
+int wifi_drv_set_acs_exclusion_list(unsigned int radioIndex, char* str)
+{
+    wifi_hal_dbg_print("%s:%d Enter\n",__func__,__LINE__);
+    platform_set_acs_exclusion_list_t platform_set_acs_exclusion_list_fn = get_platform_acs_exclusion_list_fn();
+    if (platform_set_acs_exclusion_list_fn != NULL){
+       return platform_set_acs_exclusion_list_fn(radioIndex, str);
+    } else {
+        return 0;
+    }
+}
+
+int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t chanlist, char* buff)
+{
+    wifi_hal_dbg_print("%s:%d Enter\n",__func__,__LINE__);
+    platform_get_chanspec_list_t platform_get_chanspec_list_fn = get_platform_chanspec_list_fn();
+    if(platform_get_chanspec_list_fn != NULL)
+    {
+        return platform_get_chanspec_list_fn(radioIndex,bandwidth,chanlist,buff);
+    } else {
+        return 0;
+    }
+}
+
 int wifi_drv_getApAclDeviceNum(int vap_index, uint *acl_count)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
