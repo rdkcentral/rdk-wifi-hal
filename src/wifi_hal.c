@@ -135,18 +135,24 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 #if !defined(_PLATFORM_RASPBERRYPI_)
     /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
+#if defined (_PLATFORM_BANANAPI_R4_)
+    _syscmd("cat /etc/machine-id", output, sizeof(output));
+#else
     _syscmd("grep -a 'Serial' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
-    len = strnlen(output, sizeof(output));
-    if (len != 0 && output[len - 1] == '\n') {
-        output[len - 1] = '\0';
+#endif
+    if (output[strlen(output) - 1] == '\n') {
+        output[strlen(output) - 1] = '\0';
     }
     strcpy(hal->wifi_prop.serialNo,output);
 
     memset(output, '\0', sizeof(output));
+#if defined (_PLATFORM_BANANAPI_R4_)
+    _syscmd("cat /proc/device-tree/model | tr -d ' '", output, sizeof(output));
+#else
     _syscmd("grep -a 'MODEL' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
-    len = strnlen(output, sizeof(output));
-    if (len != 0 && output[len - 1] == '\n') {
-        output[len - 1] = '\0';
+#endif 
+    if (output[strlen(output) - 1] == '\n') {
+        output[strlen(output) - 1] = '\0';
     }
     strcpy(hal->wifi_prop.manufacturerModel,output);
     strcpy(hal->wifi_prop.manufacturer,output);
@@ -161,18 +167,24 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
     // CM mac
     memset(output, '\0', sizeof(output));
+#if defined (_PLATFORM_BANANAPI_R4_)
+    _syscmd("ifconfig erouter0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+#else
     _syscmd("grep -a 'CM' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
-    len = strnlen(output, sizeof(output));
-    if (len != 0 && output[len - 1] == '\n') {
-        output[len - 1] = '\0';
+#endif
+    if (output[strlen(output) - 1] == '\n') {
+        output[strlen(output) - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.cm_mac);
 
     memset(output, '\0', sizeof(output));
+#if defined (_PLATFORM_BANANAPI_R4_)
+    _syscmd("ifconfig erouter0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+#else
     _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    len = strnlen(output, sizeof(output));
-    if (len != 0 && output[len - 1] == '\n') {
-        output[len - 1] = '\0';
+#endif
+    if (output[strlen(output) - 1] == '\n') { 
+        output[strlen(output) - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.al_1905_mac);
     wifi_hal_error_print("serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s eth0=%s Line=%d\n",hal->wifi_prop.serialNo,hal->wifi_prop.manufacturerModel,hal->wifi_prop.software_version,hal->wifi_prop.manufacturer,output,__LINE__);
