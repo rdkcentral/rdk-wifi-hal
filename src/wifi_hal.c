@@ -2575,6 +2575,9 @@ static int decode_bss_info_to_neighbor_ap_info(wifi_neighbor_ap2_t *ap, const wi
     // - ap_SignalStrength
     ap->ap_SignalStrength = bss->rssi;
 
+    // -ap_freq
+    ap->ap_freq = bss->freq;
+
     // - ap_SecurityModeEnabled
     switch (bss->sec_mode) {
         case wifi_security_mode_none:
@@ -3044,6 +3047,45 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
             wifi_freq_to_channel(interface->scan_filter.values[i], &chan);
             wifi_hal_stats_dbg_print("%s:%d: [SCAN] freq[%u]: %u (channel %u)\n", __func__, __LINE__, i,
                 interface->scan_filter.values[i], chan);
+        }
+        break;
+    }
+
+    case WIFI_RADIO_SCAN_MODE_SELECT_CHANNELS: {
+
+        if (!chan_num || !chan_list) {
+            wifi_hal_error_print("%s:%d: [SCAN] Needs chan_num and chan_list param\n", __func__,
+                __LINE__);
+            return WIFI_HAL_INVALID_ARGUMENTS;
+        }
+
+        // - allocate space for freq list
+        if (RETURN_OK != set_freqs_filter(interface, chan_num, NULL)) {
+            wifi_hal_error_print("%s:%d: [SCAN] set_freqs_filter failed\n", __func__, __LINE__);
+            return WIFI_HAL_ERROR;
+        }
+
+        // - convert channels to freqs
+        for (i = 0; i < chan_num; i++) {
+            // - verify the channel number (it is possible only in AP mode)
+            int i_freq;
+#if OPTION_GET_CHANNELS_FROM_HOSTAP == 0
+            i_freq = channel_is_valid_from_radio(radio, chan_list[i]);
+#else
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            i_freq = channel_is_valid_from_hapd(&interface->u.ap.hapd, chan_list[i]);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+#endif // OPTION_GET_CHANNELS_FROM_HOSTAP
+            if (i_freq < 0) {
+                wifi_hal_error_print("%s:%d: [SCAN] channel %u is invalid for radio %d\n", __func__,
+                    __LINE__, chan_list[i], radioIndex);
+                return WIFI_HAL_ERROR;
+            }
+            freq = i_freq;
+
+            interface->scan_filter.values[i] = freq;
+            wifi_hal_dbg_print("%s:%d: [SCAN] chan:%u -> freq:%u\n", __func__, __LINE__,
+                chan_list[i], freq);
         }
         break;
     }

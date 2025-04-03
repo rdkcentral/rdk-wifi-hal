@@ -1796,20 +1796,6 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #ifdef WIFI_EMULATOR_CHANGE
         send_mgmt_to_char_dev = true;
 #endif
-
-#if !defined(WIFI_EMULATOR_CHANGE)
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
-		defined(SKYSR213_PORT) || defined(SKYSR300_PORT) || defined(TCHCBRV2_PORT)
-		/* Authentication done in driver except SAE */
-		if (len >= IEEE80211_HDRLEN + sizeof(mgmt->u.auth) &&
-				le_to_host16(mgmt->u.auth.auth_alg) != WLAN_AUTH_SAE) {
-			forward_frame = false;
-		}
-#endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) ||
-		 defined(SCXER10_PORT) || defined(SKYSR213_PORT) || defined(SKYSR300_PORT) ||
-		 defined(TCHCBRV2_PORT) */
-#endif //WIFI_EMULATOR_CHANGE
-
         break;
 
     case WLAN_FC_STYPE_ASSOC_REQ:
@@ -13287,6 +13273,8 @@ int process_bss_frame(struct nl_msg *msg, void *arg)
 }
 #endif
 
+// MBSSID config disabled due to kernel error. Not required by drivers yet.
+#if 0
 static int nl80211_mbssid(struct nl_msg *msg, struct wpa_driver_ap_params *params)
 {
 #if HOSTAPD_VERSION >= 210
@@ -13345,6 +13333,7 @@ static int nl80211_mbssid(struct nl_msg *msg, struct wpa_driver_ap_params *param
 
     return 0;
 }
+#endif
 
 int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
 {
@@ -13541,9 +13530,11 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
 #endif /* CONFIG_SAE */
 #endif /* HOSTAPD_VERSION */
 
+#if 0
     if (nl80211_mbssid(msg, params) < 0) {
         return -1;
     }
+#endif
 
 #ifdef CONFIG_IEEE80211BE
     ret = nl80211_drv_mlo_msg(msg, &msg_mlo, interface, params);
