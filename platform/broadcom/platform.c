@@ -1719,14 +1719,14 @@ int platform_get_acl_num(int vap_index, uint *acl_count)
             __LINE__, errno, strerror(errno));
         return RETURN_ERR;
     }
-    acllist->count = htod32((WLC_IOCTL_MEDLEN - sizeof(int)) / ETHER_ADDR_LEN);
+    acllist->count = (WLC_IOCTL_MEDLEN - sizeof(int)) / ETHER_ADDR_LEN;
     wifi_hal_info_print("%s:%d SREESH Value of interface_name is %s acllist->count = %d \n", __func__, __LINE__, interface_name,acllist->count);
     if (wl_ioctl(interface_name, WLC_GET_MACLIST, acllist, WLC_IOCTL_MEDLEN) < 0) {
         wifi_hal_error_print("%s:%dSREESH failed to get maclist for %s, err: %d (%s)\n", __func__,
             __LINE__, interface_name, errno, strerror(errno));
         return RETURN_ERR;
     }
-    *acl_count = dtoh32(acllist->count);
+    *acl_count = acllist->count;
     wifi_hal_error_print("%s:%dSREESH vap[%d] acl count %d\n", __func__, __LINE__, vap_index, *acl_count);//Change to dbg print later
     return RETURN_OK;
 }
