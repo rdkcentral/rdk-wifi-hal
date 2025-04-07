@@ -1714,8 +1714,8 @@ int platform_get_acl_num(int vap_index, uint *acl_count)
             __func__, __LINE__, vap_index, errno, strerror(errno));
         return RETURN_ERR;
     }
-    acllist->count = 0;
     memset(&acllist->ea[0], 0xff, sizeof(acllist->ea[0]));
+    wifi_hal_info_print("%s:%d SREESH Value of interface_name is %s acllist->count = %d \n", __func__, __LINE__, interface_name,acllist->count);
     if (wl_ioctl(interface_name, WLC_GET_MACLIST, acllist, sizeof(buf)) < 0) {
         wifi_hal_error_print("%s:%dSREESH failed to get maclist for %s, err: %d (%s)\n", __func__,
             __LINE__, interface_name, errno, strerror(errno));
