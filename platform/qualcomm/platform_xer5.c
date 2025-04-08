@@ -26,7 +26,7 @@
 #define MAX_BUF_SIZE 300
 #define VAP_PREFIX "ath"
 #define RADIO_PREFIX "wifi"
-#define MAX_NUM_RADIOS 2
+#define IPQ_XER5_MAX_NUM_RADIOS 2
 #define OUI_QCA "0x001374"
 #define RETRY_LIMIT 7
 
@@ -44,6 +44,9 @@
 #define MLD_PREFIX "mld"
 
 extern INT wifi_setMLDaddr(INT apIndex, CHAR *mldMacAddress);
+extern int qca_getRadiosIndex();
+extern int qca_nl_cfg80211_init();
+extern int isValidAPIndex(int apIndex);
 
 static const char* getRadiusCfgFile = "radius.cfg";
 
@@ -242,7 +245,7 @@ enum vap_enum_type {
     vap_mesh_sta,
     vap_invalid
 };
-typedef bool (*vap_type) (unsigned int ap_index);
+typedef BOOL (*vap_type) (unsigned int ap_index);
 
 vap_type vap_type_arr[10] = {
 
@@ -315,7 +318,7 @@ int platform_pre_init()
 void qcacfg_nvram_set_str (const char *param, const char *val) {
 
     char cmd[DEFAULT_CMD_SIZE] = {0};
-    if (param == NULL || val == NULL || strlen(param) == NULL || strlen(val) == NULL) {
+    if (param == NULL || val == NULL || strlen(param) == 0 || strlen(val) == 0) {
         return;
     }
 
@@ -326,7 +329,7 @@ void qcacfg_nvram_set_str (const char *param, const char *val) {
 void qcacfg_nvram_set_int (const char *param, const int val) {
 
     char cmd[DEFAULT_CMD_SIZE] = {0};
-    if (param == NULL || strlen(param) == NULL) {
+    if (param == NULL || strlen(param) == 0) {
         return;
     }
 
@@ -337,7 +340,7 @@ void qcacfg_nvram_set_int (const char *param, const int val) {
 
 int qcacfg_nvram_get (const char *param, const char *val, const unsigned int size) {
 
-    if (param == NULL || val == NULL || size == 0 || strlen(param) == NULL) {
+    if (param == NULL || val == NULL || size == 0 || strlen(param) == 0) {
         wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
         return -1;
     }
@@ -357,20 +360,20 @@ int qcacfg_nvram_get (const char *param, const char *val, const unsigned int siz
     return 0;
 }
 
-int qcacfg_nvram_get_bool (const char *param, const bool *val) {
+int qcacfg_nvram_get_bool (const char *param, bool *val) {
 
     char tmp[DEFAULT_CMD_SIZE] = {0};
-    if (param == NULL || val == NULL || strlen(param) == NULL) {
+    if (param == NULL || val == NULL || strlen(param) == 0) {
         wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
         return -1;
     }
 
     qcacfg_nvram_get(param,tmp,sizeof(tmp));
     if (strncmp(tmp,"1",1)) {
-        val = true;
+        *val = true;
     }
     else {
-        val = false;
+        *val = false;
     }
     return 0;
 }
@@ -389,12 +392,12 @@ int is_interface_exists(const char *fname)
 //check if radio  present in info map
 int check_radio_index(uint8_t radio_index)
 {
-    radio_interface_mapping_t platform_map_t[MAX_NUM_RADIOS];
+    radio_interface_mapping_t platform_map_t[IPQ_XER5_MAX_NUM_RADIOS];
     uint8_t i = 0;
 
     get_radio_interface_info_map(platform_map_t);
 
-    for (i = 0; i < MAX_NUM_RADIOS ; i++) {
+    for (i = 0; i < IPQ_XER5_MAX_NUM_RADIOS ; i++) {
         if (platform_map_t[i].radio_index == radio_index) {
 
             return 0;
@@ -405,6 +408,18 @@ int check_radio_index(uint8_t radio_index)
     return -1;
 }
 
+int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff)
+{
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    return 0;
+}
+
+int platform_set_acs_exclusion_list(wifi_radio_index_t index,char *buff)
+{
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    return 0;
+}
+
 int platform_post_init(wifi_vap_info_map_t *vap_map)
 {
     char cmd[DEFAULT_CMD_SIZE];
@@ -413,7 +428,7 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
 
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
 
-    for (i = 0; i < MAX_NUM_RADIOS; i++) {
+    for (i = 0; i < IPQ_XER5_MAX_NUM_RADIOS; i++) {
         if(i == RDK_2G_RADIO) {
             for (apIndex = 0; apIndex < MAX_NUM_VAP_PER_RADIO; apIndex++) {
                 if (isValidAPIndex(VAP_RADIO_2G[apIndex])) {
@@ -454,7 +469,7 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
 void getprivatevap2G(unsigned int *index)
 {
     unsigned int idx = 0;
-    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
+    wifi_interface_name_idex_map_t interface_map[(IPQ_XER5_MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
     if (index == NULL) {
         wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
         return;
@@ -474,7 +489,7 @@ void getprivatevap2G(unsigned int *index)
 void getprivatevap5G(unsigned int *index)
 {
     unsigned int idx = 0;
-    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
+    wifi_interface_name_idex_map_t interface_map[(IPQ_XER5_MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
     if (index == NULL) {
         wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
         return;
@@ -492,8 +507,7 @@ void getprivatevap5G(unsigned int *index)
 
 void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
-    unsigned int apindex = 0, i = 0; int band = -1;
-    size_t len = 0;
+    unsigned int apindex = 0;
     char cmd[DEFAULT_CMD_SIZE] = {0};
     char tmp[DEFAULT_CMD_SIZE] = {0};
     char command[DEFAULT_CMD_SIZE] = {0};
@@ -505,7 +519,7 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
 
     variant = operationParam->variant; channelWidth = operationParam->channelWidth;
     //wifi_interface_name_idex_map_t *interface_map;
-    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
+    wifi_interface_name_idex_map_t interface_map[(IPQ_XER5_MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
 
     get_wifi_interface_info_map(interface_map);
 
@@ -621,16 +635,14 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
     FILE *fp = popen(command, "r");
     if (fp == NULL) {
         wifi_hal_error_print("%s:%d Failed to run command \n",__func__,__LINE__);
-        return -1;
+        return;
     }
     while (fgets(buffer, sizeof(buffer), fp) != NULL) {
         strncpy(output, buffer, DEFAULT_CMD_SIZE);
-        output[strcspn(output, "\n")] = '\0';
     }
     pclose(fp);
 
-    len = strlen(output) > strlen(cmd) ? strlen(output) : strlen(cmd);
-    if (strncmp(output, cmd, len) != 0 ) {
+    if (strncmp(output, cmd, strlen(cmd)) != 0 ) {
         snprintf(tmp, DEFAULT_CMD_SIZE, "cfg80211tool %s%d mode %s",VAP_PREFIX,apindex,cmd);
         system(tmp);
     }
@@ -645,7 +657,6 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     char cmd[MAX_BUF_SIZE] = {0};
     int ret = 0;
     uint32_t apIndex = 0, primary_vap_index = 0;// check private vap index
-    int channel = 0;
     char *guard_int = NULL;
     wifi_radio_info_t *radio = NULL;
 
@@ -670,6 +681,8 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
         case WIFI_FREQUENCY_5H_BAND:
             getprivatevap5G(&primary_vap_index);
             break;
+	default:
+	    break;
     }
     qca_setRadioMode(index, operationParam);
     wifi_setRadioTransmitPower(index, operationParam->transmitPower);
@@ -742,6 +755,8 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
         case wifi_guard_interval_3200:
             guard_int = "3200nsec";
             break;
+	default:
+	    break;
     }
     if(guard_int != NULL)
     {
@@ -932,8 +947,8 @@ int platform_wps_event(wifi_wps_event_t data)
                 wifi_hal_info_print("%s:%d WPS-FAIL msg=%d config_error=%d reason=%d (%s)\n",__func__, __LINE__, fail->msg, 
                                     fail->config_error, fail->error_indication, WPS_ei_to_str[fail->error_indication]);
             } else {
-                wifi_hal_info_print("%s:%d WPS-FAIL msg=%d config_error=%d reason=%d (%s)\n",__func__, __LINE__, fail->msg, 
-                                    fail->config_error);
+                wifi_hal_info_print("%s:%d WPS-FAIL msg=%d config_error=%d reason=%d\n",__func__, __LINE__, fail->msg, 
+                                    fail->config_error, fail->error_indication);
             }
             break;
         case WPS_EV_SUCCESS:
@@ -1121,7 +1136,7 @@ int platform_get_channel_bandwidth(wifi_radio_index_t index,  wifi_channelBandwi
     u_int8_t seqCounter = 0;
 
     wifi_getRadioOperatingChannelBandwidth(index, temp_buff);
-    if (temp_buff[0] == NULL) {
+    if (temp_buff[0] == '\0') {
         wifi_hal_error_print("%s:%d Channel Bandwidth is NULL\n", __func__, __LINE__);
         return -1;
     }
@@ -1246,7 +1261,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
      pclose(fptr);
      strtok_r(val, "\n", &context);
 
-     radioPhyTemperature->radio_Temperature = val ? atoi(val) : 0;
+     radioPhyTemperature->radio_Temperature = (val[0] != '\0') ? atoi(val) : 0;
 
      return RETURN_OK;
 }
@@ -1294,8 +1309,12 @@ int wifi_setApRetrylimit(void *priv)
 }
 
 #ifdef CONFIG_IEEE80211BE
-int wifi_drv_set_ap_mlo(struct nl_msg *msg, void *priv, struct wpa_driver_ap_params *params) {
+int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
+    struct wpa_driver_ap_params *params)
+{
 #ifdef CONFIG_MLO
+    (void)msg_mlo;
+
     wifi_interface_info_t *interface = (wifi_interface_info_t *) priv;
     int res = 0;
     wifi_hal_dbg_print("%s:%d: params->num_mlo_links: %d\n", __func__, __LINE__, params->num_mlo_links);
@@ -1335,8 +1354,15 @@ int wifi_drv_set_ap_mlo(struct nl_msg *msg, void *priv, struct wpa_driver_ap_par
     wifi_hal_dbg_print("%s:%d: EXIT\n", __func__, __LINE__);
     return res;
 #else
-#error "The wifi_drv_set_ap_mlo is not implemented"
+#error "The nl80211_drv_mlo_msg is not implemented"
 #endif /* CONFIG_MLO */
+}
+
+int nl80211_send_mlo_msg(struct nl_msg *msg)
+{
+    (void)msg;
+
+    return 0;
 }
 
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb) {

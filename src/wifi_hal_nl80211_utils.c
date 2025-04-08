@@ -378,6 +378,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -409,6 +411,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -440,6 +444,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -471,6 +477,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -502,6 +510,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -534,6 +544,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -570,6 +582,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -601,6 +615,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -632,6 +648,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -663,6 +681,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -694,6 +714,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -1785,6 +1807,8 @@ int get_security_mode_int_from_str(char *security_mode_str,char *mfp_str,wifi_se
         *security_mode = wifi_security_mode_wpa3_enterprise;
     } else if (strcmp(security_mode_str, "wpa wpa2") == 0) {
         *security_mode = wifi_security_mode_wpa_wpa2_enterprise;
+    } else if (strstr(security_mode_str, "psk2") && strstr(security_mode_str, "sae") && !strcmp(mfp_str, "0")) {
+        *security_mode = wifi_security_mode_wpa3_compatibility;
     } else {
         wifi_hal_error_print("%s:%d: wifi security mode not found:[%s:%s]\r\n",__func__, __LINE__, security_mode_str,mfp_str);
         return RETURN_ERR;
@@ -1875,6 +1899,10 @@ int get_security_mode_str_from_int(wifi_security_modes_t security_mode, unsigned
         strcpy(security_mode_str, "wpa wpa2");
         break;
 
+    case wifi_security_mode_wpa3_compatibility:
+        strcpy(security_mode_str, "psk2 sae");
+        break;
+
     default:
         wifi_hal_error_print("%s:%d: wifi security mode not found:[%d]\r\n",__func__, __LINE__, security_mode);
         return RETURN_ERR;
@@ -1907,6 +1935,7 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
                 case wifi_security_mode_wpa3_personal:
                 case wifi_security_mode_wpa3_transition:
                 case wifi_security_mode_wpa3_enterprise:
+                case wifi_security_mode_wpa3_compatibility:
                     has_gcmp256 = !interface->u.ap.conf.disable_11be;
                     break;
                 default:
@@ -2205,7 +2234,7 @@ int get_bw80_center_freq(wifi_radio_operationParam_t *param, const char *country
 
     for (i = 0; i < num_channels; i++) {
         if (param->channel <= (channels[i]+6)) {
-            freq = ieee80211_chan_to_freq(country, param->op_class, channels[i]);
+            freq = ieee80211_chan_to_freq(country, param->operatingClass, channels[i]);
             break;
         }
     }
@@ -2234,7 +2263,7 @@ int get_bw160_center_freq(wifi_radio_operationParam_t *param, const char *countr
 
     for (i = 0; i < num_channels; i++) {
         if (param->channel <= (channels[i]+14)) {
-            freq = ieee80211_chan_to_freq(country, param->op_class, channels[i]);
+            freq = ieee80211_chan_to_freq(country, param->operatingClass, channels[i]);
             break;
         }
     }
@@ -2259,7 +2288,7 @@ int get_bw320_center_freq(wifi_radio_operationParam_t *param, const char *countr
 
     for (i = 0; i < num_channels; i++) {
         if (param->channel <= (channels[i] + next_channel_start)) {
-            freq = ieee80211_chan_to_freq(country, param->op_class, channels[i]);
+            freq = ieee80211_chan_to_freq(country, param->operatingClass, channels[i]);
             break;
         }
     }
@@ -2271,6 +2300,49 @@ int get_bw320_center_freq(wifi_radio_operationParam_t *param, const char *countr
     return freq;
 }
 #endif /* CONFIG_IEEE80211BE */
+
+//wifi_halstats
+void wifi_hal_stats_print(wifi_hal_stats_log_level_t level, const char *format, ...)
+{
+    char buff[256] = { 0 };
+    FILE *fpg = NULL;
+    get_formatted_time(buff);
+    va_list list;
+    if ((access("/nvram/wifiHalStatsDbg", R_OK)) == 0) {
+        fpg = fopen("/tmp/wifiHalStats", "a+");
+    } else {
+        switch (level) {
+        case WIFI_HAL_STATS_LOG_LVL_INFO:
+        case WIFI_HAL_STATS_LOG_LVL_ERROR:
+            fpg = fopen("/rdklogs/logs/wifiHalStats.txt", "a+");
+            if (fpg == NULL) {
+                return;
+            }
+            break;
+        case WIFI_HAL_STATS_LOG_LVL_DEBUG:
+        default:
+            return;
+        }
+    }
+    if (fpg == NULL) {
+        return;
+    }
+    static const char *level_marker[WIFI_HAL_STATS_LOG_LVL_MAX] = {
+        [WIFI_HAL_STATS_LOG_LVL_DEBUG] = "<D>",
+        [WIFI_HAL_STATS_LOG_LVL_INFO] = "<I>",
+        [WIFI_HAL_STATS_LOG_LVL_ERROR] = "<E>",
+    };
+    if (level < WIFI_HAL_STATS_LOG_LVL_MAX){
+        snprintf(&buff[strlen(buff)], 256 - strlen(buff), " %s ", level_marker[level]);
+    }
+    fprintf(fpg, "%s ", buff);
+    va_start(list, format);
+    vfprintf(fpg, format, list);
+    va_end(list);
+    fflush(fpg);
+    fclose(fpg);
+    return;
+}
 
 void wifi_hal_print(wifi_hal_log_level_t level, const char *format, ...)
 {
@@ -3070,6 +3142,16 @@ platform_set_txpower_t get_platform_set_txpower_fn()
     return driver_info.platform_set_txpower_fn;
 }
 
+platform_set_acs_exclusion_list_t get_platform_acs_exclusion_list_fn()
+{
+    return driver_info.platform_set_acs_exclusion_list_fn;
+}
+
+platform_get_chanspec_list_t get_platform_chanspec_list_fn()
+{
+    return driver_info.platform_get_chanspec_list_fn;
+}
+
 platform_get_ApAclDeviceNum_t get_platform_ApAclDeviceNum_fn()
 {
     return driver_info.platform_get_ApAclDeviceNum_fn;
@@ -3271,7 +3353,7 @@ int uint_array_set(uint_array_t *array, uint num, const uint values[])
         free(array->values);
         array->values = (uint*)malloc(num * sizeof(uint));
         if (array->values == NULL) {
-            wifi_hal_error_print("%s:%d: memory allocation error!\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d: memory allocation error!\n", __func__, __LINE__);
             ret = -1;
             goto cleanup_array;
         }
@@ -3578,6 +3660,17 @@ int wifi_bitrate_to_str(char *dest, size_t dest_size, wifi_bitrate_t bitrate)
     return wifi_enum_bitmap_to_str(dest, dest_size,
         wifi_bitrate_Map, ARRAY_SIZE(wifi_bitrate_Map),
         "", (int)bitrate);
+}
+
+int wifi_channelBandwidth_from_str(const char *str, wifi_channelBandwidth_t *bandwidth)
+{
+    for (size_t i = 0; i < ARRAY_SIZE(wifi_bandwidth_Map); i++) {
+        if (strcasecmp(str, wifi_bandwidth_Map[i].str_val) == 0) {
+            *bandwidth = (wifi_channelBandwidth_t)wifi_bandwidth_Map[i].enum_val;
+            return 0;
+        }
+    }
+    return -1; 
 }
 
 /* return AP-config pointer as well as group index */
@@ -4141,3 +4234,68 @@ void init_interface_map(void)
     }
 }
 #endif /* CONFIG_WIFI_EMULATOR */
+
+void concat_band_to_vap_name(wifi_vap_name_t vap_name, unsigned int rdk_radio_index)
+{
+    switch (rdk_radio_index) {
+    case 0:
+        strncat((char *)vap_name, "2g", strlen("2g") + 1);
+        break;
+    case 1:
+        strncat((char *)vap_name, "5g", strlen("5g") + 1);
+        break;
+    case 2:
+        strncat((char *)vap_name, "6g", strlen("6g") + 1);
+        break;
+    default:
+        wifi_hal_error_print("%s:%d: Invalid rdk_radio_index:%d for vap_name:%s\n", __func__,
+            __LINE__, rdk_radio_index, vap_name);
+    }
+}
+
+int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
+{
+    unsigned int index = 0;
+    wifi_interface_info_t *interface = NULL;
+    for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
+        if (strncmp(interface_index_map[index].interface_name, ifname, strlen(ifname)) == 0) {
+            switch (colocated_mode) {
+            case 0:
+                strcpy((char *)interface_index_map[index].vap_name, "mesh_sta_");
+                concat_band_to_vap_name((char *)interface_index_map[index].vap_name,
+                    interface_index_map[index].rdk_radio_index);
+                break;
+            case 1:
+                /* Check the interface should be either fronthaul or backhaul */
+                if (is_wifi_hal_vap_private(interface_index_map[index].index) == false &&
+                    is_wifi_hal_vap_mesh_backhaul(interface_index_map[index].index) == false) {
+                    /* Error case */
+                    wifi_hal_error_print(
+                        "%s:%d: Invalid vap_name:%s for ifname:%s for colocated_mode:%d\n",
+                        __func__, __LINE__, interface_index_map[index].vap_name, ifname,
+                        colocated_mode);
+                    return -1;
+                }
+                break;
+            default:
+                /* Error case */
+                wifi_hal_error_print("%s:%d: Invalid colocated_mode:%d for ifname:%s\n", __func__,
+                    __LINE__, colocated_mode, ifname);
+                return -1;
+            }
+            wifi_hal_dbg_print("%s:%d: vap_name:%s configured for ifname:%s vap_index:%d\n",
+                __func__, __LINE__, interface_index_map[index].vap_name, ifname,
+                interface_index_map[index].index);
+            if (colocated_mode == 0) {
+                interface = get_interface_by_vap_index(interface_index_map[index].index);
+                if (interface != NULL && interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+                    memset(&interface->u, 0, sizeof(interface->u));
+                }
+            }
+            return 0;
+        }
+    }
+    wifi_hal_error_print("%s:%d: Interface:%s not present in interface_index_map\n", __func__,
+        __LINE__, ifname);
+    return -1;
+}

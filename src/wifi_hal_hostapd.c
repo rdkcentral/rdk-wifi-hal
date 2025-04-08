@@ -141,7 +141,7 @@ void set_interface_vendor_ies(wifi_interface_info_t* interface) {
         if (platform_get_vendor_oui_fn(vendor_oui, sizeof(vendor_oui)) == 0) {
             wifi_hal_dbg_print("%s:%d: vendor_oui = %s \n", __func__, __LINE__,vendor_oui);
             
-            if (elems = wpabuf_parse_bin(vendor_oui)) {
+            if ((elems = wpabuf_parse_bin(vendor_oui)) != NULL) {
                 conf->vendor_elements = elems;
             }
         }
@@ -394,6 +394,12 @@ int update_hostap_data(wifi_interface_info_t *interface)
 
     vap = &interface->vap_info;
 
+    if (vap->vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(vap->vap_index)) {
+        wifi_hal_error_print("%s:%d: Not an AP based VAP. Returning error\n", __func__,
+            __LINE__);
+        return RETURN_ERR;
+    }
+
     radio = get_radio_by_rdk_index(vap->radio_index);
     iconf = &radio->iconf;
 
@@ -481,6 +487,9 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 
     conf->ieee802_1x = 0;
     conf->wpa_key_mgmt = 0;
+#if HOSTAPD_VERSION >= 210
+    conf->wpa_key_mgmt_rsno = 0;
+#endif /* HOSTAPD_VERSION >= 210 */
     conf->wpa = 0;
     memset(&test_ip, 0, sizeof(test_ip));
 
@@ -544,7 +553,15 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 #else
             conf->sae_pwe = 0;
 #endif /* CONFIG_IEEE80211BE*/
-#endif
+#endif /* HOSTAPD_VERSION >= 210 */
+            break;
+        case wifi_security_mode_wpa3_compatibility:
+            conf->wpa_key_mgmt = WPA_KEY_MGMT_PSK;
+#if HOSTAPD_VERSION >= 210
+            conf->wpa_key_mgmt_rsno = WPA_KEY_MGMT_SAE;
+            conf->sae_pwe = 1;
+#endif /* HOSTAPD_VERSION >= 210 */
+            conf->auth_algs = WPA_AUTH_ALG_SAE | WPA_AUTH_ALG_SHARED | WPA_AUTH_ALG_OPEN;
             break;
         default:
             conf->wpa_key_mgmt = -1;
@@ -595,6 +612,13 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->sae_require_mfp = 0;
             break;
     }
+    if(sec->mode == wifi_security_mode_wpa3_compatibility) {
+        conf->ieee80211w = (enum mfp_options) NO_MGMT_FRAME_PROTECTION;
+#if HOSTAPD_VERSION >= 210
+        conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
+#endif /* HOSTAPD_VERSION >= 210 */
+        conf->sae_require_mfp = 1;
+    }
 #endif
 
     wifi_hal_dbg_print("%s:%d: security:%d mfp:%d wpa_key_mgmt:%d 11w:%d\n",
@@ -617,6 +641,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         case wifi_security_mode_wpa3_enterprise:
         case wifi_security_mode_wpa3_transition:
         case wifi_security_mode_enhanced_open:
+        case wifi_security_mode_wpa3_compatibility:
             conf->wpa = 2;
             break;
 
@@ -670,7 +695,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
     conf->wpa_group_rekey = sec->rekey_interval;
     conf->wpa_group_rekey_set = 1;
 
-    wifi_hal_dbg_print("%s:%d: wpa_gmk_rekey:%d wpa_group_rekey:%d\n", __func__, __LINE__, conf->wpa_gmk_rekey, conf->wpa_group_rekey);
+    wifi_hal_dbg_print("%s:%d: wpa_gmk_rekey:%d wpa_group_rekey:%d wpa:%d \n", __func__, __LINE__, conf->wpa_gmk_rekey, conf->wpa_group_rekey, conf->wpa);
 
     conf->wpa_strict_rekey = sec->strict_rekey;
 
@@ -720,13 +745,6 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         }
 
         char output[256] = {0};
-        _syscmd("sh /usr/sbin/deviceinfo.sh -eip", output, sizeof(output));
-
-        //own_ip_addr
-        if (inet_aton(output, &conf->own_ip_addr.u.v4)) {
-            conf->own_ip_addr.af = AF_INET;
-        }
-
         // nas_identifier
         memset(output, '\0', sizeof(output));
         _syscmd("sh /usr/sbin/deviceinfo.sh -emac", output, sizeof(output));
@@ -1389,6 +1407,11 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 #ifdef CONFIG_IEEE80211AX
     struct he_capabilities *drv_he_cap;
 #endif
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    struct eht_capabilities *drv_eht_cap;
+#endif // HOSTAPD_VERSION >= 211
+#endif // CONFIG_IEEE80211BE
 
     if (interface == NULL) {
         return RETURN_ERR;
@@ -1452,7 +1475,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     iface->basic_rates = radio->basic_rates[band];
 
     get_coutry_str_from_code(param->countryCode, country);
-    iface->freq = ieee80211_chan_to_freq(country, param->op_class, param->channel);
+    iface->freq = ieee80211_chan_to_freq(country, param->operatingClass, param->channel);
 
 #if defined(CONFIG_HW_CAPABILITIES)
     iface->current_mode = get_hw_mode(iface);
@@ -1596,9 +1619,9 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 
     hostapd_set_oper_centr_freq_seg0_idx(interface->u.ap.hapd.iconf, seg0);
 
-    global_op_class = (unsigned int) country_to_global_op_class(country, (unsigned char)param->op_class);
+    global_op_class = (unsigned int) country_to_global_op_class(country, (unsigned char)param->operatingClass);
     wifi_hal_info_print("%s:%d:interface name:%s country:%s op class:%d global op class:%d channel:%d frequency:%d center_freq1:%d\n", __func__, __LINE__, 
-        interface->name, country, param->op_class, global_op_class, param->channel, iface->freq, cf1);
+        interface->name, country, param->operatingClass, global_op_class, param->channel, iface->freq, cf1);
     if (interface->u.ap.iface_initialized == false) {
         dl_list_init(&iface->sta_seen);
         interface->u.ap.iface_initialized = true;
@@ -1690,6 +1713,18 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 #endif
 #endif
 
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    drv_eht_cap = &iface->current_mode->eht_capab[IEEE80211_MODE_AP];
+    iface->conf->eht_phy_capab.su_beamformer = !!(
+        drv_eht_cap->phy_cap[EHT_PHYCAP_SU_BEAMFORMER_IDX] & EHT_PHYCAP_SU_BEAMFORMER);
+    iface->conf->eht_phy_capab.su_beamformee = !!(
+        drv_eht_cap->phy_cap[EHT_PHYCAP_SU_BEAMFORMEE_IDX] & EHT_PHYCAP_SU_BEAMFORMEE);
+    iface->conf->eht_phy_capab.mu_beamformer = !!(
+        drv_eht_cap->phy_cap[EHT_PHYCAP_MU_BEAMFORMER_IDX] & EHT_PHYCAP_MU_BEAMFORMER_MASK);
+#endif // HOSTAPD_VERSION >= 211
+#endif // CONFIG_IEEE80211BE
+
     if(preassoc_supp_rates) {
       os_free(preassoc_supp_rates);
       preassoc_supp_rates = NULL;
@@ -1700,6 +1735,26 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     }
 
     return RETURN_OK;
+}
+
+static int hostapd_for_each_interface_adapter(struct hapd_interfaces *interfaces,
+    int (*cb)(struct hostapd_iface *iface, void *ctx), void *ctx)
+{
+    wifi_radio_info_t *radio;
+    unsigned int i;
+    int ret;
+
+    for (i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = &g_wifi_hal.radio_info[i];
+
+        interfaces = &radio->interfaces;
+        ret = hostapd_for_each_interface(interfaces, cb, ctx);
+        if (ret != 0) {
+            return ret;
+        }
+    }
+
+    return 0;
 }
 
 int update_hostap_interfaces(wifi_radio_info_t *radio)
@@ -1715,7 +1770,7 @@ int update_hostap_interfaces(wifi_radio_info_t *radio)
     }
 
     interfaces = &radio->interfaces;
-    interfaces->for_each_interface = hostapd_for_each_interface;
+    interfaces->for_each_interface = &hostapd_for_each_interface_adapter;
     interfaces->iface = radio->iface;
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
@@ -1944,7 +1999,7 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     iconf->acs = param->autoChannelEnabled;
     iconf->channel = param->channel;
 #if HOSTAPD_VERSION >= 210
-    iconf->op_class = param->op_class;
+    iconf->op_class = param->operatingClass;
 #endif
 
     get_coutry_str_from_oper_params(param, iconf->country);
@@ -2079,11 +2134,9 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
         iconf->vht_capab |= VHT_CAP_SUPP_CHAN_WIDTH_160MHZ;
     }
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT)
 #if HOSTAPD_VERSION >= 210
     iconf->mbssid = param->band == WIFI_FREQUENCY_6_BAND ? MBSSID_ENABLED : MBSSID_DISABLED;
 #endif /* HOSTAPD_VERSION >= 210 */
-#endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) */
 
     //validate_config_params
     if (hostapd_config_check(iconf, 1) < 0) {
@@ -2477,7 +2530,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         ctx->cancel_auth_timeout = wpa_sm_sta_cancel_auth_timeout;
 #ifdef CONFIG_WIFI_EMULATOR
         if((sec->mode == wifi_security_mode_wpa3_personal) || (sec->mode == wifi_security_mode_wpa3_enterprise) ||
-                (sec->mode == wifi_security_mode_wpa3_transition)) {
+                (sec->mode == wifi_security_mode_wpa3_transition) || (sec->mode == wifi_security_mode_wpa3_compatibility)) {
             ctx->get_state = wpa_sm_supplicant_sta_get_state;
             ctx->cancel_auth_timeout = wpa_sm_supplicant_sta_cancel_auth_timeout;
         }
@@ -2556,7 +2609,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
             wpa_sm_set_param(sm, WPA_PARAM_PAIRWISE, WPA_CIPHER_NONE);
             wpa_sm_set_param(sm, WPA_PARAM_GROUP, WPA_CIPHER_NONE);
         } else {
-            sel = (WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_PSK_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+            sel = (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK |
+                WPA_KEY_MGMT_PSK_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
             key_mgmt = pick_akm_suite(sel); 
 
             if (key_mgmt == -1) {
@@ -2567,8 +2621,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, key_mgmt);
         }
 
-        wifi_hal_dbg_print("update_wpa_sm_params%x %x %x\n", data.group_cipher, data.pairwise_cipher,
-            key_mgmt);
+        wifi_hal_dbg_print("%s:%d:%x %x %x\n", __func__, __LINE__, data.group_cipher,
+            data.pairwise_cipher, key_mgmt);
     } else {
         if (sec->mode == wifi_security_mode_none) {
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, WPA_KEY_MGMT_NONE);
@@ -2596,6 +2650,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                 sel = (WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w);
             } else if (sec->mode == wifi_security_mode_wpa3_enterprise) {
                 sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w);
+            } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
+                sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE);
             } else {
                 wifi_hal_error_print("Unsupported security mode : 0x%x\n", sec->mode);
                 return;

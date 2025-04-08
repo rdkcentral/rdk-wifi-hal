@@ -237,6 +237,10 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
         }
         nl80211_parse_wmm_params(tb[NL80211_ATTR_STA_WME], &event.assoc_info.wmm_params);
     }
+
+    event.assoc_info.beacon_ies = interface->ie;
+    event.assoc_info.beacon_ies_len = interface->ie_len;
+
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC, &event);
     return;
 }
@@ -344,6 +348,9 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     event.tx_status.data = nla_data(frame);
     event.tx_status.data_len = nla_len(frame);
     event.tx_status.ack = ack != NULL;
+#if HOSTAPD_VERSION >= 211
+    event.tx_status.link_id = NL80211_DRV_LINK_ID_NA;
+#endif /* HOSTAPD_VERSION >= 211 */
 
    if (event.tx_status.type  == WLAN_FC_TYPE_MGMT &&
      (event.tx_status.stype == WLAN_FC_STYPE_AUTH ||
@@ -494,14 +501,14 @@ static void nl80211_new_scan_results_event(wifi_interface_info_t *interface, str
     int rem;
     struct nlattr *nl;
 
-    wifi_hal_dbg_print("%s:%d: [SCAN] new scan results for interface '%s'\n", __func__, __LINE__, interface->name);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] new scan results for interface '%s'\n", __func__, __LINE__, interface->name);
     
     if (tb[NL80211_ATTR_SCAN_SSIDS]) {
         nla_for_each_nested(nl, tb[NL80211_ATTR_SCAN_SSIDS], rem) {
             ;//wifi_hal_dbg_print("%s:%d: Scan probed for SSID '%s'", __func__, __LINE__, nla_data(nl));
         }
     } else {
-        wifi_hal_info_print("%s:%d: [SCAN] attribute scan_ssids not present\n", __func__, __LINE__);
+        wifi_hal_stats_info_print("%s:%d: [SCAN] attribute scan_ssids not present\n", __func__, __LINE__);
     }
 
     nl80211_get_scan_results(interface);
@@ -509,17 +516,17 @@ static void nl80211_new_scan_results_event(wifi_interface_info_t *interface, str
 
 static void nl80211_new_trigger_scan_event(wifi_interface_info_t *interface, struct nlattr **tb)
 {
-    wifi_hal_dbg_print("%s:%d: [SCAN] scan started for interface '%s'\n", __func__, __LINE__, interface->name);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan started for interface '%s'\n", __func__, __LINE__, interface->name);
 }
 
 static void nl80211_new_scan_aborted_event(wifi_interface_info_t *interface, struct nlattr **tb)
 {
-    wifi_hal_dbg_print("%s:%d: [SCAN] scan aborted for interface '%s'\n", __func__, __LINE__, interface->name);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan aborted for interface '%s'\n", __func__, __LINE__, interface->name);
 
     pthread_mutex_lock(&interface->scan_state_mutex);
     if (interface->scan_state != WIFI_SCAN_STATE_STARTED) {
         pthread_mutex_unlock(&interface->scan_state_mutex);
-        wifi_hal_dbg_print("%s:%d: [SCAN] received scan abort for scan not triggered by us\n", __func__, __LINE__);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] received scan abort for scan not triggered by us\n", __func__, __LINE__);
         return;
     }
     interface->scan_state = WIFI_SCAN_STATE_ABORTED;
@@ -571,7 +578,7 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     }
 
     if (status != WLAN_STATUS_SUCCESS) {
-        wifi_hal_error_print("%s:%d: status code unsuccessful, returning\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: status code %d unsuccessful, returning\n", __func__, __LINE__, status);
         send_sta_connection_status_to_cb(backhaul->bssid, interface->vap_info.vap_index, wifi_connection_status_ap_not_found);
         return;    
     }
@@ -905,7 +912,7 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     if (wifi_chan_event_type == WIFI_EVENT_CHANNELS_CHANGED) {
         radio_param->channel = channel;
         radio_param->channelWidth = l_channel_width;
-        radio_param->op_class = op_class;
+        radio_param->operatingClass = op_class;
 
         ch_switch_update_hostap_config(radio, channel, op_class, freq, cf1, cf2,
             hostap_channel_width, l_channel_width);
