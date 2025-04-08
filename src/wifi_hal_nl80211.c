@@ -2113,12 +2113,13 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
 {
     wifi_interface_info_t *interface;
     struct genlmsghdr *gnlh;
+    unsigned short fc, stype;
     struct nlattr *tb[NL80211_ATTR_MAX + 1], *attr;
     unsigned int len;
     struct ieee80211_mgmt *mgmt = NULL;
     u16 reason = 0;
     int sig_dbm = -100;
-    int phy_rate = 60;
+    int phy_rate = 6;
 #ifdef CMXB7_PORT
     int snr = 0;
 #endif
@@ -2175,7 +2176,35 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
     wifi_hal_info_print("%s:%d POORNA About to enter the NL retrieval of PHY RATE\n",__func__,__LINE__);
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]);
- 	wifi_hal_info_print("%s:%d POORNA The retrieved value of Phy Rate = %d\n",__func__,__LINE__,phy_rate);
+	fc = le_to_host16(mgmt->frame_control);
+        stype = WLAN_FC_GET_STYPE(fc);
+        switch(stype) {
+	case  WIFI_MGMT_FRAME_TYPE_PROBE_REQ:
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_PROBE_REQ Received \n",__func__,__LINE__)
+	case  WIFI_MGMT_FRAME_TYPE_PROBE_RSP:
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_PROBE_REQ Received \n",__func__,__LINE__)
+	case  WIFI_MGMT_FRAME_TYPE_ASSOC_REQ:
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_ASSOC_REQ Received\n",__func__,__LINE__)
+	case  WIFI_MGMT_FRAME_TYPE_ASSOC_RSP:
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_ASSOC_RSP Received\n",__func__,__LINE__)
+	case  WIFI_MGMT_FRAME_TYPE_AUTH:
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_AUTH Received \n",__func__,__LINE__)
+	case  WIFI_MGMT_FRAME_TYPE_DEAUTH:
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_DEAUTH Received\n",__func__,__LINE__)
+	case  WIFI_MGMT_FRAME_TYPE_REASSOC_REQ:
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_REASSOC_REQ Received\n",__func__,__LINE__)
+	case  WIFI_MGMT_FRAME_TYPE_REASSOC_RSP
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_REASSOC_REQ Received\n",__func__,__LINE__)
+	case  WIFI_MGMT_FRAME_TYPE_DISASSOC:
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_DISASSOC Received\n",__func__,__LINE__)
+	case  WIFI_MGMT_FRAME_TYPE_ACTION:
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_ACTION Received\n",__func__,__LINE__)
+	case  WIFI_MGMT_FRAME_TYPE_INVALID:
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_INVALID Received\n",__func__,__LINE__)
+
+	}
+ 	wifi_hal_info_print("%s:%d POORNA  Phy Rate = %d VAP-index %d \n",__func__,__LINE__,phy_rate,wifi_vap_info_t.vap_index);
+
     }
 #endif
     if ((attr = tb[NL80211_ATTR_REASON_CODE]) != NULL) {
