@@ -2180,27 +2180,27 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
         stype = WLAN_FC_GET_STYPE(fc);
         switch(stype) {
 	case  WIFI_MGMT_FRAME_TYPE_PROBE_REQ:
-		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_PROBE_REQ Received \n",__func__,__LINE__)
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_PROBE_REQ Received \n",__func__,__LINE__);break;
 	case  WIFI_MGMT_FRAME_TYPE_PROBE_RSP:
-		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_PROBE_REQ Received \n",__func__,__LINE__)
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_PROBE_REQ Received \n",__func__,__LINE__);break;
 	case  WIFI_MGMT_FRAME_TYPE_ASSOC_REQ:
-		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_ASSOC_REQ Received\n",__func__,__LINE__)
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_ASSOC_REQ Received\n",__func__,__LINE__);break;
 	case  WIFI_MGMT_FRAME_TYPE_ASSOC_RSP:
-		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_ASSOC_RSP Received\n",__func__,__LINE__)
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_ASSOC_RSP Received\n",__func__,__LINE__);break;
 	case  WIFI_MGMT_FRAME_TYPE_AUTH:
-		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_AUTH Received \n",__func__,__LINE__)
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_AUTH Received \n",__func__,__LINE__);break;
 	case  WIFI_MGMT_FRAME_TYPE_DEAUTH:
-		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_DEAUTH Received\n",__func__,__LINE__)
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_DEAUTH Received\n",__func__,__LINE__);break;
 	case  WIFI_MGMT_FRAME_TYPE_REASSOC_REQ:
-		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_REASSOC_REQ Received\n",__func__,__LINE__)
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_REASSOC_REQ Received\n",__func__,__LINE__);break;
 	case  WIFI_MGMT_FRAME_TYPE_REASSOC_RSP
-		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_REASSOC_REQ Received\n",__func__,__LINE__)
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_REASSOC_REQ Received\n",__func__,__LINE__);break;
 	case  WIFI_MGMT_FRAME_TYPE_DISASSOC:
-		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_DISASSOC Received\n",__func__,__LINE__)
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_DISASSOC Received\n",__func__,__LINE__);break;
 	case  WIFI_MGMT_FRAME_TYPE_ACTION:
-		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_ACTION Received\n",__func__,__LINE__)
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_ACTION Received\n",__func__,__LINE__);break;
 	case  WIFI_MGMT_FRAME_TYPE_INVALID:
-		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_INVALID Received\n",__func__,__LINE__)
+		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_INVALID Received\n",__func__,__LINE__);break;
 
 	}
  	wifi_hal_info_print("%s:%d POORNA  Phy Rate = %d interface-name %s \n",__func__,__LINE__,phy_rate,interface->name);
