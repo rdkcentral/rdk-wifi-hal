@@ -2203,7 +2203,7 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
 		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_INVALID Received\n",__func__,__LINE__)
 
 	}
- 	wifi_hal_info_print("%s:%d POORNA  Phy Rate = %d VAP-index %d \n",__func__,__LINE__,phy_rate,wifi_vap_info_t.vap_index);
+ 	wifi_hal_info_print("%s:%d POORNA  Phy Rate = %d interface-name %s \n",__func__,__LINE__,phy_rate,interface->name);
 
     }
 #endif
