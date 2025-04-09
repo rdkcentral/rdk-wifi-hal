@@ -2179,32 +2179,40 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
 	fc = le_to_host16(mgmt->frame_control);
         stype = WLAN_FC_GET_STYPE(fc);
         switch(stype) {
-	case  WIFI_MGMT_FRAME_TYPE_PROBE_REQ:
+	case  WLAN_FC_STYPE_PROBE_REQ:
 		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_PROBE_REQ Received \n",__func__,__LINE__);break;
-	case  WIFI_MGMT_FRAME_TYPE_PROBE_RSP:
+	case  WLAN_FC_STYPE_PROBE_RESP:
 		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_PROBE_REQ Received \n",__func__,__LINE__);break;
-	case  WIFI_MGMT_FRAME_TYPE_ASSOC_REQ:
+	case  WLAN_FC_STYPE_ASSOC_REQ:
 		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_ASSOC_REQ Received\n",__func__,__LINE__);break;
-	case  WIFI_MGMT_FRAME_TYPE_ASSOC_RSP:
+	case  WLAN_FC_STYPE_ASSOC_RESP:
 		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_ASSOC_RSP Received\n",__func__,__LINE__);break;
-	case  WIFI_MGMT_FRAME_TYPE_AUTH:
+	case  WLAN_FC_STYPE_AUTH:
 		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_AUTH Received \n",__func__,__LINE__);break;
-	case  WIFI_MGMT_FRAME_TYPE_DEAUTH:
+	case  WLAN_FC_STYPE_DEAUTH:
 		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_DEAUTH Received\n",__func__,__LINE__);break;
-	case  WIFI_MGMT_FRAME_TYPE_REASSOC_REQ:
+	case  WLAN_FC_STYPE_REASSOC_REQ:
 		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_REASSOC_REQ Received\n",__func__,__LINE__);break;
-	case  WIFI_MGMT_FRAME_TYPE_REASSOC_RSP:
+	case  WLAN_FC_STYPE_REASSOC_RESP:
 		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_REASSOC_REQ Received\n",__func__,__LINE__);break;
-	case  WIFI_MGMT_FRAME_TYPE_DISASSOC:
+	case  WLAN_FC_STYPE_DISASSOC:
 		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_DISASSOC Received\n",__func__,__LINE__);break;
-	case  WIFI_MGMT_FRAME_TYPE_ACTION:
+	case  WLAN_FC_STYPE_ACTION:
 		wifi_hal_info_print("%s:%d POORNA WIFI_MGMT_FRAME_TYPE_ACTION Received\n",__func__,__LINE__);break;
+	case  WLAN_FC_STYPE_BEACON:
+		wifi_hal_info_print("%s:%d POORNA WLAN_FC_STYPE_BEACON Received\n",__func__,__LINE__);break;
+	case  WLAN_FC_STYPE_ATIM:
+		wifi_hal_info_print("%s:%d POORNA WLAN_FC_STYPE_ATIM Received\n",__func__,__LINE__);break;
 	default:
 		wifi_hal_info_print("%s:%d POORNA NONE(default case) Received\n",__func__,__LINE__);
             break;
 
 	}
+	wifi_vap_info_t* vap = NULL;
+	vap = &interface->vap_info;
+	
  	wifi_hal_info_print("%s:%d POORNA  Phy Rate = %d interface-name %s \n",__func__,__LINE__,phy_rate,interface->name);
+	wifi_hal_info_print("%s:%d POORNA   vap-name: %s index: %d \n",__func__,__LINE__,vap->vap_name,vap->vap_index);    
 
     }
 #endif
