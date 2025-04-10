@@ -10659,6 +10659,10 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
     struct ieee80211_mgmt *mgmt;
     u16 fc;
     int use_cookie = 1;
+    // Prior Hostapd Versions (<2.10) do not support channel dwelling as a parameter
+    #if !defined(HOSTAPD_2_11) && !defined(HOSTAPD_2_10)
+    unsigned int wait = 0;
+    #endif
     int res, interface_freq;
     mac_addr_str_t src_mac_str, dst_mac_str;
 
