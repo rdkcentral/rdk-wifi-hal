@@ -341,6 +341,28 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         return;
     }
 
+    if (vap->vap_mode != wifi_vap_mode_ap) {
+        // If a station just sent a TX frame (and therefore here received a TX status as an ACK), 
+        // it doesn't need to do anything with that information. Action frames are not sent to the
+        // RX handler. Additionally, following commands depend on `hapd` which is not present for 
+        // non-AP modes.
+        // We'll debug out the info though, for programmer convenience.
+        
+        char tmp[256] = "";
+        sprintf(tmp, "%s:%d:", __func__, __LINE__);
+        if (addr) sprintf(tmp + strlen(tmp), " MAC: "MACSTR",", MAC2STR((u8*)nla_data(addr)));
+        if (cookie) sprintf(tmp + strlen(tmp), " cookie: %llu,", nla_get_u64(cookie));
+        if (ack) sprintf(tmp + strlen(tmp), " ack: %d,", nla_get_flag(ack));
+        
+        sprintf(tmp + strlen(tmp), " type: %d, stype: %d",
+                WLAN_FC_GET_TYPE(fc), WLAN_FC_GET_STYPE(fc));
+        
+        wifi_hal_dbg_print("%s\n", tmp);
+
+        wifi_hal_dbg_print("%s:%d: vap mode is not AP, dropping\n", __func__, __LINE__);
+        return;
+    }
+
     os_memset(&event, 0, sizeof(event));
     event.tx_status.type = WLAN_FC_GET_TYPE(fc);
     event.tx_status.stype = WLAN_FC_GET_STYPE(fc);
