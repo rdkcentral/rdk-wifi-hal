@@ -288,7 +288,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     wifi_frame_t mgmt_frame;
     int sig_dbm = -100;
 #if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined (TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT))
-    int phy_rate = 6;
+    int phy_rate = 60;
 #endif
 
     wifi_mgmtFrameType_t mgmt_type = WIFI_MGMT_FRAME_TYPE_INVALID;
@@ -320,7 +320,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     }
 #if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT))
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
-        phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]);
+        phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]) * 10;
     }
 #endif
 
