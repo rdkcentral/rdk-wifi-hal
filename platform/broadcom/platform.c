@@ -507,6 +507,12 @@ int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t 
     return RETURN_OK;
 }
 
+int wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
+{
+    int res = wifi_hal_send_mgmt_frame(apIndex, MacAddr, frame, len, frequency, wait);
+    return (res == 0) ? RETURN_OK : RETURN_ERR;
+}
+
 int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
 {
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
