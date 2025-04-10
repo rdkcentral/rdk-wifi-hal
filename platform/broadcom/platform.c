@@ -507,10 +507,15 @@ int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t 
     return RETURN_OK;
 }
 
-int wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
+INT wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
 {
     int res = wifi_hal_send_mgmt_frame(apIndex, MacAddr, frame, len, frequency, wait);
-    return (res == 0) ? RETURN_OK : RETURN_ERR;
+    return (res == 0) ? WIFI_HAL_SUCCESS : WIFI_HAL_ERROR;
+}
+
+INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCHAR *frame, UINT len)
+{
+    return wifi_sendActionFrameExt(apIndex, MacAddr, frequency, 0, frame, len);
 }
 
 int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
