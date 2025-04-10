@@ -351,7 +351,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         char tmp[256] = "";
         sprintf(tmp, "%s:%d:", __func__, __LINE__);
         if (addr) sprintf(tmp + strlen(tmp), " MAC: "MACSTR",", MAC2STR((u8*)nla_data(addr)));
-        if (cookie) sprintf(tmp + strlen(tmp), " cookie: %lu,", nla_get_u64(cookie));
+        if (cookie) sprintf(tmp + strlen(tmp), " cookie: %llu,", (unsigned long long)nla_get_u64(cookie));
         if (ack) sprintf(tmp + strlen(tmp), " ack: %d,", nla_get_flag(ack));
         
         sprintf(tmp + strlen(tmp), " type: %d, stype: %d",
