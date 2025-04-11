@@ -739,7 +739,7 @@ static void wifi_set_disassoc_timer(struct hostapd_data *hapd, struct sta_info *
     * decide to reject the connection),
     */
 
-#if (HOSTAPD_VERSION == 210) //2.10
+#if defined(VNTXER5_PORT || TARGET_GEMINI7_2) && (HOSTAPD_VERSION == 210) //2.10
     wpa_auth_pmksa_remove(hapd->wpa_auth, sta->addr, false);
 #else
     wpa_auth_pmksa_remove(hapd->wpa_auth, sta->addr);
