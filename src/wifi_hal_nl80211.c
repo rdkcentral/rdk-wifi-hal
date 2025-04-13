@@ -49,7 +49,9 @@
 #include "ap/wmm.h"
 #include <sys/wait.h>
 #include <linux/if_ether.h>
+#ifdef __GLIBC__
 #include <netinet/ether.h>
+#endif
 #include <linux/filter.h>
 #include <fcntl.h>
 
@@ -2794,6 +2796,15 @@ void *nl_recv_func(void *arg)
     wifi_hal_priv_t *priv = (wifi_hal_priv_t *)arg;
     wifi_interface_info_t *interface;
     int eloop_timeout_ms;
+#if defined (_PLATFORM_BANANAPI_R4_)
+    size_t stack_size2;
+    pthread_attr_t attr;
+
+    pthread_attr_init(&attr);
+    pthread_attr_getstacksize(&attr, &stack_size2);
+    wifi_hal_dbg_print("%s:%d Thread stack size = %ld bytes \n", __func__, __LINE__, stack_size2);
+    pthread_attr_destroy(&attr);
+#endif
 
     prctl(PR_SET_NAME,  __func__, 0, 0, 0);
 
