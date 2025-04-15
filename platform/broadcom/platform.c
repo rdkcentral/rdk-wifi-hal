@@ -734,6 +734,17 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
             }
         }
     }
+#if defined(_SCER11BEL_PRODUCT_REQ_)
+    /* Rearrange open-flow action for DHCP broadcast packets.
+     * To Fix connectivity issues with legacy client devices eg: LG TV, Tapo camera
+     */
+    if ( 0 != v_secure_system("ovs-ofctl add-flow brlan0 in_port=LOCAL,dl_dst=ff:ff:ff:ff:ff:ff,dl_type=0x0800,udp,tp_src=67,tp_dst=68,actions=wl0.1,wl1.1,wl2.1,eth0,eth1,eth2,eth3")) {
+        wifi_hal_dbg_print("%s Failed to update ovs flow rule for DHCP to fix connectivity issues \n",__FUNCTION__);
+    } else {
+       wifi_hal_dbg_print("%s Updated ovs flow rule for DHCP to fix connectivity issues \n",__FUNCTION__);
+    }
+#endif
+
 
     return 0;
 }
