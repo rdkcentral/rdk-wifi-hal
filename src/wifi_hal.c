@@ -183,7 +183,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     }
 #else
     _syscmd("grep -a 'MODEL' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
-#endif
+#endif 
     if (output[strlen(output) - 1] == '\n') {
         output[strlen(output) - 1] = '\0';
     }
@@ -205,10 +205,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     // CM mac
     memset(output, '\0', sizeof(output));
 #if defined (_PLATFORM_BANANAPI_R4_)
-    _syscmd("ifconfig erouter0 | grep -oE 'ether [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    if (strlen(output) == 0) {
-        _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    }
+    _syscmd("ifconfig erouter0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
 #else
     _syscmd("grep -a 'CM' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
 #endif
@@ -219,14 +216,11 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
     memset(output, '\0', sizeof(output));
 #if defined (_PLATFORM_BANANAPI_R4_)
-    _syscmd("ifconfig erouter0 | grep -oE 'ether [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    if (strlen(output) == 0) {
-        _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    }
+    _syscmd("ifconfig erouter0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
 #else
     _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
 #endif
-    if (output[strlen(output) - 1] == '\n') {
+    if (output[strlen(output) - 1] == '\n') { 
         output[strlen(output) - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.al_1905_mac);

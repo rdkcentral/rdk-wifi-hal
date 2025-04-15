@@ -15,6 +15,14 @@
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 * See the License for the specific language governing permissions and
 * limitations under the License.
+*
+* Some material is:
+* Copyright (c) 2002-2015, Jouni Malinen j@w1.fi
+* Copyright (c) 2003-2004, Instant802 Networks, Inc.
+* Copyright (c) 2005-2006, Devicescape Software, Inc.
+* Copyright (c) 2007, Johannes Berg johannes@sipsolutions.net
+* Copyright (c) 2009-2010, Atheros Communications
+* Licensed under the BSD-3 License
 **************************************************************************/
 
 #include <stddef.h>
@@ -31,7 +39,7 @@
 #define BPI_LEN_16 16
 #define MAX_KEYPASSPHRASE_LEN 129
 #define MAX_SSID_LEN 33
-#define INVALID_KEY  "123456783435"
+#define INVALID_KEY  "12345678"
 
 int wifi_nvram_defaultRead(char *in,char *out);
 int _syscmd(char *cmd, char *retBuf, int retBufSize);
@@ -182,8 +190,6 @@ int platform_get_keypassphrase_default(char *password, int vap_index)
 
 int platform_get_ssid_default(char *ssid, int vap_index)
 {
-    int ret = 0;
-
     wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
     /* if the vap_index is that of mesh STA or mesh backhaul then try to obtain the ssid from
        /nvram/EasymeshCfg.json file */
@@ -388,7 +394,7 @@ INT wifi_getRadioChannelStats(INT radioIndex, wifi_channelStats_t *input_output_
 
 static int get_sta_list_handler(struct nl_msg *msg, void *arg)
 {
-    struct nlattr *tb[NL80211_ATTR_MAX  1];
+    struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     sta_list_t *sta_list = (sta_list_t *)arg;
 
@@ -399,10 +405,10 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
     }
 
     if (tb[NL80211_ATTR_MAC]) {
-        sta_list->macs = realloc(sta_list->macs, (sta_list->num  1) * sizeof(mac_address_t));
+        sta_list->macs = realloc(sta_list->macs, (sta_list->num + 1) * sizeof(mac_address_t));
         if (sta_list->macs) {
             memcpy(sta_list->macs[sta_list->num], nla_data(tb[NL80211_ATTR_MAC]), sizeof(mac_address_t));
-            sta_list->num;
+            sta_list->num++;
         }
     }
 
@@ -432,10 +438,10 @@ static int get_sta_list(wifi_interface_info_t *interface, sta_list_t *sta_list)
 static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
 {
     wifi_associated_dev3_t *dev = (wifi_associated_dev3_t *)arg;
-    struct nlattr *tb[NL80211_ATTR_MAX  1];
-    struct nlattr *stats[NL80211_STA_INFO_MAX  1];
+    struct nlattr *tb[NL80211_ATTR_MAX + 1];
+    struct nlattr *stats[NL80211_STA_INFO_MAX + 1];
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
-    static struct nla_policy stats_policy[NL80211_STA_INFO_MAX  1] = {
+    static struct nla_policy stats_policy[NL80211_STA_INFO_MAX + 1] = {
                 [NL80211_STA_INFO_INACTIVE_TIME] = { .type = NLA_U32 },
                 [NL80211_STA_INFO_RX_BYTES] = { .type = NLA_U32 },
                 [NL80211_STA_INFO_TX_BYTES] = { .type = NLA_U32 },
@@ -444,8 +450,8 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
                 [NL80211_STA_INFO_TX_FAILED] = { .type = NLA_U32 },
                 [NL80211_STA_INFO_CONNECTED_TIME] = { .type = NLA_U32 },
     };
-    struct nlattr *rate[NL80211_RATE_INFO_MAX  1];
-    static struct nla_policy rate_policy[NL80211_RATE_INFO_MAX  1] = {
+    struct nlattr *rate[NL80211_RATE_INFO_MAX + 1];
+    static struct nla_policy rate_policy[NL80211_RATE_INFO_MAX + 1] = {
                 [NL80211_RATE_INFO_BITRATE32] = { .type = NLA_U32 },
     };
     struct nl80211_sta_flag_update *sta_flags;
@@ -466,7 +472,7 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
 
     if (nla_parse_nested(stats, NL80211_STA_INFO_MAX, tb[NL80211_ATTR_STA_INFO], stats_policy)) {
-	wifi_hal_error_print("%s:%d Failed to parse nested attributes\n", __func__, __LINE__);
+	      wifi_hal_error_print("%s:%d Failed to parse nested attributes\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -582,12 +588,6 @@ INT wifi_setApIsolationEnable(INT apIndex, BOOL enable)
     return RETURN_ERR;
 }
 
-INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCHAR *frame, UINT len)
-{
-    wifi_hal_send_mgmt_frame(apIndex, MacAddr, frame, len, frequency);
-    return RETURN_OK;
-}
-
 UINT wifi_freq_to_op_class(UINT freq)
 {
     u8 op_class, channel;
@@ -677,36 +677,6 @@ INT wifi_steering_eventRegister(wifi_steering_eventCB_t event_cb)
     return RETURN_OK;
 }
 
-int wifi_rrm_send_beacon_req(struct wifi_interface_info_t *interface, const u8 *addr,
-    u16 num_of_repetitions, u8 measurement_request_mode, u8 oper_class, u8 channel,
-    u16 random_interval, u16 measurement_duration, u8 mode, const u8 *bssid,
-    struct wpa_ssid_value *ssid, u8 *rep_cond, u8 *rep_cond_threshold, u8 *rep_detail,
-    const u8 *ap_ch_rep, unsigned int ap_ch_rep_len, const u8 *req_elem, unsigned int req_elem_len,
-    u8 *ch_width, u8 *ch_center_freq0, u8 *ch_center_freq1, u8 last_indication)
-{
-    return 0;
-}
-
-/* called by BTM API */
-int wifi_wnm_send_bss_tm_req(struct wifi_interface_info_t *interface, struct sta_info *sta,
-    u8 dialog_token, u8 req_mode, int disassoc_timer, u8 valid_int, const u8 *bss_term_dur,
-    const char *url, const u8 *nei_rep, size_t nei_rep_len, const u8 *mbo_attrs, size_t mbo_len)
-{
-    return 0;
-}
-
-int handle_wnm_action_frame(struct wifi_interface_info_t *interface, const mac_address_t sta,
-    struct ieee80211_mgmt *mgmt, size_t len)
-{
-    return 0;
-}
-
-int handle_rrm_action_frame(struct wifi_interface_info_t *interface, const mac_address_t sta,
-    const struct ieee80211_mgmt *mgmt, size_t len, int ssi_signal)
-{
-    return 0;
-}
-
 INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
 {
     return 0;
@@ -744,4 +714,3 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     return 0;
 }
 #endif /* CONFIG_IEEE80211BE */
-
