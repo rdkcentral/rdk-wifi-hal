@@ -1356,7 +1356,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #ifdef WIFI_HAL_VERSION_3_PHASE2
         callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame);
 #else
-#if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT))
+#if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined (TARGET_GEMINI7_2))
         callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)mgmt, len, mgmt_type, dir, sig_dbm, phy_rate);
 #else
         callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)mgmt, len, mgmt_type, dir);
@@ -3498,7 +3498,7 @@ skip:   found = 0;
     return mode;
 }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
 static void phy_info_iftype_copy(struct hostapd_hw_modes *mode,
                  enum ieee80211_op_mode opmode,
                  struct nlattr **tb, struct nlattr **tb_flags)
@@ -4425,7 +4425,7 @@ static int regulatory_domain_set_info_handler(struct nl_msg *msg, void *arg)
     return 0;
 }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
 static void wiphy_info_mbssid(struct wpa_driver_capa *cap, struct nlattr *attr)
 {
     struct nlattr *config[NL80211_MBSSID_CONFIG_ATTR_MAX + 1];
@@ -4453,7 +4453,7 @@ static void wiphy_info_mbssid(struct wpa_driver_capa *cap, struct nlattr *attr)
 static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 {
     wifi_radio_info_t *radio;
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     struct wpa_driver_capa *capa;
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
@@ -4461,7 +4461,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     //unsigned int *cmd;
     unsigned int phy_index = 0;
     int rdk_radio_index;
-#if defined(VNTXER5_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
+#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
     defined(SCXER10_PORT)
     int existing_radio_found = 0;
 #endif
@@ -4473,7 +4473,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
-#if !defined(VNTXER5_PORT) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
+#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
     !defined(XB10_PORT) && !defined(SCXER10_PORT)
     for (unsigned int j = 0; j < g_wifi_hal.num_radios; j++)
     {
@@ -4509,7 +4509,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     }
 
     //print_attributes(__func__, tb);
-#if !defined(VNTXER5_PORT) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
+#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
     !defined(XB10_PORT) && !defined(SCXER10_PORT)
     radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
     memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
@@ -4536,7 +4536,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     if (tb[NL80211_ATTR_WIPHY_NAME]) {
         strcpy(radio->name, nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]));
     }
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     capa = &radio->driver_data.capa;
 
     if (tb[NL80211_ATTR_MAX_NUM_SCAN_SSIDS]) {
@@ -4815,7 +4815,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
         radio->dev_id = nla_get_u64(tb[NL80211_ATTR_WDEV]);
     }
 
-#if !defined(VNTXER5_PORT) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
+#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
     !defined(XB10_PORT) && !defined(SCXER10_PORT)
     g_wifi_hal.num_radios++;
 #endif
@@ -5320,7 +5320,7 @@ int update_channel_flags()
     return 0;
 }
 
-#if defined(VNTXER5_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
+#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
     defined(SCXER10_PORT)
 static int protocol_feature_handler(struct nl_msg *msg, void *arg)
 {
@@ -5361,7 +5361,7 @@ static u32 get_nl80211_protocol_features(int nl_id)
 int init_nl80211()
 {
     int ret;
-#if defined(VNTXER5_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
+#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
     defined(SCXER10_PORT)
     u32 feat;
     int flags = 0;
@@ -5459,7 +5459,7 @@ int init_nl80211()
         g_wifi_hal.radio_info[i].index = -1;
     }
     init_interface_map();
-#if !defined(VNTXER5_PORT) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
+#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
     !defined(XB10_PORT) && !defined(SCXER10_PORT)
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
     if (msg == NULL) {
