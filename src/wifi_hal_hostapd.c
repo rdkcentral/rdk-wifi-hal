@@ -2899,7 +2899,7 @@ void start_bss(wifi_interface_info_t *interface)
     //my_print_hex_dump(conf->ssid.ssid_len, conf->ssid.ssid);
 #if HOSTAPD_VERSION >= 211 //2.11
     ret = hostapd_setup_bss(hapd, 1, true);
-#elif defined(VNTXER5_PORT) && (HOSTAPD_VERSION == 210) //2.10
+#elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
     ret = hostapd_setup_bss(hapd, 1, true);
 #else
     ret = hostapd_setup_bss(hapd, 1);
