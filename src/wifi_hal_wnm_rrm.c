@@ -47,7 +47,9 @@
 #include "ap/dfs.h"
 #include <sys/wait.h>
 #include <linux/if_ether.h>
+#ifdef __GLIBC__
 #include <netinet/ether.h>
+#endif
 #include <linux/filter.h>
 #include <fcntl.h>
 
