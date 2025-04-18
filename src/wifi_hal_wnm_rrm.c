@@ -759,7 +759,7 @@ static void wifi_set_disassoc_timer(struct hostapd_data *hapd, struct sta_info *
     * decide to reject the connection),
     */
 
-#if defined(VNTXER5_PORT) && (HOSTAPD_VERSION == 210) //2.10
+#if (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
     wpa_auth_pmksa_remove(hapd->wpa_auth, sta->addr, false);
 #else
     wpa_auth_pmksa_remove(hapd->wpa_auth, sta->addr);
@@ -1147,7 +1147,7 @@ static int wifi_hal_parse_rrm_beacon_req(wifi_interface_info_t *interface,
     int op_class;
 
     if (len < sizeof(*req)) {
-        wifi_hal_error_print("%s:%d RRM: request element too short, len: %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d RRM: request element too short, len: %zu\n", __func__, __LINE__,
             len);
         return RETURN_ERR;
     }
@@ -1342,7 +1342,7 @@ int wifi_hal_parse_rm_beacon_request(unsigned int apIndex, char *buff, size_t le
     }
 
     if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.action.u.rrm)) {
-        wifi_hal_error_print("%s:%d too short measurement request, len: %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d too short measurement request, len: %zu\n", __func__, __LINE__,
             len);
         return RETURN_ERR;
     }
@@ -1375,7 +1375,7 @@ int wifi_hal_parse_rm_beacon_request(unsigned int apIndex, char *buff, size_t le
     // len -= IEEE80211_HDRLEN + sizeof(mgmt->u.action.u.rrm);
 
     if (len < 2) {
-        wifi_hal_error_print("%s:%d too short measurement request, len: %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d too short measurement request, len: %zu\n", __func__, __LINE__,
             len);
         return -1;
     }
