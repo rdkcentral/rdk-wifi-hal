@@ -2128,12 +2128,14 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
 
     interface = (wifi_interface_info_t *)arg;
 
-    if ((gnlh->cmd != NL80211_CMD_FRAME) && (gnlh->cmd != NL80211_CMD_UNEXPECTED_FRAME)) {
-        wifi_hal_error_print("%s:%d: Unknown event\n", __func__, __LINE__);
+    if ((gnlh->cmd != NL80211_CMD_FRAME) && (gnlh->cmd != NL80211_CMD_UNEXPECTED_FRAME) &&
+        (gnlh->cmd != NL80211_CMD_UNEXPECTED_4ADDR_FRAME)) {
+        wifi_hal_error_print("%s:%d: Unknown event %d\n", __func__, __LINE__, gnlh->cmd);
         return NL_SKIP;
     }
 
-    if (gnlh->cmd == NL80211_CMD_UNEXPECTED_FRAME) {
+    if ((gnlh->cmd == NL80211_CMD_UNEXPECTED_FRAME) ||
+        (gnlh->cmd == NL80211_CMD_UNEXPECTED_4ADDR_FRAME)) {
         union wpa_event_data event;
 
         os_memset(&event, 0, sizeof(event));
@@ -2146,9 +2148,28 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
         }
         event.rx_from_unknown.addr = nla_get_string(tb[NL80211_ATTR_MAC]);
 
-        event.rx_from_unknown.wds = 1;
+        //we need to improve this code later
+#ifdef BANANA_PI_PORT // for reference device platforms
+        //if (gnlh->cmd == NL80211_CMD_UNEXPECTED_4ADDR_FRAME) {
+            event.rx_from_unknown.wds = 1;
+        //}
+        if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+            struct hostapd_bss_config *conf;
 
-        wifi_hal_dbg_print("%s%d: received spurious frame event on interface %s sent to hostapd.\n", __func__, __LINE__, interface->name);
+            conf = &interface->u.ap.conf;
+            conf->wds_sta = 1;
+            strncpy(conf->wds_bridge, interface->vap_info.bridge_name,
+                sizeof(conf->wds_bridge));
+            wifi_hal_dbg_print("%s:%d: hostap wds status:%d wds_bridge:%s\r\n",
+                __func__, __LINE__, conf->wds_sta, conf->wds_bridge);
+        }
+#else
+        event.rx_from_unknown.wds = 0;
+#endif
+
+        wifi_hal_dbg_print("%s:%d: received spurious frame event:%d"
+            " on interface %s from" MACSTR " sent to hostapd wds:%d.\n", __func__, __LINE__,
+            gnlh->cmd, interface->name, MAC2STR(event.rx_from_unknown.addr), event.rx_from_unknown.wds);
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_FROM_UNKNOWN, &event);
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -7291,6 +7312,40 @@ static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface)
     interface->mgmt_frames_registered = 0;
 }
 
+int wifi_hal_configure_wds_sta_to_bridge(wifi_interface_info_t *interface, int add)
+{
+    int ret = 0;
+    wifi_vap_info_t *vap = &interface->vap_info;
+
+    if (vap->vap_mode != wifi_vap_mode_sta || interface->u.sta.wds_sta == 0) {
+        wifi_hal_error_print(
+            "%s:%d: interface:%s either vapmode:%d is not sta or wds_sta:%d is not enabled.\n",
+            __func__, __LINE__, interface->name, vap->vap_mode,
+            interface->u.sta.wds_sta);
+        return RETURN_ERR;
+    }
+
+    if (add == 1) {
+        if ((ret = nl80211_create_bridge(interface->name, vap->bridge_name)) != 0) {
+            wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s with ret:%d\n",
+                __func__, __LINE__, interface->name, vap->bridge_name, ret);
+            return ret;
+        }
+        wifi_hal_info_print("%s:%d: Sta %s interface added successfully to bridge:%s\n",
+            __func__, __LINE__, interface->name, vap->bridge_name);
+
+        if ((ret = nl80211_interface_enable(vap->bridge_name, true)) != 0) {
+            wifi_hal_error_print("%s:%d: interface:%s failed to set bridge %s with ret:%d\n",
+                __func__, __LINE__, interface->name, vap->bridge_name, ret);
+        }
+    } else {
+        wifi_hal_info_print("%s:%d: interface:%s remove from bridge:%s\n", __func__, __LINE__,
+            interface->name, vap->bridge_name);
+        nl80211_remove_from_bridge(interface->name);
+    }
+    return ret;
+}
+
 int nl80211_update_interface(wifi_interface_info_t *interface)
 {
     struct nl_msg *msg;
@@ -7330,6 +7385,19 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
 
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_INTERFACE);
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_STATION);
+
+        if (interface->u.sta.wds_sta) {
+            if ((ret = nla_put_u8(msg, NL80211_ATTR_4ADDR,
+                (uint8_t)interface->u.sta.wds_sta)) < 0) {
+                wifi_hal_error_print("%s:%d: Error enabling sta wds for %s interface"
+                    " on dev:%d error: %d (%s)\n", __func__, __LINE__, interface->name,
+                    radio->index, ret, strerror(-ret));
+                return RETURN_ERR;
+            }
+            wifi_hal_info_print("%s:%d: Sta %s interface on dev:%d 4ADDR:%d"
+                " enabled successfully\n", __func__, __LINE__, interface->name,
+                radio->index, interface->u.sta.wds_sta);
+        }
     }
 
     if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
@@ -11038,7 +11106,53 @@ int wifi_drv_set_sta_vlan(void *priv, const u8 *addr,
 #endif
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
+
+    wifi_interface_info_t *interface;
+    struct nl_msg *msg;
+    wifi_vap_info_t *vap;
+    wifi_radio_info_t *radio;
+    wifi_driver_data_t *drv;
+    int ret;
+
+    interface = (wifi_interface_info_t *)priv;
+    vap = &interface->vap_info;
+    radio = get_radio_by_rdk_index(vap->radio_index);
+    drv = &radio->driver_data;
+
+    if (!(msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_STATION)) ||
+          nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr)) {
+        wifi_hal_error_print("%s:%d netlink:%s command set station failed\r\n",
+                __func__, __LINE__, ifname);
+        goto fail;
+    }
+
+    if (vlan_id && (drv->capa.flags & WPA_DRIVER_FLAGS_VLAN_OFFLOAD) &&
+            (nla_put_u16(msg, NL80211_ATTR_VLAN_ID, vlan_id) < 0)) {
+        wifi_hal_error_print("%s:%d netlink:%s command set vlan_id:%d failed\r\n",
+                __func__, __LINE__, ifname, vlan_id);
+        goto fail;
+    }
+
+    if (nla_put_u32(msg, NL80211_ATTR_STA_VLAN, if_nametoindex(ifname)) < 0) {
+        wifi_hal_error_print("%s:%d netlink:%s command set ifname_id:%d failed\r\n",
+                __func__, __LINE__, ifname, if_nametoindex(ifname));
+        goto fail;
+    }
+
+    ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
+    if (ret < 0) {
+        wifi_hal_error_print("%s:%d nl80211: NL80211_ATTR_STA_VLAN (addr=" MACSTR " ifname=%s"
+            " vlan_id=%d) failed: %d (%s)\n", __func__, __LINE__, MAC2STR(addr), ifname,
+            vlan_id, ret, strerror(-ret));
+    }
+    wifi_hal_info_print("%s:%d nl80211: NL80211 cmd set station for vlan (addr="
+            MACSTR " ifname=%s, ifname_id:%d vlan_id=%d) success\n", __func__, __LINE__,
+            MAC2STR(addr), ifname, if_nametoindex(ifname), vlan_id);
+
     return 0;
+fail:
+    nlmsg_free(msg);
+    return -ENOBUFS;
 }
 
 #if HOSTAPD_VERSION >= 211 //2.11
@@ -11195,8 +11309,8 @@ int wifi_drv_get_seqnum(const char *iface, void *priv, const u8 *addr, int idx, 
     return nl80211_send_and_recv(msg, get_key_handler, seq, NULL, NULL);
 }
 
-int wlan_nl80211_create_interface(char *ifname, uint32_t if_type, int wds, uint8_t *mac, wifi_radio_info_t *radio,
-    wifi_vap_info_t *vap, wifi_interface_info_t **interface)
+int wlan_nl80211_create_interface(char *ifname, uint32_t if_type, int wds, uint8_t *mac,
+    wifi_radio_info_t *radio)
 {
     struct nl_msg *msg;
     wifi_interface_info_t *intf;
@@ -11240,16 +11354,8 @@ int wlan_nl80211_create_interface(char *ifname, uint32_t if_type, int wds, uint8
         return ret;
     }
 
-    if ((intf = get_interface_by_vap_index(vap->vap_index)) != NULL) {
-        wifi_hal_dbg_print("%s:%d:interface for vap index:%d already exists\n", __func__, __LINE__,
-            vap->vap_index);
-
-        // TBD We need to revisit this code and think of it. This below line of code is correct or not ?
-        memcpy(&intf->vap_info, vap, sizeof(wifi_vap_info_t));
-        nl80211_interface_enable(intf->name, true);
-    }
-
-    *interface = intf;
+    wifi_hal_dbg_print("%s:%d:Enabling interface:%s - wds:%d\n", __func__, __LINE__, ifname, wds);
+    nl80211_interface_enable(ifname, true);
 
     return RETURN_OK;
 }
@@ -11263,7 +11369,7 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
     drv = &radio->driver_data;
 
     wifi_hal_dbg_print("%s:%d nl80211: %s[%d]: set_sta_vlan(" MACSTR
-        ", ifname=%s[%d], vlan_id=%d)", __func__, __LINE__, interface->name,
+        ", ifname=%s[%d], vlan_id=%d)\r\n", __func__, __LINE__, interface->name,
         if_nametoindex(interface->name), MAC2STR(addr), ifname, if_nametoindex(ifname), vlan_id);
 
     if (!(msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_STATION)) ||
@@ -11290,11 +11396,11 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
     ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
     if (ret < 0) {
         wifi_hal_error_print("%s:%d nl80211: NL80211_ATTR_STA_VLAN (addr="
-            MACSTR " ifname=%s vlan_id=%d) failed: %d (%s)", __func__, __LINE__
+            MACSTR " ifname=%s vlan_id=%d) failed: %d (%s)\r\n", __func__, __LINE__,
             MAC2STR(addr), ifname, vlan_id, ret, strerror(-ret));
     }
     wifi_hal_info_print("%s:%d nl80211: NL80211_ATTR_STA_VLAN (addr="
-            MACSTR " ifname=%s vlan_id=%d) success", __func__, __LINE__
+            MACSTR " ifname=%s vlan_id=%d) success\r\n", __func__, __LINE__,
             MAC2STR(addr), ifname, vlan_id);
     return ret;
 fail:
@@ -11321,8 +11427,6 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val,
     int ret;
     wifi_vap_info_t *vap;
     wifi_radio_info_t *radio;
-    // we need to add changes to store this interface map on interface hash_map.
-    wifi_interface_info_t new_interface = { 0 };
 
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
@@ -11343,28 +11447,27 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val,
         __func__, __LINE__, MAC2STR(addr), aid, val, name);
     if (val) {
         if (!if_nametoindex(name)) {
-            if (wlan_nl80211_create_interface(name, NL80211_IFTYPE_AP_VLAN, 1,
-                vap->u.bss_info.bssid, radio, vap, &new_interface) != RETURN_OK) {
-                wifi_hal_error_print("%s:%d new interface create is falied for "
+            if (wlan_nl80211_create_interface(name, NL80211_IFTYPE_AP_VLAN,
+                interface->u.ap.conf.wds_sta, vap->u.bss_info.bssid, radio) != RETURN_OK) {
+                wifi_hal_error_print("%s:%d new interface create failed for "
                     "interface name:%s vap_index:%d\r\n", __func__, __LINE__, name, vap->vap_index);
                 return RETURN_ERR;
             } else {
-                new_interface->index = if_nametoindex(name);
-                wifi_hal_info_print("%s:%d: new interfce:%s id:%d is created\r\n",
-                    __func__, __LINE__, name, new_interface->index);
+                wifi_hal_info_print("%s:%d: new interface:%s is created with 4addr:%d\r\n",
+                    __func__, __LINE__, name, interface->u.ap.conf.wds_sta);
             }
-            if (bridge_ifname && nl80211_create_bridge(interface->name, bridge_ifname) != 0) {
+            if (bridge_ifname && nl80211_create_bridge(name, bridge_ifname) != 0) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
-                    __func__, __LINE__, interface->name, vap->bridge_name);
+                    __func__, __LINE__, name, vap->bridge_name);
                 return RETURN_ERR;
             } else {
                 if (nl80211_interface_enable(bridge_ifname, true) != 0) {
                     wifi_hal_error_print("%s:%d: interface:%s failed to set bridge %s up\n",
-                        __func__, __LINE__, interface->name, bridge_ifname);
+                        __func__, __LINE__, name, bridge_ifname);
                     return RETURN_ERR;
                 }
                 wifi_hal_info_print("%s:%d: interface:%s set bridge %s up\n", __func__, __LINE__,
-                    interface->name, bridge_ifname);
+                    name, bridge_ifname);
             }
             memset(&event, 0, sizeof(event));
             event.wds_sta_interface.sta_addr = addr;
