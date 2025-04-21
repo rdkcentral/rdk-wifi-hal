@@ -682,6 +682,7 @@ INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
     return 0;
 }
 
+#ifdef PLATFORM_LINUX
 int wifi_rrm_send_beacon_req(struct wifi_interface_info_t *interface, const u8 *addr,
     u16 num_of_repetitions, u8 measurement_request_mode, u8 oper_class, u8 channel,
     u16 random_interval, u16 measurement_duration, u8 mode, const u8 *bssid,
@@ -711,6 +712,7 @@ int handle_rrm_action_frame(struct wifi_interface_info_t *interface, const mac_a
 {
     return 0;
 }
+#endif
 
 #ifdef CONFIG_IEEE80211BE
 int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
