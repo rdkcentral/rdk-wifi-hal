@@ -32,6 +32,26 @@
 
 #include "wifi_hal_priv.h"
 #include "wifi_hal_wnm_rrm.h"
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <linux/rtnetlink.h>
+#include <netpacket/packet.h>
+#include <netlink/route/link/bridge.h>
+#include "wifi_hal.h"
+#include "wifi_hal_priv.h"
+#include "wpa_auth_i.h"
+#include "driver_nl80211.h"
+#include "ieee802_11.h"
+#include "ap/sta_info.h"
+#include "ap/dfs.h"
+#include <sys/wait.h>
+#include <linux/if_ether.h>
+#ifdef __GLIBC__
+#include <netinet/ether.h>
+#endif
+#include <linux/filter.h>
+#include <fcntl.h>
 
 /* See Table 9-112—Optional subelement IDs for Beacon report */
 #define WLAN_BEACON_REPORT_SUBELEM_WIDE_BW_CHSWITCH 163
