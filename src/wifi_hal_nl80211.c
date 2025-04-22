@@ -5108,7 +5108,7 @@ static void wiphy_info_mbssid(struct wpa_driver_capa *cap, struct nlattr *attr)
         return;
     }
 
-    if (config[NL80211_MBSSID_CONFIG_ATTR_MAX_INTERFACES] != NULL) {
+    if (config[NL80211_MBSSID_CONFIG_ATTR_MAX_INTERFACES] == NULL) {
         return;
     }
 
