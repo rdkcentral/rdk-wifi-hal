@@ -4295,8 +4295,9 @@ void concat_band_to_vap_name(wifi_vap_name_t vap_name, unsigned int rdk_radio_in
 
 int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
 {
-    unsigned int index = 0;
+    unsigned int index = 0, i = 0;
     wifi_interface_info_t *interface = NULL;
+    int vap_count = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
         if (strncmp(interface_index_map[index].interface_name, ifname, strlen(ifname)) == 0) {
             switch (colocated_mode) {
@@ -4306,6 +4307,18 @@ int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
                     interface_index_map[index].rdk_radio_index);
                 break;
             case 1:
+                for (i = 0; i < interface_index_map_size; i++) {
+                    if (interface_index_map[i].rdk_radio_index ==
+                        interface_index_map[index].rdk_radio_index) {
+                        vap_count++;
+                    }
+                }
+                /* If only one VAP in collocated mode, configure it as mesh_back_haul */
+                if (vap_count == 1) {
+                    strcpy((char *)interface_index_map[index].vap_name, "mesh_backhaul_");
+                    concat_band_to_vap_name((char *)interface_index_map[index].vap_name,
+                        interface_index_map[index].rdk_radio_index);
+                }
                 /* Check the interface should be either fronthaul or backhaul */
                 if (is_wifi_hal_vap_private(interface_index_map[index].index) == false &&
                     is_wifi_hal_vap_mesh_backhaul(interface_index_map[index].index) == false) {

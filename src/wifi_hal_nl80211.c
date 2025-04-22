@@ -2162,7 +2162,7 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
             conf->wds_sta = 1;
             strncpy(conf->wds_bridge, interface->vap_info.bridge_name,
                 sizeof(conf->wds_bridge));
-            wifi_hal_dbg_print("%s:%d: hostap wds status:%d wds_bridge:%s\r\n",
+            wifi_hal_dbg_print("%s:%d: hostap 4addr status:%d wds_bridge:%s\r\n",
                 __func__, __LINE__, conf->wds_sta, conf->wds_bridge);
         }
 #else
@@ -7323,16 +7323,16 @@ static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface)
     interface->mgmt_frames_registered = 0;
 }
 
-int wifi_hal_configure_wds_sta_to_bridge(wifi_interface_info_t *interface, int add)
+int wifi_hal_configure_sta_4addr_to_bridge(wifi_interface_info_t *interface, int add)
 {
     int ret = 0;
     wifi_vap_info_t *vap = &interface->vap_info;
 
-    if (vap->vap_mode != wifi_vap_mode_sta || interface->u.sta.wds_sta == 0) {
+    if (vap->vap_mode != wifi_vap_mode_sta || interface->u.sta.sta_4addr == 0) {
         wifi_hal_error_print(
-            "%s:%d: interface:%s either vapmode:%d is not sta or wds_sta:%d is not enabled.\n",
+            "%s:%d: interface:%s either vapmode:%d is not sta or sta_4addr:%d is not enabled.\n",
             __func__, __LINE__, interface->name, vap->vap_mode,
-            interface->u.sta.wds_sta);
+            interface->u.sta.sta_4addr);
         return RETURN_ERR;
     }
 
@@ -7397,9 +7397,9 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_INTERFACE);
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_STATION);
 
-        if (interface->u.sta.wds_sta) {
+        if (interface->u.sta.sta_4addr) {
             if ((ret = nla_put_u8(msg, NL80211_ATTR_4ADDR,
-                (uint8_t)interface->u.sta.wds_sta)) < 0) {
+                (uint8_t)interface->u.sta.sta_4addr)) < 0) {
                 wifi_hal_error_print("%s:%d: Error enabling sta wds for %s interface"
                     " on dev:%d error: %d (%s)\n", __func__, __LINE__, interface->name,
                     radio->index, ret, strerror(-ret));
@@ -7407,7 +7407,7 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
             }
             wifi_hal_info_print("%s:%d: Sta %s interface on dev:%d 4ADDR:%d"
                 " enabled successfully\n", __func__, __LINE__, interface->name,
-                radio->index, interface->u.sta.wds_sta);
+                radio->index, interface->u.sta.sta_4addr);
         }
     }
 
@@ -11324,7 +11324,6 @@ int wlan_nl80211_create_interface(char *ifname, uint32_t if_type, int wds, uint8
     wifi_radio_info_t *radio)
 {
     struct nl_msg *msg;
-    wifi_interface_info_t *intf;
     int ret = RETURN_ERR;
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_NEW_INTERFACE);

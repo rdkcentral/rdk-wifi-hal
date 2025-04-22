@@ -1252,9 +1252,9 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
 }
 #endif
 
-int get_sta_wds_status(int *wds_sta)
+int get_sta_4addr_status(bool *sta_4addr)
 {
-    return json_parse_integer(EM_CFG_FILE, "wds_sta", wds_sta);
+    return json_parse_boolean(EM_CFG_FILE, "sta_4addr_mode_enabled", sta_4addr);
 }
 
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
@@ -1400,12 +1400,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         nl80211_interface_enable(interface->name, false);
 #ifndef CONFIG_WIFI_EMULATOR
         if (vap->vap_mode == wifi_vap_mode_sta) {
-            int wds_sta = 0;
+            bool sta_4addr = 0;
             wifi_hal_info_print("%s:%d: interface:%s remove from bridge\n", __func__, __LINE__,
                 interface->name);
             nl80211_remove_from_bridge(interface->name);
-            if (get_sta_wds_status(&wds_sta) == RETURN_OK) {
-                interface->u.sta.wds_sta = wds_sta;
+            if (get_sta_4addr_status(&sta_4addr) == RETURN_OK) {
+                interface->u.sta.sta_4addr = (int)sta_4addr;
             }
         }
 #endif
