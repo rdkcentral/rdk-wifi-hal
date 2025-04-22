@@ -129,6 +129,15 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {2, 1,  "ath15",  "brlan1",    0,    15,     "mesh_sta_5g"},
 #endif
 
+#ifdef TARGET_GEMINI7_2 // for Qualcomm based platforms
+    {1, 0,  "home-ap-24",   "br-home",  100,    0,      "private_ssid_2g"},
+    {2, 1,  "home-ap-50",   "br-home",  100,    1,      "private_ssid_5g"},
+    {1, 0,  "bhaul-ap-24",  "",  0,    12,     "mesh_backhaul_2g"},
+    {2, 1,  "bhaul-ap-50",  "",  0,    13,     "mesh_backhaul_5g"},
+    {1, 0,  "bhaul-sta-24",  "",    0,    14,     "mesh_sta_2g"},
+    {2, 1,  "bhaul-sta-50",  "",    0,    15,     "mesh_sta_5g"},
+#endif
+
 #ifdef CMXB7_PORT // for Intel based platforms  
     {1, 0,  "wlan0.0",   "brlan0",  100, 0,      "private_ssid_2g"},
     {0, 1,  "wlan2.0",   "brlan0",  100, 1,      "private_ssid_5g"},
@@ -308,7 +317,7 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 1, 1, "radio2", "wl1"},
 #endif
 
-#if defined(VNTXER5_PORT) 
+#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) 
     { 1, 0, "radio1", "wifi0"},
     { 2, 1, "radio2", "wifi1"},
 #endif
@@ -485,6 +494,37 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
 #endif
+
+#ifdef TARGET_GEMINI7_2
+    "dt_gemini7_2",
+    "wifi_3_0",
+    {"Wireless Extender","DT","GEMINI7_2","GR-EXT02A-CTS","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    platform_pre_init,
+    platform_post_init,
+    platform_set_radio,
+    platform_set_radio_pre_init,
+    platform_pre_create_vap,
+    platform_create_vap,
+    platform_get_ssid_default,
+    platform_get_keypassphrase_default,
+    platform_get_radius_key_default,
+    platform_get_wps_pin_default,
+    platform_get_country_code_default,
+    platform_wps_event,
+    platform_flags_init,
+    platform_get_aid,
+    platform_free_aid,
+    platform_sync_done,
+    platform_update_radio_presence,
+    platform_set_txpower,
+    platform_set_offload_mode,
+    platform_get_acl_num,
+    platform_get_vendor_oui,
+    platform_set_neighbor_report,
+    platform_get_radio_phytemperature,
+    platform_set_dfs,
+    platform_get_radio_caps,
+#endif 
 
 #ifdef TCXB8_PORT // for Broadcom based platforms
     "tcxb8",
@@ -4255,9 +4295,11 @@ void concat_band_to_vap_name(wifi_vap_name_t vap_name, unsigned int rdk_radio_in
 
 int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
 {
-    unsigned int index = 0;
+    unsigned int index = 0, i = 0;
     wifi_interface_info_t *interface = NULL;
-    for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
+    int vap_count = 0;
+    int index_map_size = get_sizeof_interfaces_index_map();
+    for (index = 0; index < index_map_size; index++) {
         if (strncmp(interface_index_map[index].interface_name, ifname, strlen(ifname)) == 0) {
             switch (colocated_mode) {
             case 0:
@@ -4266,6 +4308,18 @@ int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
                     interface_index_map[index].rdk_radio_index);
                 break;
             case 1:
+                for (i = 0; i < index_map_size; i++) {
+                    if (interface_index_map[i].rdk_radio_index ==
+                        interface_index_map[index].rdk_radio_index) {
+                        vap_count++;
+                    }
+                }
+                /* If only one VAP in collocated mode, configure it as mesh_back_haul */
+                if (vap_count == 1) {
+                    strcpy((char *)interface_index_map[index].vap_name, "mesh_backhaul_");
+                    concat_band_to_vap_name((char *)interface_index_map[index].vap_name,
+                        interface_index_map[index].rdk_radio_index);
+                }
                 /* Check the interface should be either fronthaul or backhaul */
                 if (is_wifi_hal_vap_private(interface_index_map[index].index) == false &&
                     is_wifi_hal_vap_mesh_backhaul(interface_index_map[index].index) == false) {

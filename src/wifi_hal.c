@@ -162,14 +162,28 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 #if !defined(_PLATFORM_RASPBERRYPI_)
     /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
+#if defined (_PLATFORM_BANANAPI_R4_)
+    _syscmd("cat /etc/machine-id", output, sizeof(output));
+    if (strlen(output) == 0) {
+        strncpy(output, "bpi-123", sizeof(output));
+    }
+#else
     _syscmd("grep -a 'Serial' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
+#endif
     if (output[strlen(output) - 1] == '\n') {
         output[strlen(output) - 1] = '\0';
     }
     strcpy(hal->wifi_prop.serialNo,output);
 
     memset(output, '\0', sizeof(output));
+#if defined (_PLATFORM_BANANAPI_R4_)
+    _syscmd("cat /proc/device-tree/model | tr -d ' '", output, sizeof(output));
+    if (strlen(output) == 0) {
+        strncpy(output, "Banana Pi - R4", sizeof(output));
+    }
+#else
     _syscmd("grep -a 'MODEL' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
+#endif 
     if (output[strlen(output) - 1] == '\n') {
         output[strlen(output) - 1] = '\0';
     }
@@ -178,6 +192,11 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
     memset(output, '\0', sizeof(output));
     _syscmd("grep 'imagename:' /version.txt | cut -d ':' -f2 ", output, sizeof(output));
+#if defined(_PLATFORM_BANANAPI_R4_)
+    if (strlen(output) == 0) {
+        strncpy(output, "Banana Pi - R4 V1.0", sizeof(output));
+    }
+#endif
     if (output[strlen(output) - 1] == '\n') {
         output[strlen(output) - 1] = '\0';
     }
@@ -185,14 +204,28 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
     // CM mac
     memset(output, '\0', sizeof(output));
+#if defined (_PLATFORM_BANANAPI_R4_)
+    _syscmd("ifconfig erouter0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+    if (strlen(output) == 0) {
+        _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+    }
+#else
     _syscmd("grep -a 'CM' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
+#endif
     if (output[strlen(output) - 1] == '\n') {
         output[strlen(output) - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.cm_mac);
 
     memset(output, '\0', sizeof(output));
+#if defined (_PLATFORM_BANANAPI_R4_)
+    _syscmd("ifconfig erouter0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+    if (strlen(output) == 0) {
+        _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+    }
+#else
     _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+#endif
     if (output[strlen(output) - 1] == '\n') { 
         output[strlen(output) - 1] = '\0';
     }
@@ -375,9 +408,15 @@ INT wifi_hal_init()
     platform_get_radio_caps_t get_radio_caps_fn;
     platform_flags_init_t flags_init_fn;
 #endif
+    pthread_attr_t *attrp = NULL;
+#if defined(_PLATFORM_BANANAPI_R4_)
+    ssize_t stack_size = 0x800000; /* 8MB */
+    pthread_attr_t attr;
+    int ret = 0;
+#endif
     char *drv_name;
+
     wifi_hal_info_print("%s:%d: start\n", __func__, __LINE__);
-    
     if ((drv_name = get_wifi_drv_name()) == NULL) {
         wifi_hal_error_print("%s:%d: driver not found, get drv name failed\n", __func__, __LINE__);
         return RETURN_ERR;
@@ -418,9 +457,25 @@ INT wifi_hal_init()
         return RETURN_ERR;
     }
 
-    if (pthread_create(&g_wifi_hal.nl_tid, NULL, nl_recv_func, &g_wifi_hal) != 0) {
+#if defined(_PLATFORM_BANANAPI_R4_)
+    attrp = &attr;
+    pthread_attr_init(&attr);
+    ret = pthread_attr_setstacksize(&attr, stack_size);
+    if (ret != 0) {
+        wifi_hal_error_print("%s:%d pthread_attr_setstacksize failed for size:%ld ret:%d\n",
+            __func__, __LINE__, stack_size, ret);
+    }
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+#endif
+    if (pthread_create(&g_wifi_hal.nl_tid, attrp, nl_recv_func, &g_wifi_hal) != 0) {
         wifi_hal_error_print("%s:%d:ssp_main create failed\n", __func__, __LINE__);
+        if(attrp != NULL) {
+            pthread_attr_destroy(attrp);
+        }
         return RETURN_ERR;
+    }
+    if(attrp != NULL) {
+        pthread_attr_destroy(attrp);
     }
 #ifndef CONFIG_WIFI_EMULATOR
     if (eap_server_register_methods() != 0) {
