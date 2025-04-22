@@ -4298,7 +4298,8 @@ int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
     unsigned int index = 0, i = 0;
     wifi_interface_info_t *interface = NULL;
     int vap_count = 0;
-    for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
+    int index_map_size = get_sizeof_interfaces_index_map();
+    for (index = 0; index < index_map_size; index++) {
         if (strncmp(interface_index_map[index].interface_name, ifname, strlen(ifname)) == 0) {
             switch (colocated_mode) {
             case 0:
@@ -4307,7 +4308,7 @@ int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
                     interface_index_map[index].rdk_radio_index);
                 break;
             case 1:
-                for (i = 0; i < interface_index_map_size; i++) {
+                for (i = 0; i < index_map_size; i++) {
                     if (interface_index_map[i].rdk_radio_index ==
                         interface_index_map[index].rdk_radio_index) {
                         vap_count++;
