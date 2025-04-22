@@ -1164,6 +1164,8 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     int preassoc_min_mcs = convert_string_mcs_to_int(vap->u.bss_info.preassoc.minimum_advertised_mcs);
     conf->min_adv_mcs = preassoc_min_mcs;
     wifi_hal_dbg_print("%s:%d:min_adv_mcs is %d  and ifacename is %s\n", __func__, __LINE__,conf->min_adv_mcs,conf->iface);
+    conf->he_6g_min_rate = convert_string_rate_to_int(vap->u.bss_info.preassoc.sixGOpInfoMinRate);
+    wifi_hal_dbg_print("POORNA %s:%d:he_6g_min_rate is %d\n", __func__, __LINE__,conf->he_6g_min_rate);
 #endif
     /* IEEE 802.11u - Interworking */
     conf->interworking = vap->u.bss_info.interworking.interworking.interworkingEnabled;
