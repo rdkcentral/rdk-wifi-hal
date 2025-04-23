@@ -65,7 +65,7 @@
 #include "collection.h"
 #include "driver.h"
 
-#ifdef CONFIG_WIFI_EMULATOR
+#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
 #include "wpa_supplicant_i.h"
 #include "bss.h"
 #include "sme.h"
@@ -152,6 +152,8 @@ extern "C" {
 #define ecw2cw(ecw) ((1 << (ecw)) - 1)
 
 #define     MAX_BSSID_IN_ESS    8
+
+#define MAX_FREQ_LIST_SIZE 128
 
 #define BUF_SIZE         32
 #define NL_SOCK_MAX_BUF_SIZE             262144
@@ -486,7 +488,7 @@ typedef struct wifi_interface_info_t {
 #endif
     /* Wi-Fi band steering sta_list_map */
     hash_map_t  *bm_sta_map;
-#ifdef CONFIG_WIFI_EMULATOR
+#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
     unsigned char *ie;
     size_t ie_len;
     unsigned char *beacon_ie;
