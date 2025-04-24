@@ -2229,9 +2229,11 @@ static void wpa_sm_sta_set_state(void *ctx, enum wpa_states state)
 
     if (state == WPA_COMPLETED) {
         nl80211_get_channel_bw_conn(interface);
+        wifi_hal_configure_sta_4addr_to_bridge(interface, 1);
     } else if (state == WPA_DISCONNECTED) {
         callbacks = get_hal_device_callbacks();
         
+        wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
         if (callbacks->sta_conn_status_callback) {
             memcpy(&bss, &interface->u.sta.backhaul, sizeof(wifi_bss_info_t));
 
