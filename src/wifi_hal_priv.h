@@ -494,6 +494,7 @@ typedef struct wifi_interface_info_t {
     unsigned char *beacon_ie;
     size_t beacon_ie_len;
     struct wpa_supplicant wpa_s;
+    struct wpa_ssid current_ssid_info;
 #endif
 } wifi_interface_info_t;
 
@@ -1106,6 +1107,7 @@ int json_parse_integer(const char* file_name, const char *item_name, int *val);
 int json_parse_boolean(const char* file_name, const char *item_name, bool *val);
 bool get_ifname_from_mac(const mac_address_t *mac, char *ifname);
 int wifi_hal_configure_sta_4addr_to_bridge(wifi_interface_info_t *interface, int add);
+struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface);
 
 #ifdef CONFIG_IEEE80211BE
 int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,

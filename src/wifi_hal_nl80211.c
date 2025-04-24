@@ -8368,6 +8368,12 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s\n", __func__, __LINE__,
         to_mac_str(backhaul->bssid, bssid_str), backhaul->freq, backhaul->ssid);
 
+    if (interface->wpa_s.current_ssid == NULL) {
+        interface->wpa_s.current_ssid = get_wifi_wpa_current_ssid(interface);
+        wifi_hal_info_print("%s:%d: point to - wpa_s.current_ssid:[%p]\n",
+            __func__, __LINE__, interface->wpa_s.current_ssid);
+    }
+
     if ((interface->wpa_s.current_ssid == NULL) || (interface->wpa_s.p2pdev == NULL) ||
         (interface->wpa_s.conf == NULL)) {
         wifi_hal_error_print("%s:%d NULL Pointer for wpa_s cur_ssid:%p p2pdev:%p conf:%p\n",

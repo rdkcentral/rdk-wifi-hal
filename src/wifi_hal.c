@@ -1181,6 +1181,11 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
 }
 
 #if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface)
+{
+    return &interface->current_ssid_info;
+}
+
 int deinit_wpa_supplicant(wifi_interface_info_t *interface)
 {
     wifi_hal_info_print("%s:%d: deinit wpa supplicant params\n", __func__, __LINE__);
@@ -1189,10 +1194,12 @@ int deinit_wpa_supplicant(wifi_interface_info_t *interface)
         interface->wpa_s.p2pdev = NULL;
     }
 
+#if 0
     if (interface->wpa_s.current_ssid != NULL) {
         free(interface->wpa_s.current_ssid);
         interface->wpa_s.current_ssid = NULL;
     }
+#endif
 
     if (interface->wpa_s.conf != NULL) {
         free(interface->wpa_s.conf);
@@ -1222,11 +1229,15 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
     }
 
     if (interface->wpa_s.current_ssid == NULL) {
+#if 0
         interface->wpa_s.current_ssid = (struct wpa_ssid *)malloc(sizeof(struct wpa_ssid));
         if (interface->wpa_s.current_ssid == NULL) {
             wifi_hal_error_print("%s:%d: NULL Pointer \n", __func__, __LINE__);
             return RETURN_ERR;
         }
+#else
+        interface->wpa_s.current_ssid = get_wifi_wpa_current_ssid(interface);
+#endif
         memset(interface->wpa_s.current_ssid, 0, sizeof(struct wpa_ssid));
     }
 
