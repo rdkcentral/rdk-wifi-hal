@@ -1285,6 +1285,24 @@ int platform_set_neighbor_report(uint index, uint add, mac_address_t mac)
 
 int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
+    wifi_radio_info_t *radio = NULL;
+
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
+        return -1;
+    }
+
+    if (operationParam == NULL || check_radio_index(index) != 0 ) {
+        wifi_hal_error_print("%s:%d returning error param:%p index:%d\n",__func__,__LINE__, operationParam, index);
+        return -1;
+    }
+
+    if (wifi_setRadioDfsEnable(index, operationParam->DfsEnabled) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d RadioDfsEnable Failed\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
     return 0;
 }
 
