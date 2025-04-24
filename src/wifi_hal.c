@@ -508,6 +508,15 @@ INT wifi_hal_pre_init()
         wifi_hal_info_print("%s:%d: platfrom pre init\n", __func__, __LINE__);
         pre_init_fn();
     }
+
+#ifdef CONFIG_IEEE80211BE
+void hostapd_wpa_event(void *ctx, enum wpa_event_type event,
+                       union wpa_event_data *data);
+
+     wpa_supplicant_event = hostapd_wpa_event;
+#endif
+
+
     return RETURN_OK;
 }
 
