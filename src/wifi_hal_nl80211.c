@@ -62,12 +62,12 @@
 #include <semaphore.h>
 #endif
 
-#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 #include "sme.h"
 #endif
 #ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
-#elif defined BANANA_PI_PORT
+#elif defined(BANANA_PI_PORT)
 #include "config.h"
 #endif
 
@@ -8339,6 +8339,22 @@ int wifi_hal_emu_set_radio_channel_stats(unsigned int radio_index, bool emu_stat
 }
 #endif
 
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+int init_wpa_sm_param(wifi_interface_info_t *interface)
+{
+    wifi_vap_security_t *security;
+    security = &interface->vap_info.u.sta_info.security;
+
+    if (security->mode != wifi_security_mode_none) {
+        wifi_hal_info_print("%s:%d: update eapol sm param for vap_index:%d\n",
+            __func__, __LINE__, interface->vap_info.vap_index);
+        update_eapol_sm_params(interface);
+        eapol_sm_notify_portEnabled(interface->u.sta.wpa_sm->eapol, TRUE);
+    }
+    return RETURN_OK;
+}
+#endif
+
 #define MAX_PWD_LEN 64
 #define MAX_SAE_GROUP 5
 int nl80211_connect_sta(wifi_interface_info_t *interface)
@@ -8362,9 +8378,10 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     backhaul = &interface->u.sta.backhaul;
     security = &vap->u.sta_info.security;
 
-#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     struct wpa_bss *bss;
     wifi_radio_info_t *radio;
+
     wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s\n", __func__, __LINE__,
         to_mac_str(backhaul->bssid, bssid_str), backhaul->freq, backhaul->ssid);
 
@@ -8413,6 +8430,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     }
 
     update_wpa_sm_params(interface);
+    init_wpa_sm_param(interface);
     interface->wpa_s.current_ssid->proto = WPA_PROTO_RSN;
     interface->wpa_s.current_ssid->group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
 
@@ -8453,7 +8471,9 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 
     if ( (security->mode == wifi_security_mode_wpa3_personal) ||
         (security->mode == wifi_security_mode_wpa3_compatibility)) {
-        interface->wpa_s.current_ssid->sae_password = malloc(MAX_PWD_LEN);
+        if (interface->wpa_s.current_ssid->sae_password == NULL) {
+            interface->wpa_s.current_ssid->sae_password = malloc(MAX_PWD_LEN);
+        }
         if (interface->wpa_s.current_ssid->sae_password == NULL) {
             wifi_hal_error_print("%s:%d: NULL pointer\n", __func__, __LINE__);
             free(interface->wpa_s.current_ssid->ssid);
@@ -8467,7 +8487,9 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             MAX_PWD_LEN-1);
     } else if ((security->mode != wifi_security_mode_wpa2_enterprise) &&
         (security->mode != wifi_security_mode_wpa3_enterprise)) {
-        interface->wpa_s.current_ssid->passphrase = malloc(MAX_PWD_LEN);
+        if (interface->wpa_s.current_ssid->passphrase == NULL) {
+            interface->wpa_s.current_ssid->passphrase = malloc(MAX_PWD_LEN);
+        }
         if (interface->wpa_s.current_ssid->passphrase == NULL) {
             wifi_hal_error_print("%s:%d: NULL pointer\n", __func__, __LINE__);
             free(interface->wpa_s.current_ssid->ssid);
@@ -9810,7 +9832,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
             wifi_hal_stats_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d on freq:%d for ssid:%s\n", __func__, __LINE__,
                         to_mac_str(bssid, bssid_str), scan_info_ap->rssi, scan_info_ap->freq, scan_info_ap->ssid);
             memcpy(vap->u.sta_info.bssid, bssid, sizeof(bssid_t));
-#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
             if (bss[NL80211_BSS_INFORMATION_ELEMENTS]) {
                 interface->ie_len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
                 interface->ie = (unsigned char *)malloc(interface->ie_len);
@@ -11138,15 +11160,18 @@ int wifi_drv_set_sta_vlan(void *priv, const u8 *addr,
 
     wifi_interface_info_t *interface;
     struct nl_msg *msg;
-    wifi_vap_info_t *vap;
-    wifi_radio_info_t *radio;
-    wifi_driver_data_t *drv;
     int ret;
 
     interface = (wifi_interface_info_t *)priv;
+#ifdef BANANA_PI_PORT
+    wifi_driver_data_t *drv;
+    wifi_radio_info_t *radio;
+    wifi_vap_info_t *vap;
+
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
     drv = &radio->driver_data;
+#endif
 
     if (!(msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_STATION)) ||
           nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr)) {
@@ -11155,12 +11180,14 @@ int wifi_drv_set_sta_vlan(void *priv, const u8 *addr,
         goto fail;
     }
 
+#ifdef BANANA_PI_PORT
     if (vlan_id && (drv->capa.flags & WPA_DRIVER_FLAGS_VLAN_OFFLOAD) &&
             (nla_put_u16(msg, NL80211_ATTR_VLAN_ID, vlan_id) < 0)) {
         wifi_hal_error_print("%s:%d netlink:%s command set vlan_id:%d failed\r\n",
                 __func__, __LINE__, ifname, vlan_id);
         goto fail;
     }
+#endif
 
     if (nla_put_u32(msg, NL80211_ATTR_STA_VLAN, if_nametoindex(ifname)) < 0) {
         wifi_hal_error_print("%s:%d netlink:%s command set ifname_id:%d failed\r\n",
@@ -11393,8 +11420,10 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
 {
     struct nl_msg *msg;
     int ret;
+#ifdef BANANA_PI_PORT
     wifi_driver_data_t *drv;
     drv = &radio->driver_data;
+#endif
 
     wifi_hal_dbg_print("%s:%d nl80211: %s[%d]: set_sta_vlan(" MACSTR
         ", ifname=%s[%d], vlan_id=%d)\r\n", __func__, __LINE__, interface->name,
@@ -11407,6 +11436,7 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
         goto fail;
     }
 
+#ifdef BANANA_PI_PORT
     if (vlan_id && (drv->capa.flags & WPA_DRIVER_FLAGS_VLAN_OFFLOAD)) {
         if (nla_put_u16(msg, NL80211_ATTR_VLAN_ID, vlan_id) < 0) {
             wifi_hal_error_print("%s:%d netlink command vlan id:%d set failed\r\n",
@@ -11414,6 +11444,7 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
             goto fail;
         }
     }
+#endif
 
     if (nla_put_u32(msg, NL80211_ATTR_STA_VLAN, if_nametoindex(ifname)) < 0) {
         wifi_hal_error_print("%s:%d netlink command sta vlan[%s]:%d set failed\r\n",
@@ -14447,7 +14478,7 @@ int wifi_drv_get_bssid(void *priv, u8 *bssid)
 int wifi_drv_get_ssid(void *priv, u8 *ssid)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
-#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     if (ssid == NULL) {
         wifi_hal_dbg_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
         return 0;
@@ -14470,7 +14501,7 @@ int wifi_drv_get_ssid(void *priv, u8 *ssid)
 #endif
 }
 
-#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 int wifi_supplicant_drv_associate(void *priv, struct wpa_driver_associate_params *params)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
@@ -14578,7 +14609,7 @@ int wifi_supplicant_drv_authenticate(void *priv, struct wpa_driver_auth_params *
     return -1;
 }
 
-#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 int wifi_supplicant_drv_get_bssid(void *priv, u8 *bssid)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
@@ -16647,7 +16678,7 @@ int wifi_drv_get_sta_auth_type(void *priv, const u8 *addr, int auth_key,int fram
 const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .name = "nl80211",
     .desc = "Linux nl80211/cfg80211",
-#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     .get_bssid = wifi_supplicant_drv_get_bssid,
 #else
     .get_bssid = wifi_drv_get_bssid,
@@ -16660,7 +16691,7 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .get_scan_results2 = wifi_drv_get_scan_results,
     .abort_scan = wifi_drv_abort_scan,
     .deauthenticate = wifi_drv_deauthenticate,
-#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     .authenticate = wifi_supplicant_drv_authenticate,
     .associate = wifi_supplicant_drv_associate,
 #else

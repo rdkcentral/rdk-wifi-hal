@@ -65,7 +65,7 @@
 #include "collection.h"
 #include "driver.h"
 
-#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 #include "wpa_supplicant_i.h"
 #include "bss.h"
 #include "sme.h"
@@ -488,7 +488,7 @@ typedef struct wifi_interface_info_t {
 #endif
     /* Wi-Fi band steering sta_list_map */
     hash_map_t  *bm_sta_map;
-#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     unsigned char *ie;
     size_t ie_len;
     unsigned char *beacon_ie;

@@ -1180,7 +1180,7 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
     return RETURN_OK;
 }
 
-#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface)
 {
     return &interface->current_ssid_info;
@@ -1270,7 +1270,7 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
 
     return RETURN_OK;
 }
-#endif //CONFIG_WIFI_EMULATOR || BANANA_PI_PORT)
+#endif //CONFIG_WIFI_EMULATOR || BANANA_PI_PORT
 
 int get_sta_4addr_status(bool *sta_4addr)
 {
@@ -1661,7 +1661,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             }
         }
-#if (defined CONFIG_WIFI_EMULATOR || defined BANANA_PI_PORT)
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         //Init wpa-supplicant params.
         if (vap->vap_mode == wifi_vap_mode_sta) {
             deinit_wpa_supplicant(interface);
