@@ -703,8 +703,13 @@ int nl80211_send_mlo_msg(struct nl_msg *msg)
 
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb)
 {
-    (void)eht_capab;
-    (void)tb;
+    if (tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC] &&
+        nla_len(tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC]) >= 2) {
+        const u8 *pos;
+
+        pos = nla_data(tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC]);
+        eht_capab->mac_cap = WPA_GET_LE16(pos);
+    }
 }
 
 int update_hostap_mlo(wifi_interface_info_t *interface)
