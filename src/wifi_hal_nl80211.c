@@ -9451,6 +9451,33 @@ static void parse_eht_capa(const uint8_t type, uint8_t len, const uint8_t *data,
     bss->supp_standards |= WIFI_80211_VARIANT_BE;
     bss->oper_standards = WIFI_80211_VARIANT_BE;
 }
+
+static void parse_eht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
+    const struct parse_ies_data *ie_buffer, wifi_bss_info_t *bss)
+{
+    (void)type;
+    (void)ie_buffer;
+
+    if (len < 5) {
+        wifi_hal_error_print("%s:%d: Invalid EHT Operation element\n", __func__, __LINE__);
+        return;
+    }
+
+    switch (data[1]) {
+    case 1:
+        bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_320MHZ;
+        break;
+
+    default:
+        wifi_hal_error_print("%s:%d: MJ Unknown EHT channel width\n", __func__, __LINE__);
+        break;
+    }
+
+    if (bss->oper_freq_band & WIFI_FREQUENCY_6_BAND) {
+        bss->supp_standards |= WIFI_80211_VARIANT_BE;
+        bss->oper_standards = WIFI_80211_VARIANT_BE;
+    }
+}
 #endif /* CONFIG_IEEE80211BE */
 
 static void parse_bss_load(const uint8_t type, uint8_t len, const uint8_t *data,
@@ -9483,6 +9510,9 @@ static void parse_extension_tag(const uint8_t type, uint8_t len, const uint8_t *
 #ifdef CONFIG_IEEE80211BE
         case WLAN_EID_EXT_EHT_CAPABILITIES:
             parse_eht_capa(type, len, data, ie_buffer, bss);
+            break;
+        case WLAN_EID_EXT_EHT_OPERATION:
+            parse_eht_oper(type, len, data, ie_buffer, bss);
             break;
 #endif /* CONFIG_IEEE80211BE */
         default:
