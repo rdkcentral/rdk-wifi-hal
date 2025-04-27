@@ -2302,6 +2302,15 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
         return RETURN_ERR;
     }
 
+#if defined(_PLATFORM_BANANAPI_R4_)
+    if (interface->rdk_radio_index != index) {
+        wifi_hal_stats_error_print("%s:%d:Not allowing scan on radio_index: %d because not "
+            "matching with interface->rdk_radio_index:%d\n",
+            __func__, __LINE__, index, interface->rdk_radio_index);
+        return RETURN_ERR;
+    }
+#endif
+
     vap = &interface->vap_info;
     radio_param = &radio->oper_param;
 
