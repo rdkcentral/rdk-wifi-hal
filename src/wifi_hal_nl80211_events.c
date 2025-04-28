@@ -208,6 +208,7 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
     u16 status = 0;
     size_t len = 0;
 
+    memset(&event, 0, sizeof(event));
     wifi_hal_dbg_print("%s:%d: Enter \n", __func__, __LINE__);
     if (tb[NL80211_ATTR_FRAME]) {
         len = nla_len(tb[NL80211_ATTR_FRAME]);
@@ -254,6 +255,7 @@ static void nl80211_authenticate_event(wifi_interface_info_t *interface, struct 
     union wpa_event_data event;
     const struct ieee80211_mgmt *mgmt;
 
+    memset(&event, 0, sizeof(event));
     wifi_hal_dbg_print("%s:%d: Enter \n", __func__, __LINE__);
     if (tb[NL80211_ATTR_FRAME]) {
         mgmt = (const struct ieee80211_mgmt *) nla_data(tb[NL80211_ATTR_FRAME]);

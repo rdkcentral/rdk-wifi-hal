@@ -9834,19 +9834,33 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
             memcpy(vap->u.sta_info.bssid, bssid, sizeof(bssid_t));
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
             if (bss[NL80211_BSS_INFORMATION_ELEMENTS]) {
-                interface->ie_len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
-                interface->ie = (unsigned char *)malloc(interface->ie_len);
+                uint32_t ie_len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
+                if (interface->ie == NULL) {
+                    interface->ie = (unsigned char *)malloc(ie_len);
+                } else if (ie_len > interface->ie_len) {
+                    interface->ie = (unsigned char *)realloc(interface->ie, ie_len);
+                }
                 if (interface->ie != NULL) {
+                    interface->ie_len = ie_len;
                     memset(interface->ie, 0, interface->ie_len);
                     memcpy(interface->ie, nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]), interface->ie_len);
+                } else {
+                    interface->ie_len = 0;
                 }
             }
             if (bss[NL80211_BSS_BEACON_IES]) {
-                interface->beacon_ie_len = nla_len(bss[NL80211_BSS_BEACON_IES]);
-                interface->beacon_ie = (unsigned char *)malloc(interface->beacon_ie_len);
+                uint32_t beacon_ie_len = nla_len(bss[NL80211_BSS_BEACON_IES]);
+                if (interface->beacon_ie == NULL) {
+                    interface->beacon_ie = (unsigned char *)malloc(beacon_ie_len);
+                } else if (beacon_ie_len > interface->beacon_ie_len) {
+                    interface->beacon_ie = (unsigned char *)realloc(interface->beacon_ie, beacon_ie_len);
+                }
                 if (interface->beacon_ie != NULL) {
+                    interface->beacon_ie_len = beacon_ie_len;
                     memset(interface->beacon_ie, 0, interface->beacon_ie_len);
                     memcpy(interface->beacon_ie, nla_data(bss[NL80211_BSS_BEACON_IES]), interface->beacon_ie_len);
+                } else {
+                    interface->beacon_ie_len = 0;
                 }
             }
 #endif
@@ -15807,6 +15821,7 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
     size_t i, len = *current_len;
     u8 bss_param, tbtt_count = 0;
     u8 *tbtt_count_pos, *eid_start = eid, *size_offset = eid - len + 1;
+    wifi_interface_info_t *interface_iter, *tx_interface;
     wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
@@ -15831,8 +15846,10 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
         return eid_start;
     }
 
-    interface = hash_map_get_first(radio->interface_map);
-    while (interface) {
+    tx_interface = wifi_hal_get_mbssid_tx_interface(radio);
+
+    interface_iter = hash_map_get_first(radio->interface_map);
+    while (interface_iter != NULL) {
         if (!len || len + RNR_TBTT_HEADER_LEN + RNR_TBTT_INFO_LEN > 255) {
             eid_start = eid;
             *eid++ = WLAN_EID_REDUCED_NEIGHBOR_REPORT;
@@ -15848,12 +15865,13 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
         len += RNR_TBTT_HEADER_LEN;
 
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-        for (;interface; interface = hash_map_get_next(radio->interface_map, interface)) {
+        for (; interface_iter != NULL;
+            interface_iter = hash_map_get_next(radio->interface_map, interface_iter)) {
 
             bss_param = 0;
-            hapd = &interface->u.ap.hapd;
+            hapd = &interface_iter->u.ap.hapd;
 
-            if (!hapd->conf || !hapd->started) {
+            if (hapd->conf == NULL || hapd->iconf == NULL || !hapd->started) {
                 continue;
             }
 
@@ -15867,15 +15885,21 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
             memcpy(eid, &hapd->conf->ssid.short_ssid, 4);
             eid += 4;
 
-            bss_param |= RNR_BSS_PARAM_MULTIPLE_BSSID;
+            bss_param |= hapd->iconf->mbssid != MBSSID_DISABLED ? RNR_BSS_PARAM_MULTIPLE_BSSID : 0;
 
-            if (is_wifi_hal_vap_private(interface->vap_info.vap_index)) {
+            if (interface_iter == tx_interface) {
                 bss_param |= RNR_BSS_PARAM_TRANSMITTED_BSSID;
             }
 
             if (is_6ghz_op_class(hapd->iconf->op_class) &&
                 hapd->conf->unsol_bcast_probe_resp_interval) {
                 bss_param |= RNR_BSS_PARAM_UNSOLIC_PROBE_RESP_ACTIVE;
+            }
+
+            if (interface->u.ap.hapd.conf != NULL &&
+                strncmp(interface->u.ap.hapd.conf->ssid.ssid, hapd->conf->ssid.ssid,
+                    sizeof(hapd->conf->ssid.ssid)) == 0) {
+                bss_param |= RNR_BSS_PARAM_SAME_SSID;
             }
 
             bss_param |= RNR_BSS_PARAM_CO_LOCATED | RNR_BSS_PARAM_MEMBER_CO_LOCATED_ESS;
