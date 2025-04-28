@@ -535,6 +535,32 @@ int json_parse_integer(const char* file_name, const char *item_name, int *val)
     return 0;
 }
 
+int json_parse_boolean(const char* file_name, const char *item_name, bool *val)
+{
+    cJSON *item;
+    cJSON *json;
+
+    json = json_open_file(file_name);
+    if (json == NULL) {
+        *val = false;
+        return -1;
+    }
+
+    item = cJSON_GetObjectItem(json, item_name);
+    if ((item == NULL) || (cJSON_IsBool(item) == false)) {
+        wifi_hal_error_print("%s:%d: (%s) does "
+            "not exist or is not a boolean.\n",
+            __func__, __LINE__, item_name);
+        cJSON_Delete(json);
+        *val = false;
+        return -1;
+    }
+    *val = (item->type & cJSON_True) ? true : false;
+
+    cJSON_Delete(json);
+    return 0;
+}
+
 /* This routine will take mac address from the user and returns associated interfacename */
 bool get_ifname_from_mac(const mac_address_t *mac, char *ifname)
 {

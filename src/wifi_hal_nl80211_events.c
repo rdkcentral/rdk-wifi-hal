@@ -174,6 +174,8 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     os_memset(&event, 0, sizeof(event));
     event.disassoc_info.addr = mac;
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
+    //Remove the station from the bridge, if present
+    wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
 }
 #endif //_PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
 
