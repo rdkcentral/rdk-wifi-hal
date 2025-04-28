@@ -9469,7 +9469,7 @@ static void parse_eht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
         break;
 
     default:
-        wifi_hal_error_print("%s:%d: MJ Unknown EHT channel width\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: Unknown EHT channel width\n", __func__, __LINE__);
         break;
     }
 
