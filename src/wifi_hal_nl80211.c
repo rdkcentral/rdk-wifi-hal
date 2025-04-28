@@ -9458,19 +9458,23 @@ static void parse_eht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
     (void)type;
     (void)ie_buffer;
 
-    if (len < 5) {
-        wifi_hal_error_print("%s:%d: Invalid EHT Operation element\n", __func__, __LINE__);
-        return;
-    }
+    if ((data[1] & EHT_OPER_INFO_PRESENT) && len >= 7) {
+        switch (data[6] & 0x07) {
+        case EHT_OPER_CHANNEL_WIDTH_40MHZ:
+            bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_40MHZ;
+            break;
+        case EHT_OPER_CHANNEL_WIDTH_80MHZ:
+            bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_80MHZ;
+            break;
+        case EHT_OPER_CHANNEL_WIDTH_160MHZ:
+            bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_160MHZ;
+            break;
+        case EHT_OPER_CHANNEL_WIDTH_320MHZ:
 
-    switch (data[1]) {
-    case 1:
-        bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_320MHZ;
-        break;
-
-    default:
-        wifi_hal_error_print("%s:%d: Unknown EHT channel width\n", __func__, __LINE__);
-        break;
+        default:
+            wifi_hal_error_print("%s:%d: Unknown EHT channel width\n", __func__, __LINE__);
+            break;
+        }
     }
 
     if (bss->oper_freq_band & WIFI_FREQUENCY_6_BAND) {
