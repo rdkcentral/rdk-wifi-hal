@@ -2159,6 +2159,10 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     strcpy(ssid_list[0], vap->u.sta_info.ssid);
     wifi_hal_info_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
 
+    pthread_mutex_lock(&interface->scan_info_mutex);
+    hash_map_cleanup(interface->scan_info_map);
+    pthread_mutex_unlock(&interface->scan_info_mutex);
+
     return (nl80211_start_scan(interface, 0, num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
 }
 
@@ -2768,13 +2772,11 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
         interface->scan_state = WIFI_SCAN_STATE_NONE;
 
         /* Cleanup scan data (scan_info_ap_map[0]) before the new scan. Result data
-           (scan_info_ap_map[1]) stays unchanged. For compatibility with existing code,
-           scan_info_map is not cleaned up here */
-        /*
+         *  (scan_info_ap_map[1]) stays unchanged. 
+         */
         pthread_mutex_lock(&interface->scan_info_mutex);
         hash_map_cleanup(interface->scan_info_map);
         pthread_mutex_unlock(&interface->scan_info_mutex);
-        */
         pthread_mutex_lock(&interface->scan_info_ap_mutex);
         cleanup_freqs_filter(interface);
         hash_map_cleanup(interface->scan_info_ap_map[0]);
