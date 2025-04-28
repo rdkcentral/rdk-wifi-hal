@@ -11120,15 +11120,18 @@ int wifi_drv_set_sta_vlan(void *priv, const u8 *addr,
 
     wifi_interface_info_t *interface;
     struct nl_msg *msg;
-    wifi_vap_info_t *vap;
-    wifi_radio_info_t *radio;
-    wifi_driver_data_t *drv;
     int ret;
 
     interface = (wifi_interface_info_t *)priv;
+#ifdef BANANA_PI_PORT
+    wifi_driver_data_t *drv;
+    wifi_radio_info_t *radio;
+    wifi_vap_info_t *vap;
+
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
     drv = &radio->driver_data;
+#endif
 
     if (!(msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_STATION)) ||
           nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr)) {
@@ -11137,12 +11140,14 @@ int wifi_drv_set_sta_vlan(void *priv, const u8 *addr,
         goto fail;
     }
 
+#ifdef BANANA_PI_PORT
     if (vlan_id && (drv->capa.flags & WPA_DRIVER_FLAGS_VLAN_OFFLOAD) &&
             (nla_put_u16(msg, NL80211_ATTR_VLAN_ID, vlan_id) < 0)) {
         wifi_hal_error_print("%s:%d netlink:%s command set vlan_id:%d failed\r\n",
                 __func__, __LINE__, ifname, vlan_id);
         goto fail;
     }
+#endif
 
     if (nla_put_u32(msg, NL80211_ATTR_STA_VLAN, if_nametoindex(ifname)) < 0) {
         wifi_hal_error_print("%s:%d netlink:%s command set ifname_id:%d failed\r\n",
@@ -11375,8 +11380,10 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
 {
     struct nl_msg *msg;
     int ret;
+#ifdef BANANA_PI_PORT
     wifi_driver_data_t *drv;
     drv = &radio->driver_data;
+#endif
 
     wifi_hal_dbg_print("%s:%d nl80211: %s[%d]: set_sta_vlan(" MACSTR
         ", ifname=%s[%d], vlan_id=%d)\r\n", __func__, __LINE__, interface->name,
@@ -11389,6 +11396,7 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
         goto fail;
     }
 
+#ifdef BANANA_PI_PORT
     if (vlan_id && (drv->capa.flags & WPA_DRIVER_FLAGS_VLAN_OFFLOAD)) {
         if (nla_put_u16(msg, NL80211_ATTR_VLAN_ID, vlan_id) < 0) {
             wifi_hal_error_print("%s:%d netlink command vlan id:%d set failed\r\n",
@@ -11396,6 +11404,7 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
             goto fail;
         }
     }
+#endif
 
     if (nla_put_u32(msg, NL80211_ATTR_STA_VLAN, if_nametoindex(ifname)) < 0) {
         wifi_hal_error_print("%s:%d netlink command sta vlan[%s]:%d set failed\r\n",
