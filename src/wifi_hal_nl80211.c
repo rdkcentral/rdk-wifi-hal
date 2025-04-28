@@ -9470,7 +9470,8 @@ static void parse_eht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
             bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_160MHZ;
             break;
         case EHT_OPER_CHANNEL_WIDTH_320MHZ:
-
+            bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_320MHZ;
+            break;
         default:
             wifi_hal_error_print("%s:%d: Unknown EHT channel width\n", __func__, __LINE__);
             break;
