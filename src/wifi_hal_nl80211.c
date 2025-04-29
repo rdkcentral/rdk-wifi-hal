@@ -9478,10 +9478,8 @@ static void parse_eht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
         }
     }
 
-    if (bss->oper_freq_band & WIFI_FREQUENCY_6_BAND) {
-        bss->supp_standards |= WIFI_80211_VARIANT_BE;
-        bss->oper_standards = WIFI_80211_VARIANT_BE;
-    }
+    bss->supp_standards |= WIFI_80211_VARIANT_BE;
+    bss->oper_standards = WIFI_80211_VARIANT_BE;
 }
 #endif /* CONFIG_IEEE80211BE */
 
