@@ -8871,6 +8871,10 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         }
     }
 
+    char vid[] =  {0xdd, 0x09, 0x00, 0x10, 0x18, 0x02, 0xff, 0xff, 0x1c, 0xff, 0xff};
+
+    nla_put(msg, NL80211_ATTR_IE, 11, vid);
+
     ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
     if (ret) {
         wifi_hal_stats_error_print("%s:%d: [SCAN] TRIGGER_SCAN command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
