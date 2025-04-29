@@ -366,9 +366,38 @@ int wifi_setApRetrylimit(void *priv)
 
 int platform_get_radio_caps(wifi_radio_index_t index)
 {
-    return 0;
-}
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface;
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_dbg_print("%s:%d failed to get radio for index\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
 
+    for (interface = hash_map_get_first(radio->interface_map); interface != NULL;
+        interface = hash_map_get_next(radio->interface_map, interface)) {
+
+        if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+            continue;
+        }
+
+       struct hostapd_iface *iface = &interface->u.ap.iface;
+        if (strstr(interface->vap_info.vap_name, "private_ssid_5g")) {
+           for (int i = 0; i < iface->num_hw_features; i++) {
+                iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].eht_supported = true;
+           }
+        } else if (strstr(interface->vap_info.vap_name, "private_ssid_6g")) {
+           for (int i = 0; i < iface->num_hw_features; i++) {
+                iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].eht_supported = true;
+           }
+        }
+    }
+#endif // HOSTAPD_VERSION
+#endif //CONFIG_IEEE80211BE
+    return RETURN_OK;
+}
 
 INT wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
 {
