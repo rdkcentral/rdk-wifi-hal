@@ -2151,11 +2151,10 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     return RETURN_OK;
 }
 
-int update_hostap_interface_params(wifi_interface_info_t *interface)
+int update_hostap_interface_params_v2(wifi_interface_info_t *interface, unsigned char update_mlo)
 {
     int ret = RETURN_ERR;
 
-    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     // initialize the default params
     if (update_hostap_data(interface) != RETURN_OK) {
         goto exit;
@@ -2179,13 +2178,21 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
         goto exit;
     }
 #ifdef CONFIG_IEEE80211BE
-    if (update_hostap_mlo(interface) != RETURN_OK) {
+    if (update_mlo && update_hostap_mlo(interface) != RETURN_OK) {
         goto exit;
     }
 #endif /* CONFIG_IEEE80211BE */
 
     ret = RETURN_OK;
 exit:
+    return ret;
+}
+
+int update_hostap_interface_params(wifi_interface_info_t *interface)
+{
+    int ret;
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    ret = update_hostap_interface_params_v2(interface, 1);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return ret;
 }
@@ -2371,7 +2378,7 @@ static int wpa_sm_sta_ether_send(void *ctx, const u8 *dest, u16 proto, const u8 
         encrypt = interface->u.sta.wpa_sm && wpa_sm_has_ptk_installed(interface->u.sta.wpa_sm);
         wifi_hal_info_print("%s:%d: Sending eapol via control port to sta:%s on interface:%s encrypt:%d\n", __func__, __LINE__,
             to_mac_str(dest, mac_str), interface->name, encrypt);
-        if ((ret = nl80211_tx_control_port(interface, dest, ETH_P_EAPOL, buf, len, !encrypt))) {
+        if ((ret = nl80211_tx_control_port(interface, dest, ETH_P_EAPOL, buf, len, !encrypt, -1))) {
             wifi_hal_error_print("%s:%d: eapol send failed\n", __func__, __LINE__);
             return -1;
         }
