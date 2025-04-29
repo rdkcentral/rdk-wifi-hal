@@ -7571,9 +7571,24 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
         scan_info = hash_map_get_first(interface->scan_info_map);
         while (scan_info != NULL) {
             if (strcmp(scan_info->ssid, interface->vap_info.u.sta_info.ssid) == 0){
-                bss[desired_scanned_ssid_pos] = *scan_info;
-                ssid_found_count++;
-                desired_scanned_ssid_pos++;
+#if defined(_PLATFORM_BANANAPI_R4_)
+                int scan_info_radio_index = -1;
+                wifi_convert_freq_band_to_radio_index(scan_info->oper_freq_band,
+                    &scan_info_radio_index);
+                if (scan_info_radio_index == interface->rdk_radio_index) {
+#endif
+                    bss[desired_scanned_ssid_pos] = *scan_info;
+                    ssid_found_count++;
+                    desired_scanned_ssid_pos++;
+#if defined(_PLATFORM_BANANAPI_R4_)
+                } else {
+                    wifi_hal_stats_dbg_print(
+                        "%s:%d: [SCAN] Not considering result from freq_band:%d"
+                        " scan_radio_index:%d rdk_radio_index:%d.\n",
+                        __func__, __LINE__, scan_info->oper_freq_band, scan_info_radio_index,
+                        interface->rdk_radio_index);
+                }
+#endif
             }
             scan_info = hash_map_get_next(interface->scan_info_map, scan_info);
         }

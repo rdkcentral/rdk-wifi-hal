@@ -2302,6 +2302,15 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
         return RETURN_ERR;
     }
 
+#if defined(_PLATFORM_BANANAPI_R4_)
+    if (interface->rdk_radio_index != index) {
+        wifi_hal_stats_error_print("%s:%d:Not allowing scan on radio_index: %d because not "
+            "matching with interface->rdk_radio_index:%d\n",
+            __func__, __LINE__, index, interface->rdk_radio_index);
+        return RETURN_ERR;
+    }
+#endif
+
     vap = &interface->vap_info;
     radio_param = &radio->oper_param;
 
@@ -2346,6 +2355,10 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
 
     strcpy(ssid_list[0], vap->u.sta_info.ssid);
     wifi_hal_stats_info_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
+
+    pthread_mutex_lock(&interface->scan_info_mutex);
+    hash_map_cleanup(interface->scan_info_map);
+    pthread_mutex_unlock(&interface->scan_info_mutex);
 
     return (nl80211_start_scan(interface, 0, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
 }
@@ -2959,13 +2972,11 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
         interface->scan_state = WIFI_SCAN_STATE_NONE;
 
         /* Cleanup scan data (scan_info_ap_map[0]) before the new scan. Result data
-           (scan_info_ap_map[1]) stays unchanged. For compatibility with existing code,
-           scan_info_map is not cleaned up here */
-        /*
+         *  (scan_info_ap_map[1]) stays unchanged. 
+         */
         pthread_mutex_lock(&interface->scan_info_mutex);
         hash_map_cleanup(interface->scan_info_map);
         pthread_mutex_unlock(&interface->scan_info_mutex);
-        */
         pthread_mutex_lock(&interface->scan_info_ap_mutex);
         cleanup_freqs_filter(interface);
         hash_map_cleanup(interface->scan_info_ap_map[0]);
