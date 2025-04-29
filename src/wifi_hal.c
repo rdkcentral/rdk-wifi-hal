@@ -570,6 +570,13 @@ INT wifi_hal_pre_init()
         wifi_hal_info_print("%s:%d: platfrom pre init\n", __func__, __LINE__);
         pre_init_fn();
     }
+
+#ifdef BANANA_PI_PORT
+    void hostapd_wpa_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
+
+    wpa_supplicant_event = hostapd_wpa_event;
+#endif // BANANA_PI_PORT
+
     return RETURN_OK;
 }
 

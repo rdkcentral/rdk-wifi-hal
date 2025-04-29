@@ -10666,7 +10666,8 @@ int wifi_drv_add_ts(void *priv, u8 tsid, const u8 *addr, u8 user_priority, u16 a
     return 0;
 }
 
-int wifi_drv_br_set_net_param(void *priv, enum drv_br_net_param param, unsigned int val)
+int wifi_drv_br_set_net_param(void *priv, enum drv_br_net_param param, const char *ifname,
+    unsigned int val)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return 0;
@@ -11006,7 +11007,7 @@ int wifi_drv_status(void *priv, char *buf, size_t buflen)
     return 0;
 }
 
-int wifi_drv_get_survey(void *priv, unsigned int freq)
+int wifi_drv_get_survey(void *priv, unsigned int freq, int link_id)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return 0;
@@ -11189,7 +11190,7 @@ int wifi_drv_send_action(void *priv,
                       const u8 *dst, const u8 *src,
                       const u8 *bssid,
                       const u8 *data, size_t data_len,
-                      int no_cck)
+                      int no_cck, int link_id)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
@@ -11989,7 +11990,7 @@ fail:
 }
 
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val,
-                const char *bridge_ifname, char *ifname_wds)
+                const char *bridge_ifname, const char *ifname_wds)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
@@ -13555,7 +13556,7 @@ int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type,
                      void *bss_ctx, void **drv_priv,
                      char *force_ifname, u8 *if_addr,
                      const char *bridge, int use_existing,
-                     int setup_ap)
+                     int setup_ap, int freq, u32 radio_mask)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return 0;
