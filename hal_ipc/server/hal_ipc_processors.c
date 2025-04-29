@@ -42,7 +42,7 @@ int sync_hostapd_freq_param(unsigned int apIndex)
 
     get_coutry_str_from_code(radio_param->countryCode, country);
 
-    freq = ieee80211_chan_to_freq(country, radio_param->op_class, radio_param->channel);
+    freq = ieee80211_chan_to_freq(country, radio_param->operatingClass, radio_param->channel);
     if (interface->u.ap.hapd.iface->freq != freq) {
         wifi_hal_info_print("%s:%d: ap index:%u existing freq:%d curr freq:%d\n", __func__, __LINE__, apIndex, interface->u.ap.hapd.iface->freq, freq);
         interface->u.ap.hapd.iface->freq = freq;

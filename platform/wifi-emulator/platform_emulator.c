@@ -284,6 +284,18 @@ int platform_get_acl_num(int vap_index, uint *acl_count)
     return 0;
 }
 
+int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff)
+{
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    return 0;
+}
+
+int platform_set_acs_exclusion_list(wifi_radio_index_t index,char *buff)
+{
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    return 0;
+}
+
 int platform_get_vendor_oui(char *vendor_oui, int vendor_oui_len)
 {
     return -1;
@@ -379,7 +391,7 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
 
     if (nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0),
         NULL) < 0) {
-        wifi_hal_error_print("%s:%d Failed to parse sta data\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse sta data\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -401,13 +413,13 @@ static int get_sta_list(wifi_interface_info_t *interface, sta_list_t *sta_list)
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, NLM_F_DUMP, NL80211_CMD_GET_STATION);
     if (msg == NULL) {
-        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
         return -1;
     }
 
     ret = nl80211_send_and_recv(msg, get_sta_list_handler, sta_list, NULL, NULL);
     if (ret < 0) {
-        wifi_hal_error_print("%s:%d Failed to execute NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to execute NL command\n", __func__, __LINE__);
         return -1;
     }
 
@@ -437,12 +449,12 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
 
     if (nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),genlmsg_attrlen(gnlh, 0),
         NULL) < 0) {
-        wifi_hal_error_print("%s:%d Failed to parse sta data\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse sta data\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     if (!tb[NL80211_ATTR_STA_INFO]) {
-        wifi_hal_error_print("%s:%d Failed to get sta info attribute\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to get sta info attribute\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -451,7 +463,7 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
 
     if (nla_parse_nested(stats, NL80211_STA_INFO_MAX, tb[NL80211_ATTR_STA_INFO], stats_policy)) {
-	wifi_hal_error_print("%s:%d Failed to parse nested attributes\n", __func__, __LINE__);
+	wifi_hal_stats_error_print("%s:%d Failed to parse nested attributes\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -500,7 +512,7 @@ static int get_sta_stats(wifi_interface_info_t *interface, mac_address_t mac, wi
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_GET_STATION);
     if (msg == NULL) {
-        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
         return -1;
     }
 
@@ -508,7 +520,7 @@ static int get_sta_stats(wifi_interface_info_t *interface, mac_address_t mac, wi
 
     ret = nl80211_send_and_recv(msg, get_sta_stats_handler, dev, NULL, NULL);
     if (ret < 0) {
-        wifi_hal_error_print("%s:%d Failed to execute NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to execute NL command\n", __func__, __LINE__);
         return -1;
     }
 
@@ -525,13 +537,13 @@ INT wifi_getApAssociatedDeviceDiagnosticResult3(INT apIndex,
 
     interface = get_interface_by_vap_index(apIndex);
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d Failed to get interface for index %d\n", __func__, __LINE__, apIndex);
+        wifi_hal_stats_error_print("%s:%d Failed to get interface for index %d\n", __func__, __LINE__, apIndex);
         return -1;
     }
 
     ret = get_sta_list(interface, &sta_list);
     if (ret < 0) {
-        wifi_hal_error_print("%s:%d Failed to get sta list\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to get sta list\n", __func__, __LINE__);
         goto exit;
     }
 
@@ -542,7 +554,7 @@ INT wifi_getApAssociatedDeviceDiagnosticResult3(INT apIndex,
     for (i = 0; i < sta_list.num; i++) {
         ret = get_sta_stats(interface, sta_list.macs[i], &(*associated_dev_array)[i]);
         if (ret < 0) {
-            wifi_hal_error_print("%s:%d Failed to get sta stats\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d Failed to get sta stats\n", __func__, __LINE__);
             free(*associated_dev_array);
             *associated_dev_array = NULL;
             *output_array_size = 0;
@@ -605,19 +617,38 @@ INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
     return 0;
 }
 
-int update_hostap_mlo(wifi_interface_info_t *interface)
+#ifdef CONFIG_IEEE80211BE
+int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
+    struct wpa_driver_ap_params *params)
 {
+    (void)msg;
+    (void)msg_mlo;
+    (void)priv;
+    (void)params;
+
     return 0;
 }
 
-int wifi_drv_set_ap_mlo(struct nl_msg *msg, void *priv, struct wpa_driver_ap_params *params)
+int nl80211_send_mlo_msg(struct nl_msg *msg)
 {
+    (void)msg;
+
     return 0;
 }
 
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb)
 {
+    (void)eht_capab;
+    (void)tb;
 }
+
+int update_hostap_mlo(wifi_interface_info_t *interface)
+{
+    (void)interface;
+
+    return 0;
+}
+#endif /* CONFIG_IEEE80211BE */
 
 INT wifi_steering_clientDisconnect(UINT steeringgroupIndex, INT apIndex, mac_address_t client_mac,
     wifi_disconnectType_t type, UINT reason)
@@ -680,10 +711,15 @@ INT wifi_getApInterworkingServiceEnable(INT apIndex, BOOL *output_bool)
     return 0;
 }
 
+INT wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
+{
+    int res = wifi_hal_send_mgmt_frame(apIndex, MacAddr, frame, len, frequency, wait);
+    return (res == 0) ? WIFI_HAL_SUCCESS : WIFI_HAL_ERROR;
+}
+
 INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCHAR *frame, UINT len)
 {
-    wifi_hal_send_mgmt_frame(apIndex, MacAddr, frame, len, frequency);
-    return RETURN_OK;
+    return wifi_sendActionFrameExt(apIndex, MacAddr, frequency, 0, frame, len);
 }
 
 INT wifi_setDownStreamGroupAddress(INT apIndex, BOOL disabled)

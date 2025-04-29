@@ -1580,9 +1580,15 @@ INT wifi_getApInterworkingServiceEnable(INT apIndex, BOOL *output_bool)
 }
 
 //--------------------------------------------------------------------------------------------------
-INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCHAR *frame, UINT len)
+INT wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
 {
     return RETURN_ERR;
+}
+
+//--------------------------------------------------------------------------------------------------
+INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCHAR *frame, UINT len)
+{
+    return wifi_sendActionFrameExt(apIndex, MacAddr, frequency, 0, frame, len);
 }
 
 //--------------------------------------------------------------------------------------------------
