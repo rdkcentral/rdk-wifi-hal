@@ -1194,13 +1194,6 @@ int deinit_wpa_supplicant(wifi_interface_info_t *interface)
         interface->wpa_s.p2pdev = NULL;
     }
 
-#if 0
-    if (interface->wpa_s.current_ssid != NULL) {
-        free(interface->wpa_s.current_ssid);
-        interface->wpa_s.current_ssid = NULL;
-    }
-#endif
-
     if (interface->wpa_s.conf != NULL) {
         free(interface->wpa_s.conf);
         interface->wpa_s.conf = NULL;
@@ -1229,15 +1222,7 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
     }
 
     if (interface->wpa_s.current_ssid == NULL) {
-#if 0
-        interface->wpa_s.current_ssid = (struct wpa_ssid *)malloc(sizeof(struct wpa_ssid));
-        if (interface->wpa_s.current_ssid == NULL) {
-            wifi_hal_error_print("%s:%d: NULL Pointer \n", __func__, __LINE__);
-            return RETURN_ERR;
-        }
-#else
         interface->wpa_s.current_ssid = get_wifi_wpa_current_ssid(interface);
-#endif
         memset(interface->wpa_s.current_ssid, 0, sizeof(struct wpa_ssid));
     }
 
@@ -2322,6 +2307,15 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
         return RETURN_ERR;
     }
 
+#if defined(_PLATFORM_BANANAPI_R4_)
+    if (interface->rdk_radio_index != index) {
+        wifi_hal_stats_error_print("%s:%d:Not allowing scan on radio_index: %d because not "
+            "matching with interface->rdk_radio_index:%d\n",
+            __func__, __LINE__, index, interface->rdk_radio_index);
+        return RETURN_ERR;
+    }
+#endif
+
     vap = &interface->vap_info;
     radio_param = &radio->oper_param;
 
@@ -2366,6 +2360,10 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
 
     strcpy(ssid_list[0], vap->u.sta_info.ssid);
     wifi_hal_stats_info_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
+
+    pthread_mutex_lock(&interface->scan_info_mutex);
+    hash_map_cleanup(interface->scan_info_map);
+    pthread_mutex_unlock(&interface->scan_info_mutex);
 
     return (nl80211_start_scan(interface, 0, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
 }
@@ -2979,13 +2977,11 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
         interface->scan_state = WIFI_SCAN_STATE_NONE;
 
         /* Cleanup scan data (scan_info_ap_map[0]) before the new scan. Result data
-           (scan_info_ap_map[1]) stays unchanged. For compatibility with existing code,
-           scan_info_map is not cleaned up here */
-        /*
+         *  (scan_info_ap_map[1]) stays unchanged. 
+         */
         pthread_mutex_lock(&interface->scan_info_mutex);
         hash_map_cleanup(interface->scan_info_map);
         pthread_mutex_unlock(&interface->scan_info_mutex);
-        */
         pthread_mutex_lock(&interface->scan_info_ap_mutex);
         cleanup_freqs_filter(interface);
         hash_map_cleanup(interface->scan_info_ap_map[0]);
