@@ -5825,7 +5825,14 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
 
     /* Setup CSA request */
     os_memset(&csa_settings, 0, sizeof(csa_settings));
-    csa_settings.cs_count = 5;
+    if (radio->radar_detected) {
+        csa_settings.cs_count = 8;
+        csa_settings.block_tx = 1;
+        radio->radar_detected = false;
+    } else {
+        csa_settings.cs_count = 5;
+        csa_settings.block_tx = 0;
+    }
 
     os_memset(&csa_settings.freq_params, 0, sizeof(struct hostapd_freq_params));
 
@@ -13313,24 +13320,33 @@ int wifi_drv_commit(void *priv)
     return 0;
 }
 
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT)
 //Selects a Non-DFS Channel from the list of available channels
 short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg0_idx, u8 *oper_centr_freq_seg1_idx,
                                               int *secondary_channel)
 {
-    struct hostapd_channel_data *chan;
+    struct hostapd_channel_data *chan = NULL;
+#if HOSTAPD_VERSION >= 210 // 2.10
     enum dfs_channel_type channel_type = DFS_AVAILABLE;
 
     chan = dfs_get_valid_channel(&interface->u.ap.iface, secondary_channel,
                                     oper_centr_freq_seg0_idx,
                                     oper_centr_freq_seg1_idx,
                                     channel_type);
+#endif /* HOSTAPD_VERSION >= 210 */
+    if (chan == NULL) {
+        wifi_hal_error_print("%s:%d failed to get new channel, return default\n", __func__,
+            __LINE__);
+        return 36;
+    }
 
     wifi_hal_info_print("%s:%d Selected non-dfs channel:%u \n", __FUNCTION__, __LINE__, chan->chan);
 
     return chan->chan;
 }
+#endif /* defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT) */
 
+#if defined(CMXB7_PORT)
 //To set a channel in the primary interface of the radio
 int prim_interface_set_freq(wifi_radio_info_t *radio, wifi_interface_info_t *interface, int freq, u8 channel, int sec_chan_offset, int ht_enabled, int bw, int cf1, char *country)
 {
@@ -13439,7 +13455,9 @@ int nl80211_interface_reenable(wifi_radio_info_t *radio, int freq)
 
     return 0;
 }
+#endif /* defined(CMXB7_PORT) */
 
+#if defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT)
 //To Notify OneWiFi about channel change
 int dfs_chan_change_event(int radio_index, u8 channel, int bw, u8 op_class) {
     wifi_channel_change_event_t radio_channel_param;
@@ -13459,7 +13477,7 @@ int dfs_chan_change_event(int radio_index, u8 channel, int bw, u8 op_class) {
 
     return 0;
 }
-#endif
+#endif /* defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT) */
 
 //To Disable and enable primary interface of the radio
 int reenable_prim_interface(wifi_radio_info_t *radio) {
@@ -13806,17 +13824,14 @@ int nl80211_dfs_nop_finished (wifi_interface_info_t *interface, int freq, int ht
 int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int ht_enabled,
                                int sec_chan_offset, int bandwidth, int bw, int cf1, int cf2)
 {
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT)
     wifi_radio_info_t *radio;
     wifi_radio_operationParam_t radio_param;
     u8 oper_centr_freq_seg0_idx = 0;
     u8 oper_centr_freq_seg1_idx = 0;
     int dfs_start = 52, dfs_end = 144;
-
-    if( strncmp(interface->name, "wlan2", strlen(interface->name)) ) {
-        wifi_hal_info_print("%s:%d iface name is not wlan2 name:%s \n", __FUNCTION__, __LINE__, interface->name);
-        return 0;
-    }
+    u8 orig_chan_width = 0;
+    int orig_secondary_chan = 0;
 
     wifi_hal_info_print("%s:%d name:%s freq:%d cf1:%d cf2:%d sec_chan:%d bandwidth:%d ht_enabled:%d \n", __func__, __LINE__,
                     interface->name, freq, cf1, cf2, sec_chan_offset, bw, ht_enabled);
@@ -13828,24 +13843,38 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
         return 0;
     }
 
-    if(!interface->u.ap.iface.dfs_cac_ms) {
+#if defined(CMXB7_PORT)
+    if (!interface->u.ap.iface.dfs_cac_ms) {
         return 0;
     }
+#endif /* defined(CMXB7_PORT) */
+
+    radio->radar_detected = true;
 
     radio_param = radio->oper_param;
 
-    if(bandwidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    // downgrade bandwidth since 160MHz may not be available
+    if (bandwidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
+        orig_chan_width = hostapd_get_oper_chwidth(interface->u.ap.hapd.iconf);
+        orig_secondary_chan = interface->u.ap.iface.conf->secondary_channel;
         hostapd_set_oper_chwidth(interface->u.ap.hapd.iconf, CHANWIDTH_80MHZ);
         interface->u.ap.iface.conf->secondary_channel = get_sec_channel_offset(radio, freq);
     }
 
-    radio_param.channel = get_non_dfs_chan(interface, &oper_centr_freq_seg0_idx, &oper_centr_freq_seg1_idx, &sec_chan_offset);
+    radio_param.channel = get_non_dfs_chan(interface, &oper_centr_freq_seg0_idx,
+        &oper_centr_freq_seg1_idx, &sec_chan_offset);
     radio_param.channelWidth = bandwidth;
-    if(bandwidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
+
+    if (bandwidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
         wifi_channelBandwidth_t Chan_width_80MHz = WIFI_CHANNELBANDWIDTH_80MHZ;
-        wifi_hal_info_print("nl80211-%s:%d Setting bandwidth as 80MHz \n", __func__, __LINE__);
+        wifi_hal_info_print("%s:%d Setting bandwidth to 80MHz\n", __func__, __LINE__);
         radio_param.channelWidth = Chan_width_80MHz;
+        // restore original bandwidth to avoid beacon change before channel switch
+        hostapd_set_oper_chwidth(interface->u.ap.hapd.iconf, orig_chan_width);
+        interface->u.ap.iface.conf->secondary_channel = orig_secondary_chan;
     }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d \n", radio_param.channel, oper_centr_freq_seg0_idx, oper_centr_freq_seg1_idx, sec_chan_offset);
 
@@ -13858,7 +13887,7 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
     }
 
     dfs_chan_change_event(interface->vap_info.radio_index, radio->oper_param.channel, radio->oper_param.channelWidth, radio->oper_param.op_class);
-#endif
+#endif /* defined(CMXB7_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT) */
     return RETURN_OK;
 }
 

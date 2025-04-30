@@ -497,6 +497,35 @@ int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
     return RETURN_OK;
 }
 
+static int disable_dfs_auto_channel_change(int radio_index, int disable)
+{
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT)
+    char radio_dev[IFNAMSIZ];
+
+    snprintf(radio_dev, sizeof(radio_dev), "wl%d", radio_index);
+
+    if (wl_ioctl(radio_dev, WLC_DOWN, NULL, 0) < 0) {
+        wifi_hal_error_print("%s:%d failed to set radio down for %s, err: %d (%s)\n", __func__,
+            __LINE__, radio_dev, errno, strerror(errno));
+        return -1;
+    }
+
+    if (wl_iovar_set(radio_dev, "dfs_auto_channel_change_disable", &disable, sizeof(disable)) < 0) {
+        wifi_hal_error_print("%s:%d failed to set dfs_auto_channel_change_disable %d for %s, "
+                             "err: %d (%s)\n",
+            __func__, __LINE__, disable, radio_dev, errno, strerror(errno));
+        return -1;
+    }
+
+    if (wl_ioctl(radio_dev, WLC_UP, NULL, 0) < 0) {
+        wifi_hal_error_print("%s:%d failed to set radio up for %s, err: %d (%s)\n", __func__,
+            __LINE__, radio_dev, errno, strerror(errno));
+        return -1;
+    }
+#endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) */
+    return 0;
+}
+
 int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
     if ((index < 0) || (operationParam == NULL)) {
@@ -628,6 +657,8 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     if (radio->oper_param.DfsEnabled != operationParam->DfsEnabled) {
         /* sometimes spectrum management is not enabled by nvram */
         enable_spect_management(index, operationParam->DfsEnabled);
+        /* userspace selects new channel and configures CSA when radar detected */
+        disable_dfs_auto_channel_change(index, true);
     }
 
     return 0;
