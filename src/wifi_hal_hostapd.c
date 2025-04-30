@@ -2193,7 +2193,7 @@ exit:
     return ret;
 }
 
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 static enum wpa_states wpa_sm_supplicant_sta_get_state(void *ctx)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
@@ -2224,7 +2224,7 @@ static void wpa_sm_sta_set_state(void *ctx, enum wpa_states state)
     wifi_bss_info_t bss;
     wifi_station_stats_t sta;
     interface = (wifi_interface_info_t *)ctx;
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     interface->wpa_s.wpa_state = state;
 #endif
     interface->u.sta.state = state;
@@ -2533,7 +2533,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         ctx->set_state = wpa_sm_sta_set_state;
         ctx->get_state = wpa_sm_sta_get_state;
         ctx->cancel_auth_timeout = wpa_sm_sta_cancel_auth_timeout;
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         if((sec->mode == wifi_security_mode_wpa3_personal) || (sec->mode == wifi_security_mode_wpa3_enterprise) ||
                 (sec->mode == wifi_security_mode_wpa3_transition) || (sec->mode == wifi_security_mode_wpa3_compatibility)) {
             ctx->get_state = wpa_sm_supplicant_sta_get_state;
@@ -2553,7 +2553,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
 
         interface->u.sta.wpa_sm = wpa_sm_init(ctx);
     }
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     interface->wpa_s.wpa = interface->u.sta.wpa_sm;
 #ifdef CONFIG_IEEE80211W
     unsigned int ieee80211w;
@@ -2591,7 +2591,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         break;
     }
 #endif
-#endif
+#endif //CONFIG_WIFI_EMULATOR || BANANA_PI_PORT
 
     sm = interface->u.sta.wpa_sm;
 
@@ -2777,6 +2777,8 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
 
     if (interface->u.sta.wpa_sm->eapol == NULL) {
         ctx = os_zalloc(sizeof(struct eapol_ctx));
+        wifi_hal_info_print("%s:%d: wifi eapol context:%p created for vap_index:%d\n",
+            __func__, __LINE__, ctx, vap->vap_index);
 
         ctx->ctx = interface;
         ctx->msg_ctx = interface;
@@ -2792,7 +2794,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
         ctx->cb_ctx = interface;
 
         interface->u.sta.wpa_sm->eapol = eapol_sm_init(ctx);
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         interface->wpa_s.wpa->eapol = interface->u.sta.wpa_sm->eapol;
         interface->wpa_s.eapol = interface->u.sta.wpa_sm->eapol;
 #endif

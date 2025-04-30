@@ -179,7 +179,7 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
 }
 #endif //_PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
 
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 static void nl80211_parse_wmm_params(struct nlattr *wmm_attr,
         struct wmm_params *wmm_params)
 {
@@ -198,7 +198,9 @@ static void nl80211_parse_wmm_params(struct nlattr *wmm_attr,
         nla_get_u8(wmm_info[NL80211_STA_WME_UAPSD_QUEUES]);
     wmm_params->info_bitmap |= WMM_PARAMS_UAPSD_QUEUES_INFO;
 }
+#endif
 
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 static void nl80211_associate_event(wifi_interface_info_t *interface, struct nlattr **tb)
 {
     union wpa_event_data event;
@@ -206,6 +208,7 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
     u16 status = 0;
     size_t len = 0;
 
+    memset(&event, 0, sizeof(event));
     wifi_hal_dbg_print("%s:%d: Enter \n", __func__, __LINE__);
     if (tb[NL80211_ATTR_FRAME]) {
         len = nla_len(tb[NL80211_ATTR_FRAME]);
@@ -247,12 +250,12 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
     return;
 }
 
-
 static void nl80211_authenticate_event(wifi_interface_info_t *interface, struct nlattr **tb)
 {
     union wpa_event_data event;
     const struct ieee80211_mgmt *mgmt;
 
+    memset(&event, 0, sizeof(event));
     wifi_hal_dbg_print("%s:%d: Enter \n", __func__, __LINE__);
     if (tb[NL80211_ATTR_FRAME]) {
         mgmt = (const struct ieee80211_mgmt *) nla_data(tb[NL80211_ATTR_FRAME]);
@@ -274,7 +277,7 @@ static void nl80211_authenticate_event(wifi_interface_info_t *interface, struct 
 
     return;
 }
-#endif
+#endif //CONFIG_WIFI_EMULATOR || BANANA_PI_PORT
 
 static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, struct nlattr **tb)
 {
@@ -673,7 +676,7 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     if (sec->mode == wifi_security_mode_none) {
         wpa_sm_set_state(interface->u.sta.wpa_sm, WPA_COMPLETED);
     }
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
 #endif
     interface->u.sta.state = WPA_ASSOCIATED;
@@ -703,7 +706,7 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
         callbacks->sta_conn_status_callback(vap->vap_index, &bss, &sta);
     }
 
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
     interface->wpa_s.disconnected = 1;
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
@@ -1517,7 +1520,7 @@ static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, stru
     case NL80211_CMD_CONNECT:
         nl80211_connect_event(interface, tb);
         break;
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     case NL80211_CMD_AUTHENTICATE:
         nl80211_authenticate_event(interface, tb);
         break;

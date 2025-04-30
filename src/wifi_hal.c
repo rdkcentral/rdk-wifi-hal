@@ -40,6 +40,9 @@
 #ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
 #endif
+#ifdef BANANA_PI_PORT
+#include "config.h"
+#endif
 
 #define MAC_ADDRESS_LEN 6
 
@@ -1177,17 +1180,18 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
     return RETURN_OK;
 }
 
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface)
+{
+    return &interface->current_ssid_info;
+}
+
 int deinit_wpa_supplicant(wifi_interface_info_t *interface)
 {
+    wifi_hal_info_print("%s:%d: deinit wpa supplicant params\n", __func__, __LINE__);
     if (interface->wpa_s.p2pdev != NULL) {
         free(interface->wpa_s.p2pdev);
         interface->wpa_s.p2pdev = NULL;
-    }
-
-    if (interface->wpa_s.current_ssid != NULL) {
-        free(interface->wpa_s.current_ssid);
-        interface->wpa_s.current_ssid = NULL;
     }
 
     if (interface->wpa_s.conf != NULL) {
@@ -1218,11 +1222,7 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
     }
 
     if (interface->wpa_s.current_ssid == NULL) {
-        interface->wpa_s.current_ssid = (struct wpa_ssid *)malloc(sizeof(struct wpa_ssid));
-        if (interface->wpa_s.current_ssid == NULL) {
-            wifi_hal_error_print("%s:%d: NULL Pointer \n", __func__, __LINE__);
-            return RETURN_ERR;
-        }
+        interface->wpa_s.current_ssid = get_wifi_wpa_current_ssid(interface);
         memset(interface->wpa_s.current_ssid, 0, sizeof(struct wpa_ssid));
     }
 
@@ -1244,13 +1244,18 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
         memset(interface->wpa_s.conf->ssid, 0, sizeof(struct wpa_ssid));
     }
 
+#ifdef CONFIG_WIFI_EMULATOR
     interface->wpa_s.driver = &g_wpa_supplicant_driver_nl80211_ops;
+#else
+    interface->wpa_s.driver = &g_wpa_driver_nl80211_ops;
+#endif
     dl_list_init(&interface->wpa_s.bss);
     dl_list_init(&interface->wpa_s.bss_tmp_disallowed);
+    wifi_hal_info_print("%s:%d: wpa supplicant params init success\n", __func__, __LINE__);
 
     return RETURN_OK;
 }
-#endif
+#endif //CONFIG_WIFI_EMULATOR || BANANA_PI_PORT
 
 int get_sta_4addr_status(bool *sta_4addr)
 {
@@ -1641,7 +1646,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             }
         }
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         //Init wpa-supplicant params.
         if (vap->vap_mode == wifi_vap_mode_sta) {
             deinit_wpa_supplicant(interface);
@@ -2264,7 +2269,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     bool found = false;
     wifi_radio_operationParam_t *radio_param, param;
     char country[8] = {0}, tmp_str[32] = {0}, chan_list_str[512] = {0};
-    unsigned int freq_list[32], i;
+    unsigned int freq_list[MAX_FREQ_LIST_SIZE], i;
     ssid_t  ssid_list[8];
     int op_class, freq_num = 0;
 
@@ -2329,7 +2334,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     get_coutry_str_from_code(radio_param->countryCode, country);
     memcpy((unsigned char *)&param, (unsigned char *)radio_param, sizeof(wifi_radio_operationParam_t));
 
-    for (i = 0; i < num; i++) {
+    for (i = 0; i < num && freq_num < MAX_FREQ_LIST_SIZE; i++) {
         param.channel = (scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN) ?
             radio_param->channel : chan_list[i]; 
 
