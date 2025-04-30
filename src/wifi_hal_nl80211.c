@@ -2966,6 +2966,7 @@ static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
     int ack_len = sizeof(*nlh) + sizeof(int) + sizeof(*nlh);
 
     *ret = err->error;
+    wifi_hal_error_print("%s:%d: kernel error: %d\n", __func__, __LINE__, err->error);
 
     if (!(nlh->nlmsg_flags & NLM_F_ACK_TLVS))
         return NL_SKIP;
@@ -9995,12 +9996,9 @@ int nl80211_update_beacon_params(wifi_interface_info_t *interface)
     return -1;
 }
 
-static int nl80211_send_frame_cmd(wifi_interface_info_t *interface,
-                                  unsigned int freq, unsigned int wait,
-                                  const u8 *buf, size_t buf_len,
-                                  int save_cookie, int no_ack,
-                                  const u16 *csa_offs,
-                                  size_t csa_offs_len)
+static int nl80211_send_frame_cmd(wifi_interface_info_t *interface, unsigned int freq,
+    unsigned int wait, const u8 *buf, size_t buf_len, int save_cookie, int offchanok, int no_ack,
+    const u16 *csa_offs, size_t csa_offs_len)
 {
     struct nl_msg *msg;
     u64 cookie;
@@ -10012,7 +10010,7 @@ static int nl80211_send_frame_cmd(wifi_interface_info_t *interface,
     if (!(msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_FRAME)) ||
         (freq && nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ, freq)) ||
 	    (wait && nla_put_u32(msg, NL80211_ATTR_DURATION, wait)) ||
-	    ((freq != 0) && nla_put_flag(msg, NL80211_ATTR_OFFCHANNEL_TX_OK)) ||
+	    (offchanok && nla_put_flag(msg, NL80211_ATTR_OFFCHANNEL_TX_OK)) ||
         (no_ack && nla_put_flag(msg, NL80211_ATTR_DONT_WAIT_FOR_ACK)) ||
         (csa_offs && nla_put(msg, NL80211_ATTR_CSA_C_OFFSETS_TX,
                              csa_offs_len * sizeof(u16), csa_offs)) ||
@@ -10751,17 +10749,16 @@ int wifi_drv_send_action(void *priv,
     int ret = -1;
     unsigned char *buf;
     struct ieee80211_hdr *hdr;
-    int off_chan = 1;
+    int offchanok = 1;
 
-    if ((int) freq == interface->u.ap.iface.freq &&
-        interface->beacon_set)
-    {
-        off_chan = 0;
+    if (freq == 0 || ((int)freq == interface->u.ap.iface.freq && interface->beacon_set) ||
+        ieee80211_is_dfs(freq, interface->u.ap.iface.current_mode, 1)) {
+        offchanok = 0;
     }
 
     wifi_hal_dbg_print("%s:%d: nl80211: Send Action frame (ifindex=%d, "
-            "freq=%u MHz wait=%d ms no_cck=%d offchanok=%d)",__func__, __LINE__,
-            interface->index, freq, wait_time, no_cck, off_chan);
+                       "freq=%u MHz wait=%d ms no_cck=%d offchanok=%d)",
+        __func__, __LINE__, interface->index, freq, wait_time, no_cck, offchanok);
 
     buf = (unsigned char*) calloc(sizeof(struct ieee80211_hdr) + data_len, sizeof(unsigned char));
     if (buf == NULL)
@@ -10782,7 +10779,7 @@ int wifi_drv_send_action(void *priv,
     // TODO:
     // in case we send off-chan action frame
     // fill csa offset data
-    if (off_chan) {
+    if (offchanok) {
         csa_offs_len = 1;
         csa_offs = (uint16_t*) calloc(csa_offs_len, sizeof(uint16_t));
         if (!csa_offs) {
@@ -10792,8 +10789,8 @@ int wifi_drv_send_action(void *priv,
         // *csa_offs = <csa offset data>
     }
 
-    ret = nl80211_send_frame_cmd(interface, freq, wait_time, buf, 24 + data_len,
-            use_cookie, no_ack, csa_offs, csa_offs_len);
+    ret = nl80211_send_frame_cmd(interface, freq, wait_time, buf, 24 + data_len, use_cookie, no_ack,
+        offchanok, csa_offs, csa_offs_len);
 
     free(csa_offs);
     free(buf);
@@ -10978,7 +10975,7 @@ send_frame_cmd:
 
     //wifi_hal_dbg_print("nl80211: send_mlme -> send_frame_cmd\n");
     res = nl80211_send_frame_cmd(interface, freq, wait, data, data_len,
-              use_cookie, noack, csa_offs, csa_offs_len);
+              use_cookie, 0, noack, csa_offs, csa_offs_len);
 
     return res;
 }
