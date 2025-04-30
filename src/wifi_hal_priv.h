@@ -65,7 +65,7 @@
 #include "collection.h"
 #include "driver.h"
 
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 #include "wpa_supplicant_i.h"
 #include "bss.h"
 #include "sme.h"
@@ -152,6 +152,8 @@ extern "C" {
 #define ecw2cw(ecw) ((1 << (ecw)) - 1)
 
 #define     MAX_BSSID_IN_ESS    8
+
+#define MAX_FREQ_LIST_SIZE 128
 
 #define BUF_SIZE         32
 #define NL_SOCK_MAX_BUF_SIZE             262144
@@ -486,12 +488,13 @@ typedef struct wifi_interface_info_t {
 #endif
     /* Wi-Fi band steering sta_list_map */
     hash_map_t  *bm_sta_map;
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     unsigned char *ie;
     size_t ie_len;
     unsigned char *beacon_ie;
     size_t beacon_ie_len;
     struct wpa_supplicant wpa_s;
+    struct wpa_ssid current_ssid_info;
 #endif
 } wifi_interface_info_t;
 
@@ -1105,6 +1108,7 @@ int json_parse_boolean(const char* file_name, const char *item_name, bool *val);
 bool get_ifname_from_mac(const mac_address_t *mac, char *ifname);
 int wifi_hal_configure_sta_4addr_to_bridge(wifi_interface_info_t *interface, int add);
 int wifi_convert_freq_band_to_radio_index(int band, int *radio_index);
+struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface);
 
 #ifdef CONFIG_IEEE80211BE
 int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
