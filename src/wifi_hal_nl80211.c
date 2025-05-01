@@ -68,7 +68,7 @@
 #ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
 #elif defined(BANANA_PI_PORT)
-#include "config.h"
+#include "wpa_supplicant/config.h"
 #endif
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)

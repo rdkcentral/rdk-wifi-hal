@@ -125,7 +125,7 @@ librdk_wifihal_la_SOURCES += ../platform/raspberry-pi/platform_pi.c
 endif
 
 if BANANA_PI_PORT
-librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/banana-pi
+librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/banana-pi -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/wpa_supplicant
 librdk_wifihal_la_SOURCES += ../platform/banana-pi/platform.c
 endif
 
