@@ -1564,6 +1564,17 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
 #endif //CONFIG_WIFI_EMULATOR || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
         }
+        if (vap->vap_mode == wifi_vap_mode_ap) {
+#if (defined(EASY_MESH_NODE) || defined(EASY_MESH_COLOCATED_NODE))
+            if (isVapMeshBackhaul(vap->vap_index)) {
+#if defined(_PLATFORM_RASPBERRYPI_)
+                interface->vap_info.u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
+#elif defined(_PLATFORM_BANANAPI_R4_)
+                vap->u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
+#endif
+            }
+#endif // EASY_MESH_NODE || EASY_MESH_COLOCATED_NODE
+        }
 #if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
         if (set_acl == 1) {
             nl80211_set_acl(interface);
