@@ -8398,6 +8398,15 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     struct wpa_bss *bss;
     wifi_radio_info_t *radio;
 
+    if (vap->radio_index >= MAX_NUM_RADIOS) {
+        wifi_hal_error_print("%s:%d:connect failed due to wrong radio_index:%d\n",
+            __func__, __LINE__, vap->radio_index);
+        return RETURN_ERR;
+    }
+
+    ie_info_t *bss_ie = &interface->bss_elem_ie[vap->radio_index];
+    ie_info_t *beacon_ie = &interface->beacon_elem_ie[vap->radio_index];
+
     wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s\n", __func__, __LINE__,
         to_mac_str(backhaul->bssid, bssid_str), backhaul->freq, backhaul->ssid);
 
@@ -8415,14 +8424,14 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     }
     if (interface->wpa_s.current_bss == NULL) {
         interface->wpa_s.current_bss = (struct wpa_bss *)malloc(
-                sizeof(struct wpa_bss) + interface->ie_len);
+                sizeof(struct wpa_bss) + bss_ie->buff_len);
         if (interface->wpa_s.current_bss == NULL) {
             wifi_hal_error_print("%s:%d NULL Pointer\n", __func__, __LINE__);
             return -1;
         }
     }
     // Fill in current bss struct where we are going to connect.
-    memset(interface->wpa_s.current_bss, 0, sizeof(struct wpa_bss) + interface->ie_len);
+    memset(interface->wpa_s.current_bss, 0, sizeof(struct wpa_bss) + bss_ie->buff_len);
     strcpy(interface->wpa_s.current_bss->ssid, backhaul->ssid);
     interface->wpa_s.current_bss->ssid_len = strlen(backhaul->ssid);
     memcpy(interface->wpa_s.current_bss->bssid, backhaul->bssid, ETH_ALEN);
@@ -8531,8 +8540,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         interface->wpa_s.current_ssid->ssid_len = strlen(backhaul->ssid);
     }
     interface->wpa_s.current_bss->freq = backhaul->freq;
-    interface->wpa_s.current_bss->ie_len = interface->ie_len;
-    interface->wpa_s.current_bss->beacon_ie_len = interface->beacon_ie_len;
+    interface->wpa_s.current_bss->ie_len = bss_ie->buff_len;
+    interface->wpa_s.current_bss->beacon_ie_len = beacon_ie->buff_len;
     interface->wpa_s.drv_priv = interface;
 #ifdef CONFIG_WIFI_EMULATOR
     radio = get_radio_by_phy_index(interface->phy_index);
@@ -8542,7 +8551,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     interface->wpa_s.hw.modes = radio->hw_modes;
     interface->wpa_s.hw.num_modes = NUM_NL80211_BANDS;
     memcpy(interface->wpa_s.own_addr, vap->u.sta_info.mac, ETH_ALEN);
-    struct wpa_bss *curr_bss = (struct wpa_bss *)malloc(sizeof(struct wpa_bss) + interface->ie_len);
+    struct wpa_bss *curr_bss = (struct wpa_bss *)malloc(sizeof(struct wpa_bss) + bss_ie->buff_len);
     if (curr_bss == NULL) {
         wifi_hal_error_print("%s:%d: NULL pointer\n", __func__, __LINE__);
         free(interface->wpa_s.current_ssid->ssid);
@@ -8553,15 +8562,15 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             free(interface->wpa_s.current_ssid->passphrase);
         return -1;
     }
-    memset(curr_bss, 0, sizeof(struct wpa_bss) + interface->ie_len);
+    memset(curr_bss, 0, sizeof(struct wpa_bss) + bss_ie->buff_len);
     strcpy(curr_bss->ssid, backhaul->ssid);
     curr_bss->ssid_len = strlen(backhaul->ssid);
     memcpy(curr_bss->bssid, backhaul->bssid, ETH_ALEN);
     curr_bss->freq = backhaul->freq;
-    curr_bss->ie_len = interface->ie_len;
-    curr_bss->beacon_ie_len = interface->beacon_ie_len;
-    if (interface->ie != NULL) {
-        memcpy(curr_bss + 1, interface->ie, interface->ie_len);
+    curr_bss->ie_len = bss_ie->buff_len;
+    curr_bss->beacon_ie_len = beacon_ie->buff_len;
+    if (bss_ie->buff != NULL) {
+        memcpy(curr_bss + 1, bss_ie->buff, bss_ie->buff_len);
     }
 
     if (radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
@@ -8586,7 +8595,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 
     bss = wpa_bss_get_bssid_latest(&interface->wpa_s, backhaul->bssid);
     if (bss) { 
-        memcpy(bss + 1, interface->ie, interface->ie_len);
+        memcpy(bss + 1, bss_ie->buff, bss_ie->buff_len);
     }
 
     sme_send_authentication(&interface->wpa_s, curr_bss, interface->wpa_s.current_ssid, 1);
@@ -9883,33 +9892,39 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
             memcpy(vap->u.sta_info.bssid, bssid, sizeof(bssid_t));
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
             if (bss[NL80211_BSS_INFORMATION_ELEMENTS]) {
+                uint32_t radio_index = vap->radio_index;
                 uint32_t ie_len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
-                if (interface->ie == NULL) {
-                    interface->ie = (unsigned char *)malloc(ie_len);
-                } else if (ie_len > interface->ie_len) {
-                    interface->ie = (unsigned char *)realloc(interface->ie, ie_len);
+                ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
+
+                if (bss_ie->buff == NULL) {
+                    bss_ie->buff = (unsigned char *)malloc(ie_len);
+                } else if (ie_len > bss_ie->buff_len) {
+                    bss_ie->buff = (unsigned char *)realloc(bss_ie->buff, ie_len);
                 }
-                if (interface->ie != NULL) {
-                    interface->ie_len = ie_len;
-                    memset(interface->ie, 0, interface->ie_len);
-                    memcpy(interface->ie, nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]), interface->ie_len);
+                if (bss_ie->buff != NULL) {
+                    bss_ie->buff_len = ie_len;
+                    memset(bss_ie->buff, 0, bss_ie->buff_len);
+                    memcpy(bss_ie->buff, nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]), bss_ie->buff_len);
                 } else {
-                    interface->ie_len = 0;
+                    bss_ie->buff_len = 0;
                 }
             }
             if (bss[NL80211_BSS_BEACON_IES]) {
+                uint32_t radio_index = vap->radio_index;
                 uint32_t beacon_ie_len = nla_len(bss[NL80211_BSS_BEACON_IES]);
-                if (interface->beacon_ie == NULL) {
-                    interface->beacon_ie = (unsigned char *)malloc(beacon_ie_len);
-                } else if (beacon_ie_len > interface->beacon_ie_len) {
-                    interface->beacon_ie = (unsigned char *)realloc(interface->beacon_ie, beacon_ie_len);
+                ie_info_t *beacon_ie = &interface->beacon_elem_ie[radio_index];
+
+                if (beacon_ie->buff == NULL) {
+                    beacon_ie->buff = (unsigned char *)malloc(beacon_ie_len);
+                } else if (beacon_ie_len > beacon_ie->buff_len) {
+                    beacon_ie->buff = (unsigned char *)realloc(beacon_ie->buff, beacon_ie_len);
                 }
-                if (interface->beacon_ie != NULL) {
-                    interface->beacon_ie_len = beacon_ie_len;
-                    memset(interface->beacon_ie, 0, interface->beacon_ie_len);
-                    memcpy(interface->beacon_ie, nla_data(bss[NL80211_BSS_BEACON_IES]), interface->beacon_ie_len);
+                if (beacon_ie->buff != NULL) {
+                    beacon_ie->buff_len = beacon_ie_len;
+                    memset(beacon_ie->buff, 0, beacon_ie->buff_len);
+                    memcpy(beacon_ie->buff, nla_data(bss[NL80211_BSS_BEACON_IES]), beacon_ie->buff_len);
                 } else {
-                    interface->beacon_ie_len = 0;
+                    beacon_ie->buff_len = 0;
                 }
             }
 #endif
