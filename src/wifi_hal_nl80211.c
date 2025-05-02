@@ -11585,8 +11585,8 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val,
         os_strlcpy(ifname_wds, name, IFNAMSIZ + 1);
     }
 
-    wifi_hal_info_print("%s:%d:nl80211: Set WDS STA addr=" MACSTR " aid=%d val=%d name=%s\r\n",
-        __func__, __LINE__, MAC2STR(addr), aid, val, name);
+    wifi_hal_info_print("%s:%d:nl80211: Set WDS STA addr=" MACSTR " aid=%d val=%d name=%s ifindex:%d\r\n",
+        __func__, __LINE__, MAC2STR(addr), aid, val, name, if_nametoindex(name));
     if (val) {
         if (!if_nametoindex(name)) {
             if (wlan_nl80211_create_interface(name, NL80211_IFTYPE_AP_VLAN,
@@ -11616,6 +11616,10 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val,
             event.wds_sta_interface.ifname = name;
             event.wds_sta_interface.istatus = INTERFACE_ADDED;
             wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+        } else {
+            wifi_hal_dbg_print("%s:%d:Re-Enabling interface:%s - wds:%d\n",
+                __func__, __LINE__, name, interface->u.ap.conf.wds_sta);
+            nl80211_interface_enable(name, true);
         }
         return nl80211_set_sta_vlan(radio, interface, addr, name, 0);
     } else {
