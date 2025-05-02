@@ -7743,18 +7743,16 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     struct wpa_bss *bss;
     wifi_radio_info_t *radio;
+    uint32_t radio_index = 0;
 
-    if (vap->radio_index >= MAX_NUM_RADIOS) {
-        wifi_hal_error_print("%s:%d:connect failed due to wrong radio_index:%d\n",
-            __func__, __LINE__, vap->radio_index);
-        return RETURN_ERR;
-    }
+    wifi_convert_freq_band_to_radio_index(backhaul->oper_freq_band,
+        (int *)&radio_index);
+    ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
+    ie_info_t *beacon_ie = &interface->beacon_elem_ie[radio_index];
 
-    ie_info_t *bss_ie = &interface->bss_elem_ie[vap->radio_index];
-    ie_info_t *beacon_ie = &interface->beacon_elem_ie[vap->radio_index];
-
-    wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s\n", __func__, __LINE__,
-        to_mac_str(backhaul->bssid, bssid_str), backhaul->freq, backhaul->ssid);
+    wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s sta radio:%d for vap radio:%d\n",
+        __func__, __LINE__, to_mac_str(backhaul->bssid, bssid_str),
+        backhaul->freq, backhaul->ssid, radio_index, vap->radio_index);
 
     if (interface->wpa_s.current_ssid == NULL) {
         interface->wpa_s.current_ssid = get_wifi_wpa_current_ssid(interface);
@@ -7943,6 +7941,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     if (bss) { 
         memcpy(bss + 1, bss_ie->buff, bss_ie->buff_len);
     }
+
+    wpa_hexdump(MSG_MSGDUMP, "CONN_BSS_IE", bss_ie->buff, bss_ie->buff_len);
 
     sme_send_authentication(&interface->wpa_s, curr_bss, interface->wpa_s.current_ssid, 1);
     return 0;
@@ -8934,7 +8934,7 @@ static void parse_extension_tag(const uint8_t type, uint8_t len, const uint8_t *
         return;
     }
 
-    wifi_hal_stats_dbg_print("%s:%d: [SCAN] Extension TagNumber=%d\n", __func__, __LINE__, data[0]);
+    //wifi_hal_stats_dbg_print("%s:%d: [SCAN] Extension TagNumber=%d\n", __func__, __LINE__, data[0]);
 
     switch (data[0]) {
         case WLAN_EID_EXT_HE_CAPABILITIES:
@@ -9146,7 +9146,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     if (bss[NL80211_BSS_INFORMATION_ELEMENTS]) {
         ie = nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
         len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
-        wifi_hal_stats_dbg_print("[SCAN] BSSID: %s, IE LEN %d\n", bssid_str, len);
+        //wifi_hal_stats_dbg_print("[SCAN] BSSID: %s, IE LEN %d\n", bssid_str, len);
         if (len > 512) {
             wifi_hal_stats_error_print("[Wrong NL SCAN output] BSSID: %s, IE LEN %d\n", bssid_str, len);
             return NL_SKIP;
@@ -9260,8 +9260,10 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
             memcpy(vap->u.sta_info.bssid, bssid, sizeof(bssid_t));
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
             if (bss[NL80211_BSS_INFORMATION_ELEMENTS]) {
-                uint32_t radio_index = vap->radio_index;
+                uint32_t radio_index = 0;
                 uint32_t ie_len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
+                wifi_convert_freq_band_to_radio_index(scan_info_ap->oper_freq_band,
+                    (int *)&radio_index);
                 ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
 
                 if (bss_ie->buff == NULL) {
@@ -9273,13 +9275,19 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
                     bss_ie->buff_len = ie_len;
                     memset(bss_ie->buff, 0, bss_ie->buff_len);
                     memcpy(bss_ie->buff, nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]), bss_ie->buff_len);
+
+                    wifi_hal_stats_dbg_print("%s:%d: bss ie for radio:%d\n", __func__, __LINE__, radio_index);
+                    wpa_hexdump(MSG_MSGDUMP, "SCAN_BSS_IE", bss_ie->buff, bss_ie->buff_len);
                 } else {
+                    wifi_hal_stats_error_print("%s:%d bss ie not updated for radio:%d\r\n", __func__, __LINE__, radio_index);
                     bss_ie->buff_len = 0;
                 }
             }
             if (bss[NL80211_BSS_BEACON_IES]) {
-                uint32_t radio_index = vap->radio_index;
+                uint32_t radio_index = 0;
                 uint32_t beacon_ie_len = nla_len(bss[NL80211_BSS_BEACON_IES]);
+                wifi_convert_freq_band_to_radio_index(scan_info_ap->oper_freq_band,
+                    (int *)&radio_index);
                 ie_info_t *beacon_ie = &interface->beacon_elem_ie[radio_index];
 
                 if (beacon_ie->buff == NULL) {
@@ -9292,6 +9300,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
                     memset(beacon_ie->buff, 0, beacon_ie->buff_len);
                     memcpy(beacon_ie->buff, nla_data(bss[NL80211_BSS_BEACON_IES]), beacon_ie->buff_len);
                 } else {
+                    wifi_hal_stats_error_print("%s:%d beacon ie not updated for radio:%d\r\n", __func__, __LINE__, radio_index);
                     beacon_ie->buff_len = 0;
                 }
             }
