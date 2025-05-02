@@ -41,7 +41,7 @@
 #include "config_supplicant.h"
 #endif
 #ifdef BANANA_PI_PORT
-#include "config.h"
+#include "wpa_supplicant/config.h"
 #endif
 
 #define MAC_ADDRESS_LEN 6
