@@ -8401,8 +8401,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 
     wifi_convert_freq_band_to_radio_index(backhaul->oper_freq_band,
         (int *)&radio_index);
-    ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
-    ie_info_t *beacon_ie = &interface->beacon_elem_ie[radio_index];
+    wifi_ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
+    wifi_ie_info_t *beacon_ie = &interface->beacon_elem_ie[radio_index];
 
     wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s sta radio:%d for vap radio:%d\n",
         __func__, __LINE__, to_mac_str(backhaul->bssid, bssid_str),
@@ -9896,7 +9896,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
                 uint32_t ie_len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
                 wifi_convert_freq_band_to_radio_index(scan_info_ap->oper_freq_band,
                     (int *)&radio_index);
-                ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
+                wifi_ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
 
                 if (bss_ie->buff == NULL) {
                     bss_ie->buff = (unsigned char *)malloc(ie_len);
@@ -9920,7 +9920,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
                 uint32_t beacon_ie_len = nla_len(bss[NL80211_BSS_BEACON_IES]);
                 wifi_convert_freq_band_to_radio_index(scan_info_ap->oper_freq_band,
                     (int *)&radio_index);
-                ie_info_t *beacon_ie = &interface->beacon_elem_ie[radio_index];
+                wifi_ie_info_t *beacon_ie = &interface->beacon_elem_ie[radio_index];
 
                 if (beacon_ie->buff == NULL) {
                     beacon_ie->buff = (unsigned char *)malloc(beacon_ie_len);
