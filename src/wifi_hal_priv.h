@@ -423,6 +423,13 @@ static inline uint* uint_array_values(const uint_array_t *array) {
     return array ? array->values : NULL;
 }
 
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+typedef struct ie_info {
+    uint8_t *buff;
+    size_t  buff_len;
+} wifi_ie_info_t;
+#endif
+
 typedef struct wifi_interface_info_t {
     char name[32];
     char bridge[32];
@@ -489,10 +496,8 @@ typedef struct wifi_interface_info_t {
     /* Wi-Fi band steering sta_list_map */
     hash_map_t  *bm_sta_map;
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
-    unsigned char *ie;
-    size_t ie_len;
-    unsigned char *beacon_ie;
-    size_t beacon_ie_len;
+    wifi_ie_info_t bss_elem_ie[MAX_NUM_RADIOS];
+    wifi_ie_info_t beacon_elem_ie[MAX_NUM_RADIOS];
     struct wpa_supplicant wpa_s;
     struct wpa_ssid current_ssid_info;
 #endif
