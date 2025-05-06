@@ -10781,7 +10781,7 @@ int wifi_drv_send_action(void *priv,
     }
 
     wifi_hal_dbg_print("%s:%d: nl80211: Send Action frame (ifindex=%d, "
-                       "freq=%u MHz wait=%d ms no_cck=%d offchanok=%d)",
+                       "freq=%u MHz wait=%d ms no_cck=%d offchanok=%d)\n",
         __func__, __LINE__, interface->index, freq, wait_time, no_cck, offchanok);
 
     buf = (unsigned char*) calloc(sizeof(struct ieee80211_hdr) + data_len, sizeof(unsigned char));
@@ -10897,6 +10897,7 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
 #endif
     int res, interface_freq;
     mac_addr_str_t src_mac_str, dst_mac_str;
+    int offchanok = 1;
 
     char country[8];
     wifi_device_callbacks_t *callbacks;
@@ -10953,6 +10954,11 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, src_mac_str),
                 to_mac_str(mgmt->da, dst_mac_str), le_to_host16(mgmt->u.deauth.reason_code));
             break;
+        case WLAN_FC_STYPE_ACTION:
+            wifi_hal_dbg_print("%s:%d: interface:%s send action frame from:%s to:%s cat:%d\n",
+                __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, src_mac_str),
+                to_mac_str(mgmt->da, dst_mac_str), mgmt->u.action.category);
+            break;
         }
     }
 
@@ -10997,9 +11003,14 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
           use_cookie = 0;
 send_frame_cmd:
 
+    if (freq == 0 || ((int)freq == interface->u.ap.iface.freq && interface->beacon_set) ||
+        ieee80211_is_dfs(freq, interface->u.ap.iface.current_mode, 1)) {
+        offchanok = 0;
+    }
+
     //wifi_hal_dbg_print("nl80211: send_mlme -> send_frame_cmd\n");
     res = nl80211_send_frame_cmd(interface, freq, wait, data, data_len,
-              use_cookie, 0, noack, csa_offs, csa_offs_len);
+              use_cookie, offchanok, noack, csa_offs, csa_offs_len);
 
     return res;
 }
