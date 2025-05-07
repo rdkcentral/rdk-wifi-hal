@@ -4213,3 +4213,82 @@ bool is_db_upgrade_required(char* inactive_firmware)
 #endif
     return false;
 }
+
+int wifi_hal_setApMacAddressControlMode(uint32_t apIndex, uint32_t mac_filter_mode)
+{
+    wifi_interface_info_t *interface = get_interface_by_vap_index(apIndex);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: WiFi interface not found for vap:%d\n", __func__, __LINE__,
+            apIndex);
+        return RETURN_ERR;
+    }
+
+    wifi_vap_info_t *vap;
+    vap = &interface->vap_info;
+    if (vap == NULL) {
+        wifi_hal_error_print("%s:%d: WiFi interface not found for vap:%d\n", __func__, __LINE__,
+            apIndex);
+        return RETURN_ERR;
+    }
+
+    if (vap->u.bss_info.enabled != true || vap->vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print(":%s:%d bss not enabled:%d for vap:%d\n", __func__, __LINE__,
+            vap->u.bss_info.enabled, vap->vap_index);
+        return RETURN_ERR;
+    }
+
+    switch (mac_filter_mode) {
+    case 2:
+        vap->u.bss_info.mac_filter_enable = true;
+        vap->u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
+        break;
+
+    case 1:
+        vap->u.bss_info.mac_filter_enable = true;
+        vap->u.bss_info.mac_filter_mode = wifi_mac_filter_mode_white_list;
+        break;
+
+    case 0:
+        vap->u.bss_info.mac_filter_enable = false;
+        break;
+
+    default:
+        wifi_hal_error_print(":%s:%d Wrong Mac mode %d\n", __func__, __LINE__, mac_filter_mode);
+        return RETURN_ERR;
+    }
+
+    return (nl80211_set_acl(interface));
+}
+
+int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)
+{
+    wifi_vap_info_t *vap;
+    wifi_interface_info_t *interface = get_interface_by_vap_index(apIndex);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: WiFi interface not found for vap:%d\n", __func__, __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+
+    vap = &interface->vap_info;
+    if (vap->vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d: sta vap:%d does not support this\n", __func__, __LINE__, vap->vap_index);
+        return RETURN_ERR;
+    }
+
+    if (vap->u.bss_info.mac_filter_enable == true) {
+        if (vap->u.bss_info.mac_filter_mode != wifi_mac_filter_mode_black_list) {
+            wifi_hal_error_print("%s:%d: user configured mac filter mode:%d for vap:%d\n", __func__, __LINE__,
+                                        vap->u.bss_info.mac_filter_mode, apIndex);
+            return RETURN_ERR;
+        } else if (vap->u.bss_info.mac_filter_mode == mac_filter_mode) {
+            wifi_hal_error_print(":%s:%d mac filtermode is already set for vap:%d\n", __func__, __LINE__, vap->vap_index);
+            return RETURN_OK;
+        }
+    } else {
+        wifi_hal_info_print("%s:%d: force enable mac mode for vap:%d\n", __func__, __LINE__, apIndex);
+        vap->u.bss_info.mac_filter_enable = true;
+    }
+
+    vap->u.bss_info.mac_filter_mode = mac_filter_mode;
+    return (nl80211_set_acl(interface));
+}
