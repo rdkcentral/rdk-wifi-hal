@@ -1308,8 +1308,12 @@ int wifi_setApRetrylimit(void *priv)
 }
 
 #ifdef CONFIG_IEEE80211BE
-int wifi_drv_set_ap_mlo(struct nl_msg *msg, void *priv, struct wpa_driver_ap_params *params) {
+int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
+    struct wpa_driver_ap_params *params)
+{
 #ifdef CONFIG_MLO
+    (void)msg_mlo;
+
     wifi_interface_info_t *interface = (wifi_interface_info_t *) priv;
     int res = 0;
     wifi_hal_dbg_print("%s:%d: params->num_mlo_links: %d\n", __func__, __LINE__, params->num_mlo_links);
@@ -1349,8 +1353,15 @@ int wifi_drv_set_ap_mlo(struct nl_msg *msg, void *priv, struct wpa_driver_ap_par
     wifi_hal_dbg_print("%s:%d: EXIT\n", __func__, __LINE__);
     return res;
 #else
-#error "The wifi_drv_set_ap_mlo is not implemented"
+#error "The nl80211_drv_mlo_msg is not implemented"
 #endif /* CONFIG_MLO */
+}
+
+int nl80211_send_mlo_msg(struct nl_msg *msg)
+{
+    (void)msg;
+
+    return 0;
 }
 
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb) {
