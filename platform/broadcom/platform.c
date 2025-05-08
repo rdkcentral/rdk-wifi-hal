@@ -1627,7 +1627,7 @@ int platform_flags_init(int *flags)
 
 int platform_get_aid(void* priv, u16* aid, const u8* addr)
 {
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined (XB10_PORT)
     int ret;
     sta_info_t sta_info;
     wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
@@ -3182,6 +3182,9 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x02, 0x03, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
 #endif // TCXB8_PORT
+#if HOSTAPD_VERSION >= 211
+    static const u8 eht_mcs[] = { 0x44, 0x44, 0x44 };
+#endif /* HOSTAPD_VERSION >= 211 */
     struct hostapd_iface *iface = &interface->u.ap.iface;
 
     radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD;
@@ -3191,6 +3194,9 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
         iface->hw_features[i].a_mpdu_params &= ~(0x07 << 2);
         iface->hw_features[i].a_mpdu_params |= 0x05 << 2;
         memcpy(iface->hw_features[i].mcs_set, ht_mcs, sizeof(ht_mcs));
+#if HOSTAPD_VERSION >= 211
+        memcpy(iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].mcs, eht_mcs, sizeof(eht_mcs));
+#endif /* HOSTAPD_VERSION >= 211 */
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT)
         memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mac_cap, he_mac_cap,
@@ -3226,6 +3232,9 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x02, 0x1b, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
 #endif // TCXB8_PORT
+#if HOSTAPD_VERSION >= 211
+    static const u8 eht_mcs[] = { 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
+#endif /* HOSTAPD_VERSION >= 211 */
     struct hostapd_iface *iface = &interface->u.ap.iface;
 
     radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD | WPA_DRIVER_FLAGS_DFS_OFFLOAD;
@@ -3241,6 +3250,9 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
         iface->hw_features[i].vht_capab = 0x0f8b69b6;
 #endif
         memcpy(iface->hw_features[i].vht_mcs_set, vht_mcs, sizeof(vht_mcs));
+#if HOSTAPD_VERSION >= 211
+        memcpy(iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].mcs, eht_mcs, sizeof(eht_mcs));
+#endif /* HOSTAPD_VERSION >= 211 */
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT)
         memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mac_cap, he_mac_cap,
@@ -3278,9 +3290,15 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x7b, 0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71,
         0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
 #endif // TCXB7_PORT || TCXB8_PORT
+#if HOSTAPD_VERSION >= 211
+    static const u8 eht_mcs[] = { 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
+#endif /* HOSTAPD_VERSION >= 211 */
     struct hostapd_iface *iface = &interface->u.ap.iface;
 
     for (int i = 0; i < iface->num_hw_features; i++) {
+#if HOSTAPD_VERSION >= 211
+        memcpy(iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].mcs, eht_mcs, sizeof(eht_mcs));
+#endif /* HOSTAPD_VERSION >= 211 */
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT)
         memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mac_cap, he_mac_cap,
             sizeof(he_mac_cap));
@@ -3311,6 +3329,28 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 
 #ifdef CONFIG_IEEE80211BE
         radio->driver_data.capa.flags2 |= WPA_DRIVER_FLAGS2_MLO;
+
+        /*
+         * FIXME: Hardcodes eml_capa and mld_capa_and_ops because brcm does not provide
+         * this information and we have errors in hostap.
+         *
+         * Remove it when brcm makes the necessary changes.
+         */
+        radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa =
+            (((8 << 11) & EHT_ML_EML_CAPA_TRANSITION_TIMEOUT_MASK) |
+                ((0 << 8) & EHT_ML_EML_CAPA_EMLMR_DELAY_MASK) |
+                ((0 << 7) & EHT_ML_EML_CAPA_EMLMR_SUPP) |
+                ((0 << 4) & EHT_ML_EML_CAPA_EMLSR_TRANS_DELAY_MASK) |
+                (((0 << 1) & EHT_ML_EML_CAPA_EMLSR_PADDING_DELAY_MASK) |
+                    ((1 << 0) & EHT_ML_EML_CAPA_EMLSR_SUPP)));
+
+        radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops =
+            ((0 << 12 & EHT_ML_MLD_CAPA_AAR_SUPP) |
+                ((15 << 7) & EHT_ML_MLD_CAPA_FREQ_SEP_FOR_STR_MASK) |
+                (EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_ALL_TO_ALL |
+                    EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_ALL_TO_ONE) |
+                ((0 << 4) & EHT_ML_MLD_CAPA_SRS_SUPP) |
+                ((MAX_NUM_MLD_LINKS - 1) & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK));
 #endif /* CONFIG_IEEE80211BE */
 
     for (interface = hash_map_get_first(radio->interface_map); interface != NULL;
@@ -3639,9 +3679,157 @@ void platform_bss_enable(char* ifname, bool enable)
 #endif
 
 #ifdef CONFIG_IEEE80211BE
-int wifi_drv_set_ap_mlo(struct nl_msg *msg, void *priv, struct wpa_driver_ap_params *params) {
-    //TODO: FIXME
+//! FIXME: temporary solution, it should be dynamically configured and come from vap configuration
+static struct hostapd_mld MLD_UNIT[] = {
+    { .name = "mld_unit_0", .links = DL_LIST_HEAD_INIT(MLD_UNIT[0].links) },
+#ifdef CONFIG_NO_MLD_ONLY_PRIVATE
+    { .name = "mld_unit_1", .links = DL_LIST_HEAD_INIT(MLD_UNIT[1].links) },
+    { .name = "mld_unit_2", .links = DL_LIST_HEAD_INIT(MLD_UNIT[2].links) },
+    { .name = "mld_unit_3", .links = DL_LIST_HEAD_INIT(MLD_UNIT[3].links) },
+    { .name = "mld_unit_4", .links = DL_LIST_HEAD_INIT(MLD_UNIT[4].links) },
+    { .name = "mld_unit_5", .links = DL_LIST_HEAD_INIT(MLD_UNIT[5].links) },
+    { .name = "mld_unit_6", .links = DL_LIST_HEAD_INIT(MLD_UNIT[6].links) },
+    { .name = "mld_unit_7", .links = DL_LIST_HEAD_INIT(MLD_UNIT[7].links) },
+#endif /* CONFIG_NO_MLD_ONLY_PRIVATE */
+};
+
+extern void hostapd_bss_link_deinit(struct hostapd_data *hapd);
+
+/*
+ * Get MLD entry index.
+ *
+ * @note This is semantic trick to help distinguish between mld_unit and mld_id because according to
+ * the spec MLD_ID has nothing to do with entry id and has its own calculation logic, but in fact in
+ * hostapd-2.11 MLD_ID always evaluates to 0 regardless of the actual value of mld_id.
+ */
+static inline void set_mld_unit(struct hostapd_bss_config *conf, unsigned char mld_unit)
+{
+    conf->mld_id = mld_unit;
+}
+/*
+ * Set MLD entry index.
+ *
+ * @note This is semantic trick to help distinguish between mld_unit and mld_id because according to
+ * the spec MLD_ID has nothing to do with entry id and has its own calculation logic, but in fact in
+ * hostapd-2.11 MLD_ID always evaluates to 0 regardless of the actual value of mld_id.
+ */
+static inline unsigned char get_mld_unit(struct hostapd_bss_config *conf)
+{
+    return conf->mld_id;
+}
+
+int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
+    struct wpa_driver_ap_params *params)
+{
+    (void)msg;
+
+    *msg_mlo = NULL;
+
+/*
+ *  `SERCOMMXER10` does not support the nl mlo vendor commands.
+ */
+#ifndef SCXER10_PORT
+    wifi_interface_info_t *interface;
+    struct hostapd_bss_config *conf;
+    struct hostapd_data *hapd;
+    struct nlattr *nlattr_vendor;
+    mac_addr_str_t mld_addr = {};
+    unsigned char apply;
+
+    interface = (wifi_interface_info_t *)priv;
+    conf = &interface->u.ap.conf;
+    hapd = &interface->u.ap.hapd;
+
+    /*
+     * NOTE: According to the new updates of the brcm contract of sending the message
+     * `RDK_VENDOR_NL80211_SUBCMD_SET_MLD` we can't send this message for config -1 (`link_id=-1`).
+     */
+    if (!params->mld_ap && (u8)hapd->mld_link_id == (u8)-1) {
+        wifi_hal_dbg_print("%s:%d skip Non-MLO iface:%s:\n", __func__, __LINE__, conf->iface);
+        return 0;
+    }
+
+    // Validation
+    if (params->mld_ap) {
+        if (get_mld_unit(conf) != (unsigned char)-1 && get_mld_unit(conf) >= RDK_VENDOR_MAX_NUM_MLD_UNIT) {
+            wifi_hal_error_print("%s:%d: Invalid mld_id:%u\n", __func__, __LINE__, conf->mld_id);
+            return -1;
+        }
+        if ((u8)params->mld_link_id != (u8)NL80211_DRV_LINK_ID_NA &&
+            params->mld_link_id >= RDK_VENDOR_MAX_NUM_MLD_LINKS) {
+            wifi_hal_error_print("%s:%d: Invalid mld_link_id:%u\n", __func__, __LINE__,
+                params->mld_link_id);
+            return -1;
+        }
+
+        (void)to_mac_str(hapd->mld->mld_addr, mld_addr);
+    }
+
+    /*
+     * NOTE: The BRCM driver does not support MLO reconfiguration and even sending the same message
+     * to the module twice.
+     */
+#ifndef CONFIG_NO_MLD_DETECT_DOUBLE_APPLY
+    char fname_buff[32 + sizeof("/tmp/.mld_")];
+    int fd;
+    snprintf(fname_buff, sizeof(fname_buff), "/tmp/.mld_%s", conf->iface);
+    if ((fd = open(fname_buff, O_WRONLY | O_CREAT | O_EXCL, 0)) == -1) {
+        wifi_hal_dbg_print("%s:%d skip double apply for the iface:%s:\n", __func__, __LINE__,
+            conf->iface);
+        return 0;
+    }
+    close(fd);
+#endif /* CONFIG_NO_MLD_DOUBLE_APPLY */
+
+    /*
+     * !FIXME: need to look for the last active VAP.
+     *
+     * NOTE: We cannot iterate over `interface_map` because this collection `hash_map t` has a
+     * stateful iterator and any call to `hash_map_get_first` under the loop of this collection
+     * instance invalidates the top-level iterator.
+     */
+    apply = is_wifi_hal_6g_radio_from_interfacename(conf->iface);
+
+    wifi_hal_dbg_print(
+        "%s:%d iface:%s - mld_ap:%d mld_unit:%u mld_link_id:%u mld_addr:%s apply:%d\n", __func__,
+        __LINE__, conf->iface, params->mld_ap, get_mld_unit(conf), params->mld_link_id, mld_addr,
+        apply);
+
+    /*
+     * message format
+     *
+     * NL80211_ATTR_VENDOR_DATA
+     * RDK_VENDOR_ATTR_MLD_ENABLE
+     * RDK_VENDOR_ATTR_MLD_UNIT
+     * RDK_VENDOR_ATTR_MLD_LINK_ID
+     * RDK_VENDOR_ATTR_MLD_MAC
+     * RDK_VENDOR_ATTR_MLD_CONFIG_APPLY
+     */
+    if ((*msg_mlo = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
+             RDK_VENDOR_NL80211_SUBCMD_SET_MLD)) == NULL ||
+        (nlattr_vendor = nla_nest_start(*msg_mlo, NL80211_ATTR_VENDOR_DATA)) == NULL ||
+        nla_put_u8(*msg_mlo, RDK_VENDOR_ATTR_MLD_ENABLE, params->mld_ap) < 0 ||
+        (params->mld_ap ?
+                (nla_put_u8(*msg_mlo, RDK_VENDOR_ATTR_MLD_UNIT, get_mld_unit(conf)) < 0 ||
+                    nla_put_u8(*msg_mlo, RDK_VENDOR_ATTR_MLD_LINK_ID, params->mld_link_id) < 0 ||
+                    (!is_zero_ether_addr(hapd->mld->mld_addr) &&
+                        nla_put(*msg_mlo, RDK_VENDOR_ATTR_MLD_MAC, ETH_ALEN, hapd->mld->mld_addr) <
+                            0)) :
+                0) ||
+        nla_put_u8(*msg_mlo, RDK_VENDOR_ATTR_MLD_CONFIG_APPLY, apply) < 0) {
+        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        nlmsg_free(*msg_mlo);
+        return -1;
+    }
+    nla_nest_end(*msg_mlo, nlattr_vendor);
+#endif /* SCXER10_PORT */
+
     return 0;
+}
+
+int nl80211_send_mlo_msg(struct nl_msg *msg)
+{
+    return ((msg != NULL) ? nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL) : 0);
 }
 
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb) {
@@ -3655,61 +3843,148 @@ void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nla
 }
 
 /* TODO: temporary solution, mld id should come from vap configuration */
-static inline int get_mld_id_for_ap(int ap_index)
+static unsigned char platform_get_mld_unit_for_ap(int ap_index)
 {
+    unsigned char res;
+
     if(is_wifi_hal_vap_private(ap_index)) {
-        return 0;
+        res = 0;
     } else if(is_wifi_hal_vap_xhs(ap_index)) {
-        return 1;
+        res = 1;
     } else if(is_wifi_hal_vap_hotspot_open(ap_index)) {
-        return 2;
+        res = 2;
     } else if(is_wifi_hal_vap_lnf_psk(ap_index)) {
-        return 3;
+        res = 3;
     } else if(is_wifi_hal_vap_hotspot_secure(ap_index)) {
-        return 4;
+        res = 4;
     } else if(is_wifi_hal_vap_lnf_radius(ap_index)) {
-        return 5;
+        res = 5;
     } else if(is_wifi_hal_vap_mesh_backhaul(ap_index)) {
-        return 6;
+        res = 6;
+    } else {
+        res = 7;
     }
-    return 7;
+
+    wifi_hal_dbg_print("%s:%d mld_unit:%u for the ap_index:%d\n", __func__, __LINE__, res, ap_index);
+    return res;
 }
 
-int update_hostap_mlo(wifi_interface_info_t *interface) {
-    /* TODO: add correct way to configure MLD. These changes are done only for
-     * testing wifi-7 single-link connection */
+/* TODO: temporary solution, link_id should come from vap configuration */
+static unsigned char platform_get_link_id_for_radio_index(unsigned int radio_index, unsigned int ap_index)
+{
+    int mlo_config[4];
+    unsigned char res = NL80211_DRV_LINK_ID_NA;
+
+#ifndef CONFIG_NO_MLD_ONLY_PRIVATE
+    if (!is_wifi_hal_vap_private(ap_index)) {
+        wifi_hal_dbg_print("%s:%d skip MLO for Non-Private VAP radio_index:%u ap_index:%u\n",
+            __func__, __LINE__, radio_index, ap_index);
+        radio_index = -1;
+    }
+#endif /* CONFIG_NO_MLD_ONLY_PRIVATE */
+
+    if (radio_index < (sizeof(mlo_config) / sizeof(*mlo_config))) {
+        char *wl_mlo_config;
+
+        wl_mlo_config = nvram_get("wl_mlo_config");
+        if (wl_mlo_config != NULL) {
+            int ret;
+
+            ret = sscanf(wl_mlo_config, "%d %d %d %d", &mlo_config[0], &mlo_config[1],
+                &mlo_config[2], &mlo_config[3]);
+
+            if ((sizeof(mlo_config) / sizeof(*mlo_config)) == ret &&
+                mlo_config[radio_index] < (sizeof(mlo_config) / sizeof(*mlo_config)) &&
+                mlo_config[radio_index] >= -1) {
+                res = (unsigned char)mlo_config[radio_index];
+            }
+        }
+    }
+
+    wifi_hal_dbg_print("%s:%d link_id:%u for the radio_index:%u ap_index:%u\n", __func__, __LINE__,
+        res, radio_index, ap_index);
+    return res;
+}
+
+static unsigned char platform_iface_is_mlo_ap(const char *iface)
+{
+    char name[32 + sizeof("_bss_mlo_mode")];
+    const char *wl_bss_mlo_mode;
+    unsigned char res;
+
+    (void)snprintf(name, sizeof(name), "%s_bss_mlo_mode", iface);
+    wl_bss_mlo_mode = nvram_get(name);
+    res = ((wl_bss_mlo_mode != NULL) ? atoi(wl_bss_mlo_mode) : 0);
+
+    wifi_hal_dbg_print("%s:%d mld_ap:%u for the iface:%s\n", __func__, __LINE__, res, iface);
+    return res;
+}
+
+int update_hostap_mlo(wifi_interface_info_t *interface)
+{
     struct hostapd_bss_config *conf;
     struct hostapd_data *hapd;
+    wifi_vap_info_t *vap;
 
     conf = &interface->u.ap.conf;
     hapd = &interface->u.ap.hapd;
+    vap = &interface->vap_info;
 
-    conf->mld_ap = !conf->disable_11be;
+    hostapd_bss_link_deinit(hapd);
 
-    conf->mld_id = -1;
-    free(hapd->mld);
-    hapd->mld = NULL;
-    hapd->mld_link_id = 0;
-
-    if (conf->mld_ap) {
-        wifi_vap_info_t *vap;
-
-        vap = &interface->vap_info;
-
-        conf->mld_id = get_mld_id_for_ap(vap->vap_index);
-        hapd->mld = malloc(sizeof(*hapd->mld));
-        memset(hapd->mld, 0, sizeof(*hapd->mld));
-        os_memcpy(hapd->mld->mld_addr, hapd->own_addr, ETH_ALEN);
-        os_memcpy(conf->mld_addr, hapd->own_addr, ETH_ALEN);
-        dl_list_init(&hapd->mld->links);
-        snprintf(hapd->mld->name, sizeof(hapd->mld->name), "mld_id_%d", vap->vap_index);
-        hostapd_mld_add_link(hapd);
+    if (get_mld_unit(conf) == (unsigned char)-1) {
+        free(hapd->mld);
     }
 
-    wifi_hal_info_print("%s:%d: mlo vap: %s - mld_ap:%d mld_id:%d mld_link_id:%d\n", __func__,
-        __LINE__, interface->name, conf->mld_ap, conf->mld_id, hapd->mld_link_id);
+    set_mld_unit(conf, -1);
+    conf->okc = 0;
+    hapd->mld = NULL;
+
+    hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
+    conf->mld_ap = (!conf->disable_11be && (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
+
+    if (conf->mld_ap) {
+        unsigned char is_mlo_ap;
+        unsigned char is_first_bss;
+
+        is_mlo_ap = platform_iface_is_mlo_ap(conf->iface);
+
+        /*
+         * FIXME: This is not final solution, as it should be dynamic and come from the vap
+         * configuration.
+         */
+        if (is_mlo_ap) {
+            set_mld_unit(conf, platform_get_mld_unit_for_ap(vap->vap_index));
+            hapd->mld = &MLD_UNIT[get_mld_unit(conf)];
+
+            /*
+             * NOTE: For MLO, we need to enable okc=1, or disable_pmksa_caching=1, otherwise there
+             * will be problems with PMKID for link AP
+             */
+            conf->okc = 1;
+        } else {
+            hapd->mld = malloc(sizeof(*hapd->mld));
+            os_memset(hapd->mld, 0, sizeof(*hapd->mld));
+            dl_list_init(&hapd->mld->links);
+            snprintf(hapd->mld->name, sizeof(hapd->mld->name), "slo_mld_id_%u", vap->vap_index);
+        }
+
+        hostapd_mld_add_link(hapd);
+
+        is_first_bss = hostapd_mld_is_first_bss(hapd);
+
+        if (is_first_bss) {
+            os_memcpy(hapd->mld->mld_addr, hapd->own_addr, ETH_ALEN);
+        }
+
+        wifi_hal_dbg_print("%s:%d: Setup of first (%d) link (%u) BSS of %s %s for VAP %s\n",
+            __func__, __LINE__, is_first_bss, hapd->mld_link_id, (is_mlo_ap ? "MLO" : "SLO"),
+            hapd->mld->name, vap->vap_name);
+    }
+
+    wifi_hal_info_print("%s:%d: iface:%s - mld_ap:%d mld_unit:%u mld_link_id:%u\n", __func__,
+        __LINE__, conf->iface, conf->mld_ap, get_mld_unit(conf), hapd->mld_link_id);
 
     return RETURN_OK;
 }
-
 #endif /* CONFIG_IEEE80211BE */

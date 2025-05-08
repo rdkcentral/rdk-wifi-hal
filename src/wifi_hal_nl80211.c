@@ -1229,6 +1229,9 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #ifdef CMXB7_PORT
         event.rx_mgmt.snr_db = snr;
 #endif
+#if HOSTAPD_VERSION >= 211
+        event.rx_mgmt.link_id = NL80211_DRV_LINK_ID_NA;
+#endif /* HOSTAPD_VERSION >= 211 */
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -3970,6 +3973,9 @@ static void wiphy_info_extended_capab(wifi_driver_data_t *drv,
 
         capa = &drv->iface_ext_capa[drv->num_iface_ext_capa];
         capa->iftype = nla_get_u32(tb1[NL80211_ATTR_IFTYPE]);
+        wifi_hal_dbg_print(
+            "%s:%d: nl80211: Driver-advertised extended capabilities for interface type %s",
+            __func__, __LINE__, nl80211_iftype_str(capa->iftype));
 
         len = nla_len(tb1[NL80211_ATTR_EXT_CAPA]);
         capa->ext_capa = os_memdup(nla_data(tb1[NL80211_ATTR_EXT_CAPA]),
@@ -3998,6 +4004,9 @@ static void wiphy_info_extended_capab(wifi_driver_data_t *drv,
             capa->mld_capa_and_ops =
                 nla_get_u16(tb1[NL80211_ATTR_MLD_CAPA_AND_OPS]);
         }
+
+        wifi_hal_dbg_print("%s:%d: nl80211: EML Capability: 0x%x MLD Capability: 0x%x", __func__,
+            __LINE__, capa->eml_capa, capa->mld_capa_and_ops);
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
 
@@ -8794,7 +8803,6 @@ int wifi_drv_get_ext_capab(void *priv, enum wpa_driver_if_type type,
 static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
                                  u16 *eml_capa, u16 *mld_capa_and_ops)
 {
-    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
     wifi_radio_info_t *radio;
@@ -8813,9 +8821,9 @@ static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
 
     nlmode = wpa_driver_nl80211_if_type(type);
 
-    /* By default, set to zero */
-    *eml_capa = 0;
-    *mld_capa_and_ops = 0;
+    /* By default, set to UNSPECIFIED */
+    *eml_capa = drv->iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa;
+    *mld_capa_and_ops = drv->iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops;
 
     /* Replace the default value if a per-interface type value exists */
     for (i = 0; i < drv->num_iface_ext_capa; i++) {
@@ -8825,6 +8833,10 @@ static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
             break;
         }
     }
+
+    wifi_hal_dbg_print("%s:%d: eml_capa: 0x%x, mld_capa_and_ops: 0x%x\n", __func__, __LINE__,
+        *eml_capa, *mld_capa_and_ops);
+
     return 0;
 }
 #endif /* CONFIG_IEEE80211BE */
@@ -9680,6 +9692,9 @@ void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len)
     os_memset(&event, 0, sizeof(event));
     event.rx_mgmt.frame = (unsigned char *)frame;
     event.rx_mgmt.frame_len = len;
+#if HOSTAPD_VERSION >= 211
+    event.rx_mgmt.link_id = NL80211_DRV_LINK_ID_NA;
+#endif /* HOSTAPD_VERSION >= 211 */
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -10285,6 +10300,19 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
           !(drv->capa.flags & WPA_DRIVER_FLAGS_TDLS_SUPPORT)) {
         return -EOPNOTSUPP;
     }
+
+#ifdef CONFIG_IEEE80211BE
+#ifdef CONFIG_DRIVER_BRCM
+    //! WORKAROUND: BRCM cfg80211 does not support NL80211_CMD_NEW_STATION(add_station)
+    if (params->mld_link_sta) {
+        wifi_hal_dbg_print(
+            "%s:%d: WORKAROUND: Replacement Add to Set for the mld_link(id=%d, addr=" MACSTR ")\n",
+            __func__, __LINE__, params->mld_link_id, MAC2STR(params->mld_link_addr));
+
+        params->set = 1;
+    }
+#endif /* CONFIG_DRIVER_BRCM */
+#endif /* CONFIG_IEEE80211BE */
 
     wifi_hal_info_print("%s:%d: %s STA %s\n", __func__, __LINE__, params->set ? "Set" : "Add",
         to_mac_str(params->addr, mac_str));
@@ -12082,6 +12110,9 @@ static int nl80211_mbssid(struct nl_msg *msg, struct wpa_driver_ap_params *param
 
 int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
 {
+#ifdef CONFIG_IEEE80211BE
+    struct nl_msg *msg_mlo;
+#endif /* CONFIG_IEEE80211BE */
     struct nl_msg *msg;
     int ret;
     int num_suites;
@@ -12277,11 +12308,11 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     }
 
 #ifdef CONFIG_IEEE80211BE
-    ret = wifi_drv_set_ap_mlo(msg, interface, params);
-    if(0 != ret) {
-      wifi_hal_error_print(
-          "%s:%d: Failed to set ap mlo on interface %s, error: %d\n", __func__,
-          __LINE__, interface->name, ret);
+    ret = nl80211_drv_mlo_msg(msg, &msg_mlo, interface, params);
+    if (ret < 0) {
+        wifi_hal_error_print("%s:%d: Failed to create mlo msg on interface %s, error: %d\n",
+            __func__, __LINE__, interface->name, ret);
+        return -1;
     }
 #endif /* CONFIG_IEEE80211BE */
 
@@ -12338,6 +12369,16 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     {
         set_bss_param(priv, params);
     }
+
+#ifdef CONFIG_IEEE80211BE
+    ret = nl80211_send_mlo_msg(msg_mlo);
+    if (ret < 0) {
+        wifi_hal_error_print("%s:%d: Failed to send mlo msg on interface %s, error: %d\n", __func__,
+            __LINE__, interface->name, ret);
+        return -1;
+    }
+#endif /* CONFIG_IEEE80211BE */
+
     return 0;
 }
 

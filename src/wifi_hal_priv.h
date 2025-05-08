@@ -960,7 +960,9 @@ int wifi_setQamPlus(void *priv);
 int wifi_setApRetrylimit(void *priv);
 
 #ifdef CONFIG_IEEE80211BE
-int wifi_drv_set_ap_mlo(struct nl_msg *msg, void *priv, struct wpa_driver_ap_params *params);
+int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
+    struct wpa_driver_ap_params *params);
+int nl80211_send_mlo_msg(struct nl_msg *msg);
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb);
 int update_hostap_mlo(wifi_interface_info_t *interface);
 #endif /* CONFIG_IEEE80211BE */
