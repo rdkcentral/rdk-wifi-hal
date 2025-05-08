@@ -796,20 +796,27 @@ bool is_core_acl_drop_mgmt_frame(wifi_interface_info_t *interface, mac_address_t
     memset(sta_mac_str, 0, sizeof(sta_mac_str));
 
     l_vap_info = &interface->vap_info;
-
-    if (l_vap_info->u.bss_info.mac_filter_enable == TRUE) {
+    wifi_hal_dbg_print("%s:%d: MJ mac_filter_enable:%d\n", __func__, __LINE__, l_vap_info->u.bss_info.mac_filter_enable);
+    if (l_vap_info->u.bss_info.mac_filter_enable == TRUE) {       
         key = to_mac_str(sta_mac, sta_mac_str);
+        wifi_hal_dbg_print("%s:%d: MJ Converted MAC address to string: %s\n", __func__, __LINE__, key);
         l_acl_map = hash_map_get(interface->acl_map, key);
-
+        wifi_hal_dbg_print("%s:%d: MJ ACL map lookup result for MAC %s: %p\n", __func__, __LINE__, key, l_acl_map);
         if (l_vap_info->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_white_list) {
+            wifi_hal_dbg_print("%s:%d: MJ MAC filter mode: Whitelist\n", __func__, __LINE__);
             if (l_acl_map != NULL)
+            wifi_hal_dbg_print("%s:%d: MJ MAC %s is in the whitelist. Frame will not be dropped.\n", __func__, __LINE__, key);
                 return false;
         } else {
-            if (l_acl_map == NULL)
+            wifi_hal_dbg_print("%s:%d: MJ MAC filter mode: Blacklist\n", __func__, __LINE__);
+            if (l_acl_map == NULL){
+                wifi_hal_dbg_print("%s:%d: MJ MAC %s is NOT in the blacklist. Frame will not be dropped.\n", __func__, __LINE__, key);
                 return false;
-        }
+        }}
+        wifi_hal_dbg_print("%s:%d: MJ Frame for MAC %s will be dropped.\n", __func__, __LINE__, key);
         return true;
     }
+    wifi_hal_dbg_print("%s:%d: MJ MAC filtering is disabled. Frame will not be dropped.\n", __func__, __LINE__);
     return false;
 }
 #endif
@@ -1021,6 +1028,8 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #ifdef NL80211_ACL
         // If mac filter acl is enabled then we need to drop mgmt frame based on acl config
         if (is_core_acl_drop_mgmt_frame(interface, sta)) {
+            wifi_hal_dbg_print("%s:%d: MJ Station present in acl list dropping auth req\n", __func__,
+                __LINE__);
             return -1;
         }
 #endif
