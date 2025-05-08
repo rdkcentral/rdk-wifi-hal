@@ -1658,7 +1658,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         interface->u.ap.iface_initialized = true;
     }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     iface->drv_flags = radio->driver_data.capa.flags;
 #if HOSTAPD_VERSION >= 210
     iface->drv_flags2 = radio->driver_data.capa.flags2;
@@ -1678,7 +1678,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     hostapd_get_mld_capa(iface);
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
 
 #if HOSTAPD_VERSION >= 210
     iface->mbssid_max_interfaces = radio->driver_data.capa.mbssid_max_interfaces;

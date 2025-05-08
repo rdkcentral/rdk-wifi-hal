@@ -502,7 +502,7 @@ INT wifi_hal_init()
         return RETURN_ERR;
     }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         wifi_interface_info_t *interface;
         radio = get_radio_by_rdk_index(i);
@@ -518,7 +518,7 @@ INT wifi_hal_init()
             interface = hash_map_get_next(radio->interface_map, interface);
         }
     }
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
 
     if ((get_radio_caps_fn = get_platform_get_radio_caps_fn()) != NULL) {
         wifi_hal_dbg_print("%s:%d: get platform radio capabilities\n", __func__, __LINE__);
