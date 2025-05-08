@@ -16584,6 +16584,36 @@ int wifi_drv_set_ap_wps_ie(void *priv, const struct wpabuf *beacon,
     return 0;
 }
 
+static void wifi_hal_wps_cancel_on_other_radios(wifi_interface_info_t *interface)
+{
+    wifi_vap_type_t vap_type;
+    wifi_radio_info_t *radio_iter;
+    wifi_interface_info_t *interface_iter;
+
+    if (wifi_hal_get_vap_interface_type(interface->vap_info.vap_name, vap_type) < 0) {
+        wifi_hal_error_print("%s:%d failed to get vap type for %s\n", __func__, __LINE__,
+            interface->vap_info.vap_name);
+        return;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        if ((radio_iter = get_radio_by_rdk_index(i)) == NULL) {
+            continue;
+        }
+
+        if ((interface_iter = wifi_hal_get_vap_interface_by_type(radio_iter, vap_type)) == NULL) {
+            continue;
+        }
+
+        if (interface_iter == interface) {
+            continue;
+        }
+        if (interface_iter->u.ap.hapd.wps_stats.pbc_status == WPS_PBC_STATUS_ACTIVE) {
+            wifi_hal_nl80211_wps_cancel(interface_iter->vap_info.vap_index);
+        }
+    }
+}
+
 static wifi_wps_ev_t convert_wps_event(unsigned int event)
 {
     switch (event) {
@@ -16646,6 +16676,12 @@ int wifi_drv_wps_event_notify_cb(void *ctx, unsigned int event, void *data)
             event_data.vap_index = vap->vap_index;
         }
     }
+
+#if !defined(TARGET_GEMINI7_2)
+    if (event == WPS_EV_SUCCESS) {
+        wifi_hal_wps_cancel_on_other_radios(interface);
+    }
+#endif
 
     event_data.event = event;
     event_data.wps_data = (unsigned char *)data;
