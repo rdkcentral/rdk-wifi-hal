@@ -129,6 +129,7 @@ static void nl80211_new_station_event(wifi_interface_info_t *interface, struct n
     struct nlattr *attr;
     mac_address_t mac;
     mac_addr_str_t mac_str;
+    wifi_interface_info_t *link_interface = interface;
     if ((attr = tb[NL80211_ATTR_MAC]) == NULL) {
         wifi_hal_error_print("%s:%d: mac attribute not present ... dropping\n", __func__, __LINE__);
         return;
@@ -148,8 +149,32 @@ static void nl80211_new_station_event(wifi_interface_info_t *interface, struct n
     event.assoc_info.req_ies = ies;
     event.assoc_info.req_ies_len = ies_len;
     event.assoc_info.addr = mac;
+#if HOSTAPD_VERSION >= 211
+    event.assoc_info.link_addr = NULL;
+    event.assoc_info.assoc_link_id = -1;
+#ifdef CONFIG_IEEE80211BE
+#ifndef CONFIG_DRIVER_BRCM
+    if (tb[NL80211_ATTR_MLO_LINK_ID]) {
+        event.assoc_info.assoc_link_id = nla_get_u8(tb[NL80211_ATTR_MLO_LINK_ID]);
+        wifi_hal_dbg_print("%s:%d: nl80211: STA assoc link ID %d", __func__, __LINE__,
+            event.assoc_info.assoc_link_id);
+        if (tb[NL80211_ATTR_MLD_ADDR]) {
+            event.assoc_info.addr = nla_data(tb[NL80211_ATTR_MLD_ADDR]);
+            event.assoc_info.link_addr = nla_data(tb[NL80211_ATTR_MAC]);
+            wifi_hal_dbg_print("%s:%d:nl80211: STA MLD address " MACSTR, __func__, __LINE__,
+                MAC2STR(event.assoc_info.addr));
+        }
+    }
+    struct hostapd_data *link_bss = hostapd_mld_get_link_bss(&interface->u.ap.hapd,
+        event.assoc_info.assoc_link_id);
+    if(link_bss != NULL) {
+        link_interface = (wifi_interface_info_t *)link_bss;
+    }
+#endif /* CONFIG_DRIVER_BRCM */
+#endif /* CONFIG_IEEE80211BE */
+#endif /* HOSTAPD_VERSION >= 211 */
     wifi_hal_dbg_print("%s:%d: New station ies_len:%ld, ies:%p\n", __func__, __LINE__, ies_len, ies);
-    notify_assoc_data(interface, tb, event);
+    notify_assoc_data(link_interface, tb, event);
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_ASSOC, &event);
 }
 
@@ -370,8 +395,9 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     event.tx_status.data = nla_data(frame);
     event.tx_status.data_len = nla_len(frame);
     event.tx_status.ack = ack != NULL;
+    //!TESTME
 #if HOSTAPD_VERSION >= 211
-    event.tx_status.link_id = NL80211_DRV_LINK_ID_NA;
+    event.tx_status.link_id = -1;
 #endif /* HOSTAPD_VERSION >= 211 */
 
    if (event.tx_status.type  == WLAN_FC_TYPE_MGMT &&
@@ -1484,6 +1510,43 @@ static void nl80211_vendor_event(wifi_interface_info_t *interface,
     }
 }
 
+#if HOSTAPD_VERSION >= 211
+#ifdef CONFIG_IEEE80211BE
+#ifndef CONFIG_DRIVER_BRCM
+static void nl80211_stop_ap(wifi_interface_info_t *interface, struct nlattr **tb)
+{
+    wifi_interface_info_t *primary_interface;
+    struct hostapd_data *hapd;
+    int link_id = -1;
+
+    hapd = &interface->u.ap.hapd;
+    primary_interface = hapd->drv_priv;
+
+    if (tb[NL80211_ATTR_MLO_LINK_ID]) {
+        struct hostapd_data *link_bss;
+
+        link_id = nla_get_u8(tb[NL80211_ATTR_MLO_LINK_ID]);
+        if (!nl80211_link_valid(primary_interface->valid_links, link_id)) {
+            wifi_hal_dbg_print("%s:%d: nl80211: Ignoring STOP_AP event for invalid link ID "
+                               "%d (valid: 0x%04x)\n",
+                __func__, __LINE__, link_id, primary_interface->valid_links);
+            return;
+        }
+
+        link_bss = hostapd_mld_get_link_bss(hapd, link_id);
+        if (link_bss != NULL) {
+            hapd = link_bss;
+        }
+    }
+
+    wifi_hal_dbg_print("%s:%d: nl80211: STOP_AP event on link %d", __func__, __LINE__, link_id);
+
+    wpa_supplicant_event(hapd, EVENT_INTERFACE_UNAVAILABLE, NULL);
+}
+#endif /* CONFIG_DRIVER_BRCM */
+#endif /* CONFIG_IEEE80211BE */
+#endif /* HOSTAPD_VERSION >= 211 */
+
 static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, struct nlattr **tb)
 {
     switch (cmd) {
@@ -1531,13 +1594,24 @@ static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, stru
         break;
 
     case NL80211_CMD_CH_SWITCH_NOTIFY:
+        //!FIXME: process link_id
         nl80211_ch_switch_notify_event(interface, tb, WIFI_EVENT_CHANNELS_CHANGED);
         break;
 
     case NL80211_CMD_RADAR_DETECT:
+        //!FIXME: process link_id
         nl80211_ch_switch_notify_event(interface, tb, WIFI_EVENT_DFS_RADAR_DETECTED);
         nl80211_dfs_radar_event(interface, tb);
         break;
+#if HOSTAPD_VERSION >= 211
+#ifdef CONFIG_IEEE80211BE
+#ifndef CONFIG_DRIVER_BRCM
+    case NL80211_CMD_STOP_AP:
+        nl80211_stop_ap(interface, tb);
+        break;
+#endif /* CONFIG_DRIVER_BRCM */
+#endif /* CONFIG_IEEE80211BE */
+#endif /* HOSTAPD_VERSION >= 211 */
 
     case NL80211_CMD_VENDOR:
         nl80211_vendor_event(interface, tb);

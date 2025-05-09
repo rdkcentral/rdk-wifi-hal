@@ -369,10 +369,15 @@ typedef struct {
 } wifi_sta_priv_t;
 
 typedef struct {
+    /*
+     * This MUST be the first member of wifi_ap_priv_t
+     * as users of this structure will cast a hostapd_data to wifi_ap_priv_t pointer.
+     */
+    struct hostapd_data hapd;
+
     int     br_sock_fd;
 
     // hostapd specific interface data
-    struct hostapd_data     hapd;
     struct hostapd_iface    iface;
     struct hostapd_bss_config   conf;
     bool    hapd_initialized;
@@ -421,6 +426,23 @@ static inline uint* uint_array_values(const uint_array_t *array) {
 }
 
 typedef struct wifi_interface_info_t {
+    /*
+     * This MUST be the first member of wifi_interface_info_t
+     * as users of this structure will cast a wifi_ap_priv_t to wifi_interface_info_t pointer.
+     */
+    union {
+        wifi_ap_priv_t  ap;
+        wifi_sta_priv_t sta;
+    } u;
+#if HOSTAPD_VERSION >= 211
+#ifdef CONFIG_IEEE80211BE
+#ifndef CONFIG_DRIVER_BRCM
+    struct wifi_interface_info_t *links[MAX_NUM_MLD_LINKS];
+    // struct wifi_interface_info_t *flink;
+    u16 valid_links;
+#endif /* CONFIG_DRIVER_BRCM */
+#endif /* CONFIG_IEEE80211BE */
+#endif /* HOSTAPD_VERSION >= 211 */
     char name[32];
     char bridge[32];
     unsigned int index;
@@ -448,11 +470,6 @@ typedef struct wifi_interface_info_t {
     struct nl_handle *bss_nl_connect_event;
     int bss_nl_connect_event_fd;
     struct nl_cb *bss_nl_cb;
-
-    union {
-        wifi_ap_priv_t  ap;
-        wifi_sta_priv_t sta;
-    } u;
 
     char   wpa_passphrase[64];
     char   device_name[64], manufacturer[64], model_name[64], model_number[64];
@@ -905,7 +922,7 @@ int     nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         unsigned int num_ssid,  ssid_t *ssid_list);
 int     nl80211_get_scan_results(wifi_interface_info_t *interface);
 int     nl80211_switch_channel(wifi_radio_info_t *radio);
-int     nl80211_tx_control_port(wifi_interface_info_t *interface, const u8 *dest, u16 proto, const u8 *buf, size_t len, int no_encrypt);
+int     nl80211_tx_control_port(wifi_interface_info_t *interface, const u8 *dest, u16 proto, const u8 *buf, size_t len, int no_encrypt, int link_id);
 int     nl80211_set_acl(wifi_interface_info_t *interface);
 int     nl80211_set_acl_mode(wifi_interface_info_t *interface, uint32_t mac_filter_mode);
 int     nl80211_set_mac(wifi_interface_info_t *interface);
@@ -1032,30 +1049,9 @@ int pick_akm_suite(int sel);
 int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const u8 *data,size_t data_len,unsigned int freq, unsigned int wait);
 int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason);
 void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac);
-#if HOSTAPD_VERSION >= 211 //2.11
 int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reason,int link_id);
-#else
-int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reason);
-#endif
-#ifdef HOSTAPD_2_11 //2.11
- int wifi_drv_send_mlme(void *priv, const u8 *data,
-                      size_t data_len,int noack,
-                      unsigned int freq, const u16 *csa_offs,
-                      size_t csa_offs_len, int no_encrypt,
-                      unsigned int wait, int link_id);
-#elif HOSTAPD_2_10 //2.10
- int wifi_drv_send_mlme(void *priv, const u8 *data,
-                      size_t data_len,int noack,
-                      unsigned int freq, const u16 *csa_offs,
-                      size_t csa_offs_len, int no_encrypt,
-                      unsigned int wait);
-#else
- int wifi_drv_send_mlme(void *priv, const u8 *data,
-                                          size_t data_len, int noack,
-                                          unsigned int freq,
-                                          const u16 *csa_offs,
-                                          size_t csa_offs_len);
-#endif
+int wifi_drv_send_mlme(void *priv, const u8 *data, size_t data_len, int noack, unsigned int freq,
+    const u16 *csa_offs, size_t csa_offs_len, int no_encrypt, unsigned int wait, int link_id);
 
 BOOL is_wifi_hal_vap_private(UINT ap_index);
 BOOL is_wifi_hal_vap_xhs(UINT ap_index);
