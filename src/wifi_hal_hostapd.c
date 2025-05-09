@@ -1078,8 +1078,6 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     strcpy(conf->ctrl_interface, "/var/run/hostapd");
     conf->ctrl_interface_gid_set = 1;
 
-    memcpy(conf->bssid, interface->mac, sizeof(interface->mac));
-
     memset(conf->ssid.ssid, 0, sizeof(conf->ssid.ssid));
     strcpy(conf->ssid.ssid, vap->u.bss_info.ssid);
     conf->ssid.ssid_len = strlen(vap->u.bss_info.ssid);
@@ -1887,6 +1885,8 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
 
     iconf = &radio->iconf;
+
+    iconf->use_driver_iface_addr = 1;
 
     iconf->beacon_int = param->beaconInterval;
     iconf->rts_threshold = 2347; /* use driver default: 2347 */
@@ -2892,6 +2892,7 @@ void start_bss(wifi_interface_info_t *interface)
     int ret;
     struct hostapd_data     *hapd;
     struct hostapd_bss_config *conf;
+    int first = 1;
     //struct hostapd_iface *iface;
     //struct hostapd_config *iconf;
 
@@ -2901,15 +2902,30 @@ void start_bss(wifi_interface_info_t *interface)
     conf = hapd->conf;
     //iconf = hapd->iconf;
     //iface = hapd->iface;
+#ifdef CONFIG_IEEE80211BE
+#ifndef CONFIG_DRIVER_BRCM
+    if (conf->mld_ap) {
+        struct hostapd_data *bss;
 
-    wifi_hal_dbg_print("%s:%d:ssid info ssid len:%zu\n", __func__, __LINE__, conf->ssid.ssid_len);
+        first = 0;
+
+        for_each_mld_link(bss, hapd) {
+            if(bss == hapd) {
+                first = 1;
+                break;
+            }
+        }
+    }
+#endif /* CONFIG_DRIVER_BRCM */
+#endif /* CONFIG_IEEE80211BE */
+    wifi_hal_dbg_print("%s:%d:ssid info ssid len:%zu first:%d\n", __func__, __LINE__, conf->ssid.ssid_len, first);
     //my_print_hex_dump(conf->ssid.ssid_len, conf->ssid.ssid);
 #if HOSTAPD_VERSION >= 211 //2.11
-    ret = hostapd_setup_bss(hapd, 1, true);
+    ret = hostapd_setup_bss(hapd, first, true);
 #elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
-    ret = hostapd_setup_bss(hapd, 1, true);
+    ret = hostapd_setup_bss(hapd, first, true);
 #else
-    ret = hostapd_setup_bss(hapd, 1);
+    ret = hostapd_setup_bss(hapd, first);
 #endif
 
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);

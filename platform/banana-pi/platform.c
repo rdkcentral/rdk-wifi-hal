@@ -59,10 +59,10 @@ extern void hostapd_bss_link_deinit(struct hostapd_data *hapd);
 extern int update_hostap_interface_params_v2(wifi_interface_info_t *interface,
     unsigned char update_mlo);
 
-int platform_get_link_id_for_radio_index(wifi_radio_index_t index)
+static unsigned char platform_get_link_id_for_radio_index(wifi_radio_index_t index)
 {
     wifi_radio_info_t *radio;
-    int link_id = -1;
+    unsigned char link_id = -1;
 
     radio = get_radio_by_rdk_index(index);
 
@@ -89,8 +89,8 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     struct hostapd_bss_config *conf;
     struct hostapd_data *hapd;
     wifi_vap_info_t *vap;
-    int link_id;
-    int mld_ap;
+    unsigned char link_id;
+    unsigned char mld_ap;
     int res = 0;
 
     conf = &interface->u.ap.conf;
@@ -98,58 +98,31 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     vap = &interface->vap_info;
 
     link_id = platform_get_link_id_for_radio_index(vap->radio_index);
-    mld_ap = (!conf->disable_11be && (link_id < MAX_NUM_MLD_LINKS));
-
     if (!is_wifi_hal_vap_private(vap->vap_index)) {
         wifi_hal_dbg_print("%s:%d skip MLO for Non-Private VAP:%s\n", __func__, __LINE__,
             conf->iface);
-        mld_ap = 0;
+        link_id = -1;
     }
+    mld_ap = (!conf->disable_11be && (link_id < MAX_NUM_MLD_LINKS));
 
     conf->okc = mld_ap;
 
     if (conf->mld_ap != mld_ap) {
         if (mld_ap) {
-            struct hostapd_data *h_hapd;
-
-            conf->mld_ap = mld_ap;
-            hapd->mld_link_id = link_id;
-
             hapd->mld = MLD_UNIT;
-
-            h_hapd = hostapd_mld_get_first_bss(hapd);
-            if (h_hapd) {
-                hapd->drv_priv = h_hapd->drv_priv;
-                wifi_hal_dbg_print("%s:%d: Setup of non first link (%d) BSS of MLD %s\n", __func__,
-                    __LINE__, hapd->mld_link_id, hapd->conf->iface);
-            } else {
-                wifi_hal_dbg_print("%s:%d: Setup of first link (%d) BSS of MLD %s\n", __func__,
-                    __LINE__, hapd->mld_link_id, hapd->conf->iface);
-                os_memcpy(hapd->mld->mld_addr, hapd->own_addr, ETH_ALEN);
-            }
-
-            wifi_hal_dbg_print("%s:%d: MLD: Set link_id=%u, mld_addr=" MACSTR ", own_addr=" MACSTR "\n",
-                __func__, __LINE__, hapd->mld_link_id, MAC2STR(hapd->mld->mld_addr),
-                MAC2STR(hapd->own_addr));
-
-            if (hostapd_drv_link_add(hapd, hapd->mld_link_id, hapd->own_addr)) {
-                wifi_hal_error_print("%s:%d: MLD: Failed to add link %d in MLD %s\n", __func__,
-                    __LINE__, hapd->mld_link_id, hapd->conf->iface);
-                return -1;
-            }
-            hostapd_mld_add_link(hapd);
         } else {
+            //!TESTME
             if (hostapd_mld_is_first_bss(hapd)) {
                 unsigned int i;
                 unsigned int bss_list_len;
-                struct hostapd_data *bss;
+                struct hostapd_data *bss, *bss_next;
                 struct hostapd_data **bss_list;
 
                 i = 0;
-                bss_list_len = dl_list_len(&hapd->mld->links);
+                bss_list_len = dl_list_len(&hapd->mld->links) - 1;
                 bss_list = malloc(sizeof(struct hostapd_data *) * bss_list_len);
 
-                for_each_mld_link(bss, hapd)
+                dl_list_for_each_safe(bss, bss_next, &hapd->mld->links, struct hostapd_data, link)
                 {
                     if (bss == hapd) {
                         continue;
@@ -200,11 +173,12 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
                 hostapd_if_link_remove(hapd, WPA_IF_AP_BSS, hapd->conf->iface, hapd->mld_link_id);
                 hostapd_bss_link_deinit(hapd);
             }
-
-            conf->mld_ap = mld_ap;
-            hapd->mld_link_id = link_id;
+            hapd->mld = NULL;
         }
     }
+
+    conf->mld_ap = mld_ap;
+    hapd->mld_link_id = link_id;
 
     return res;
 }

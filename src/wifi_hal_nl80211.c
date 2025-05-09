@@ -13126,6 +13126,12 @@ int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type,
                      int setup_ap, int freq, u32 radio_mask)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
+    wifi_interface_info_t *interface;
+
+    interface = (wifi_interface_info_t *)bss_ctx;
+    
+    os_memcpy(if_addr, interface->mac, ETH_ALEN);
+
     return 0;
 }
 
@@ -15998,6 +16004,7 @@ static size_t wifi_drv_get_rnr_colocation_len(void *priv, size_t *current_len)
     return total_len;
 }
 
+//TODO: add link_id
 static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_len)
 {
     wifi_radio_info_t *radio;
@@ -16060,7 +16067,7 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
             }
 
             *eid++ = RNR_NEIGHBOR_AP_OFFSET_UNKNOWN;
-            memcpy(eid, hapd->conf->bssid, ETH_ALEN);
+            memcpy(eid, hapd->own_addr, ETH_ALEN);
             eid += ETH_ALEN;
             memcpy(eid, &hapd->conf->ssid.short_ssid, 4);
             eid += 4;
