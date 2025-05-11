@@ -582,6 +582,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     wifi_radio_operationParam_t old_operationParam;
     platform_set_radio_pre_init_t set_radio_pre_init_fn;
     bool is_channel_changed;
+    int ret;
 
 #ifdef CMXB7_PORT
     int dfs_start_chan = 52, dfs_end_chan = 144;
@@ -793,9 +794,13 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
             if (is_channel_changed) {
                 wifi_hal_dbg_print("%s:%d: Switch channel on radio index:%d\n", __func__, __LINE__,
                     index);
-                if (nl80211_switch_channel(radio) == -1) {
+                if ((ret = nl80211_switch_channel(radio)) == -1) {
                     wifi_hal_error_print("%s:%d: Error switching channel\n", __func__, __LINE__);
                     goto reload_config;
+                } else if (ret != 0) {
+                    wifi_hal_error_print("%s:%d: Error switching channel ret:%d\n", __func__,
+                        __LINE__, ret);
+                    return RETURN_ERR;
                 }
             }
             goto Exit;
