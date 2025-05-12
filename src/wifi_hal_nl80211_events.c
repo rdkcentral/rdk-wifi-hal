@@ -47,6 +47,90 @@ int no_seq_check(struct nl_msg *msg, void *arg)
 }
 
 #if defined(_PLATFORM_RASPBERRYPI_)
+int notify_assoc_data(wifi_interface_info_t *interface, struct nlattr **tb,
+    union wpa_event_data event)
+{
+    wifi_device_callbacks_t *callbacks;
+    wifi_device_frame_hooks_t *hooks;
+    wifi_vap_info_t *vap;
+    struct nlattr *attr;
+    mac_address_t sta_mac;
+    mac_addr_str_t sta_mac_str;
+    wifi_frame_t mgmt_frame;
+    int sig_dbm = -100;
+    int phy_rate = 60;
+    wifi_mgmtFrameType_t mgmt_type;
+    wifi_direction_t dir;
+    struct ieee80211_mgmt *mgmt = NULL;
+    int frame_len = 0;
+
+    callbacks = get_hal_device_callbacks();
+    hooks = get_device_frame_hooks();
+    vap = &interface->vap_info;
+
+    if ((attr = tb[NL80211_ATTR_MAC]) == NULL) {
+        wifi_hal_error_print("%s:%d: mac attribute not present ... dropping\n", __func__, __LINE__);
+        return -1;
+    }
+    memcpy(sta_mac, nla_data(attr), sizeof(mac_address_t));
+    if (tb[NL80211_ATTR_RX_SIGNAL_DBM]) {
+        sig_dbm = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
+    }
+    wifi_hal_dbg_print("%s:%d: Received assoc frame from: %s\n", __func__, __LINE__,
+        to_mac_str(sta_mac, sta_mac_str));
+    mgmt_type = WIFI_MGMT_FRAME_TYPE_ASSOC_REQ;
+    dir = wifi_direction_uplink;
+    frame_len = IEEE80211_HDRLEN + sizeof(mgmt->u.assoc_req) + event.assoc_info.req_ies_len;
+    mgmt = (struct ieee80211_mgmt *)malloc(frame_len);
+    if (mgmt == NULL) {
+        wifi_hal_error_print("%s:%d: Unable to allocate frame, returning\n", __func__, __LINE__);
+        return -1;
+    }
+    memset(mgmt, 0, frame_len);
+    wifi_hal_dbg_print("%s:%d: Creating ieee80211_mgmt of size: %u\n", __func__, __LINE__,
+        frame_len);
+    memcpy(mgmt->sa, sta_mac, sizeof(mac_address_t));
+    memcpy(mgmt->da, interface->mac, sizeof(mac_address_t));
+    memcpy(mgmt->bssid, interface->mac, sizeof(mac_address_t));
+    memcpy(mgmt->u.assoc_req.variable, event.assoc_info.req_ies, event.assoc_info.req_ies_len);
+
+    if (callbacks->mgmt_frame_rx_callback) {
+        mgmt_frame.ap_index = vap->vap_index;
+        memcpy(mgmt_frame.sta_mac, sta_mac, sizeof(mac_address_t));
+        mgmt_frame.type = mgmt_type;
+        mgmt_frame.dir = dir;
+        mgmt_frame.sig_dbm = sig_dbm;
+        mgmt_frame.len = frame_len;
+        mgmt_frame.data = (unsigned char *)mgmt;
+#ifdef WIFI_HAL_VERSION_3_PHASE2
+        callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame);
+#else
+#if defined(RDK_ONEWIFI) &&                                                                     \
+    (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
+        defined(TCHCBRV2_PORT) || defined(SCXER10_PORT))
+        if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
+            phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]);
+        }
+        callbacks->mgmt_frame_rx_callback(vap->vap_index, sta_mac, (unsigned char *)mgmt, frame_len,
+            mgmt_type, dir, sig_dbm, phy_rate);
+#else
+        callbacks->mgmt_frame_rx_callback(vap->vap_index, sta_mac, (unsigned char *)mgmt, frame_len,
+            mgmt_type, dir);
+#endif
+#endif
+
+        for (unsigned int i = 0; i < hooks->num_hooks; i++) {
+            if (hooks->frame_hooks_fn[i](vap->vap_index, mgmt_type) == NL_SKIP) {
+                goto cleanup;
+            }
+        }
+    }
+cleanup:
+    if (mgmt) {
+        free(mgmt);
+    }
+}
+
 static void nl80211_new_station_event(wifi_interface_info_t *interface, struct nlattr **tb)
 {
     union wpa_event_data event;
@@ -74,6 +158,8 @@ static void nl80211_new_station_event(wifi_interface_info_t *interface, struct n
     event.assoc_info.req_ies = ies;
     event.assoc_info.req_ies_len = ies_len;
     event.assoc_info.addr = mac;
+    wifi_hal_dbg_print("%s:%d: New station ies_len:%d, ies:%p\n", __func__, __LINE__, ies_len, ies);
+    notify_assoc_data(interface, tb, event);
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_ASSOC, &event);
 }
 

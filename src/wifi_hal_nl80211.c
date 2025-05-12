@@ -5785,7 +5785,8 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
     int sec_chan_offset, freq, freq1, bandwidth;
     u8 seg0;
     char country[8];
-    int ret;
+    int ret = 0;
+    bool is_first_interface;
 
     param = &radio->oper_param;
     get_coutry_str_from_code(param->countryCode, country);
@@ -5862,6 +5863,7 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
     wifi_hal_dbg_print("%s:%d chan_freq: %d center_freq: %d bandwidth: %d sec_chan_offset: %d\n",
         __func__, __LINE__, freq, freq1, bandwidth, sec_chan_offset);
 
+    is_first_interface = true;
     hash_map_foreach(radio->interface_map, interface) {
         if (!interface->bss_started) {
             continue;
@@ -5874,12 +5876,15 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
         ret = hostapd_switch_channel(&interface->u.ap.hapd, &csa_settings);
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-        if (ret != 0) {
+        /* Ignore the error if the error is not on first interface,
+           as CSA would be in progress after the first interface channel switch. */
+        if (ret != 0 && is_first_interface == true) {
             wifi_hal_error_print("%s:%d interface: %s failed to switch channel to %d, error: %d\n",
                 __func__, __LINE__, interface->name, param->channel, ret);
+            return ret;
         }
+        is_first_interface = false;
     }
-
     return 0;
 }
 
