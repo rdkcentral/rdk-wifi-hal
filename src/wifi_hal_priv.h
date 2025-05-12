@@ -787,6 +787,7 @@ int     nl80211_get_scan_results(wifi_interface_info_t *interface);
 int     nl80211_switch_channel(wifi_radio_info_t *radio);
 int     nl80211_tx_control_port(wifi_interface_info_t *interface, const u8 *dest, u16 proto, const u8 *buf, size_t len, int no_encrypt);
 int     nl80211_set_acl(wifi_interface_info_t *interface);
+int     nl80211_set_acl_mode(wifi_interface_info_t *interface, uint32_t mac_filter_mode);
 int     nl80211_set_mac(wifi_interface_info_t *interface);
 int     nl80211_dfs_cac_started(wifi_interface_info_t *interface, int freq, int ht_enabled, int sec_channel_offset, int bandwidth, int bw, int cf1, int cf2);
 int     nl80211_dfs_radar_cac_aborted(wifi_interface_info_t *interface, int freq, int ht_enabled, int sec_channel_offset, int bandwidth, int bw, int cf1, int cf2);
