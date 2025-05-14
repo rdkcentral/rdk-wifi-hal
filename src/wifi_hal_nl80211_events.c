@@ -158,7 +158,7 @@ static void nl80211_new_station_event(wifi_interface_info_t *interface, struct n
     event.assoc_info.req_ies = ies;
     event.assoc_info.req_ies_len = ies_len;
     event.assoc_info.addr = mac;
-    wifi_hal_dbg_print("%s:%d: New station ies_len:%d, ies:%p\n", __func__, __LINE__, ies_len, ies);
+    wifi_hal_dbg_print("%s:%d: New station ies_len:%zu, ies:%p\n", __func__, __LINE__, ies_len, ies);
     notify_assoc_data(interface, tb, event);
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_ASSOC, &event);
 }
