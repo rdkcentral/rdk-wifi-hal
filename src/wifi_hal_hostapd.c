@@ -490,6 +490,12 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 #if HOSTAPD_VERSION >= 210
     conf->wpa_key_mgmt_rsno = 0;
 #endif /* HOSTAPD_VERSION >= 210 */
+
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+    conf->wpa_key_mgmt_rsno_2 = 0;
+    conf->rsn_pairwise_rsno_2 = 0;
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
+
     conf->wpa = 0;
     memset(&test_ip, 0, sizeof(test_ip));
 
@@ -559,7 +565,19 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->wpa_key_mgmt = WPA_KEY_MGMT_PSK;
 #if HOSTAPD_VERSION >= 210
             conf->wpa_key_mgmt_rsno = WPA_KEY_MGMT_SAE;
-            conf->sae_pwe = 1;
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+            if(is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
+                conf->wpa_key_mgmt = WPA_KEY_MGMT_SAE;
+                conf->wpa_key_mgmt_rsno = 0;
+            }
+            if(!conf->disable_11be) {
+                conf->wpa_key_mgmt_rsno_2 = WPA_KEY_MGMT_SAE_EXT_KEY;
+                conf->rsn_pairwise_rsno_2 = WPA_CIPHER_GCMP_256;
+            }
+            wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d wpa_key_mgmt:%d wpa_key_mgmt_rsno_2:%d \n",
+                __FUNCTION__, __LINE__, conf->iface, conf->disable_11be, conf->wpa_key_mgmt, conf->wpa_key_mgmt_rsno_2);
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
+            conf->sae_pwe = 2;
 #endif /* HOSTAPD_VERSION >= 210 */
             conf->auth_algs = WPA_AUTH_ALG_SAE | WPA_AUTH_ALG_SHARED | WPA_AUTH_ALG_OPEN;
             break;
@@ -618,6 +636,16 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
 #endif /* HOSTAPD_VERSION >= 210 */
         conf->sae_require_mfp = 1;
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+        if(is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
+            conf->ieee80211w = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
+	    if(!conf->disable_11be) {
+	        conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED; 
+	    }
+    	    wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d ieee80211w:%d ieee80211w_rsno:%d \n",
+                           __func__, __LINE__, conf->iface, conf->disable_11be, conf->ieee80211w, conf->ieee80211w_rsno);
+	}
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
     }
 #endif
 
@@ -1068,6 +1096,9 @@ int update_hostap_bss(wifi_interface_info_t *interface)
 
 #ifdef CONFIG_IEEE80211BE
     conf->disable_11be = !radio->iconf.ieee80211be;
+#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+    conf->mld_ap = vap->u.bss_info.mld_info.common_info.mld_enable;
+#endif
 #endif /* CONFIG_IEEE80211BE */
 
     strcpy(conf->iface, interface->name);
@@ -1629,7 +1660,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         interface->u.ap.iface_initialized = true;
     }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     iface->drv_flags = radio->driver_data.capa.flags;
 #if HOSTAPD_VERSION >= 210
     iface->drv_flags2 = radio->driver_data.capa.flags2;
@@ -1649,7 +1680,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     hostapd_get_mld_capa(iface);
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
 
 #if HOSTAPD_VERSION >= 210
     iface->mbssid_max_interfaces = radio->driver_data.capa.mbssid_max_interfaces;
@@ -2192,7 +2223,7 @@ exit:
     return ret;
 }
 
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 static enum wpa_states wpa_sm_supplicant_sta_get_state(void *ctx)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
@@ -2223,7 +2254,7 @@ static void wpa_sm_sta_set_state(void *ctx, enum wpa_states state)
     wifi_bss_info_t bss;
     wifi_station_stats_t sta;
     interface = (wifi_interface_info_t *)ctx;
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     interface->wpa_s.wpa_state = state;
 #endif
     interface->u.sta.state = state;
@@ -2532,7 +2563,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         ctx->set_state = wpa_sm_sta_set_state;
         ctx->get_state = wpa_sm_sta_get_state;
         ctx->cancel_auth_timeout = wpa_sm_sta_cancel_auth_timeout;
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         if((sec->mode == wifi_security_mode_wpa3_personal) || (sec->mode == wifi_security_mode_wpa3_enterprise) ||
                 (sec->mode == wifi_security_mode_wpa3_transition) || (sec->mode == wifi_security_mode_wpa3_compatibility)) {
             ctx->get_state = wpa_sm_supplicant_sta_get_state;
@@ -2552,7 +2583,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
 
         interface->u.sta.wpa_sm = wpa_sm_init(ctx);
     }
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     interface->wpa_s.wpa = interface->u.sta.wpa_sm;
 #ifdef CONFIG_IEEE80211W
     unsigned int ieee80211w;
@@ -2590,7 +2621,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         break;
     }
 #endif
-#endif
+#endif //CONFIG_WIFI_EMULATOR || BANANA_PI_PORT
 
     sm = interface->u.sta.wpa_sm;
 
@@ -2776,6 +2807,8 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
 
     if (interface->u.sta.wpa_sm->eapol == NULL) {
         ctx = os_zalloc(sizeof(struct eapol_ctx));
+        wifi_hal_info_print("%s:%d: wifi eapol context:%p created for vap_index:%d\n",
+            __func__, __LINE__, ctx, vap->vap_index);
 
         ctx->ctx = interface;
         ctx->msg_ctx = interface;
@@ -2791,7 +2824,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
         ctx->cb_ctx = interface;
 
         interface->u.sta.wpa_sm->eapol = eapol_sm_init(ctx);
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         interface->wpa_s.wpa->eapol = interface->u.sta.wpa_sm->eapol;
         interface->wpa_s.eapol = interface->u.sta.wpa_sm->eapol;
 #endif

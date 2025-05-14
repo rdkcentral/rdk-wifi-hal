@@ -587,3 +587,29 @@ bool get_ifname_from_mac(const mac_address_t *mac, char *ifname)
     freeifaddrs(ifaddr);
     return found;
 }
+
+int wifi_convert_freq_band_to_radio_index(int band, int *radio_index)
+{
+    int status = RETURN_OK;
+
+    switch (band) {
+    case WIFI_FREQUENCY_2_4_BAND:
+        *radio_index = 0;
+        break;
+
+    case WIFI_FREQUENCY_5_BAND:
+    case WIFI_FREQUENCY_5L_BAND:
+        *radio_index = 1;
+        break;
+
+    case WIFI_FREQUENCY_5H_BAND:
+    case WIFI_FREQUENCY_6_BAND:
+        *radio_index = 2;
+        break;
+
+    default:
+        status = RETURN_ERR;
+        break;
+    }
+    return status;
+}

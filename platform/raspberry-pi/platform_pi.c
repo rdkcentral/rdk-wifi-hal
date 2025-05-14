@@ -174,7 +174,7 @@ int platform_get_keypassphrase_default(char *password, int vap_index)
     wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
     /* if the vap_index is that of mesh STA then try to obtain the ssid from
        /nvram/EasymeshCfg.json file */
-    if (is_wifi_hal_vap_mesh_sta(vap_index)) {
+    if (is_wifi_hal_vap_mesh_sta(vap_index) || is_wifi_hal_vap_mesh_backhaul(vap_index)) {
         if (!json_parse_backhaul_keypassphrase(password)) {
             wifi_hal_dbg_print("%s:%d, read password from jSON file\n", __func__, __LINE__);
             return 0;
@@ -198,7 +198,7 @@ int platform_get_ssid_default(char *ssid, int vap_index)
     wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
     /* if the vap_index is that of mesh STA or mesh backhaul then try to obtain the ssid from
        /nvram/EasymeshCfg.json file */
-    if (is_wifi_hal_vap_mesh_sta(vap_index)) {
+    if (is_wifi_hal_vap_mesh_sta(vap_index) || is_wifi_hal_vap_mesh_backhaul(vap_index)) {
         if (!json_parse_backhaul_ssid(ssid)) {
             wifi_hal_dbg_print("%s:%d, read SSID:%s from jSON file\n", __func__, __LINE__, ssid);
             return 0;
