@@ -18,7 +18,6 @@
 
 #define DEFAULT_CMD_SIZE 256
 #define MAX_BUF_SIZE 300
-#define VAP_PREFIX "ath"
 #define MAX_NUM_RADIOS 2
 #define OUI_QCA "0x001374"
 #define RETRY_LIMIT 7
@@ -245,6 +244,21 @@ vap_type vap_type_arr[10] = {
     is_wifi_hal_vap_mesh_sta
 };
 
+static char* getInterface(int Index)
+{
+    unsigned int idx = 0;
+    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
+    get_wifi_interface_info_map(interface_map);
+    for (idx = 0; idx < ARRAY_SZ(interface_map); idx++) 
+    {
+        if (Index == interface_map[idx].index)
+        {
+	   return interface_map[idx].interface_name;
+        }
+    }
+    return " ";
+}
+
 bool isValidAPIndex(int index)
 {
 	return true;
@@ -349,10 +363,6 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
     wifi_channelBandwidth_t channelWidth = WIFI_CHANNELBANDWIDTH_80MHZ;
 
     variant = operationParam->variant; channelWidth = operationParam->channelWidth;
-    //wifi_interface_name_idex_map_t *interface_map;
-    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
-
-    get_wifi_interface_info_map(interface_map);
 
     switch (operationParam->band) {
 
@@ -462,7 +472,7 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
         default:
             break;
     }
-    snprintf(command, DEFAULT_CMD_SIZE, "cfg80211tool %s%d get_mode | cut -d':' -f2",VAP_PREFIX,apindex);
+    snprintf(command, DEFAULT_CMD_SIZE, "cfg80211tool %s get_mode | cut -d':' -f2",getInterface(apindex));
     FILE *fp = popen(command, "r");
     if (fp == NULL) {
         wifi_hal_error_print("%s:%d Failed to run command \n",__func__,__LINE__);
@@ -476,7 +486,7 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
 
     len = strlen(output) > strlen(cmd) ? strlen(output) : strlen(cmd);
     if (strncmp(output, cmd, len) != 0 ) {
-        snprintf(tmp, DEFAULT_CMD_SIZE, "cfg80211tool %s%d mode %s",VAP_PREFIX,apindex,cmd);
+        snprintf(tmp, DEFAULT_CMD_SIZE, "cfg80211tool %s mode %s",getInterface(apindex),cmd);
         system(tmp);
     }
 
@@ -574,7 +584,7 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     }
 
     if (operationParam->autoChannelEnabled) {
-        snprintf(cmd, sizeof(cmd), "iwconfig %s%d channel 0",VAP_PREFIX, primary_vap_index);
+        snprintf(cmd, sizeof(cmd), "iwconfig %s channel 0",getInterface(primary_vap_index));
         ret = system(cmd);
         if(ret == -1) {
             wifi_hal_error_print("ACS set command failed %s:%d \n",__func__, __LINE__);
