@@ -2117,6 +2117,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
 int process_mgmt_frame(struct nl_msg *msg, void *arg)
 {
+    wifi_hal_info_print("%s:%d POORNA Process_mgmt_frame Called\n",__func__,__LINE__);
     wifi_interface_info_t *interface;
     struct genlmsghdr *gnlh;
     unsigned short fc, stype;
@@ -2199,8 +2200,10 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
     if (tb[NL80211_ATTR_RX_SIGNAL_DBM]) {
         sig_dbm = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
     }
-#if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(TCHCBRV2_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT)) || defined(TARGET_GEMINI7_2)
+#if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(TCHCBRV2_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2))
+	wifi_hal_info_print("%s:%d POORNA Entered into function \n",__func__,__LINE__);
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
+	wifi_hal_info_print("%s:%d POORNA NL80211_ATTR_RX_PHY_RATE_INFO Received \n",__func__,__LINE__);
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]) * 10;
 	fc = le_to_host16(mgmt->frame_control);
         stype = WLAN_FC_GET_STYPE(fc);
@@ -2238,7 +2241,7 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
 	vap = &interface->vap_info;
 	
  	wifi_hal_info_print("%s:%d POORNA  Phy Rate = %d interface-name %s \n",__func__,__LINE__,phy_rate,interface->name);
-	wifi_hal_info_print("%s:%d POORNA   vap-name: %s index: %d \n",__func__,__LINE__,vap->vap_name,vap->vap_index);    
+	wifi_hal_info_print("%s:%d POORNA  vap-name: %s index: %d \n",__func__,__LINE__,vap->vap_name,vap->vap_index);    
 
     }
 #endif
