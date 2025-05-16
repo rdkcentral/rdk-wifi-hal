@@ -2125,7 +2125,7 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
     struct ieee80211_mgmt *mgmt = NULL;
     u16 reason = 0;
     int sig_dbm = -100;
-    int phy_rate = 6;
+    int phy_rate = 60;
 #ifdef CMXB7_PORT
     int snr = 0;
 #endif
