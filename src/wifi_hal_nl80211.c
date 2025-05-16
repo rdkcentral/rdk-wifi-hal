@@ -2204,8 +2204,6 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]);
 	fc = le_to_host16(mgmt->frame_control);
         stype = WLAN_FC_GET_STYPE(fc);
-	wifi_vap_info_t* vap = NULL;
-	vap = &interface->vap_info;
  	wifi_hal_dbg_print("%s:%d Phy_rate = %d interface_name = %s frametype: %d \n",__func__,__LINE__,phy_rate,interface->name,stype);    
     }
 #endif
