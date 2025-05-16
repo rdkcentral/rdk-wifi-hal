@@ -274,7 +274,7 @@ int get_min_rate(int *list, float *min_mbr_rate) {
             min_rate=list[i];
         }
     }
-    *min_mbr_rate = (float)min_rate;
+    *min_mbr_rate = (float)min_rate/10;
     return 0;
 }
 
