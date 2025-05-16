@@ -304,7 +304,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     wifi_frame_t mgmt_frame;
     int sig_dbm = -100;
 #if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined (TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT)|| defined(TARGET_GEMINI7_2))
-    int phy_rate = 60;
+    int phy_rate = 6;
 #endif
 
     wifi_mgmtFrameType_t mgmt_type = WIFI_MGMT_FRAME_TYPE_INVALID;
