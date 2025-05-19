@@ -105,6 +105,8 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     bool is_band_found = false;
     unsigned int radio_band = 0;
     char output[256] = {0};
+    size_t len;
+
     NULL_PTR_ASSERT(hal);
 
     hal->version.major = WIFI_HAL_MAJOR;
@@ -134,38 +136,43 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
     _syscmd("grep -a 'Serial' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.serialNo,output);
 
     memset(output, '\0', sizeof(output));
     _syscmd("grep -a 'MODEL' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.manufacturerModel,output);
     strcpy(hal->wifi_prop.manufacturer,output);
 
     memset(output, '\0', sizeof(output));
     _syscmd("grep 'imagename:' /version.txt | cut -d ':' -f2 ", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.software_version, output);
 
     // CM mac
     memset(output, '\0', sizeof(output));
     _syscmd("grep -a 'CM' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.cm_mac);
 
     memset(output, '\0', sizeof(output));
     _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') { 
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.al_1905_mac);
     wifi_hal_error_print("serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s eth0=%s Line=%d\n",hal->wifi_prop.serialNo,hal->wifi_prop.manufacturerModel,hal->wifi_prop.software_version,hal->wifi_prop.manufacturer,output,__LINE__);
@@ -173,38 +180,43 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
    /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
     _syscmd("grep -a 'Serial' /proc/cpuinfo | cut -d ':' -f2", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.serialNo,output);
 
     memset(output, '\0', sizeof(output));
     _syscmd("grep -a 'Model' /proc/cpuinfo | cut -d ':' -f2", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.manufacturerModel,output);
     strcpy(hal->wifi_prop.manufacturer,output);
 
     memset(output, '\0', sizeof(output));
     _syscmd("vcgencmd version | grep 'version' | cut -d ' ' -f2", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.software_version, output);
 
     // CM mac
     memset(output, '\0', sizeof(output));
     _syscmd("ifconfig eth0 | grep -oE 'ether [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.cm_mac);
 
     memset(output, '\0', sizeof(output));
     _syscmd("ifconfig eth0 | grep -oE 'ether [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.al_1905_mac);
     wifi_hal_error_print("serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s eth0=%s Line=%d\n",hal->wifi_prop.serialNo,hal->wifi_prop.manufacturerModel,hal->wifi_prop.software_version,hal->wifi_prop.manufacturer,output,__LINE__);
