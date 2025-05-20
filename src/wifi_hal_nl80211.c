@@ -2119,7 +2119,7 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
 {
     wifi_interface_info_t *interface;
     struct genlmsghdr *gnlh;
-#if !defined(SKYSR213_PORT) || !defined(XLE_PORT)
+#if !defined(SKYSR213_PORT) && !defined(XLE_PORT)
     unsigned short fc, stype;
 #endif
     struct nlattr *tb[NL80211_ATTR_MAX + 1], *attr;
