@@ -95,8 +95,6 @@ struct family_data {
     int id;
 };
 
-struct nl_msg *nl80211_drv_cmd_msg(int nl80211_id, wifi_interface_info_t *intf, int flags, uint8_t cmd);
-
 int nl80211_send_and_recv(struct nl_msg *msg,
              int (*valid_handler)(struct nl_msg *, void *),
              void *valid_data,

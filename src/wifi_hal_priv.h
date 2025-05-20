@@ -817,6 +817,7 @@ int     wifi_send_eapol(void *priv, const u8 *addr, const u8 *data,
                     size_t data_len, int encrypt,
                     const u8 *own_addr, u32 flags);
 void   *wifi_drv_init(struct hostapd_data *hapd, struct wpa_init_params *params);
+struct nl_msg *nl80211_drv_cmd_msg(int nl80211_id, wifi_interface_info_t *intf, int flags, uint8_t cmd);
 struct nl_msg *nl80211_drv_vendor_cmd_msg(int nl80211_id, wifi_interface_info_t *intf, int flags,
     uint32_t vendor_id, uint32_t subcmd);
 int nl80211_send_and_recv(struct nl_msg *msg, int (*valid_handler)(struct nl_msg *, void *),
