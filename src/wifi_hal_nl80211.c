@@ -6796,7 +6796,7 @@ int nl80211_enable_ap(wifi_interface_info_t *interface, bool enable)
     return RETURN_OK;
 }
 
-int nl80211_delete_interface(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
+int nl80211_remove_interface(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
     struct nl_msg *msg;
     int ret;
@@ -6831,10 +6831,22 @@ int nl80211_delete_interface(wifi_radio_info_t *radio, wifi_interface_info_t *in
         return -1;
     }
 
+    interface->index = 0;
+
+    return 0;
+}
+
+int nl80211_delete_interface(wifi_radio_info_t *radio, wifi_interface_info_t *interface) {
+    int ret;
+
+    if((ret = nl80211_delete_interface(radio, interface)) < 0) {
+        return ret;
+    }
+
     hash_map_remove(radio->interface_map, interface->name);
     free(interface);
 
-    return 0;
+    return ret;
 }
 
 int nl80211_delete_interfaces(wifi_radio_info_t *radio)
@@ -6848,7 +6860,7 @@ int nl80211_delete_interfaces(wifi_radio_info_t *radio)
         tmp = interface;
         interface = hash_map_get_next(radio->interface_map, interface);
 
-        nl80211_delete_interface(radio, tmp);
+        nl80211_remove_interface(radio, tmp);
     }
 
     return 0;
@@ -7583,12 +7595,12 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
     return 0;
 }
 
-int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wifi_interface_info_t **interface)
+static int nl80211_new_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, int (*handler)(struct nl_msg *msg, void *arg), u32 radio_mask)
 {
     struct nl_msg *msg;
-    wifi_interface_info_t *intf;
     char ifname[32];
     int ret;
+    (void)radio_mask;
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_NEW_INTERFACE);
     if (msg == NULL) {
@@ -7601,6 +7613,12 @@ int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wif
     }
 
     if (get_interface_name_from_vap_index(vap->vap_index, ifname) != RETURN_OK) {
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    //!MTK EXTENSION
+    if (nla_put_u32(msg, NL80211_ATTR_VIF_RADIO_MASK, radio_mask) < 0) {
         nlmsg_free(msg);
         return -1;
     }
@@ -7628,10 +7646,23 @@ int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wif
     }
 #endif
 
-    if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
+    if ((ret = nl80211_send_and_recv(msg, handler, radio, NULL, NULL))) {
         wifi_hal_error_print("%s:%d: Error creating %s interface on dev:%d error: %d (%s)\n", __func__, __LINE__,
             ifname, radio->index, ret, strerror(-ret));
-        return -1;
+        return ret;
+    }
+
+    return 0;
+}
+
+
+int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wifi_interface_info_t **interface)
+{
+    wifi_interface_info_t *intf;
+    int ret;
+
+    if((ret = nl80211_new_interface(radio, vap, &interface_info_handler, 0))) {
+        return ret;
     }
 
     if ((intf = get_interface_by_vap_index(vap->vap_index)) != NULL) {
@@ -13127,12 +13158,41 @@ int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type,
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     wifi_interface_info_t *interface;
+    wifi_radio_info_t *radio;
+    wifi_vap_info_t *vap;
+    char interface_name[32] = {};
+    int res;
 
-    interface = (wifi_interface_info_t *)bss_ctx;
+#if 0
+    static int test = 0;
+    if(test++ > 0) {
+        return 0;
+    }
+#endif
+
+    interface = (wifi_interface_info_t *)*drv_priv;
+    vap = &interface->vap_info;
+    radio = get_radio_by_rdk_index(vap->radio_index);
     
-    os_memcpy(if_addr, interface->mac, ETH_ALEN);
+    res = nl80211_new_interface(radio, vap, NULL, radio_mask);
+    get_interface_name_from_vap_index(vap->vap_index, interface_name);
 
-    return 0;
+    if(res == -ENFILE && if_nametoindex(interface_name)) {
+        wifi_hal_dbg_print("%s:%d Try to remove and re-create %s\n", __func__, __LINE__, interface_name);
+
+        nl80211_remove_interface(radio, interface);
+        res = nl80211_new_interface(radio, vap, NULL, radio_mask);
+    }
+
+    if(!(res < 0)) {
+        interface->index = if_nametoindex(interface_name);
+        os_memcpy(if_addr, vap->u.bss_info.bssid, ETH_ALEN);
+        nl80211_interface_enable(interface_name, true);
+
+        wifi_hal_dbg_print("%s:%d ifindex:%d if_addr:" MACSTR "\n", __func__, __LINE__, interface->index, MAC2STR(if_addr));
+    }
+
+    return res;
 }
 
 int nl80211_put_acl(struct nl_msg *msg, wifi_interface_info_t *interface)

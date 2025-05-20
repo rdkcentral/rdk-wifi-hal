@@ -58,6 +58,7 @@ static struct hostapd_mld MLD_UNIT[] = {
 extern void hostapd_bss_link_deinit(struct hostapd_data *hapd);
 extern int update_hostap_interface_params_v2(wifi_interface_info_t *interface,
     unsigned char update_mlo);
+extern int nl80211_remove_interface(wifi_radio_info_t *radio, wifi_interface_info_t *interface);
 
 static unsigned char platform_get_link_id_for_radio_index(wifi_radio_index_t index)
 {
@@ -108,6 +109,10 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     conf->okc = mld_ap;
 
     if (conf->mld_ap != mld_ap) {
+        wifi_radio_info_t *radio;
+
+        radio = get_radio_by_rdk_index(vap->radio_index);
+
         if (mld_ap) {
             hapd->mld = MLD_UNIT;
         } else {
@@ -130,8 +135,8 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
                     bss_list[i++] = bss;
 
                     hostapd_bss_deinit_no_free(bss);
-                    hostapd_bss_link_deinit(bss);
                     hostapd_free_hapd_data(bss);
+                    hostapd_bss_link_deinit(bss);
                 }
 
                 hostapd_if_link_remove(hapd, WPA_IF_AP_BSS, hapd->conf->iface, hapd->mld_link_id);
@@ -175,6 +180,8 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
             }
             hapd->mld = NULL;
         }
+    
+        nl80211_remove_interface(radio, interface);
     }
 
     conf->mld_ap = mld_ap;

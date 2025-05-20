@@ -2904,18 +2904,24 @@ void start_bss(wifi_interface_info_t *interface)
     //iface = hapd->iface;
 #ifdef CONFIG_IEEE80211BE
 #ifndef CONFIG_DRIVER_BRCM
+#ifndef CONFIG_DRIVER_NL80211_QCA
+    //!TESTME
+    first = (interface->index == 0 ? -1 : 1);
+
     if (conf->mld_ap) {
         struct hostapd_data *bss;
 
         first = 0;
 
-        for_each_mld_link(bss, hapd) {
-            if(bss == hapd) {
+        for_each_mld_link(bss, hapd)
+        {
+            if (bss == hapd) {
                 first = 1;
                 break;
             }
         }
     }
+#endif /* CONFIG_DRIVER_NL80211_QCA */
 #endif /* CONFIG_DRIVER_BRCM */
 #endif /* CONFIG_IEEE80211BE */
     wifi_hal_dbg_print("%s:%d:ssid info ssid len:%zu first:%d\n", __func__, __LINE__, conf->ssid.ssid_len, first);
