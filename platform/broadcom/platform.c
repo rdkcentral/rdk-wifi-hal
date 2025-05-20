@@ -3855,20 +3855,29 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
     struct hostapd_data *hapd;
     struct nlattr *nlattr_vendor;
     mac_addr_str_t mld_addr = {};
-    unsigned char apply;
+    char mlo_apply_buff[32 + sizeof("_mlo_apply")];
+    const char *mlo_apply;
+    unsigned char cfg_apply;
 
     interface = (wifi_interface_info_t *)priv;
     conf = &interface->u.ap.conf;
     hapd = &interface->u.ap.hapd;
 
     /*
-     * NOTE: According to the new updates of the brcm contract of sending the message
-     * `RDK_VENDOR_NL80211_SUBCMD_SET_MLD` we can't send this message for config -1 (`link_id=-1`).
+     * NOTE: The BRCM driver does not support MLO reconfiguration and even sending the same message
+     * to the module twice.
      */
-    if (!params->mld_ap && (u8)hapd->mld_link_id == (u8)-1) {
-        wifi_hal_dbg_print("%s:%d skip Non-MLO iface:%s:\n", __func__, __LINE__, conf->iface);
+#ifndef CONFIG_NO_MLD_DETECT_DOUBLE_APPLY
+    char fname_buff[32 + sizeof("/tmp/.mld_")];
+    int fd;
+    snprintf(fname_buff, sizeof(fname_buff), "/tmp/.mld_%s", conf->iface);
+    if ((fd = open(fname_buff, O_WRONLY | O_CREAT | O_EXCL, S_IRWXU | S_IRGRP | S_IROTH)) == -1) {
+        wifi_hal_dbg_print("%s:%d skip double apply for the iface:%s:\n", __func__, __LINE__,
+            conf->iface);
         return 0;
     }
+    close(fd);
+#endif /* CONFIG_NO_MLD_DOUBLE_APPLY */
 
     // Validation
     if (params->mld_ap) {
@@ -3887,34 +3896,20 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
     }
 
     /*
-     * NOTE: The BRCM driver does not support MLO reconfiguration and even sending the same message
-     * to the module twice.
-     */
-#ifndef CONFIG_NO_MLD_DETECT_DOUBLE_APPLY
-    char fname_buff[32 + sizeof("/tmp/.mld_")];
-    int fd;
-    snprintf(fname_buff, sizeof(fname_buff), "/tmp/.mld_%s", conf->iface);
-    if ((fd = open(fname_buff, O_WRONLY | O_CREAT | O_EXCL, 0)) == -1) {
-        wifi_hal_dbg_print("%s:%d skip double apply for the iface:%s:\n", __func__, __LINE__,
-            conf->iface);
-        return 0;
-    }
-    close(fd);
-#endif /* CONFIG_NO_MLD_DOUBLE_APPLY */
-
-    /*
      * !FIXME: need to look for the last active VAP.
      *
      * NOTE: We cannot iterate over `interface_map` because this collection `hash_map t` has a
      * stateful iterator and any call to `hash_map_get_first` under the loop of this collection
      * instance invalidates the top-level iterator.
      */
-    apply = is_wifi_hal_6g_radio_from_interfacename(conf->iface);
+    snprintf(mlo_apply_buff, sizeof(mlo_apply_buff), "%s_mlo_apply", conf->iface);
+    mlo_apply = nvram_get(mlo_apply_buff);
+    cfg_apply = (mlo_apply != NULL && atoi(mlo_apply));
 
     wifi_hal_dbg_print(
         "%s:%d iface:%s - mld_ap:%d mld_unit:%u mld_link_id:%u mld_addr:%s apply:%d\n", __func__,
         __LINE__, conf->iface, params->mld_ap, get_mld_unit(conf), params->mld_link_id, mld_addr,
-        apply);
+        cfg_apply);
 
     /*
      * message format
@@ -3937,7 +3932,7 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
                         nla_put(*msg_mlo, RDK_VENDOR_ATTR_MLD_MAC, ETH_ALEN, hapd->mld->mld_addr) <
                             0)) :
                 0) ||
-        nla_put_u8(*msg_mlo, RDK_VENDOR_ATTR_MLD_CONFIG_APPLY, apply) < 0) {
+        nla_put_u8(*msg_mlo, RDK_VENDOR_ATTR_MLD_CONFIG_APPLY, cfg_apply) < 0) {
         wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
         nlmsg_free(*msg_mlo);
         return -1;
@@ -3991,21 +3986,13 @@ static unsigned char platform_get_mld_unit_for_ap(int ap_index)
 }
 
 /* TODO: temporary solution, link_id should come from vap configuration */
-static unsigned char platform_get_link_id_for_radio_index(unsigned int radio_index, unsigned int ap_index)
+static unsigned char platform_get_link_id_for_radio_index(unsigned int radio_index)
 {
     int mlo_config[4];
     unsigned char res = NL80211_DRV_LINK_ID_NA;
 
-#ifndef CONFIG_NO_MLD_ONLY_PRIVATE
-    if (!is_wifi_hal_vap_private(ap_index)) {
-        wifi_hal_dbg_print("%s:%d skip MLO for Non-Private VAP radio_index:%u ap_index:%u\n",
-            __func__, __LINE__, radio_index, ap_index);
-        radio_index = -1;
-    }
-#endif /* CONFIG_NO_MLD_ONLY_PRIVATE */
-
     if (radio_index < (sizeof(mlo_config) / sizeof(*mlo_config))) {
-        char *wl_mlo_config;
+        const char *wl_mlo_config;
 
         wl_mlo_config = nvram_get("wl_mlo_config");
         if (wl_mlo_config != NULL) {
@@ -4022,8 +4009,8 @@ static unsigned char platform_get_link_id_for_radio_index(unsigned int radio_ind
         }
     }
 
-    wifi_hal_dbg_print("%s:%d link_id:%u for the radio_index:%u ap_index:%u\n", __func__, __LINE__,
-        res, radio_index, ap_index);
+    wifi_hal_dbg_print("%s:%d link_id:%u for the radio_index:%u\n", __func__, __LINE__,
+        res, radio_index);
     return res;
 }
 
@@ -4035,7 +4022,10 @@ static unsigned char platform_iface_is_mlo_ap(const char *iface)
 
     (void)snprintf(name, sizeof(name), "%s_bss_mlo_mode", iface);
     wl_bss_mlo_mode = nvram_get(name);
-    res = ((wl_bss_mlo_mode != NULL) ? atoi(wl_bss_mlo_mode) : 0);
+    /*
+    * NOTE: By default, `bss_mlo_mode` has the value 1.
+    */
+    res = ((wl_bss_mlo_mode != NULL) ? atoi(wl_bss_mlo_mode) : 1);
 
     wifi_hal_dbg_print("%s:%d mld_ap:%u for the iface:%s\n", __func__, __LINE__, res, iface);
     return res;
@@ -4061,8 +4051,16 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     conf->okc = 0;
     hapd->mld = NULL;
 
-    hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
+    hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index);
     conf->mld_ap = (!conf->disable_11be && (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
+
+#ifndef CONFIG_NO_MLD_ONLY_PRIVATE
+    if (!is_wifi_hal_vap_private(vap->vap_index)) {
+        wifi_hal_dbg_print("%s:%d skip MLO for Non-Private VAP %s\n", __func__, __LINE__,
+            conf->iface);
+        conf->mld_ap = 0;
+    }
+#endif /* CONFIG_NO_MLD_ONLY_PRIVATE */
 
     if (conf->mld_ap) {
         unsigned char is_mlo_ap;
