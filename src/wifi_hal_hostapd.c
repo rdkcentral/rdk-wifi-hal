@@ -1078,8 +1078,6 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     strcpy(conf->ctrl_interface, "/var/run/hostapd");
     conf->ctrl_interface_gid_set = 1;
 
-    memcpy(conf->bssid, interface->mac, sizeof(interface->mac));
-
     memset(conf->ssid.ssid, 0, sizeof(conf->ssid.ssid));
     strcpy(conf->ssid.ssid, vap->u.bss_info.ssid);
     conf->ssid.ssid_len = strlen(vap->u.bss_info.ssid);
@@ -1888,6 +1886,8 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
 
     iconf = &radio->iconf;
 
+    iconf->use_driver_iface_addr = 1;
+
     iconf->beacon_int = param->beaconInterval;
     iconf->rts_threshold = 2347; /* use driver default: 2347 */
     iconf->fragm_threshold = 2346; /* user driver default: 2346 */
@@ -2151,11 +2151,10 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     return RETURN_OK;
 }
 
-int update_hostap_interface_params(wifi_interface_info_t *interface)
+int update_hostap_interface_params_v2(wifi_interface_info_t *interface, unsigned char update_mlo)
 {
     int ret = RETURN_ERR;
 
-    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     // initialize the default params
     if (update_hostap_data(interface) != RETURN_OK) {
         goto exit;
@@ -2179,13 +2178,21 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
         goto exit;
     }
 #ifdef CONFIG_IEEE80211BE
-    if (update_hostap_mlo(interface) != RETURN_OK) {
+    if (update_mlo && update_hostap_mlo(interface) != RETURN_OK) {
         goto exit;
     }
 #endif /* CONFIG_IEEE80211BE */
 
     ret = RETURN_OK;
 exit:
+    return ret;
+}
+
+int update_hostap_interface_params(wifi_interface_info_t *interface)
+{
+    int ret;
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    ret = update_hostap_interface_params_v2(interface, 1);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return ret;
 }
@@ -2371,7 +2378,7 @@ static int wpa_sm_sta_ether_send(void *ctx, const u8 *dest, u16 proto, const u8 
         encrypt = interface->u.sta.wpa_sm && wpa_sm_has_ptk_installed(interface->u.sta.wpa_sm);
         wifi_hal_info_print("%s:%d: Sending eapol via control port to sta:%s on interface:%s encrypt:%d\n", __func__, __LINE__,
             to_mac_str(dest, mac_str), interface->name, encrypt);
-        if ((ret = nl80211_tx_control_port(interface, dest, ETH_P_EAPOL, buf, len, !encrypt))) {
+        if ((ret = nl80211_tx_control_port(interface, dest, ETH_P_EAPOL, buf, len, !encrypt, -1))) {
             wifi_hal_error_print("%s:%d: eapol send failed\n", __func__, __LINE__);
             return -1;
         }
@@ -2885,6 +2892,7 @@ void start_bss(wifi_interface_info_t *interface)
     int ret;
     struct hostapd_data     *hapd;
     struct hostapd_bss_config *conf;
+    int first = 1;
     //struct hostapd_iface *iface;
     //struct hostapd_config *iconf;
 
@@ -2894,15 +2902,36 @@ void start_bss(wifi_interface_info_t *interface)
     conf = hapd->conf;
     //iconf = hapd->iconf;
     //iface = hapd->iface;
+#ifdef CONFIG_IEEE80211BE
+#ifndef CONFIG_DRIVER_BRCM
+#ifndef CONFIG_DRIVER_NL80211_QCA
+    //!TESTME
+    first = (interface->index == 0 ? -1 : 1);
 
-    wifi_hal_dbg_print("%s:%d:ssid info ssid len:%zu\n", __func__, __LINE__, conf->ssid.ssid_len);
+    if (conf->mld_ap) {
+        struct hostapd_data *bss;
+
+        first = 0;
+
+        for_each_mld_link(bss, hapd)
+        {
+            if (bss == hapd) {
+                first = 1;
+                break;
+            }
+        }
+    }
+#endif /* CONFIG_DRIVER_NL80211_QCA */
+#endif /* CONFIG_DRIVER_BRCM */
+#endif /* CONFIG_IEEE80211BE */
+    wifi_hal_dbg_print("%s:%d:ssid info ssid len:%zu first:%d\n", __func__, __LINE__, conf->ssid.ssid_len, first);
     //my_print_hex_dump(conf->ssid.ssid_len, conf->ssid.ssid);
 #if HOSTAPD_VERSION >= 211 //2.11
-    ret = hostapd_setup_bss(hapd, 1, true);
+    ret = hostapd_setup_bss(hapd, first, true);
 #elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
-    ret = hostapd_setup_bss(hapd, 1, true);
+    ret = hostapd_setup_bss(hapd, first, true);
 #else
-    ret = hostapd_setup_bss(hapd, 1);
+    ret = hostapd_setup_bss(hapd, first);
 #endif
 
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);

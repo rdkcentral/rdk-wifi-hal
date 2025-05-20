@@ -49,6 +49,176 @@ typedef struct {
     unsigned int num;
 } sta_list_t;
 
+#ifdef CONFIG_IEEE80211BE
+//! FIXME: temporary solution, it should be dynamically configured and come from vap configuration
+static struct hostapd_mld MLD_UNIT[] = {
+    { .name = "mld_unit_0", .links = DL_LIST_HEAD_INIT(MLD_UNIT[0].links) },
+};
+
+extern void hostapd_bss_link_deinit(struct hostapd_data *hapd);
+extern int update_hostap_interface_params_v2(wifi_interface_info_t *interface,
+    unsigned char update_mlo);
+extern int nl80211_remove_interface(wifi_radio_info_t *radio, wifi_interface_info_t *interface);
+
+static unsigned char platform_get_link_id_for_radio_index(wifi_radio_index_t index)
+{
+    wifi_radio_info_t *radio;
+    unsigned char link_id = -1;
+
+    radio = get_radio_by_rdk_index(index);
+
+    switch (radio->oper_param.band) {
+    case WIFI_FREQUENCY_2_4_BAND:
+        link_id = 0;
+        break;
+    case WIFI_FREQUENCY_5_BAND:
+    case WIFI_FREQUENCY_5L_BAND:
+    case WIFI_FREQUENCY_5H_BAND:
+        link_id = 1;
+        break;
+    case WIFI_FREQUENCY_6_BAND:
+    case WIFI_FREQUENCY_60_BAND:
+        link_id = 2;
+        break;
+    }
+
+    return link_id;
+}
+
+int update_hostap_mlo(wifi_interface_info_t *interface)
+{
+    struct hostapd_bss_config *conf;
+    struct hostapd_data *hapd;
+    wifi_vap_info_t *vap;
+    unsigned char link_id;
+    unsigned char mld_ap;
+    int res = 0;
+
+    conf = &interface->u.ap.conf;
+    hapd = &interface->u.ap.hapd;
+    vap = &interface->vap_info;
+
+    link_id = platform_get_link_id_for_radio_index(vap->radio_index);
+    if (!is_wifi_hal_vap_private(vap->vap_index)) {
+        wifi_hal_dbg_print("%s:%d skip MLO for Non-Private VAP:%s\n", __func__, __LINE__,
+            conf->iface);
+        link_id = -1;
+    }
+    mld_ap = (!conf->disable_11be && (link_id < MAX_NUM_MLD_LINKS));
+
+    conf->okc = mld_ap;
+
+    if (conf->mld_ap != mld_ap) {
+        wifi_radio_info_t *radio;
+
+        radio = get_radio_by_rdk_index(vap->radio_index);
+
+        if (mld_ap) {
+            hapd->mld = MLD_UNIT;
+        } else {
+            //!TESTME
+            if (hostapd_mld_is_first_bss(hapd)) {
+                unsigned int i;
+                unsigned int bss_list_len;
+                struct hostapd_data *bss, *bss_next;
+                struct hostapd_data **bss_list;
+
+                i = 0;
+                bss_list_len = dl_list_len(&hapd->mld->links) - 1;
+                bss_list = malloc(sizeof(struct hostapd_data *) * bss_list_len);
+
+                dl_list_for_each_safe(bss, bss_next, &hapd->mld->links, struct hostapd_data, link)
+                {
+                    if (bss == hapd) {
+                        continue;
+                    }
+                    bss_list[i++] = bss;
+
+                    hostapd_bss_deinit_no_free(bss);
+                    hostapd_free_hapd_data(bss);
+                    hostapd_bss_link_deinit(bss);
+                }
+
+                hostapd_if_link_remove(hapd, WPA_IF_AP_BSS, hapd->conf->iface, hapd->mld_link_id);
+                hostapd_bss_link_deinit(hapd);
+
+                for (i = 0; i < bss_list_len; i++) {
+                    struct hostapd_bss_config *h_conf;
+                    struct hostapd_data *h_hapd;
+                    wifi_vap_info_t *h_vap;
+                    wifi_interface_info_t *h_interface;
+
+                    h_interface = (wifi_interface_info_t *)bss_list[i];
+                    h_conf = &h_interface->u.ap.conf;
+                    h_hapd = &h_interface->u.ap.hapd;
+                    h_vap = &h_interface->vap_info;
+
+                    res = update_hostap_interface_params_v2(h_interface, 0);
+                    if(res < 0) {
+                        wifi_hal_error_print("%s:%d: interface:%s failed to update hostapd params\n",
+                            __func__, __LINE__, h_interface->name);
+                        break;
+                    }
+
+                    h_hapd->mld_link_id = platform_get_link_id_for_radio_index(h_vap->radio_index);
+                    h_conf->mld_ap = (!h_conf->disable_11be && (h_hapd->mld_link_id < MAX_NUM_MLD_LINKS));
+    
+                    h_conf->okc = h_conf->mld_ap;
+
+                    h_interface->beacon_set = 0;
+                    res = hostapd_setup_bss(bss_list[i], 0, true);
+                    if(res < 0) {
+                        wifi_hal_error_print("%s:%d: interface:%s failed to setup bss\n", __func__,
+                            __LINE__, h_interface->name);
+                        break;
+                    }
+                }
+                free(bss_list);
+            } else {
+                hostapd_if_link_remove(hapd, WPA_IF_AP_BSS, hapd->conf->iface, hapd->mld_link_id);
+                hostapd_bss_link_deinit(hapd);
+            }
+            hapd->mld = NULL;
+        }
+    
+        nl80211_remove_interface(radio, interface);
+    }
+
+    conf->mld_ap = mld_ap;
+    hapd->mld_link_id = link_id;
+
+    return res;
+}
+
+void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb) {
+    if (tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC] &&
+        nla_len(tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC]) >= 2) {
+        const u8 *pos;
+
+        pos = nla_data(tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC]);
+        eht_capab->mac_cap = WPA_GET_LE16(pos);
+    }
+}
+
+int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
+    struct wpa_driver_ap_params *params)
+{
+    (void)msg;
+    (void)msg_mlo;
+    (void)priv;
+    (void)params;
+
+    return 0;
+}
+
+int nl80211_send_mlo_msg(struct nl_msg *msg)
+{
+    (void)msg;
+
+    return 0;
+}
+#endif /* CONFIG_IEEE80211BE */
+
 int wifi_nvram_defaultRead(char *in,char *out)
 {
     char buf[MAX_BUF_SIZE]={'\0'};
@@ -710,42 +880,3 @@ INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
 {
     return 0;
 }
-
-#ifdef CONFIG_IEEE80211BE
-int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
-    struct wpa_driver_ap_params *params)
-{
-    (void)msg;
-    (void)msg_mlo;
-    (void)priv;
-    (void)params;
-
-    return 0;
-}
-
-int nl80211_send_mlo_msg(struct nl_msg *msg)
-{
-    (void)msg;
-
-    return 0;
-}
-
-void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb)
-{
-    if (tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC] &&
-        nla_len(tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC]) >= 2) {
-        const u8 *pos;
-
-        pos = nla_data(tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC]);
-        eht_capab->mac_cap = WPA_GET_LE16(pos);
-    }
-}
-
-int update_hostap_mlo(wifi_interface_info_t *interface)
-{
-    (void)interface;
-
-    return 0;
-}
-#endif /* CONFIG_IEEE80211BE */
-

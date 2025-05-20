@@ -641,7 +641,7 @@ void wifi_hal_deauth(int vap_index, int status, uint8_t *mac)
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #ifdef HOSTAPD_2_10
-    wifi_drv_sta_deauth(interface, own_addr, mac, status);
+    wifi_drv_sta_deauth(interface, own_addr, mac, status, -1);
 #endif
     return;
 }
@@ -4238,6 +4238,8 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     struct ieee80211_hdr *hdr;
     mac_address_t bssid_buf;
     int res = 0;
+    struct hostapd_data *hapd;
+    int link_id = -1;
     memset(bssid_buf, 0xff, sizeof(bssid_buf));
 
     buf = os_zalloc(24 + data_len);
@@ -4257,14 +4259,19 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     os_memcpy(hdr->addr2, interface->mac, ETH_ALEN);
     os_memcpy(hdr->addr3, bssid_buf, ETH_ALEN);
 
-    
-#ifdef HOSTAPD_2_11 // 2.11
-    res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait, 0);
-#elif HOSTAPD_2_10 // 2.10
-    res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait);
-#else
-    res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0);
-#endif
+    hapd = &interface->u.ap.hapd;
+
+#if HOSTAPD_VERSION >= 211
+#ifdef CONFIG_IEEE80211BE
+#ifndef CONFIG_DRIVER_BRCM
+    if (hapd->conf->mld_ap) {
+        link_id = hapd->mld_link_id;
+    }
+#endif /* CONFIG_DRIVER_BRCM */
+#endif /* CONFIG_IEEE80211BE */
+#endif /* HOSTAPD_VERSION >= 211 */
+
+    res = wifi_drv_send_mlme(hapd->drv_priv, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait, link_id);
 
     os_free(buf);
     wifi_hal_dbg_print("%s:%d:Exit for mgmt fame on %d\n", __func__, __LINE__, apIndex);
