@@ -2119,7 +2119,9 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
 {
     wifi_interface_info_t *interface;
     struct genlmsghdr *gnlh;
+#if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(TCHCBRV2_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2))
     unsigned short fc, stype;
+#endif
     struct nlattr *tb[NL80211_ATTR_MAX + 1], *attr;
     unsigned int len;
     struct ieee80211_mgmt *mgmt = NULL;
