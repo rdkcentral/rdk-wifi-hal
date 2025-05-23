@@ -336,7 +336,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     }
 #if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT)|| defined(TARGET_GEMINI7_2))
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
-        phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]);
+        phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]) *10;
     }
 #endif
 
@@ -955,6 +955,10 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         ch_switch_update_hostap_config(radio, channel, op_class, freq, cf1, cf2,
             hostap_channel_width, l_channel_width);
 
+        if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+            wifi_hal_info_print("%s:%d:csa_in_progress:%d for radio:%d\r\n", __func__,
+                __LINE__, interface->u.ap.hapd.csa_in_progress, interface->vap_info.radio_index);
+        }
         if (interface->vap_info.vap_mode == wifi_vap_mode_ap &&
             (interface->u.ap.hapd.csa_in_progress || interface->u.ap.hapd.iface->freq != freq)) {
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
