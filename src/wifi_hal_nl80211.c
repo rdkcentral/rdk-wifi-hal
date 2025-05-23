@@ -796,27 +796,18 @@ bool is_core_acl_drop_mgmt_frame(wifi_interface_info_t *interface, mac_address_t
     memset(sta_mac_str, 0, sizeof(sta_mac_str));
 
     l_vap_info = &interface->vap_info;
-    wifi_hal_dbg_print("%s:%d: MJ mac_filter_enable:%d\n", __func__, __LINE__, l_vap_info->u.bss_info.mac_filter_enable);
     if (l_vap_info->u.bss_info.mac_filter_enable == TRUE) {       
         key = to_mac_str(sta_mac, sta_mac_str);
-        wifi_hal_dbg_print("%s:%d: MJ Converted MAC address to string: %s\n", __func__, __LINE__, key);
         l_acl_map = hash_map_get(interface->acl_map, key);
-        wifi_hal_dbg_print("%s:%d: MJ ACL map lookup result for MAC %s: %p\n", __func__, __LINE__, key, l_acl_map);
         if (l_vap_info->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_white_list) {
-            wifi_hal_dbg_print("%s:%d: MJ MAC filter mode: Whitelist\n", __func__, __LINE__);
             if (l_acl_map != NULL)
-            wifi_hal_dbg_print("%s:%d: MJ MAC %s is in the whitelist. Frame will not be dropped.\n", __func__, __LINE__, key);
                 return false;
         } else {
-            wifi_hal_dbg_print("%s:%d: MJ MAC filter mode: Blacklist\n", __func__, __LINE__);
             if (l_acl_map == NULL){
-                wifi_hal_dbg_print("%s:%d: MJ MAC %s is NOT in the blacklist. Frame will not be dropped.\n", __func__, __LINE__, key);
                 return false;
         }}
-        wifi_hal_dbg_print("%s:%d: MJ Frame for MAC %s will be dropped.\n", __func__, __LINE__, key);
         return true;
     }
-    wifi_hal_dbg_print("%s:%d: MJ MAC filtering is disabled. Frame will not be dropped.\n", __func__, __LINE__);
     return false;
 }
 #endif
@@ -1028,8 +1019,6 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #ifdef NL80211_ACL
         // If mac filter acl is enabled then we need to drop mgmt frame based on acl config
         if (is_core_acl_drop_mgmt_frame(interface, sta)) {
-            wifi_hal_dbg_print("%s:%d: MJ Station present in acl list dropping auth req\n", __func__,
-                __LINE__);
             return -1;
         }
 #endif
@@ -11696,94 +11685,6 @@ int nl80211_set_acl(wifi_interface_info_t *interface)
 
     return ret;
 }
-
-int nl80211_set_acl_mode(wifi_interface_info_t *interface, uint32_t mac_filter_mode)
-{
-    int ret = RETURN_OK;
-    wifi_vap_info_t *vap;
-    vap = &interface->vap_info;
-#ifdef NL80211_ACL
-    struct nl_msg *msg;
-    struct nlattr *acl;
-    unsigned int policy;
-    mac_address_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-
-    if (vap->u.bss_info.enabled != true || vap->u.bss_info.mac_filter_enable == false || vap->vap_mode != wifi_vap_mode_ap) {
-         wifi_hal_error_print(":%s:%d mac filter not enabled:%d for vap:%d\n", __func__, __LINE__, vap->u.bss_info.enabled, vap->vap_index);
-        return RETURN_ERR;
-    } else if (vap->u.bss_info.mac_filter_mode == mac_filter_mode) {
-        wifi_hal_error_print(":%s:%d mac filtermode is already set for vap:%d\n", __func__, __LINE__, vap->vap_index);
-        return RETURN_OK;
-    }
-
-    if (!(msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_MAC_ACL))) {
-        wifi_hal_error_print("nl80211: Failed to build MAC ACL msg\n");
-        return -ENOMEM;
-    }
-
-    if (mac_filter_mode == wifi_mac_filter_mode_black_list) {
-        policy = NL80211_ACL_POLICY_ACCEPT_UNLESS_LISTED;
-    } else {
-        policy = NL80211_ACL_POLICY_DENY_UNLESS_LISTED;
-    }
-
-
-    nla_put_u32(msg, NL80211_ATTR_ACL_POLICY, policy);
-
-    acl = nla_nest_start(msg, NL80211_ATTR_MAC_ADDRS);
-
-    if (acl == NULL) {
-        wifi_hal_error_print("nl80211: Failed to to add ACL list to msg\n");
-        nlmsg_free(msg);
-        return -ENOMEM;
-    }
-
-    if (nla_put(msg, 0, ETH_ALEN, null_mac)) {
-        wifi_hal_error_print("nl80211: Failed to add MAC to ACL list\n");
-        nlmsg_free(msg);
-        return -ENOMEM;
-    }
-    nla_nest_end(msg, acl);
-
-    wifi_hal_info_print("%s:%d: vap:%d set mac filter mode:%s\n", __func__, __LINE__, vap->vap_index,
-            (mac_filter_mode == wifi_mac_filter_mode_black_list) ? "Blacklist" : "Whitelist");
-
-    ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
-    if (ret) {
-        wifi_hal_error_print("nl80211: Failed to set MAC ACL: %d (%s)", ret, strerror(-ret));
-    } else {
-        vap->u.bss_info.mac_filter_mode = mac_filter_mode;
-    }
-#else
-    uint32_t filtermode;
-    //Call vendor HAL
-    if (vap->vap_mode == wifi_vap_mode_ap) {
-        if (vap->u.bss_info.mac_filter_enable == TRUE) {
-            if (mac_filter_mode == wifi_mac_filter_mode_black_list) {
-                //blacklist
-                filtermode = 2;
-            } else {
-                //whitelist
-                filtermode = 1;
-            }
-        } else {
-            //disabled
-            filtermode  = 0;
-        }
-        wifi_hal_info_print("%s:%d: vap:%d set mac filter mode:%s\n", __func__, __LINE__, vap->vap_index,
-            mac_filter_mode == wifi_mac_filter_mode_black_list ? "Blacklist" : "Whitelist");
-        if (wifi_setApMacAddressControlMode(vap->vap_index, filtermode) < 0) {
-            wifi_hal_error_print("%s:%d: vap index:%d failed to set mac filter\n", __func__,
-                    __LINE__, vap->vap_index);
-            return RETURN_ERR;
-        } else {
-            vap->u.bss_info.mac_filter_mode = mac_filter_mode;
-        }
-    }
-#endif // NL80211_ACL
-    return ret;
-}
-
 
 int wifi_drv_set_acl(void *priv, struct hostapd_acl_params *params)
 {

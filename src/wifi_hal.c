@@ -1123,7 +1123,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     platform_create_vap_t set_vap_params_fn;
     unsigned int i;
     char msg[2048];
-#ifdef NL80211_ACL
+ #if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
     int set_acl = 0;
 #else
     int filtermode;
@@ -1190,8 +1190,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             vap->u.bss_info.preassoc.minimum_advertised_mcs,
             vap->u.bss_info.preassoc.sixGOpInfoMinRate);
 
-#ifdef NL80211_ACL
-        if ((vap->u.bss_info.enabled == 1) &&
+#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
             ((vap->u.bss_info.mac_filter_enable == TRUE) ||
              (interface->vap_info.u.bss_info.mac_filter_enable != vap->u.bss_info.mac_filter_enable))) {
             set_acl = 1;
@@ -1420,7 +1419,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
 #endif //CONFIG_WIFI_EMULATOR || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
         }
-#ifdef NL80211_ACL
+#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
         if (set_acl == 1) {
             nl80211_set_acl(interface);
         }
