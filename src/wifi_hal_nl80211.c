@@ -796,16 +796,18 @@ bool is_core_acl_drop_mgmt_frame(wifi_interface_info_t *interface, mac_address_t
     memset(sta_mac_str, 0, sizeof(sta_mac_str));
 
     l_vap_info = &interface->vap_info;
+
     if (l_vap_info->u.bss_info.mac_filter_enable == TRUE) {       
         key = to_mac_str(sta_mac, sta_mac_str);
         l_acl_map = hash_map_get(interface->acl_map, key);
+        
         if (l_vap_info->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_white_list) {
             if (l_acl_map != NULL)
                 return false;
         } else {
-            if (l_acl_map == NULL){
+            if (l_acl_map == NULL)
                 return false;
-        }}
+        }
         return true;
     }
     return false;
