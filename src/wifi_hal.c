@@ -1311,7 +1311,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     platform_create_vap_t set_vap_params_fn;
     unsigned int i;
     char msg[2048];
-    int ret = 0;
+    int ret = RETURN_OK;
 #ifdef NL80211_ACL
     int set_acl = 0;
 #else
@@ -1321,7 +1321,6 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #if defined(VNTXER5_PORT)
     char mld_ifname[32];
 #endif
-    int ret = RETURN_OK;
 
     RADIO_INDEX_ASSERT(index);
     NULL_PTR_ASSERT(map);
