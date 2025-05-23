@@ -8233,6 +8233,36 @@ static void parse_eht_capa(const uint8_t type, uint8_t len, const uint8_t *data,
 }
 #endif /* CONFIG_IEEE80211BE */
 
+static void parse_eht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
+    const struct parse_ies_data *ie_buffer, wifi_bss_info_t *bss)
+{
+    (void)type;
+    (void)ie_buffer;
+
+    if ((data[1] & EHT_OPER_INFO_PRESENT) && len >= 7) {
+        switch (data[6] & 0x07) {
+        case EHT_OPER_CHANNEL_WIDTH_40MHZ:
+            bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_40MHZ;
+            break;
+        case EHT_OPER_CHANNEL_WIDTH_80MHZ:
+            bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_80MHZ;
+            break;
+        case EHT_OPER_CHANNEL_WIDTH_160MHZ:
+            bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_160MHZ;
+            break;
+        case EHT_OPER_CHANNEL_WIDTH_320MHZ:
+            bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_320MHZ;
+            break;
+        default:
+            wifi_hal_error_print("%s:%d: Unknown EHT channel width\n", __func__, __LINE__);
+            break;
+        }
+    }
+
+    bss->supp_standards |= WIFI_80211_VARIANT_BE;
+    bss->oper_standards = WIFI_80211_VARIANT_BE;
+}
+
 static void parse_bss_load(const uint8_t type, uint8_t len, const uint8_t *data,
             const struct parse_ies_data *ie_buffer, wifi_bss_info_t *bss)
 {
@@ -8263,6 +8293,9 @@ static void parse_extension_tag(const uint8_t type, uint8_t len, const uint8_t *
 #ifdef CONFIG_IEEE80211BE
         case WLAN_EID_EXT_EHT_CAPABILITIES:
             parse_eht_capa(type, len, data, ie_buffer, bss);
+            break;
+        case WLAN_EID_EXT_EHT_OPERATION:
+            parse_eht_oper(type, len, data, ie_buffer, bss);
             break;
 #endif /* CONFIG_IEEE80211BE */
         default:
