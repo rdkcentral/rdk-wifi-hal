@@ -2915,13 +2915,14 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
     }
 }
 
-void start_bss(wifi_interface_info_t *interface)
+int start_bss(wifi_interface_info_t *interface)
 {
     int ret;
     struct hostapd_data     *hapd;
     struct hostapd_bss_config *conf;
     //struct hostapd_iface *iface;
     //struct hostapd_config *iconf;
+    wifi_vap_info_t *vap = &interface->vap_info;
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
 
@@ -2931,6 +2932,11 @@ void start_bss(wifi_interface_info_t *interface)
     //iface = hapd->iface;
 
     wifi_hal_dbg_print("%s:%d:ssid info ssid len:%zu\n", __func__, __LINE__, conf->ssid.ssid_len);
+    if (interface->u.ap.hapd.csa_in_progress == true) {
+        hostapd_cleanup_cs_params(&interface->u.ap.hapd);
+        wifi_hal_info_print("%s:%d:force clear csa in progress flag:%d for:%s:%d\n", __func__,
+            __LINE__, interface->u.ap.hapd.csa_in_progress, vap->vap_name, vap->vap_index);
+    }
     //my_print_hex_dump(conf->ssid.ssid_len, conf->ssid.ssid);
 #if HOSTAPD_VERSION >= 211 //2.11
     ret = hostapd_setup_bss(hapd, 1, true);
@@ -2942,10 +2948,12 @@ void start_bss(wifi_interface_info_t *interface)
 
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-    if (ret < 0) {
-        wifi_hal_error_print("%s:%d: interface:%s failed to start bss\n",  __func__, __LINE__,
-            interface->name);
+    if (ret != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: vap:%s:%d create is failed:%d csa status:%d\n", __func__,
+            __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
     }
+
+    return ret;
 }
 
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio)
