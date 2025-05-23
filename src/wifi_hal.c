@@ -1191,7 +1191,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             vap->u.bss_info.preassoc.sixGOpInfoMinRate);
 
 #if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
-        if ((vap->u.bss_info.enabled == 1) &&    
+        if ((vap->u.bss_info.enabled == 1) && 
 	    ((vap->u.bss_info.mac_filter_enable == TRUE) ||
              (interface->vap_info.u.bss_info.mac_filter_enable != vap->u.bss_info.mac_filter_enable))) {
             set_acl = 1;
