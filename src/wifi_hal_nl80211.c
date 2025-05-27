@@ -47,6 +47,7 @@
 #include "ap/sta_info.h"
 #include "ap/dfs.h"
 #include "ap/wmm.h"
+#include "hs20.h"
 #include <sys/wait.h>
 #include <linux/if_ether.h>
 #ifdef __GLIBC__
@@ -2119,7 +2120,6 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
 {
     wifi_interface_info_t *interface;
     struct genlmsghdr *gnlh;
-    unsigned short fc, stype;
     struct nlattr *tb[NL80211_ATTR_MAX + 1], *attr;
     unsigned int len;
     struct ieee80211_mgmt *mgmt = NULL;
@@ -2201,6 +2201,7 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
     }
 #if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(TCHCBRV2_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2))
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
+	unsigned short fc, stype;
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]) *10;
 	fc = le_to_host16(mgmt->frame_control);
         stype = WLAN_FC_GET_STYPE(fc);
@@ -16242,6 +16243,30 @@ static size_t wifi_drv_mbssid_adv_proto(struct hostapd_data *bss, struct hostapd
     return ie_len;
 }
 
+static size_t wifi_drv_mbssid_hs20_indication(struct hostapd_data *bss, struct hostapd_data *tx_bss, u8 *buf)
+{
+    u8 ie_buf[16], tx_ie_buf[16];
+    size_t ie_len, tx_ie_len;
+    u8 *ie_end, *tx_ie_end;
+    ie_end = hostapd_eid_hs20_indication(bss, ie_buf);
+    ie_len = ie_end - ie_buf;
+    if (ie_len == 0) {
+        wifi_hal_dbg_print("%s:%d No HS20 IE present for bss, returning 0\n", __func__, __LINE__);
+        return 0;
+    }
+
+    tx_ie_end = hostapd_eid_hs20_indication(tx_bss, tx_ie_buf);
+    tx_ie_len = tx_ie_end - tx_ie_buf;
+    if (ie_len == tx_ie_len && memcmp(ie_buf, tx_ie_buf, ie_len) == 0) {
+        return 0;
+    }
+
+    if (buf) {
+        memcpy(buf, ie_buf, ie_len);
+    }
+    return ie_len;
+}
+
 static size_t wifi_drv_mbssid_mbo(struct hostapd_data *bss, u8 *buf)
 {
     u8 ie_buf[64];
@@ -16379,7 +16404,7 @@ static size_t wifi_drv_eid_mbssid_elem_len(wifi_radio_info_t *radio,
 
         nontx_profile_len += wifi_drv_mbssid_interworking(bss, tx_bss, NULL);
         nontx_profile_len += wifi_drv_mbssid_adv_proto(bss, tx_bss, NULL);
-
+	nontx_profile_len += wifi_drv_mbssid_hs20_indication(bss, tx_bss, NULL);
         nontx_profile_len += wifi_drv_mbssid_mbo(bss, NULL);
         nontx_profile_len += wifi_drv_mbssid_wmm(bss, NULL);
 
@@ -16471,7 +16496,7 @@ static u8 *wifi_drv_eid_mbssid_elem(wifi_radio_info_t *radio, wifi_interface_inf
 
         eid += wifi_drv_mbssid_interworking(bss, tx_bss, eid);
         eid += wifi_drv_mbssid_adv_proto(bss, tx_bss, eid);
-
+	eid += wifi_drv_mbssid_hs20_indication(bss, tx_bss, eid);
         eid += wifi_drv_mbssid_mbo(bss, eid);
         eid += wifi_drv_mbssid_wmm(bss, eid);
 
