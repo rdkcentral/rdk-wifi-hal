@@ -340,6 +340,11 @@ void init_oem_config(wifi_interface_info_t *interface)
     conf->manufacturer_url = (char *)&interface->manufacturer_url;
     conf->model_description = (char *)&interface->model_description;
     conf->model_url = (char *)&interface->model_url;
+    conf->fw_version = malloc(strlen(interface->firmware_version) + 1);
+    if (conf->fw_version != NULL) {
+        strcpy(conf->fw_version, interface->firmware_version);
+    }
+    wifi_hal_info_print("%s:%d:SREESH firmware_version:%s\n", __func__, __LINE__, conf->fw_version);
 
     if(wps_dev_type_str2bin("6-0050F204-1", conf->device_type)) {
         wifi_hal_dbg_print("%s:%d: WPS, invalid device_type\n", __func__, __LINE__);
@@ -740,9 +745,9 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
     conf->rdkb_eap_request_timeout = sec->eap_req_timeout;
     conf->rdkb_eap_request_retries = sec->eap_req_retries;
 #endif
-    if (conf->ieee802_1x || is_open_sec_radius_auth(sec)) {
+    if (conf->ieee802_1x || is_open_sec_radius_auth(sec) || conf->mdu) {
         conf->disable_pmksa_caching = sec->disable_pmksa_caching;
-
+        wifi_hal_info_print("%s:%d SREESH Value of conf->mdu = %d\n", __func__, __LINE__, conf->mdu);
         if (sec->u.radius.ip == 0) {
             wifi_hal_error_print("%s:%d:Invalid radius server IP configuration in VAP setting\n", __func__, __LINE__);
             return RETURN_ERR;
@@ -770,6 +775,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->radius->auth_servers[1].shared_secret = shared_secrets + shared_secret_chunk;
             conf->radius->fallback_already_done = false;
             conf->radius->retry_primary_interval = RADIUS_FALLBACK_TIMER_IN_SECS;
+            wifi_hal_info_print("%s:%d: Allocated memory for radius servers and basic initialization done\n", __func__, __LINE__);
         }
 
         char output[256] = {0};
@@ -840,7 +846,13 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 
         strcpy(conf->radius->auth_servers[1].shared_secret, sec->u.radius.s_key);
         conf->radius->auth_servers[1].shared_secret_len = strlen(conf->radius->auth_servers[1].shared_secret);
-        conf->radius->auth_servers[1].port = sec->u.radius.s_port;
+        conf->radius->auth_servers[1].port = sec->u.radius.s_port; 
+        char txt[100];
+        wifi_hal_info_print("%s:%d:SREESH SSID Name = %s radius primary server ip:%s port:%d key:%s secondary server ip:%s port:%d key:%s\n",
+            __func__, __LINE__,conf->ssid.ssid, hostapd_ip_txt(&conf->radius->auth_servers[0].addr,txt,sizeof(txt)), conf->radius->auth_servers[0].port,
+            conf->radius->auth_servers[0].shared_secret,
+            hostapd_ip_txt(&conf->radius->auth_servers[1].addr,txt,sizeof(txt)), conf->radius->auth_servers[1].port,
+            conf->radius->auth_servers[1].shared_secret);
 
         if (is_open_sec_radius_auth(sec)) {
             conf->radius_das_port = sec->u.radius.dasport;
@@ -889,6 +901,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->radius->auth_servers = NULL;
             conf->radius->auth_server = NULL;
             conf->radius->num_auth_servers = 0;
+            wifi_hal_info_print("%s:%d:SREESH freed radius server and inside else condition\n", __func__, __LINE__);
         }
 
         if (!is_open_sec(sec)) {
@@ -1142,6 +1155,11 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     //wme_enabled, uapsd_enabled
     conf->wmm_enabled = vap->u.bss_info.wmm_enabled;
     conf->wmm_uapsd = vap->u.bss_info.UAPSDEnabled;
+    
+    if (strstr(vap->repurposed_vap_name, "managed_guest")) {
+        conf->mdu = 1; // MDU should be declared inside hostapd_data structure along with connected_building_avp
+        wifi_hal_info_print("%s:%d SREESH Value of conf->mdu = %d and vap_name = %s\n", __func__, __LINE__, conf->mdu, vap->vap_name);
+    }
 
     if (update_security_config(&vap->u.bss_info.security, conf) == -1) {
         wifi_hal_error_print("%s:%d:update_security_config failed \n", __func__, __LINE__);
@@ -1181,6 +1199,9 @@ int update_hostap_bss(wifi_interface_info_t *interface)
         conf->connected_building_avp = vap->u.bss_info.connected_building_enabled;
         wifi_hal_info_print("%s:%d:connected_building_enabled is %d  and ifacename is %s\n", __func__, __LINE__,conf->connected_building_avp,conf->iface);
     }
+
+    conf->speed_tier = vap->u.bss_info.am_config.npc.speed_tier;
+    wifi_hal_info_print("%s:%d:speed_tier is %d  and ifacename is %s and vap_name = %s\n", __func__, __LINE__,conf->speed_tier,conf->iface,vap->vap_name);
    // rdk_greylist
     conf->rdk_greylist = vap->u.bss_info.network_initiated_greylist;
     if(conf->rdk_greylist) {

@@ -466,7 +466,7 @@ typedef struct wifi_interface_info_t {
 
     char   wpa_passphrase[64];
     char   device_name[64], manufacturer[64], model_name[64], model_number[64];
-    char   serial_number[64], friendly_name[64], manufacturer_url[64];
+    char   serial_number[64], friendly_name[64], manufacturer_url[64], firmware_version[64];
     char   model_description[64], model_url[64];
     int    vlan;
     char   ctrl_interface[32];

@@ -334,7 +334,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
         hal->wifi_prop.colocated_mode = -1;
     }
 
-    wifi_hal_info_print("%s:%d: serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s "
+    wifi_hal_info_print("%s:%d:SREESH serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s "
                         "al_mac_addr=%s colocated_mode:%d\n",
         __func__, __LINE__, hal->wifi_prop.serialNo, hal->wifi_prop.manufacturerModel,
         hal->wifi_prop.software_version, hal->wifi_prop.manufacturer,
@@ -368,8 +368,10 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
                     radio_band = WIFI_FREQUENCY_6_BAND;
                 }
             }
-            wifi_hal_info_print("%s:%d: interface name: %s, vap index: %d, vap name: %s\n", __func__, __LINE__,
-                    interface->name, vap->vap_index, vap->vap_name);
+            strncpy(interface->firmware_version, hal->wifi_prop.software_version, sizeof(interface->firmware_version) - 1);
+            interface->firmware_version[sizeof(interface->firmware_version) - 1] = '\0';
+            wifi_hal_info_print("%s:%d:SREESH interface name: %s, interface->firmware_version: %s, vap index: %d, vap name: %s\n", __func__, __LINE__,
+                    interface->name, interface->firmware_version, vap->vap_index, vap->vap_name);
             interface = hash_map_get_next(radio->interface_map, interface);
         }
 
@@ -1348,22 +1350,22 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     for (i = 0; i < map->num_vaps; i++) {
         vap = &map->vap_array[i];
 
-        wifi_hal_info_print("%s:%d: vap index:%d create vap\n", __func__, __LINE__,
-            vap->vap_index);
+        wifi_hal_info_print("%s:%d:SREESH vap index:%d vap_name = %s create vap\n", __func__, __LINE__,
+            vap->vap_index, vap->vap_name);
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
             if (validate_wifi_interface_vap_info_params(vap, msg, sizeof(msg)) != RETURN_OK) {
-                wifi_hal_error_print("%s:%d:Failed to validate interface vap_info params for vap_index: %d on radio index: %d. %s\n", __func__, __LINE__, vap->vap_index, index, msg);
+                wifi_hal_error_print("%s:%d:SREESH Failed to validate interface vap_info params for vap_index: %d on radio index: %d. %s\n", __func__, __LINE__, vap->vap_index, index, msg);
                 return WIFI_HAL_INVALID_ARGUMENTS;
             }
         }
 
         interface = get_interface_by_vap_index(vap->vap_index);
         if (interface == NULL) {
-            wifi_hal_info_print("%s:%d: vap index:%d create interface\n", __func__, __LINE__,
-                vap->vap_index);
+            wifi_hal_info_print("%s:%d:SREESH vap index:%d vap_name = %s create interface\n", __func__, __LINE__,
+                vap->vap_index, vap->vap_name);
             if ((nl80211_create_interface(radio, vap, &interface) != 0) || (interface == NULL)) {
-                wifi_hal_error_print("%s:%d: vap index:%d failed to create interface\n", __func__,
+                wifi_hal_error_print("%s:%d:SREESH vap index:%d failed to create interface\n", __func__,
                     __LINE__, vap->vap_index);
                 continue;
             }
@@ -1393,13 +1395,13 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             continue;
         }
 #endif
-        wifi_hal_info_print("%s:%d: vap index:%d interface:%s mode:%d\n", __func__, __LINE__,
-            vap->vap_index, interface->name, vap->vap_mode);
+        wifi_hal_info_print("%s:%d:SREESH vap index:%d interface:%s mode:%d vap_name:%s\n", __func__, __LINE__,
+            vap->vap_index, interface->name, vap->vap_mode, vap->vap_name);
         if (vap->vap_mode == wifi_vap_mode_ap) {
-            wifi_hal_info_print("%s:%d: vap_enable_status:%d\n", __func__, __LINE__, vap->u.bss_info.enabled);
+            wifi_hal_info_print("%s:%d:SREESH vap_enable_status:%d\n", __func__, __LINE__, vap->u.bss_info.enabled);
             memcpy(vap->u.bss_info.bssid, interface->mac, sizeof(vap->u.bss_info.bssid));
         } else {
-            wifi_hal_info_print("%s:%d: vap_enable_status:%d\n", __func__, __LINE__, vap->u.sta_info.enabled);
+            wifi_hal_info_print("%s:%d:SREESH vap_enable_status:%d\n", __func__, __LINE__, vap->u.sta_info.enabled);
 #if  !defined(CONFIG_WIFI_EMULATOR) && !defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
             memcpy(vap->u.sta_info.mac, interface->mac, sizeof(vap->u.sta_info.mac));
 #else
@@ -1413,12 +1415,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
         memcpy((unsigned char *)&interface->vap_info, (unsigned char *)vap, sizeof(wifi_vap_info_t));
 
-        wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface->name);
+        wifi_hal_info_print("%s:%d:SREESH interface:%s vap_name = %sset down\n", __func__, __LINE__, interface->name);
         nl80211_interface_enable(interface->name, false);
 #ifndef CONFIG_WIFI_EMULATOR
         if (vap->vap_mode == wifi_vap_mode_sta) {
             bool sta_4addr = 0;
-            wifi_hal_info_print("%s:%d: interface:%s remove from bridge\n", __func__, __LINE__,
+            wifi_hal_info_print("%s:%d:SREESH interface:%s remove from bridge\n", __func__, __LINE__,
                 interface->name);
             nl80211_remove_from_bridge(interface->name);
             if (get_sta_4addr_status(&sta_4addr) == RETURN_OK) {
@@ -1426,23 +1428,23 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
         }
 #endif
-        wifi_hal_info_print("%s:%d: interface:%s set mode:%d\n", __func__, __LINE__,
+        wifi_hal_info_print("%s:%d:SREESH interface:%s set mode:%d\n", __func__, __LINE__,
             interface->name, vap->vap_mode);
         if (nl80211_update_interface(interface) != 0) {
-            wifi_hal_error_print("%s:%d: interface:%s failed to set mode %d\n",__func__, __LINE__,
+            wifi_hal_error_print("%s:%d:SREESH interface:%s failed to set mode %d\n",__func__, __LINE__,
                 interface->name, vap->vap_mode);
             return RETURN_ERR;
         }
 
-        wifi_hal_info_print("%s:%d: interface:%s radio configured:%d radio enabled:%d\n",
+        wifi_hal_info_print("%s:%d:SREESH interface:%s radio configured:%d radio enabled:%d\n",
             __func__, __LINE__, interface->name, radio->configured, radio->oper_param.enable);
         if (radio->configured && radio->oper_param.enable) {
-            wifi_hal_info_print("%s:%d: interface:%s set up\n", __func__, __LINE__,
+            wifi_hal_info_print("%s:%d:SREESH interface:%s set up\n", __func__, __LINE__,
                 interface->name);
             if (nl80211_interface_enable(interface->name, true) != 0) {
                 ret = nl80211_retry_interface_enable(interface, true);
                 if (ret != 0) {
-                    wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n", __func__,
+                    wifi_hal_error_print("%s:%d:SREESH Retry of interface enable failed:%d\n", __func__,
                         __LINE__, ret);
                 }
             }
@@ -1450,55 +1452,55 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
             // create the bridge
-            wifi_hal_info_print("%s:%d: interface:%s bss enabled:%d bridge:%s\n", __func__,
+            wifi_hal_info_print("%s:%d:SREESH interface:%s bss enabled:%d bridge:%s\n", __func__,
                 __LINE__, interface->name, vap->u.bss_info.enabled, vap->bridge_name);
             if (vap->bridge_name[0] != '\0' && vap->u.bss_info.enabled) {
-                wifi_hal_info_print("%s:%d: interface:%s create bridge:%s\n", __func__, __LINE__,
+                wifi_hal_info_print("%s:%d:SREESH interface:%s create bridge:%s\n", __func__, __LINE__,
                     interface->name, vap->bridge_name);
 #if defined(VNTXER5_PORT)
                 if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d",  vap->vap_index);
                     if (nl80211_create_bridge(mld_ifname, vap->bridge_name) != 0) {
-                        wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
+                        wifi_hal_error_print("%s:%d:SREESH interface:%s failed to create bridge:%s\n",
                             __func__, __LINE__, interface->name, vap->bridge_name);
                         continue;
                     }
-                    wifi_hal_info_print("%s:%d: interface:%s set bridge %s up\n", __func__, __LINE__,
+                    wifi_hal_info_print("%s:%d:SREESH interface:%s set bridge %s up\n", __func__, __LINE__,
                          mld_ifname, vap->bridge_name);
                 }
                 else if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
 #else
                 if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
 #endif
-                    wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
+                    wifi_hal_error_print("%s:%d:SREESH interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
                     continue;
                 }
-                wifi_hal_info_print("%s:%d: interface:%s set bridge %s up\n", __func__, __LINE__,
+                wifi_hal_info_print("%s:%d:SREESH interface:%s set bridge %s up\n", __func__, __LINE__,
                     interface->name, vap->bridge_name);
                 if (nl80211_interface_enable(vap->bridge_name, true) != 0) {
-                    wifi_hal_error_print("%s:%d: interface:%s failed to set bridge %s up\n",
+                    wifi_hal_error_print("%s:%d:SREESH interface:%s failed to set bridge %s up\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
                     continue;
                 }
             }
 
-            wifi_hal_info_print("%s:%d: interface:%s update hostapd params\n", __func__, __LINE__,
+            wifi_hal_info_print("%s:%d:SREESH interface:%s update hostapd params\n", __func__, __LINE__,
                 interface->name);
             if (update_hostap_interface_params(interface) != RETURN_OK) {
-                wifi_hal_error_print("%s:%d: interface:%s failed to update hostapd params\n",
+                wifi_hal_error_print("%s:%d:SREESH interface:%s failed to update hostapd params\n",
                     __func__, __LINE__, interface->name);
                 return RETURN_ERR;
             }
 
-            wifi_hal_info_print("%s:%d: interface:%s vap_initialized:%d\n", __func__, __LINE__,
+            wifi_hal_info_print("%s:%d:SREESH interface:%s vap_initialized:%d\n", __func__, __LINE__,
                 interface->name, interface->vap_initialized);
             if (interface->vap_initialized == true) {
-                wifi_hal_info_print("%s:%d: interface:%s bss_started:%d\n", __func__, __LINE__,
+                wifi_hal_info_print("%s:%d:SREESH interface:%s bss_started:%d\n", __func__, __LINE__,
                     interface->name, interface->bss_started);
                 if (!(interface->bss_started)) {
                     if (vap->u.bss_info.enabled && radio->configured && radio->oper_param.enable) {
-                        wifi_hal_info_print("%s:%d: interface:%s enable ap\n", __func__,
+                        wifi_hal_info_print("%s:%d:SREESH interface:%s enable ap\n", __func__,
                             __LINE__, interface->name);
                         interface->beacon_set = 0;
                         start_bss(interface);
@@ -1507,7 +1509,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 } else {
                     // reload vaps config
                     interface->beacon_set = 0;
-                    wifi_hal_info_print("%s:%d: interface:%s reload hostapd config\n", __func__,
+                    wifi_hal_info_print("%s:%d:SREESH interface:%s reload hostapd config\n", __func__,
                         __LINE__, interface->name);
                     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                     hostapd_reload_config(interface->u.ap.hapd.iface);
@@ -1518,11 +1520,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif
                     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-                    wifi_hal_info_print("%s:%d: interface:%s disable ap\n", __func__, __LINE__,
+                    wifi_hal_info_print("%s:%d:SREESH interface:%s disable ap\n", __func__, __LINE__,
                         interface->name);
                     nl80211_enable_ap(interface, false);
 
-                    wifi_hal_info_print("%s:%d: interface:%s free hostapd data\n", __func__,
+                    wifi_hal_info_print("%s:%d:SREESH interface:%s free hostapd data\n", __func__,
                         __LINE__, interface->name);
                     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                     hostapd_bss_deinit_no_free(&interface->u.ap.hapd);
@@ -1531,16 +1533,16 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                         hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
                     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-                    wifi_hal_info_print("%s:%d: interface:%s update hostapd params\n", __func__,
+                    wifi_hal_info_print("%s:%d:SREESH interface:%s update hostapd params\n", __func__,
                         __LINE__, interface->name);
                     if (update_hostap_interface_params(interface) != RETURN_OK) {
-                        wifi_hal_error_print("%s:%d: interface:%s failed to update hostapd "
+                        wifi_hal_error_print("%s:%d:SREESH interface:%s failed to update hostapd "
                             "params\n", __func__, __LINE__, interface->name);
                         return RETURN_ERR;
                     }
 
                     if (vap->u.bss_info.enabled && radio->configured && radio->oper_param.enable) {
-                        wifi_hal_info_print("%s:%d: interface:%s enable ap\n", __func__,
+                        wifi_hal_info_print("%s:%d:SREESH interface:%s enable ap\n", __func__,
                             __LINE__, interface->name);
                         interface->beacon_set = 0;
                         start_bss(interface);
@@ -1552,15 +1554,15 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 }
             } else {
                 interface->vap_initialized = true;
-                wifi_hal_info_print("%s:%d: radio index:%d update hostapd interfaces\n", __func__,
+                wifi_hal_info_print("%s:%d:SREESH radio index:%d update hostapd interfaces\n", __func__,
                     __LINE__, radio->index);
                 if (update_hostap_interfaces(radio)!= RETURN_OK) {
-                    wifi_hal_error_print("%s:%d: radio index:%d failed to update hostapd "
+                    wifi_hal_error_print("%s:%d:SREESH radio index:%d failed to update hostapd "
                         "interfaces\n", __func__, __LINE__, radio->index);
                     return RETURN_ERR;
                 }
                 if (vap->u.bss_info.enabled && radio->configured && radio->oper_param.enable) {
-                    wifi_hal_info_print("%s:%d: interface:%s enable ap\n", __func__,
+                    wifi_hal_info_print("%s:%d:SREESH interface:%s enable ap\n", __func__,
                         __LINE__, interface->name);
                     interface->beacon_set = 0;
                     start_bss(interface);
@@ -1568,7 +1570,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 }
             }
             if (radio->configured && radio->oper_param.enable) {
-                wifi_hal_info_print("%s:%d: interface:%s set %s\n", __func__, __LINE__,
+                wifi_hal_info_print("%s:%d:SREESH interface:%s set %s\n", __func__, __LINE__,
                     interface->name, vap->u.bss_info.enabled ? "up" : "down");
                 nl80211_interface_enable(interface->name, vap->u.bss_info.enabled);
 #if defined(VNTXER5_PORT)
@@ -1591,7 +1593,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         } else if (vap->vap_mode == wifi_vap_mode_sta) {
 #if defined(CONFIG_WIFI_EMULATOR) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
             if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
-                wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
+                wifi_hal_error_print("%s:%d:SREESH interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
             }
 
@@ -1599,7 +1601,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             nl80211_set_mac(interface);
             interface->vap_initialized = true;
             nl80211_interface_enable(interface->name, true);
-            wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
+            wifi_hal_info_print("%s:%d:SREESH interface:%s set operstate 1\n", __func__,
                     __LINE__, interface->name);
             wifi_drv_set_operstate(interface, 1);
 
@@ -1609,11 +1611,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             //nl80211_start_scan(interface);
             interface->vap_initialized = true;
             if (radio->configured && radio->oper_param.enable) {
-                wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
+                wifi_hal_info_print("%s:%d:SREESH interface:%s set operstate 1\n", __func__,
                     __LINE__, interface->name);
                 wifi_drv_set_operstate(interface, 1);
             } else {
-                wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__,
+                wifi_hal_info_print("%s:%d:SREESH interface:%s set down\n", __func__, __LINE__,
                     interface->name);
                 nl80211_interface_enable(interface->name, false);
             }
@@ -1648,10 +1650,10 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 //disabled
                 filtermode  = 0;
             }
-            wifi_hal_info_print("%s:%d: vap index:%d set mac filter mode:%d\n", __func__, __LINE__,
+            wifi_hal_info_print("%s:%d:SREESH vap index:%d set mac filter mode:%d\n", __func__, __LINE__,
                 vap->vap_index, filtermode);
             if (wifi_setApMacAddressControlMode(vap->vap_index, filtermode) < 0) {
-                wifi_hal_error_print("%s:%d: vap index:%d failed to set mac filter\n", __func__,
+                wifi_hal_error_print("%s:%d:SREESH vap index:%d failed to set mac filter\n", __func__,
                     __LINE__, vap->vap_index);
                 return RETURN_ERR;
             }
@@ -1659,11 +1661,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             re_configure_steering_mac_list(interface);
         }
         if (vap->vap_mode == wifi_vap_mode_ap) {
-            wifi_hal_info_print("%s:%d: vap index:%d set power:%d\n",  __func__, __LINE__,
+            wifi_hal_info_print("%s:%d:SREESH vap index:%d set power:%d\n",  __func__, __LINE__,
                 vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             if (wifi_setApManagementFramePowerControl(vap->vap_index,
                 vap->u.bss_info.mgmtPowerControl) != RETURN_OK) {
-                wifi_hal_error_print("%s:%d: vap index:%d failed to set power %d\n", __func__,
+                wifi_hal_error_print("%s:%d:SREESH vap index:%d failed to set power %d\n", __func__,
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             }
         }
