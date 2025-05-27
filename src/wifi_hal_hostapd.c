@@ -1156,7 +1156,7 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     conf->wmm_enabled = vap->u.bss_info.wmm_enabled;
     conf->wmm_uapsd = vap->u.bss_info.UAPSDEnabled;
     
-    if (strstr(vap->repurposed_vap_name, "managed_guest")) {
+    if (vap->u.bss_info.mdu_enabled) {
         conf->mdu = 1; // MDU should be declared inside hostapd_data structure along with connected_building_avp
         wifi_hal_info_print("%s:%d SREESH Value of conf->mdu = %d and vap_name = %s\n", __func__, __LINE__, conf->mdu, vap->vap_name);
     }
