@@ -47,7 +47,7 @@
 #include "ap/sta_info.h"
 #include "ap/dfs.h"
 #include "ap/wmm.h"
-#include "hs20.h"
+#include "ap/hs20.h"
 #include <sys/wait.h>
 #include <linux/if_ether.h>
 #ifdef __GLIBC__
