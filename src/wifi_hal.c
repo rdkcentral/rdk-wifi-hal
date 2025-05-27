@@ -1415,7 +1415,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
         memcpy((unsigned char *)&interface->vap_info, (unsigned char *)vap, sizeof(wifi_vap_info_t));
 
-        wifi_hal_info_print("%s:%d:SREESH interface:%s vap_name = %sset down\n", __func__, __LINE__, interface->name);
+        wifi_hal_info_print("%s:%d:SREESH interface:%s set down\n", __func__, __LINE__, interface->name);
         nl80211_interface_enable(interface->name, false);
 #ifndef CONFIG_WIFI_EMULATOR
         if (vap->vap_mode == wifi_vap_mode_sta) {
