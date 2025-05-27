@@ -1313,7 +1313,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     platform_create_vap_t set_vap_params_fn;
     unsigned int i;
     char msg[2048];
-    int ret = 0;
+    int ret = RETURN_OK;
 #ifdef NL80211_ACL
     int set_acl = 0;
 #else
@@ -1503,7 +1503,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                         wifi_hal_info_print("%s:%d:SREESH interface:%s enable ap\n", __func__,
                             __LINE__, interface->name);
                         interface->beacon_set = 0;
-                        start_bss(interface);
+                        ret = start_bss(interface);
                         interface->bss_started = true;
                     }
                 } else {
@@ -1545,7 +1545,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                         wifi_hal_info_print("%s:%d:SREESH interface:%s enable ap\n", __func__,
                             __LINE__, interface->name);
                         interface->beacon_set = 0;
-                        start_bss(interface);
+                        ret = start_bss(interface);
                         interface->bss_started = true;
                     }
                     else {
@@ -1565,7 +1565,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     wifi_hal_info_print("%s:%d:SREESH interface:%s enable ap\n", __func__,
                         __LINE__, interface->name);
                     interface->beacon_set = 0;
-                    start_bss(interface);
+                    ret = start_bss(interface);
                     interface->bss_started = true;
                 }
             }
@@ -1686,7 +1686,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         set_vap_params_fn(index, map);
     }
 
-    return RETURN_OK;
+    return ret;
 }
 
 INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)

@@ -127,24 +127,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
-    char output_val[BPI_LEN_32];
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
-
-    if (map == NULL)
-    {
-        wifi_hal_dbg_print("%s:%d: wifi_vap_info_map_t *map is NULL \n", __func__, __LINE__);
-    }
-    for (index = 0; index < map->num_vaps; index++)
-    {
-      if (map->vap_array[index].vap_mode == wifi_vap_mode_ap)
-      {
-	//   Assigning default radius values 
-	    wifi_nvram_defaultRead("radius_s_port",output_val);
-	    map->vap_array[index].u.bss_info.security.u.radius.s_port = atoi(output_val);
-	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[index].u.bss_info.security.u.radius.s_ip);
-	    wifi_nvram_defaultRead("radius_key",map->vap_array[index].u.bss_info.security.u.radius.s_key);
-      }
-    } 
     return 0;
 }
 
@@ -240,7 +223,30 @@ int nvram_get_current_ssid(char *l_ssid, int vap_index)
 
 int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    char output_val[BPI_LEN_32];
+    int i;
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+
+    if (map == NULL)
+    {
+        wifi_hal_dbg_print("%s:%d: wifi_vap_info_map_t *map is NULL \n", __func__, __LINE__);
+    }
+    for (i = 0; i < map->num_vaps; i++)
+    {
+      if (map->vap_array[i].vap_mode == wifi_vap_mode_ap)
+      {
+	    if ((get_security_mode_support_radius(map->vap_array[i].u.bss_info.security.mode)) || is_wifi_hal_vap_lnf_radius(map->vap_array[i].vap_index) || is_wifi_hal_vap_hotspot_secure(map->vap_array[i].vap_index)) {
+	//   Assigning default radius values
+	    wifi_nvram_defaultRead("radius_s_port",output_val);
+	    map->vap_array[i].u.bss_info.security.u.radius.s_port = atoi(output_val);
+	    map->vap_array[i].u.bss_info.security.u.radius.port = atoi(output_val);
+	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.s_ip);
+	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.ip);
+	    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.s_key);
+	    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.key);
+	    }
+      }
+    }
     return 0;
 }
 
