@@ -8222,7 +8222,6 @@ static void parse_eht_capa(const uint8_t type, uint8_t len, const uint8_t *data,
     bss->supp_standards |= WIFI_80211_VARIANT_BE;
     bss->oper_standards = WIFI_80211_VARIANT_BE;
 }
-#endif /* CONFIG_IEEE80211BE */
 
 static void parse_eht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
     const struct parse_ies_data *ie_buffer, wifi_bss_info_t *bss)
@@ -8253,6 +8252,8 @@ static void parse_eht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
     bss->supp_standards |= WIFI_80211_VARIANT_BE;
     bss->oper_standards = WIFI_80211_VARIANT_BE;
 }
+
+#endif /* CONFIG_IEEE80211BE */
 
 static void parse_bss_load(const uint8_t type, uint8_t len, const uint8_t *data,
             const struct parse_ies_data *ie_buffer, wifi_bss_info_t *bss)
