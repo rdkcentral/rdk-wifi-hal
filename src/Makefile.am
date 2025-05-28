@@ -125,8 +125,7 @@ librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/banana-pi -I${PKG_CONF
 librdk_wifihal_la_SOURCES += ../platform/banana-pi/platform.c
 endif
 
-include_HEADERS = wifi_hal_rdk.h wifi_hal_rdk_framework.h ieee80211.h hs20.h ../util_crypto/aes_siv.h 
->>>>>>> 36cf454... RDKB-57273 Fix for After enabling passpoint on 6 ghz Xfinity ssid , client doesnot connect to the ssid (#205)
+include_HEADERS = wifi_hal_rdk.h wifi_hal_rdk_framework.h ieee80211.h ../util_crypto/aes_siv.h 
 
 if ONE_WIFIBUILD
 include_HEADERS += wifi_hal_priv.h wifi_hal_wnm_rrm.h
