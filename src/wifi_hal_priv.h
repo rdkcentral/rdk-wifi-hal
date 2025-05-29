@@ -538,6 +538,13 @@ typedef struct {
     wifi_hal_frame_hook_fn_t frame_hooks_fn[MAX_APPS];
 } wifi_device_frame_hooks_t;
 
+typedef struct wifi_hal_rate_limit {
+    bool enabled;
+    int rate_limit;
+    int window_size;
+    int cooldown_time;
+} wifi_hal_mgt_frame_rate_limit_t;
+
 typedef struct {
     pthread_t nl_tid;
     pthread_t hapd_eloop_tid;
@@ -561,6 +568,8 @@ typedef struct {
 #endif
     pthread_mutexattr_t hapd_lock_attr;
     pthread_mutex_t hapd_lock;
+    hash_map_t *mgt_frame_rate_limit_hashmap;
+    wifi_hal_mgt_frame_rate_limit_t mgt_frame_rate_limit;
 } wifi_hal_priv_t;
 
 extern wifi_hal_priv_t g_wifi_hal;
@@ -970,6 +979,9 @@ int update_hostap_mlo(wifi_interface_info_t *interface);
 
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio);
 void wifi_hal_configure_mbssid(wifi_radio_info_t *radio);
+
+void wifi_hal_set_mgt_frame_rate_limit(bool enable, int rate_limit, int window_size,
+    int cooldown_time);
 
 #ifdef __cplusplus
 }

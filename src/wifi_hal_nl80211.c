@@ -140,6 +140,16 @@ typedef enum {
 } wlan_emu_msg_type_t;
 #endif //defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
 
+#define RATE_LIMIT_HASH_MAP_SIZE 200
+
+typedef struct rate_limit_entry {
+    mac_address_t mac;
+    int packet_count;
+    time_t window_start;
+    time_t blocked_until;
+    time_t last_activity;
+} rate_limit_entry_t;
+
 void prepare_interface_fdset(wifi_hal_priv_t *priv)
 {
     wifi_radio_info_t *radio;
@@ -838,6 +848,123 @@ bool is_sta_in_blocked_state(wifi_interface_info_t *interface, mac_address_t sta
     return false;
 }
 
+void wifi_hal_set_mgt_frame_rate_limit(bool enable, int rate_limit, int window_size,
+    int cooldown_time)
+{
+    wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
+
+    wifi_hal_dbg_print("%s:%d: enable:%d rate_limit:%d window_size:%d cooldown_time:%d\n", __func__,
+        __LINE__, enable, rate_limit, window_size, cooldown_time);
+
+    rl->enabled = enable;
+    rl->rate_limit = rate_limit;
+    rl->window_size = window_size;
+    rl->cooldown_time = cooldown_time;
+}
+
+static void wifi_hal_rate_limit_cleanup(void)
+{
+    int entry_expire_time;
+    mac_addr_str_t mac_str;
+    rate_limit_entry_t *entry, *tmp_entry;
+    time_t time_now = get_boot_time_in_sec();
+    wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
+
+    entry_expire_time = 2 * (rl->window_size + rl->cooldown_time);
+
+    hash_map_foreach_safe(g_wifi_hal.mgt_frame_rate_limit_hashmap, entry, tmp_entry) {
+        if (difftime(time_now, entry->last_activity) >= entry_expire_time) {
+            free(hash_map_remove(g_wifi_hal.mgt_frame_rate_limit_hashmap,
+                to_mac_str(entry->mac, mac_str)));
+        }
+    }
+}
+
+static rate_limit_entry_t *wifi_hal_rate_limit_entry_get(mac_address_t mac)
+{
+    time_t time_now;
+    mac_addr_str_t mac_str;
+    rate_limit_entry_t *entry;
+
+    if (g_wifi_hal.mgt_frame_rate_limit_hashmap == NULL) {
+        g_wifi_hal.mgt_frame_rate_limit_hashmap = hash_map_create();
+    }
+
+    time_now = get_boot_time_in_sec();
+    to_mac_str(mac, mac_str);
+    entry = hash_map_get(g_wifi_hal.mgt_frame_rate_limit_hashmap, mac_str);
+    if (entry != NULL) {
+        entry->last_activity = time_now;
+        return entry;
+    }
+
+    if (hash_map_count(g_wifi_hal.mgt_frame_rate_limit_hashmap) >= RATE_LIMIT_HASH_MAP_SIZE) {
+        wifi_hal_error_print("%s:%d: failed to add client to hash map, size limit %d reached\n",
+            __func__, __LINE__, RATE_LIMIT_HASH_MAP_SIZE);
+        return NULL;
+    }
+
+    entry = calloc(1, sizeof(rate_limit_entry_t));
+    if (entry == NULL) {
+        wifi_hal_error_print("%s:%d: failed to alloc rate limit entry\n", __func__, __LINE__);
+        return NULL;
+    }
+
+    memcpy(entry->mac, mac, sizeof(mac_address_t));
+    entry->window_start = time_now;
+    entry->last_activity = time_now;
+    hash_map_put(g_wifi_hal.mgt_frame_rate_limit_hashmap, strdup(mac_str), entry);
+
+    return entry;
+}
+
+static bool is_wifi_hal_rate_limit_block(unsigned short stype, mac_address_t mac)
+{
+    time_t time_now;
+    mac_addr_str_t mac_str;
+    rate_limit_entry_t *entry;
+    wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
+
+    if (!rl->enabled || rl->rate_limit <= 0 || rl->window_size <= 0 || rl->cooldown_time <= 0) {
+        return false;
+    }
+
+    if (stype != WLAN_FC_STYPE_AUTH && stype != WLAN_FC_STYPE_DEAUTH) {
+        return false;
+    }
+
+    wifi_hal_rate_limit_cleanup();
+
+    entry = wifi_hal_rate_limit_entry_get(mac);
+    if (entry == NULL) {
+        return false;
+    }
+
+    time_now = get_boot_time_in_sec();
+    if (time_now < entry->blocked_until) {
+        return true;
+    }
+
+    if (difftime(time_now, entry->window_start) >= rl->window_size) {
+        entry->packet_count = 0;
+        entry->window_start = time_now;
+    }
+
+    if (entry->packet_count < rl->rate_limit) {
+        entry->packet_count++;
+        return false;
+    }
+
+    wifi_hal_info_print(
+        "%s:%d: blocked frame type:%d from:%s due to rate limit:%d frames per %d sec for %d sec\n",
+        __func__, __LINE__, stype, to_mac_str(mac, mac_str), rl->rate_limit, rl->window_size,
+        rl->cooldown_time);
+
+    entry->blocked_until = time_now + rl->cooldown_time;
+
+    return true;
+}
+
 #ifdef CMXB7_PORT
 int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *mgmt, u16 reason, int sig_dbm, int snr, int phy_rate, unsigned int len) {
 #else
@@ -901,6 +1028,10 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
     fc = le_to_host16(mgmt->frame_control);
     stype = WLAN_FC_GET_STYPE(fc);
+
+    if (is_wifi_hal_rate_limit_block(stype, sta)) {
+        return 0;
+    }
 
     switch(stype) {
     case WLAN_FC_STYPE_AUTH:

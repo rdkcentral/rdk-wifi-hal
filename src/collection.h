@@ -68,4 +68,8 @@ void     *hash_map_get_next    (hash_map_t *map, void *data);
 #define hash_map_foreach(map, p) \
     for (p = hash_map_get_first(map); p != NULL; p = hash_map_get_next(map, p))
 
+#define hash_map_foreach_safe(map, p, tmp)                                                     \
+    for (p = hash_map_get_first(map), tmp = (p ? hash_map_get_next(map, p) : NULL); p != NULL; \
+        p = tmp, tmp = (p ? hash_map_get_next(map, p) : NULL))
+
 #endif // _COLLECTION_H_
