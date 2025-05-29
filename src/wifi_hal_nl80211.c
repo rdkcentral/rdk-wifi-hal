@@ -8253,6 +8253,36 @@ static void parse_eht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
 
 #endif /* CONFIG_IEEE80211BE */
 
+static void parse_eht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
+    const struct parse_ies_data *ie_buffer, wifi_bss_info_t *bss)
+{
+    (void)type;
+    (void)ie_buffer;
+
+    if ((data[1] & EHT_OPER_INFO_PRESENT) && len >= 7) {
+        switch (data[6] & 0x07) {
+        case EHT_OPER_CHANNEL_WIDTH_40MHZ:
+            bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_40MHZ;
+            break;
+        case EHT_OPER_CHANNEL_WIDTH_80MHZ:
+            bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_80MHZ;
+            break;
+        case EHT_OPER_CHANNEL_WIDTH_160MHZ:
+            bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_160MHZ;
+            break;
+        case EHT_OPER_CHANNEL_WIDTH_320MHZ:
+            bss->oper_chan_bw = WIFI_CHANNELBANDWIDTH_320MHZ;
+            break;
+        default:
+            wifi_hal_error_print("%s:%d: Unknown EHT channel width\n", __func__, __LINE__);
+            break;
+        }
+    }
+
+    bss->supp_standards |= WIFI_80211_VARIANT_BE;
+    bss->oper_standards = WIFI_80211_VARIANT_BE;
+}
+
 static void parse_bss_load(const uint8_t type, uint8_t len, const uint8_t *data,
             const struct parse_ies_data *ie_buffer, wifi_bss_info_t *bss)
 {
@@ -14209,6 +14239,7 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
     size_t i, len = *current_len;
     u8 bss_param, tbtt_count = 0;
     u8 *tbtt_count_pos, *eid_start = eid, *size_offset = eid - len + 1;
+    wifi_interface_info_t *interface_iter, *tx_interface;
     wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
@@ -14233,8 +14264,10 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
         return eid_start;
     }
 
-    interface = hash_map_get_first(radio->interface_map);
-    while (interface) {
+    tx_interface = wifi_hal_get_mbssid_tx_interface(radio);
+
+    interface_iter = hash_map_get_first(radio->interface_map);
+    while (interface_iter != NULL) {
         if (!len || len + RNR_TBTT_HEADER_LEN + RNR_TBTT_INFO_LEN > 255) {
             eid_start = eid;
             *eid++ = WLAN_EID_REDUCED_NEIGHBOR_REPORT;
@@ -14250,12 +14283,13 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
         len += RNR_TBTT_HEADER_LEN;
 
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-        for (;interface; interface = hash_map_get_next(radio->interface_map, interface)) {
+        for (; interface_iter != NULL;
+            interface_iter = hash_map_get_next(radio->interface_map, interface_iter)) {
 
             bss_param = 0;
-            hapd = &interface->u.ap.hapd;
+            hapd = &interface_iter->u.ap.hapd;
 
-            if (!hapd->conf || !hapd->started) {
+            if (hapd->conf == NULL || hapd->iconf == NULL || !hapd->started) {
                 continue;
             }
 
@@ -14269,15 +14303,21 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
             memcpy(eid, &hapd->conf->ssid.short_ssid, 4);
             eid += 4;
 
-            bss_param |= RNR_BSS_PARAM_MULTIPLE_BSSID;
+            bss_param |= hapd->iconf->mbssid != MBSSID_DISABLED ? RNR_BSS_PARAM_MULTIPLE_BSSID : 0;
 
-            if (is_wifi_hal_vap_private(interface->vap_info.vap_index)) {
+            if (interface_iter == tx_interface) {
                 bss_param |= RNR_BSS_PARAM_TRANSMITTED_BSSID;
             }
 
             if (is_6ghz_op_class(hapd->iconf->op_class) &&
                 hapd->conf->unsol_bcast_probe_resp_interval) {
                 bss_param |= RNR_BSS_PARAM_UNSOLIC_PROBE_RESP_ACTIVE;
+            }
+
+            if (interface->u.ap.hapd.conf != NULL &&
+                strncmp(interface->u.ap.hapd.conf->ssid.ssid, hapd->conf->ssid.ssid,
+                    sizeof(hapd->conf->ssid.ssid)) == 0) {
+                bss_param |= RNR_BSS_PARAM_SAME_SSID;
             }
 
             bss_param |= RNR_BSS_PARAM_CO_LOCATED | RNR_BSS_PARAM_MEMBER_CO_LOCATED_ESS;
