@@ -21,19 +21,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <errno.h>
 #include <unistd.h>
 #include <net/if_arp.h>
 #include <arpa/inet.h>
 #include <net/if.h>
-#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
 #include "wifi_hal.h"
 #include "wifi_hal_rdk.h"
+#include "wifi_hal_priv.h"
 #include "pcap.h"
 #include "ieee80211.h"
 
@@ -199,32 +198,6 @@ int parse_mgmt_frame(struct ieee80211_frame *frame, size_t len, frame_test_arg_t
 int parse_ctl_frame(struct ieee80211_frame *frame, size_t len, frame_test_arg_t *arg, wifi_direction_t dir)
 {
     return RETURN_ERR;
-}
-
-int get_mac_address (char *intf_name,  mac_address_t mac)
-{
-#ifdef LINUX_PORT
-    int sock;
-    struct ifreq ifr;
-
-    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        printf("Failed to create socket\n");
-        return -1;
-    }
-
-    ifr.ifr_addr.sa_family = AF_INET;
-       strcpy(ifr.ifr_name, intf_name);
-    if (ioctl(sock, SIOCGIFHWADDR, &ifr) != 0) {
-        close(sock);
-        printf("ioctl failed to get hardware address\n");
-        return -1;
-    }
-
-    memcpy(mac, (unsigned char *)ifr.ifr_hwaddr.sa_data, sizeof(mac_address_t));
-    close(sock);
-#endif
-
-    return 0;
 }
 
 int parse_frame(unsigned char *data, size_t len, frame_test_arg_t *arg, wifi_direction_t *frame_dir)

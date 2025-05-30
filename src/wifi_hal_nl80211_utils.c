@@ -27,6 +27,7 @@
 #include <stdarg.h>
 #include <pthread.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <net/if.h>
 #include <linux/rtnetlink.h>
 #include <netpacket/packet.h>
@@ -1577,6 +1578,28 @@ int getIpStringFromAdrress (char * ipString, ip_addr_t * ip)
     return 1;
 }
 #endif
+
+int get_mac_address (char *intf_name,  mac_address_t mac)
+{
+    int sock;
+    struct ifreq ifr;
+
+    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        return RETURN_ERR;
+    }
+
+    ifr.ifr_addr.sa_family = AF_INET;
+    strcpy(ifr.ifr_name, intf_name);
+    if (ioctl(sock, SIOCGIFHWADDR, &ifr) != 0) {
+        close(sock);
+        return RETURN_ERR;
+    }
+
+    memcpy(mac, (unsigned char *)ifr.ifr_hwaddr.sa_data, sizeof(mac_address_t));
+    close(sock);
+
+    return RETURN_OK;
+}
 
 int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *interface)
 {
