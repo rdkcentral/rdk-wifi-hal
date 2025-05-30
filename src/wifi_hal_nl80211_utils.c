@@ -1961,37 +1961,14 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
         break;
 
     case wifi_encryption_aes:
-#ifdef CONFIG_IEEE80211BE
-        {
-            const wifi_interface_info_t * const interface = get_interface_by_vap_index(vap_index);
-            if (NULL == interface) {
-                wifi_hal_error_print("%s:%d NULL pointer!\n", __FUNCTION__, __LINE__);
-                return RETURN_ERR;
-            }
-            unsigned char has_gcmp256 = 0;
-            if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
-                const wifi_security_modes_t security_mode = interface->vap_info.u.bss_info.security.mode;
-                switch (security_mode) {
-                case wifi_security_mode_wpa3_personal:
-                case wifi_security_mode_wpa3_transition:
-                case wifi_security_mode_wpa3_enterprise:
-                case wifi_security_mode_wpa3_compatibility:
-                    has_gcmp256 = !interface->u.ap.conf.disable_11be;
-                    break;
-                default:
-                    break;
-                }
-            }
-            if (has_gcmp256) {
-                strcpy(encryption_mode_str, "aes+gcmp256");
-            } else {
-                strcpy(encryption_mode_str, "aes");
-            }
-        }
-#else
         strcpy(encryption_mode_str, "aes");
-#endif /* CONFIG_IEEE80211BE */
         break;
+
+#ifdef CONFIG_IEEE80211BE
+    case wifi_encryption_aes_gcmp256:
+        strcpy(encryption_mode_str, "aes+gcmp256");
+        break;
+#endif /* CONFIG_IEEE80211BE */
 
     case wifi_encryption_aes_tkip:
         strcpy(encryption_mode_str, "tkip+aes");
