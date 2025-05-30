@@ -1961,7 +1961,11 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
         break;
 
     case wifi_encryption_aes:
+        strcpy(encryption_mode_str, "aes");
+        break;
+
 #ifdef CONFIG_IEEE80211BE
+    case wifi_encryption_aes_gcmp256:
         {
             const wifi_interface_info_t * const interface = get_interface_by_vap_index(vap_index);
             if (NULL == interface) {
@@ -1985,13 +1989,12 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
             if (has_gcmp256) {
                 strcpy(encryption_mode_str, "aes+gcmp256");
             } else {
-                strcpy(encryption_mode_str, "aes");
+	        // XXX: This may be 'default' behaviour.
+	        // strcpy(encryption_mode_str, "aes");
             }
-        }
-#else
-        strcpy(encryption_mode_str, "aes");
-#endif /* CONFIG_IEEE80211BE */
+	}
         break;
+#endif /* CONFIG_IEEE80211BE */
 
     case wifi_encryption_aes_tkip:
         strcpy(encryption_mode_str, "tkip+aes");
