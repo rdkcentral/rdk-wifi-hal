@@ -213,33 +213,37 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     // CM mac
     memset(output, '\0', sizeof(output));
 #if defined (_PLATFORM_BANANAPI_R4_)
-    _syscmd("ifconfig erouter0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    if (strlen(output) == 0) {
-        _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+    if (get_mac_address("erouter0", hal->wifi_prop.cm_mac) != RETURN_OK) {
+       if (get_mac_address("eth0", hal->wifi_prop.cm_mac) != RETURN_OK) {
+            wifi_hal_error_print("%s:%d: Unable to get CM mac address\n", __func__, __LINE__);
+            memset(hal->wifi_prop.cm_mac, 0, sizeof(hal->wifi_prop.cm_mac));
+       }
     }
 #else
     _syscmd("grep -a 'CM' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
-#endif
     len = strnlen(output, sizeof(output));
     if (len != 0 && output[len - 1] == '\n') {
         output[len - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.cm_mac);
+#endif
+
 
     memset(output, '\0', sizeof(output));
 #if defined (_PLATFORM_BANANAPI_R4_)
-    _syscmd("ifconfig erouter0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    if (strlen(output) == 0) {
-        _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+    if (get_mac_address("erouter0", hal->wifi_prop.al_1905_mac) != RETURN_OK) {
+       if (get_mac_address("eth0", hal->wifi_prop.al_1905_mac) != RETURN_OK) {
+            wifi_hal_error_print("%s:%d: Unable to get AL mac address\n", __func__, __LINE__);
+            memset(hal->wifi_prop.al_1905_mac, 0, sizeof(hal->wifi_prop.al_1905_mac));
+       }
     }
 #else
-    _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-#endif
-    len = strnlen(output, sizeof(output));
-    if (len != 0 && output[len - 1] == '\n') {
-        output[len - 1] = '\0';
+    if (get_mac_address("eth0", hal->wifi_prop.al_1905_mac) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: Unable to get AL mac address\n", __func__, __LINE__);
+        memset(hal->wifi_prop.al_1905_mac, 0, sizeof(hal->wifi_prop.al_1905_mac));
     }
-    to_mac_bytes(output,hal->wifi_prop.al_1905_mac);
+#endif
+
 #elif (defined (_PLATFORM_RASPBERRYPI_))
    /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
@@ -269,20 +273,16 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
     // CM mac
     memset(output, '\0', sizeof(output));
-    _syscmd("ifconfig eth0 | grep -oE 'ether [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    len = strnlen(output, sizeof(output));
-    if (len != 0 && output[len - 1] == '\n') {
-        output[len - 1] = '\0';
+    if (get_mac_address("eth0", hal->wifi_prop.cm_mac) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: Unable to get CM mac address\n", __func__, __LINE__);
+        memset(hal->wifi_prop.cm_mac, 0, sizeof(hal->wifi_prop.cm_mac));
     }
-    to_mac_bytes(output,hal->wifi_prop.cm_mac);
 
     memset(output, '\0', sizeof(output));
-    _syscmd("ifconfig eth0 | grep -oE 'ether [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    len = strnlen(output, sizeof(output));
-    if (len != 0 && output[len - 1] == '\n') {
-        output[len - 1] = '\0';
+    if (get_mac_address("eth0", hal->wifi_prop.al_1905_mac) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: Unable to get AL mac address\n", __func__, __LINE__);
+        memset(hal->wifi_prop.al_1905_mac, 0, sizeof(hal->wifi_prop.al_1905_mac));
     }
-    to_mac_bytes(output,hal->wifi_prop.al_1905_mac);
 #endif
 
     /* Read the al_mac address from EM_CFG_FILE */
@@ -4343,7 +4343,7 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
 #endif
 
     os_free(buf);
-    wifi_hal_dbg_print("%s:%d:Exit for mgmt fame on %d\n", __func__, __LINE__, apIndex);
+    wifi_hal_dbg_print("%s:%d:Exit for mgmt frame on AP (%d), IF (%d)\n", __func__, __LINE__, apIndex, interface->index);
     return res;
 }
 
