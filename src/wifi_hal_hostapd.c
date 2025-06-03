@@ -786,10 +786,10 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 	    if (output[strlen(output) - 1] == '\n') {
            output[strlen(output) - 1] = '\0';
         }
-        if (conf->nas_identifier) {
+       /* if (conf->nas_identifier) {
             wifi_hal_info_print("%s:%d, NAS identifier %s\n", __func__, __LINE__, conf->nas_identifier);
             free(conf->nas_identifier);
-        } 
+        }  */
         conf->nas_identifier = strdup(output);
         wifi_hal_dbg_print("%s:%d, Updating NAS identifier %s\n", __func__, __LINE__, output);
         memset(output, '\0', sizeof(output));
