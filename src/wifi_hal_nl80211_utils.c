@@ -1188,6 +1188,18 @@ BOOL is_wifi_hal_vap_hotspot_from_interfacename(char *interface_name)
     return false;
 }
 
+BOOL is_wifi_hal_vap_lnf_psk_from_interfacename(char *interface_name)
+{
+    unsigned int index = 0;
+    for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
+        if ((strcmp(interface_index_map[index].interface_name, interface_name) == 0) &&
+                (strncmp(interface_index_map[index].vap_name, "lnf_psk", strlen("lnf_psk")) == 0)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 BOOL is_wifi_hal_6g_radio_from_interfacename(char *interface_name)
 {
     unsigned int index = 0;
