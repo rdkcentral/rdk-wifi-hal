@@ -1078,6 +1078,7 @@ BOOL is_wifi_hal_vap_hotspot_secure(UINT ap_index);
 BOOL is_wifi_hal_vap_lnf_radius(UINT ap_index);
 BOOL is_wifi_hal_vap_mesh_sta(UINT ap_index);
 BOOL is_wifi_hal_vap_hotspot_from_interfacename(char *interface_name);
+BOOL is_wifi_hal_vap_lnf_psk_from_interfacename(char *interface_name);
 
 BOOL is_wifi_hal_6g_radio_from_interfacename(char *interface_name);
 
