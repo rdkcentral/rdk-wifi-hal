@@ -3689,7 +3689,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name, bool mdu_ena
     }
 #endif
 
-    wifi_hal_info_print("%s:%d:SREESH bridge:%s interface:%s is hotspot:%d is lnf_psk:%d is_mdu_enabled:%d\n", __func__, __LINE__,
+    wifi_hal_info_print("%s:%d: bridge:%s interface:%s is hotspot:%d is lnf_psk:%d is_mdu_enabled:%d\n", __func__, __LINE__,
         br_name, if_name, is_hotspot_interface, is_lnf_psk_interface, mdu_enabled);
 
     if (access(OVS_MODULE, F_OK) == 0 && !is_hotspot_interface && !(is_lnf_psk_interface && mdu_enabled)) {
@@ -3722,7 +3722,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name, bool mdu_ena
 
     if(is_lnf_psk_interface && mdu_enabled && (ovs_if_get_br(ovs_brname,ifname) == 0)) {
         int status = nl80211_remove_from_bridge(if_name);
-        wifi_hal_info_print("%s:%d SREESH inside is_lnf_psk_interface && mdu_enabled for LnF interface:%s and have called the nl80211_remove_from_bridge from ovs_brname:%s with return status %d\n",  __func__, __LINE__, if_name,ovs_brname, status);
+        wifi_hal_info_print("%s:%d is_lnf_psk_interface && mdu_enabled for LnF interface:%s and have called the nl80211_remove_from_bridge from ovs_brname:%s with return status %d\n",  __func__, __LINE__, if_name,ovs_brname, status);
     }
 
     sk = nl_socket_alloc();

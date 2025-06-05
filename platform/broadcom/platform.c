@@ -1720,31 +1720,7 @@ int platform_update_radio_presence(void)
 
 int platform_get_acl_num(int vap_index, uint *acl_count)
 {
-    /*
-    char interface_name[8] = {0};
-    struct maclist *acllist;
-    if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
-        wifi_hal_error_print("%s:%dSREESH failed to get interface name for vap index: %d, err: %d (%s)\n",
-            __func__, __LINE__, vap_index, errno, strerror(errno));
-        return RETURN_ERR;
-    }
-    acllist = malloc(WLC_IOCTL_MEDLEN);
-    if (!acllist) {
-        wifi_hal_error_print("%s:%dSREESH failed to allocate memory for maclist, err: %d (%s)\n", __func__,
-            __LINE__, errno, strerror(errno));
-        return RETURN_ERR;
-    }
-    acllist->count = (WLC_IOCTL_MEDLEN - sizeof(int)) / ETHER_ADDR_LEN;
-    wifi_hal_info_print("%s:%d SREESH Value of interface_name is %s acllist->count = %d \n", __func__, __LINE__, interface_name,acllist->count);
-    if (wl_ioctl(interface_name, WLC_GET_MACLIST, acllist, WLC_IOCTL_MEDLEN) < 0) {
-        wifi_hal_error_print("%s:%dSREESH failed to get maclist for %s, err: %d (%s)\n", __func__,
-            __LINE__, interface_name, errno, strerror(errno));
-        return RETURN_ERR;
-    }
-    *acl_count = acllist->count;
-    wifi_hal_error_print("%s:%dSREESH vap[%d] acl count %d\n", __func__, __LINE__, vap_index, *acl_count);//Change to dbg print later
-    */
-    return RETURN_OK;
+    return 0;
 }
 
 int nvram_get_mgmt_frame_power_control(int vap_index, int* output_dbm)
