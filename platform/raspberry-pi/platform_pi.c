@@ -369,12 +369,163 @@ int wifi_setApRetrylimit(void *priv)
     return 0;
 }
 
+static int get_channel_stats_handler(struct nl_msg *msg, void *arg)
+{
+    int i, rem;
+    unsigned int freq;
+    unsigned char channel;
+    struct nlattr *tb[NL80211_ATTR_MAX + 1];
+    struct nlattr *survey_info[NL80211_SURVEY_INFO_MAX + 1];
+    struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+    static struct nla_policy survey_policy[NL80211_SURVEY_INFO_MAX + 1] = {
+                [NL80211_SURVEY_INFO_FREQUENCY] = { .type = NLA_U32 },
+                [NL80211_SURVEY_INFO_NOISE] = { .type = NLA_S32 },
+                [NL80211_SURVEY_INFO_TIME] = { .type = NLA_U64 },
+                [NL80211_SURVEY_INFO_TIME_BUSY] = { .type = NLA_U64 },
+                [NL80211_SURVEY_INFO_TIME_EXT_BUSY] = { .type = NLA_U64 },
+                [NL80211_SURVEY_INFO_TIME_RX] = { .type = NLA_U64 },
+                [NL80211_SURVEY_INFO_TIME_TX] = { .type = NLA_U64 },
+                [NL80211_SURVEY_INFO_TIME_SCAN] = { .type = NLA_U64 },
+                [NL80211_SURVEY_INFO_TIME_BSS_RX] = { .type = NLA_U64 },
+    };
+    channel_stats_arr_t *stats = (channel_stats_arr_t *)arg;
+
+    for (i = 0; i < stats->arr_size; i++) {
+        wifi_hal_dbg_print("%s:%d stats->arr[%d].ch_number : %d\n", __func__, __LINE__,
+            i, stats->arr[i].ch_number);
+    }
+
+
+    if (nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),genlmsg_attrlen(gnlh, 0),
+        NULL) < 0) {
+        wifi_hal_error_print("%s:%d Failed to parse survey data\n", __func__, __LINE__);
+        return NL_SKIP;
+    }
+
+    if (!tb[NL80211_ATTR_SURVEY_INFO]) {
+        wifi_hal_error_print("%s:%d Failed to get survey info attribute\n", __func__, __LINE__);
+        return NL_SKIP;
+    }
+
+    if (nla_parse_nested(survey_info, NL80211_SURVEY_INFO_MAX, tb[NL80211_ATTR_SURVEY_INFO], survey_policy)) {
+        wifi_hal_error_print("%s:%d Failed to parse nested attributes\n", __func__, __LINE__);
+        return NL_SKIP;
+    }
+
+    for (i = 0; i <= NL80211_SURVEY_INFO_MAX; i++) {
+        if (survey_policy[i].type != 0 && survey_info[i] == NULL) {
+            wifi_hal_stats_error_print("%s:%d Survey info attribute %d is missing\n", __func__,
+                __LINE__, i);
+        }
+    }
+
+    freq = nla_get_u32(survey_info[NL80211_SURVEY_INFO_FREQUENCY]);
+    if (ieee80211_freq_to_chan(freq, &channel) == NUM_HOSTAPD_MODES) {
+        wifi_hal_stats_error_print("%s:%d Failed to convert frequency %u to channel\n", __func__,
+            __LINE__, freq);
+        return NL_SKIP;
+    }
+
+    for (i = 0; i < stats->arr_size && stats->arr[i].ch_number != channel; i++);
+    if (i == stats->arr_size) {
+        //continue;
+        wifi_hal_dbg_print("%s:%d continue - return\n", __func__, __LINE__);
+        return NL_SKIP;
+    }
+
+    if (survey_info[NL80211_SURVEY_INFO_FREQUENCY]) {
+        wifi_hal_dbg_print("%s:%d FREQUENCY: %u MHz\n",  __func__, __LINE__,
+            nla_get_u32(survey_info[NL80211_SURVEY_INFO_FREQUENCY]));
+    }
+    if (survey_info[NL80211_SURVEY_INFO_NOISE]) {
+        stats->arr[i].ch_noise =
+            nla_get_s32(survey_info[NL80211_SURVEY_INFO_NOISE]);
+    }
+    if (survey_info[NL80211_SURVEY_INFO_TIME]) {
+        stats->arr[i].ch_utilization_total =
+            nla_get_u64(survey_info[NL80211_SURVEY_INFO_TIME]);
+    }
+    if (survey_info[NL80211_SURVEY_INFO_TIME_BUSY]) {
+        stats->arr[i].ch_utilization_busy =
+            nla_get_u64(survey_info[NL80211_SURVEY_INFO_TIME_BUSY]);
+    }
+
+    if (survey_info[NL80211_SURVEY_INFO_TIME_TX]) {
+        stats->arr[i].ch_utilization_busy_tx =
+            nla_get_u64(survey_info[NL80211_SURVEY_INFO_TIME_TX]);
+    }
+
+    if (survey_info[NL80211_SURVEY_INFO_TIME_EXT_BUSY]) {
+        stats->arr[i].ch_utilization_busy_ext =
+            nla_get_u64(survey_info[NL80211_SURVEY_INFO_TIME_EXT_BUSY]);
+    }
+
+    if (survey_info[NL80211_SURVEY_INFO_TIME_RX]) {
+        stats->arr[i].ch_utilization_busy_rx =
+            nla_get_u64(survey_info[NL80211_SURVEY_INFO_TIME_RX]);
+    }
+
+    if (survey_info[NL80211_SURVEY_INFO_TIME_SCAN]) {
+    }
+
+    if (survey_info[NL80211_SURVEY_INFO_TIME_BSS_RX]) {
+    }
+
+    return NL_SKIP;
+}
+
+static int get_channel_stats(wifi_interface_info_t *interface,
+    wifi_channelStats_t *channel_stats_arr, int channel_stats_arr_size)
+{
+    struct nl_msg *msg;
+    int ret = RETURN_ERR;
+    channel_stats_arr_t stats = { .arr = channel_stats_arr, .arr_size = channel_stats_arr_size };
+
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, NLM_F_DUMP, NL80211_CMD_GET_SURVEY);
+    if (msg == NULL) {
+        wifi_hal_stats_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    ret = nl80211_send_and_recv(msg, get_channel_stats_handler, &stats, NULL, NULL);
+    if (ret) {
+        wifi_hal_stats_error_print("%s:%d Failed to send NL message\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    return RETURN_OK;
+}
 
 INT wifi_getRadioChannelStats(INT radioIndex, wifi_channelStats_t *input_output_channelStats_array,
     INT array_size)
 {
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface;
+
+    wifi_hal_stats_dbg_print("%s:%d: Get radio stats for index: %d\n", __func__, __LINE__,
+        radioIndex);
+
+    radio = get_radio_by_rdk_index(radioIndex);
+    if (radio == NULL) {
+        wifi_hal_stats_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+            radioIndex);
+        return RETURN_ERR;
+    }
+
+    interface = get_primary_interface(radio);
+    if (interface == NULL) {
+        wifi_hal_stats_error_print("%s:%d: Failed to get interface for radio index: %d\n", __func__,
+            __LINE__, radioIndex);
+        return RETURN_ERR;
+    }
+    if (get_channel_stats(interface, input_output_channelStats_array, array_size)) {
+        wifi_hal_stats_error_print("%s:%d: Failed to get channel stats for radio index: %d\n", __func__,
+           __LINE__, radioIndex);
+        return RETURN_ERR;
+    }
     return RETURN_OK;
 }
+
 //--------------------------------------------------------------------------------------------------
 INT wifi_getApEnable(INT apIndex, BOOL *output_bool)
 {
@@ -518,43 +669,78 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
 
     if (nla_parse_nested(stats, NL80211_STA_INFO_MAX, tb[NL80211_ATTR_STA_INFO], stats_policy)) {
-	wifi_hal_error_print("%s:%d Failed to parse nested attributes\n", __func__, __LINE__);
+	    wifi_hal_error_print("%s:%d Failed to parse nested attributes\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     if (stats[NL80211_STA_INFO_RX_BYTES]) {
+        wifi_hal_dbg_print("%s:%d cli_BytesReceived: %d\n", __func__, __LINE__, nla_get_u32(stats[NL80211_STA_INFO_RX_BYTES]));
         dev->cli_BytesReceived = nla_get_u32(stats[NL80211_STA_INFO_RX_BYTES]);
     }
     if (stats[NL80211_STA_INFO_TX_BYTES]) {
+        wifi_hal_dbg_print("%s:%d cli_BytesSent: %d\n", __func__, __LINE__, nla_get_u32(stats[NL80211_STA_INFO_TX_BYTES]));
         dev->cli_BytesSent = nla_get_u32(stats[NL80211_STA_INFO_TX_BYTES]);
     }
     if (stats[NL80211_STA_INFO_RX_PACKETS]) {
+        wifi_hal_dbg_print("%s:%d cli_PacketsReceived: %d\n", __func__, __LINE__, nla_get_u32(stats[NL80211_STA_INFO_RX_PACKETS]));
         dev->cli_PacketsReceived = nla_get_u32(stats[NL80211_STA_INFO_RX_PACKETS]);
     }
     if (stats[NL80211_STA_INFO_TX_PACKETS]) {
+        wifi_hal_dbg_print("%s:%d cli_PacketsSent: %d\n", __func__, __LINE__, nla_get_u32(stats[NL80211_STA_INFO_TX_PACKETS]));
         dev->cli_PacketsSent = nla_get_u32(stats[NL80211_STA_INFO_TX_PACKETS]);
     }
     if (stats[NL80211_STA_INFO_TX_FAILED]) {
+        wifi_hal_dbg_print("%s:%d cli_ErrorsSent: %d\n", __func__, __LINE__, nla_get_u32(stats[NL80211_STA_INFO_TX_FAILED]));
         dev->cli_ErrorsSent = nla_get_u32(stats[NL80211_STA_INFO_TX_FAILED]);
+    }
+
+    if (stats[NL80211_STA_INFO_RX_DROP_MISC]) {
+        dev->cli_RxErrors = nla_get_u32(stats[NL80211_STA_INFO_RX_DROP_MISC]);
+        wifi_hal_dbg_print("%s:%d cli_RxErrors: %d\n", __func__, __LINE__, dev->cli_RxErrors);
+    }
+
+    if (stats[NL80211_STA_INFO_TX_RETRIES]) {
+        dev->cli_RetransCount = nla_get_s32(stats[NL80211_STA_INFO_TX_RETRIES]);
+        wifi_hal_dbg_print("%s:%d cli_RetransCount: %d\n", __func__, __LINE__, dev->cli_RetransCount);
+    }
+
+    if (stats[NL80211_STA_INFO_SIGNAL_AVG]) {
+        dev->cli_RSSI = nla_get_s32(stats[NL80211_STA_INFO_SIGNAL_AVG]);
+        dev->cli_SignalStrength = dev->cli_RSSI;
+        wifi_hal_dbg_print("%s:%d cli_RSSI: %d\n", __func__, __LINE__, dev->cli_RSSI);
     }
 
     if (stats[NL80211_STA_INFO_TX_BITRATE] &&
         nla_parse_nested(rate, NL80211_RATE_INFO_MAX, stats[NL80211_STA_INFO_TX_BITRATE], rate_policy) == 0) {
         if (rate[NL80211_RATE_INFO_BITRATE32]){
-            dev->cli_LastDataDownlinkRate = nla_get_u32(rate[NL80211_RATE_INFO_BITRATE32]) * 100;
+            wifi_hal_dbg_print("%s:%d cli_LastDataDownlinkRate: %d\n", __func__, __LINE__, nla_get_u32(rate[NL80211_RATE_INFO_BITRATE32]));
+            dev->cli_LastDataDownlinkRate = nla_get_u32(rate[NL80211_RATE_INFO_BITRATE32]) * 1000;
         }
     }
+
     if (stats[NL80211_STA_INFO_RX_BITRATE] &&
         nla_parse_nested(rate, NL80211_RATE_INFO_MAX, stats[NL80211_STA_INFO_RX_BITRATE], rate_policy) == 0) {
         if (rate[NL80211_RATE_INFO_BITRATE32]) {
-                dev->cli_LastDataUplinkRate = nla_get_u32(rate[NL80211_RATE_INFO_BITRATE32]) * 100;
+            wifi_hal_dbg_print("%s:%d cli_LastDataUplinkRate: %d\n", __func__, __LINE__, nla_get_u32(rate[NL80211_RATE_INFO_BITRATE32]));
+            dev->cli_LastDataUplinkRate = nla_get_u32(rate[NL80211_RATE_INFO_BITRATE32]) * 1000;
         }
+    }
+
+    if (stats[NL80211_STA_INFO_TX_DURATION]) {
+        wifi_hal_dbg_print("%s:%d tx duration: %d\n", __func__, __LINE__, nla_get_u32(stats[NL80211_STA_INFO_TX_DURATION]));
+        dev->cli_tx_duration = nla_get_u32(stats[NL80211_STA_INFO_TX_DURATION]);
+    }
+
+    if (stats[NL80211_STA_INFO_RX_DURATION]) {
+        wifi_hal_dbg_print("%s:%d rx duration: %d\n", __func__, __LINE__, nla_get_u32(stats[NL80211_STA_INFO_RX_DURATION]));
+        dev->cli_rx_duration = nla_get_u32(stats[NL80211_STA_INFO_RX_DURATION]);
     }
 
     if (stats[NL80211_STA_INFO_STA_FLAGS]) {
         sta_flags = nla_data(stats[NL80211_STA_INFO_STA_FLAGS]);
         dev->cli_AuthenticationState = sta_flags->mask & (1 << NL80211_STA_FLAG_AUTHORIZED) &&
             sta_flags->set & (1 << NL80211_STA_FLAG_AUTHORIZED);
+        wifi_hal_dbg_print("%s:%d cli_AuthenticationState: %d\n", __func__, __LINE__, dev->cli_AuthenticationState);
     }
 
     return NL_OK;
