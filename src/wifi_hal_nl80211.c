@@ -3720,6 +3720,11 @@ int nl80211_create_bridge(const char *if_name, const char *br_name, bool mdu_ena
         return 0;
     }
 
+    if(is_lnf_psk_interface && mdu_enabled) {
+        int status = nl80211_remove_from_bridge(if_name);
+        wifi_hal_info_print("%s:%d SREESH inside is_lnf_psk_interface && mdu_enabled for LnF interface:%s and have called the nl80211_remove_from_bridge with return status %d\n",  __func__, __LINE__, if_name, status);
+    }
+
     sk = nl_socket_alloc();
 
     // verbose logging for bridge configuration debug
