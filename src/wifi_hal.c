@@ -4063,7 +4063,7 @@ void wifi_hal_newApAssociatedDevice_callback_register(wifi_newApAssociatedDevice
     callbacks->num_assoc_cbs++;
 }
 
-void wifi_hal_apDeAuthEvent_callback_register(wifi_apDeAuthEvent_callback func)
+void wifi_hal_apDeAuthEvent_callback_register(wifi_device_deauthenticated_callback func)
 {
     wifi_device_callbacks_t *callbacks;
 
@@ -4103,7 +4103,7 @@ void wifi_hal_ap_max_client_rejection_callback_register(wifi_apMaxClientRejectio
     callbacks->max_cli_rejection_cb = func;
 }
 
-void wifi_hal_apDisassociatedDevice_callback_register(wifi_apDisassociatedDevice_callback func)
+void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_callback func)
 {
     wifi_device_callbacks_t *callbacks;
 
@@ -4129,6 +4129,20 @@ void wifi_hal_stamode_callback_register(wifi_stamode_callback func)
 
     callbacks->stamode_cb[callbacks->num_stamode_cbs] = func;
     callbacks->num_stamode_cbs++;
+}
+
+void wifi_hal_apStatusCode_callback_register(wifi_apStatusCode_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+
+    if (callbacks == NULL || callbacks->num_statuscode_cbs> MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+
+    callbacks->statuscode_cb[callbacks->num_statuscode_cbs] = func;
+    callbacks->num_statuscode_cbs++;
 }
 
 void wifi_hal_radius_eap_failure_callback_register(wifi_radiusEapFailure_callback func)
