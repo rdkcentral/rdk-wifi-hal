@@ -755,12 +755,6 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         } else {
             radius_cfg = &sec->u.radius;
         }
-
-        if (!radius_cfg) {
-            wifi_util_error_print("%s:%d:Invalid radius server configuration in VAP setting\n", __func__, __LINE__);
-            return RETURN_ERR;
-        }
-
         conf->disable_pmksa_caching = sec->disable_pmksa_caching;
         if (radius_cfg->ip == 0) {
             wifi_hal_error_print("%s:%d:Invalid radius server IP configuration in VAP setting\n", __func__, __LINE__);
