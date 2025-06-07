@@ -368,8 +368,10 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
                     radio_band = WIFI_FREQUENCY_6_BAND;
                 }
             }
-            wifi_hal_info_print("%s:%d: interface name: %s, vap index: %d, vap name: %s\n", __func__, __LINE__,
-                    interface->name, vap->vap_index, vap->vap_name);
+            strncpy(interface->firmware_version, hal->wifi_prop.software_version, sizeof(interface->firmware_version) - 1);
+            interface->firmware_version[sizeof(interface->firmware_version) - 1] = '\0';
+            wifi_hal_info_print("%s:%d:interface name: %s, interface->firmware_version: %s, vap index: %d, vap name: %s\n", __func__, __LINE__,
+                    interface->name, interface->firmware_version, vap->vap_index, vap->vap_name);
             interface = hash_map_get_next(radio->interface_map, interface);
         }
 
@@ -1348,20 +1350,20 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     for (i = 0; i < map->num_vaps; i++) {
         vap = &map->vap_array[i];
 
-        wifi_hal_info_print("%s:%d: vap index:%d create vap\n", __func__, __LINE__,
-            vap->vap_index);
+        wifi_hal_info_print("%s:%d: vap index:%d vap_name = %s create vap\n", __func__, __LINE__,
+            vap->vap_index, vap->vap_name);
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
             if (validate_wifi_interface_vap_info_params(vap, msg, sizeof(msg)) != RETURN_OK) {
-                wifi_hal_error_print("%s:%d:Failed to validate interface vap_info params for vap_index: %d on radio index: %d. %s\n", __func__, __LINE__, vap->vap_index, index, msg);
+                wifi_hal_error_print("%s:%d: Failed to validate interface vap_info params for vap_index: %d on radio index: %d. %s\n", __func__, __LINE__, vap->vap_index, index, msg);
                 return WIFI_HAL_INVALID_ARGUMENTS;
             }
         }
 
         interface = get_interface_by_vap_index(vap->vap_index);
         if (interface == NULL) {
-            wifi_hal_info_print("%s:%d: vap index:%d create interface\n", __func__, __LINE__,
-                vap->vap_index);
+            wifi_hal_info_print("%s:%d:vap index:%d vap_name = %s create interface\n", __func__, __LINE__,
+                vap->vap_index, vap->vap_name);
             if ((nl80211_create_interface(radio, vap, &interface) != 0) || (interface == NULL)) {
                 wifi_hal_error_print("%s:%d: vap index:%d failed to create interface\n", __func__,
                     __LINE__, vap->vap_index);
@@ -1393,8 +1395,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             continue;
         }
 #endif
-        wifi_hal_info_print("%s:%d: vap index:%d interface:%s mode:%d\n", __func__, __LINE__,
-            vap->vap_index, interface->name, vap->vap_mode);
+        wifi_hal_info_print("%s:%d: vap index:%d interface:%s mode:%d vap_name:%s\n", __func__, __LINE__,
+            vap->vap_index, interface->name, vap->vap_mode, vap->vap_name);
         if (vap->vap_mode == wifi_vap_mode_ap) {
             wifi_hal_info_print("%s:%d: vap_enable_status:%d\n", __func__, __LINE__, vap->u.bss_info.enabled);
             memcpy(vap->u.bss_info.bssid, interface->mac, sizeof(vap->u.bss_info.bssid));
@@ -1418,7 +1420,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #ifndef CONFIG_WIFI_EMULATOR
         if (vap->vap_mode == wifi_vap_mode_sta) {
             bool sta_4addr = 0;
-            wifi_hal_info_print("%s:%d: interface:%s remove from bridge\n", __func__, __LINE__,
+            wifi_hal_info_print("%s:%d:interface:%s remove from bridge\n", __func__, __LINE__,
                 interface->name);
             nl80211_remove_from_bridge(interface->name);
             if (get_sta_4addr_status(&sta_4addr) == RETURN_OK) {
@@ -1429,7 +1431,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         wifi_hal_info_print("%s:%d: interface:%s set mode:%d\n", __func__, __LINE__,
             interface->name, vap->vap_mode);
         if (nl80211_update_interface(interface) != 0) {
-            wifi_hal_error_print("%s:%d: interface:%s failed to set mode %d\n",__func__, __LINE__,
+            wifi_hal_error_print("%s:%d:interface:%s failed to set mode %d\n",__func__, __LINE__,
                 interface->name, vap->vap_mode);
             return RETURN_ERR;
         }
@@ -1442,7 +1444,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             if (nl80211_interface_enable(interface->name, true) != 0) {
                 ret = nl80211_retry_interface_enable(interface, true);
                 if (ret != 0) {
-                    wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n", __func__,
+                    wifi_hal_error_print("%s:%d:Retry of interface enable failed:%d\n", __func__,
                         __LINE__, ret);
                 }
             }
@@ -1458,7 +1460,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #if defined(VNTXER5_PORT)
                 if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d",  vap->vap_index);
-                    if (nl80211_create_bridge(mld_ifname, vap->bridge_name) != 0) {
+                    if (nl80211_create_bridge(mld_ifname, vap->bridge_name, vap->u.bss_info.mdu_enabled) != 0) {
                         wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                             __func__, __LINE__, interface->name, vap->bridge_name);
                         continue;
@@ -1466,9 +1468,9 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     wifi_hal_info_print("%s:%d: interface:%s set bridge %s up\n", __func__, __LINE__,
                          mld_ifname, vap->bridge_name);
                 }
-                else if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
+                else if (nl80211_create_bridge(interface->name, vap->bridge_name, vap->u.bss_info.mdu_enabled) != 0) {
 #else
-                if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
+                if (nl80211_create_bridge(interface->name, vap->bridge_name, vap->u.bss_info.mdu_enabled) != 0) {
 #endif
                     wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
@@ -1590,7 +1592,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         } else if (vap->vap_mode == wifi_vap_mode_sta) {
 #if defined(CONFIG_WIFI_EMULATOR) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
-            if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
+            if (nl80211_create_bridge(interface->name, vap->bridge_name, vap->u.bss_info.mdu_enabled) != 0) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
             }
