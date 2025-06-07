@@ -745,12 +745,12 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
     conf->rdkb_eap_request_retries = sec->eap_req_retries;
 #endif
     if (conf->ieee802_1x || is_open_sec_radius_auth(sec) || conf->mdu) {
-        wifi_radius_settings_t *radius_cfg = NULL;
+        wifi_radius_settings_t *radius_cfg;
         if (conf->mdu) {
             radius_cfg = &sec->repurposed_radius;
-            snprintf(conf->ssid.wpa_passphrase, sizeof(conf->ssid.wpa_passphrase), "%s", sec->u.key.key);
+            strcpy(conf->ssid.wpa_passphrase, sec->u.key.key);
             conf->ssid.wpa_passphrase_set = true;
-            wifi_util_info_print("%s:%d:SREESH wpa_passphrase:%s\n", __func__, __LINE__, conf->ssid.wpa_passphrase);
+            wifi_hal_info_print("%s:%d:SREESH wpa_passphrase:%s\n", __func__, __LINE__, conf->ssid.wpa_passphrase);
             conf->osen = 0;
         } else {
             radius_cfg = &sec->u.radius;
