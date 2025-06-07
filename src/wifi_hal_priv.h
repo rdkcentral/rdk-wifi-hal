@@ -881,6 +881,7 @@ wifi_interface_info_t *wifi_hal_get_vap_interface_by_type(wifi_radio_info_t *rad
 int nl80211_init_primary_interfaces();
 int nl80211_init_radio_info();
 int getIpStringFromAdrress(char * ipString,  ip_addr_t * ip);
+int get_mac_address (char *intf_name,  mac_address_t mac);
 int create_ecomode_interfaces(void);
 void update_ecomode_radio_capabilities(wifi_radio_info_t *radio);
 int convert_string_to_int(int **int_list, char *val);
