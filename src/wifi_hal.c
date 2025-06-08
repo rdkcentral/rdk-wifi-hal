@@ -1460,7 +1460,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #if defined(VNTXER5_PORT)
                 if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d",  vap->vap_index);
-                    if (nl80211_create_bridge(mld_ifname, vap->bridge_name, vap->u.bss_info.mdu_enabled) != 0) {
+                    if (nl80211_create_bridge(mld_ifname, vap->bridge_name) != 0) {
                         wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                             __func__, __LINE__, interface->name, vap->bridge_name);
                         continue;
@@ -1468,9 +1468,9 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     wifi_hal_info_print("%s:%d: interface:%s set bridge %s up\n", __func__, __LINE__,
                          mld_ifname, vap->bridge_name);
                 }
-                else if (nl80211_create_bridge(interface->name, vap->bridge_name, vap->u.bss_info.mdu_enabled) != 0) {
+                else if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
 #else
-                if (nl80211_create_bridge(interface->name, vap->bridge_name, vap->u.bss_info.mdu_enabled) != 0) {
+                if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
 #endif
                     wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
@@ -1592,7 +1592,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         } else if (vap->vap_mode == wifi_vap_mode_sta) {
 #if defined(CONFIG_WIFI_EMULATOR) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
-            if (nl80211_create_bridge(interface->name, vap->bridge_name, vap->u.bss_info.mdu_enabled) != 0) {
+            if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
             }

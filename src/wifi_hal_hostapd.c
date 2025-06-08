@@ -750,8 +750,8 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             radius_cfg = &sec->repurposed_radius;
             strcpy(conf->ssid.wpa_passphrase, sec->u.key.key);
             conf->ssid.wpa_passphrase_set = true;
-            wifi_hal_info_print("%s:%d:SREESH wpa_passphrase:%s\n", __func__, __LINE__, conf->ssid.wpa_passphrase);
             conf->osen = 0;
+            conf->wpa_psk_radius = PSK_RADIUS_DURING_4WAY_HS;
         } else {
             radius_cfg = &sec->u.radius;
         }

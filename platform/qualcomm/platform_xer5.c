@@ -1470,7 +1470,7 @@ static int qca_add_intf_to_bridge(wifi_interface_info_t *interface, bool is_mld)
                     __func__, __LINE__, interface->name);
                 }
 
-                if (nl80211_create_bridge(mld_ifname, vap->bridge_name, vap->u.bss_info.mdu_enabled) != 0) {
+                if (nl80211_create_bridge(mld_ifname, vap->bridge_name) != 0) {
                     wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
                     return RETURN_ERR;
@@ -1482,7 +1482,7 @@ static int qca_add_intf_to_bridge(wifi_interface_info_t *interface, bool is_mld)
                     wifi_hal_error_print("%s:%d: interface:%s failed to remove from OVS bridge\n",
                        __func__, __LINE__, interface->name);
                 }
-                if (nl80211_create_bridge(interface->name, vap->bridge_name, vap->u.bss_info.mdu_enabled) != 0) {
+                if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
                     wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
                     return RETURN_ERR;

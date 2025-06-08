@@ -1189,16 +1189,32 @@ BOOL is_wifi_hal_vap_hotspot_from_interfacename(char *interface_name)
     return false;
 }
 
-BOOL is_wifi_hal_vap_lnf_psk_from_interfacename(char *interface_name)
+wifi_vap_info_t* get_wifi_vap_info_from_interfacename(char *interface_name)
 {
-    unsigned int index = 0;
-    for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
-        if ((strcmp(interface_index_map[index].interface_name, interface_name) == 0) &&
-                (strncmp(interface_index_map[index].vap_name, "lnf_psk", strlen("lnf_psk")) == 0)) {
-            return true;
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface;
+    unsigned int i;
+    
+    if (!interface_name) {
+        return NULL;
+    }
+
+    for (i = 0; i < g_wifi_hal.num_radios; i++) {
+#ifndef FEATURE_SINGLE_PHY
+        radio = get_radio_by_rdk_index(l_index);
+#else //FEATURE_SINGLE_PHY
+        radio = &g_wifi_hal.radio_info[l_index];
+#endif //FEATURE_SINGLE_PHY
+        interface = hash_map_get_first(radio->interface_map);
+
+        while (interface != NULL) {
+            if (strncmp(interface->name, interface_name, strlen(interface_name)) == 0) {
+                return &interface->vap_info;
+            }
+            interface = hash_map_get_next(radio->interface_map, interface);
         }
     }
-    return false;
+    return NULL;
 }
 
 BOOL is_wifi_hal_6g_radio_from_interfacename(char *interface_name)

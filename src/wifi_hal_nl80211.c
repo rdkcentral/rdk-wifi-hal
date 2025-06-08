@@ -3800,18 +3800,20 @@ int nl80211_remove_from_bridge(const char *if_name)
     return 0;
 }
 
-int nl80211_create_bridge(const char *if_name, const char *br_name, bool mdu_enabled)
+int nl80211_create_bridge(const char *if_name, const char *br_name)
 {
     struct nl_sock *sk;
     struct nl_cache *link_cache;
     struct rtnl_link *bridge, *device;
     char ovs_brname[IFNAMSIZ];
     bool is_hotspot_interface = false, is_lnf_psk_interface = false;
+    wifi_vap_info_t *vap_cfg;
 #if defined(VNTXER5_PORT)
     int ap_index;
 #endif
     is_hotspot_interface = is_wifi_hal_vap_hotspot_from_interfacename(if_name);
-    is_lnf_psk_interface = is_wifi_hal_vap_lnf_psk_from_interfacename(if_name);
+    vap_cfg = get_wifi_vap_info_from_interfacename(if_name);
+    is_lnf_psk_interface = is_wifi_hal_vap_lnf_psk(vap_cfg->vap_index);
 #if defined(VNTXER5_PORT)
     if (strncmp(if_name, "mld", 3) == 0) {
         sscanf(if_name + 3, "%d", &ap_index);
@@ -3820,10 +3822,10 @@ int nl80211_create_bridge(const char *if_name, const char *br_name, bool mdu_ena
     }
 #endif
 
-    wifi_hal_info_print("%s:%d: bridge:%s interface:%s is hotspot:%d is lnf_psk:%d is_mdu_enabled:%d\n", __func__, __LINE__,
-        br_name, if_name, is_hotspot_interface, is_lnf_psk_interface, mdu_enabled);
+    wifi_hal_info_print("%s:%d: bridge:%s interface:%s is hotspot:%d is lnf_psk:%d is_mdu_enabled:%d vap_name = %s\n", __func__, __LINE__,
+        br_name, if_name, is_hotspot_interface, is_lnf_psk_interface, vap_cfg->u.bss_info.mdu_enabled, vap_cfg->vap_name);
 
-    if (access(OVS_MODULE, F_OK) == 0 && !is_hotspot_interface && !(is_lnf_psk_interface && mdu_enabled)) {
+    if (access(OVS_MODULE, F_OK) == 0 && !is_hotspot_interface && !(is_lnf_psk_interface && vap_cfg->u.bss_info.mdu_enabled)) {
         if (ovs_if_get_br(ovs_brname, if_name) == 0) {
             if (strcmp(br_name, ovs_brname) != 0) {
                 wifi_hal_dbg_print("%s:%d mismatch\n",  __func__, __LINE__);
@@ -3851,7 +3853,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name, bool mdu_ena
         return 0;
     }
 
-    if(is_lnf_psk_interface && mdu_enabled && (ovs_if_get_br(ovs_brname,if_name) == 0)) {
+    if(is_lnf_psk_interface && vap_cfg->u.bss_info.mdu_enabled && (ovs_if_get_br(ovs_brname,if_name) == 0)) {
         int status = nl80211_remove_from_bridge(if_name);
         wifi_hal_info_print("%s:%d is_lnf_psk_interface && mdu_enabled for LnF interface:%s and have called the nl80211_remove_from_bridge from ovs_brname:%s with return status %d\n",  __func__, __LINE__, if_name,ovs_brname, status);
     }
@@ -7483,7 +7485,7 @@ int wifi_hal_configure_sta_4addr_to_bridge(wifi_interface_info_t *interface, int
     }
 
     if (add == 1) {
-        if ((ret = nl80211_create_bridge(interface->name, vap->bridge_name, vap->u.bss_info.mdu_enabled)) != 0) {
+        if ((ret = nl80211_create_bridge(interface->name, vap->bridge_name)) != 0) {
             wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s with ret:%d\n",
                 __func__, __LINE__, interface->name, vap->bridge_name, ret);
             return ret;
@@ -11750,7 +11752,7 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val,
                 wifi_hal_info_print("%s:%d: new interface:%s is created with 4addr:%d\r\n",
                     __func__, __LINE__, name, interface->u.ap.conf.wds_sta);
             }
-            if (bridge_ifname && nl80211_create_bridge(name, bridge_ifname, vap->u.bss_info.mdu_enabled) != 0) {
+            if (bridge_ifname && nl80211_create_bridge(name, bridge_ifname) != 0) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                     __func__, __LINE__, name, vap->bridge_name);
                 return RETURN_ERR;

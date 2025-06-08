@@ -897,7 +897,7 @@ int     handle_public_action_frame(INT ap_index, mac_address_t sta_mac, wifi_pub
 int     nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wifi_interface_info_t **interface);
 int     nl80211_enable_ap(wifi_interface_info_t *interface, bool enable);
 int     nl80211_kick_device(wifi_interface_info_t *interface, mac_address_t mac);
-int     nl80211_create_bridge(const char *if_name, const char *br_name, bool mdu_enabled);
+int     nl80211_create_bridge(const char *if_name, const char *br_name);
 int     nl80211_remove_from_bridge(const char *if_name);
 int     nl80211_update_interface(wifi_interface_info_t *interface);
 int     nl80211_interface_enable(const char *ifname, bool enable);
