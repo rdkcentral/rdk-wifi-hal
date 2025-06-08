@@ -1194,16 +1194,16 @@ wifi_vap_info_t* get_wifi_vap_info_from_interfacename(char *interface_name)
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
     unsigned int i;
-    
+
     if (!interface_name) {
         return NULL;
     }
 
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
 #ifndef FEATURE_SINGLE_PHY
-        radio = get_radio_by_rdk_index(l_index);
+        radio = get_radio_by_rdk_index(i);
 #else //FEATURE_SINGLE_PHY
-        radio = &g_wifi_hal.radio_info[l_index];
+        radio = &g_wifi_hal.radio_info[i];
 #endif //FEATURE_SINGLE_PHY
         interface = hash_map_get_first(radio->interface_map);
 
