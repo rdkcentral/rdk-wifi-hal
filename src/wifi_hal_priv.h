@@ -601,6 +601,13 @@ typedef struct wifi_steering_group {
     wifi_bm_steering_group_info_t bm_group_info[MAX_NUM_RADIOS];
 } wifi_bm_steering_group_t;
 
+typedef struct wifi_hal_rate_limit {
+    bool enabled;
+    int rate_limit;
+    int window_size;
+    int cooldown_time;
+} wifi_hal_mgt_frame_rate_limit_t;
+
 typedef struct {
     pthread_t nl_tid;
     pthread_t hapd_eloop_tid;
@@ -630,6 +637,8 @@ typedef struct {
     pthread_mutex_t hapd_lock;
     pthread_mutex_t steering_data_lock;
     wifi_bm_steering_group_t  bm_steer_groups[MAX_STEERING_GROUP_NUM];
+    hash_map_t *mgt_frame_rate_limit_hashmap;
+    wifi_hal_mgt_frame_rate_limit_t mgt_frame_rate_limit;
 } wifi_hal_priv_t;
 
 extern wifi_hal_priv_t g_wifi_hal;
@@ -872,6 +881,7 @@ wifi_interface_info_t *wifi_hal_get_vap_interface_by_type(wifi_radio_info_t *rad
 int nl80211_init_primary_interfaces();
 int nl80211_init_radio_info();
 int getIpStringFromAdrress(char * ipString,  ip_addr_t * ip);
+int get_mac_address (char *intf_name,  mac_address_t mac);
 int create_ecomode_interfaces(void);
 void update_ecomode_radio_capabilities(wifi_radio_info_t *radio);
 int convert_string_to_int(int **int_list, char *val);
@@ -1125,6 +1135,9 @@ int update_hostap_mlo(wifi_interface_info_t *interface);
 
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio);
 void wifi_hal_configure_mbssid(wifi_radio_info_t *radio);
+
+void wifi_hal_set_mgt_frame_rate_limit(bool enable, int rate_limit, int window_size,
+    int cooldown_time);
 
 #ifdef __cplusplus
 }
