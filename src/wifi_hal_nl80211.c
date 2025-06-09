@@ -142,6 +142,16 @@ typedef enum {
 } wlan_emu_msg_type_t;
 #endif //defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
 
+#define RATE_LIMIT_HASH_MAP_SIZE 200
+
+typedef struct rate_limit_entry {
+    mac_address_t mac;
+    int packet_count;
+    time_t window_start;
+    time_t blocked_until;
+    time_t last_activity;
+} rate_limit_entry_t;
+
 void prepare_interface_fdset(wifi_hal_priv_t *priv)
 {
     wifi_radio_info_t *radio;
@@ -1707,6 +1717,123 @@ static void handle_probe_req_event_for_bm(wifi_interface_info_t *interface, stru
     pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
 }
 
+void wifi_hal_set_mgt_frame_rate_limit(bool enable, int rate_limit, int window_size,
+    int cooldown_time)
+{
+    wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
+
+    wifi_hal_dbg_print("%s:%d: enable:%d rate_limit:%d window_size:%d cooldown_time:%d\n", __func__,
+        __LINE__, enable, rate_limit, window_size, cooldown_time);
+
+    rl->enabled = enable;
+    rl->rate_limit = rate_limit;
+    rl->window_size = window_size;
+    rl->cooldown_time = cooldown_time;
+}
+
+static void wifi_hal_rate_limit_cleanup(void)
+{
+    int entry_expire_time;
+    mac_addr_str_t mac_str;
+    rate_limit_entry_t *entry, *tmp_entry;
+    time_t time_now = get_boot_time_in_sec();
+    wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
+
+    entry_expire_time = 2 * (rl->window_size + rl->cooldown_time);
+
+    hash_map_foreach_safe(g_wifi_hal.mgt_frame_rate_limit_hashmap, entry, tmp_entry) {
+        if (difftime(time_now, entry->last_activity) >= entry_expire_time) {
+            free(hash_map_remove(g_wifi_hal.mgt_frame_rate_limit_hashmap,
+                to_mac_str(entry->mac, mac_str)));
+        }
+    }
+}
+
+static rate_limit_entry_t *wifi_hal_rate_limit_entry_get(mac_address_t mac)
+{
+    time_t time_now;
+    mac_addr_str_t mac_str;
+    rate_limit_entry_t *entry;
+
+    if (g_wifi_hal.mgt_frame_rate_limit_hashmap == NULL) {
+        g_wifi_hal.mgt_frame_rate_limit_hashmap = hash_map_create();
+    }
+
+    time_now = get_boot_time_in_sec();
+    to_mac_str(mac, mac_str);
+    entry = hash_map_get(g_wifi_hal.mgt_frame_rate_limit_hashmap, mac_str);
+    if (entry != NULL) {
+        entry->last_activity = time_now;
+        return entry;
+    }
+
+    if (hash_map_count(g_wifi_hal.mgt_frame_rate_limit_hashmap) >= RATE_LIMIT_HASH_MAP_SIZE) {
+        wifi_hal_error_print("%s:%d: failed to add client to hash map, size limit %d reached\n",
+            __func__, __LINE__, RATE_LIMIT_HASH_MAP_SIZE);
+        return NULL;
+    }
+
+    entry = calloc(1, sizeof(rate_limit_entry_t));
+    if (entry == NULL) {
+        wifi_hal_error_print("%s:%d: failed to alloc rate limit entry\n", __func__, __LINE__);
+        return NULL;
+    }
+
+    memcpy(entry->mac, mac, sizeof(mac_address_t));
+    entry->window_start = time_now;
+    entry->last_activity = time_now;
+    hash_map_put(g_wifi_hal.mgt_frame_rate_limit_hashmap, strdup(mac_str), entry);
+
+    return entry;
+}
+
+static bool is_wifi_hal_rate_limit_block(unsigned short stype, mac_address_t mac)
+{
+    time_t time_now;
+    mac_addr_str_t mac_str;
+    rate_limit_entry_t *entry;
+    wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
+
+    if (!rl->enabled || rl->rate_limit <= 0 || rl->window_size <= 0 || rl->cooldown_time <= 0) {
+        return false;
+    }
+
+    if (stype != WLAN_FC_STYPE_AUTH && stype != WLAN_FC_STYPE_DEAUTH) {
+        return false;
+    }
+
+    wifi_hal_rate_limit_cleanup();
+
+    entry = wifi_hal_rate_limit_entry_get(mac);
+    if (entry == NULL) {
+        return false;
+    }
+
+    time_now = get_boot_time_in_sec();
+    if (time_now < entry->blocked_until) {
+        return true;
+    }
+
+    if (difftime(time_now, entry->window_start) >= rl->window_size) {
+        entry->packet_count = 0;
+        entry->window_start = time_now;
+    }
+
+    if (entry->packet_count < rl->rate_limit) {
+        entry->packet_count++;
+        return false;
+    }
+
+    wifi_hal_info_print(
+        "%s:%d: blocked frame type:%d from:%s due to rate limit:%d frames per %d sec for %d sec\n",
+        __func__, __LINE__, stype, to_mac_str(mac, mac_str), rl->rate_limit, rl->window_size,
+        rl->cooldown_time);
+
+    entry->blocked_until = time_now + rl->cooldown_time;
+
+    return true;
+}
+
 #ifdef CMXB7_PORT
 int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *mgmt, u16 reason, int sig_dbm, int snr, int phy_rate, unsigned int len) {
 #else
@@ -1735,7 +1862,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     unsigned int total_len=0;
     bool send_mgmt_to_char_dev = false;
 #endif
-
+    u16 reasoncode;
     if (mgmt == NULL) {
         return -1;
     }
@@ -1770,6 +1897,10 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
     fc = le_to_host16(mgmt->frame_control);
     stype = WLAN_FC_GET_STYPE(fc);
+
+    if (is_wifi_hal_rate_limit_block(stype, sta)) {
+        return 0;
+    }
 
     switch(stype) {
     case WLAN_FC_STYPE_AUTH:
@@ -1853,6 +1984,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         break;
 
     case WLAN_FC_STYPE_ASSOC_RESP:
+	wifi_hal_dbg_print("%s:%d:assoc resp\n", __func__, __LINE__);
         mgmt_type = WIFI_MGMT_FRAME_TYPE_ASSOC_RSP;
         break;
 
@@ -1940,7 +2072,14 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
         for (int i = 0; i < callbacks->num_disassoc_cbs; i++) {
             if (callbacks->disassoc_cb[i] != NULL) {
-                callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(sta, sta_mac_str), reason);
+                if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.disassoc)) {
+                    wifi_hal_dbg_print("handle_disassoc - too short payload (len=%lu)",(unsigned long) len);
+                    reasoncode = reason;
+                }
+                else {
+                    reasoncode = le_to_host16(mgmt->u.disassoc.reason_code);
+                }
+                callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(mgmt->sa, sta_mac_str), to_mac_str(mgmt->da, frame_da_str), mgmt_type, reasoncode);
             }
         }
         if (callbacks->steering_event_callback != 0) {
@@ -1955,10 +2094,10 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         mgmt_type = WIFI_MGMT_FRAME_TYPE_DEAUTH;
 
         if (len >= IEEE80211_HDRLEN + sizeof(mgmt->u.deauth)) {
-            wifi_hal_info_print("%s:%d: interface:%s received deauth frame from:%s to:%s sc:%d "
+            wifi_hal_info_print("%s:%d: interface:%s received deauth frame from:%s to:%s disassoc sc:%d deauth sc:%d "
                                 "len:%d reason:%d\n",
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, sta_mac_str),
-                to_mac_str(mgmt->da, frame_da_str), le_to_host16(mgmt->u.disassoc.reason_code), len,
+                to_mac_str(mgmt->da, frame_da_str), le_to_host16(mgmt->u.disassoc.reason_code), le_to_host16(mgmt->u.deauth.reason_code), len,
                 reason);
         } else {
             wifi_hal_info_print("%s:%d: interface:%s received deauth frame from:%s to:%s len:%d "
@@ -1972,14 +2111,20 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         }
         for (int i = 0; i < callbacks->num_apDeAuthEvent_cbs; i++) {
             if (callbacks->apDeAuthEvent_cb[i] != NULL) {
-                callbacks->apDeAuthEvent_cb[i](vap->vap_index, to_mac_str(sta, sta_mac_str), reason);
+                if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.deauth)) {
+                    wifi_hal_dbg_print("%s:%d handle_deauth - too short payload (len=%lu)",__func__, __LINE__, (unsigned long) len);
+                    reasoncode = reason;
+                }
+                else {
+                    reasoncode = le_to_host16(mgmt->u.deauth.reason_code);
+                }
+                callbacks->apDeAuthEvent_cb[i](vap->vap_index,to_mac_str(mgmt->sa,sta_mac_str),to_mac_str(mgmt->da,frame_da_str),mgmt_type,reasoncode);
             }
         }
 
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         station = ap_get_sta(&interface->u.ap.hapd, sta);
         if (station) {
-            wifi_hal_dbg_print("station deauthreason in deauth frame is %d\n", station->disconnect_reason_code);
 #if !defined(PLATFORM_LINUX)
             if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
                 reason = station->disconnect_reason_code;
@@ -1992,7 +2137,15 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         if (station) {
             for (int i = 0; i < callbacks->num_disassoc_cbs; i++) {
                 if (callbacks->disassoc_cb[i] != NULL) {
-                    callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(sta, sta_mac_str), reason);
+                    if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.disassoc)) {
+                        wifi_hal_dbg_print("handle_disassoc - too short payload (len=%lu)",(unsigned long) len);
+                        reasoncode = reason;
+                    }
+                    else {
+                        reasoncode = le_to_host16(mgmt->u.disassoc.reason_code);
+                    }
+		    mgmt_type = WIFI_MGMT_FRAME_TYPE_DISASSOC;
+                    callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(mgmt->sa, sta_mac_str), to_mac_str(mgmt->da, frame_da_str), mgmt_type, reasoncode);
                 }
             }
         } else {
@@ -2043,8 +2196,6 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             }
         }
     }
-
-    //mgmt_frame_received_callback(vap->vap_index, sta, mgmt, len, mgmt_type, dir);
 
     /* if frame wasn't completely handled by this function, call the hostapd code */
     if (forward_frame) {
@@ -2112,7 +2263,6 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     }
 
 #endif
-
     return -1;
 }
 
@@ -2129,7 +2279,6 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
 #ifdef CMXB7_PORT
     int snr = 0;
 #endif
-
     gnlh = nlmsg_data(nlmsg_hdr(msg));
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
@@ -2224,7 +2373,6 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
         return NL_SKIP;
     }
 #endif
-
     return NL_SKIP;
 }
 
@@ -11109,7 +11257,7 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
 
     for (int i = 0; i < callbacks->num_disassoc_cbs; i++) {
         if (callbacks->disassoc_cb[i] != NULL) {
-            callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(addr, mac_str), 0);
+            callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(addr, mac_str), to_mac_str(interface->mac, mac_str), WIFI_MGMT_FRAME_TYPE_DISASSOC, reason);
         }
     }
 #endif // _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
@@ -11154,7 +11302,7 @@ int wifi_drv_sta_notify_deauth(void *priv, const u8 *own_addr, const u8 *addr, u
 
     for (int i = 0; i < callbacks->num_apDeAuthEvent_cbs; i++) {
         if (callbacks->apDeAuthEvent_cb[i] != NULL) {
-            callbacks->apDeAuthEvent_cb[i](vap->vap_index, to_mac_str(addr, mac_str), reason);
+            callbacks->apDeAuthEvent_cb[i](vap->vap_index, to_mac_str(addr, mac_str), to_mac_str(addr, mac_str),5,reason);
         }
     }
 
@@ -11218,7 +11366,7 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
 
     for (int i = 0; i < callbacks->num_apDeAuthEvent_cbs; i++) {
         if (callbacks->apDeAuthEvent_cb[i] != NULL) {
-            callbacks->apDeAuthEvent_cb[i](vap->vap_index, to_mac_str(addr, mac_str), reason);
+            callbacks->apDeAuthEvent_cb[i](vap->vap_index, to_mac_str(addr, mac_str),to_mac_str(addr, mac_str),5,reason);
         }
     }
 #endif
@@ -11797,7 +11945,6 @@ int wifi_drv_hapd_send_eapol(
     memcpy(eth_hdr->dest, addr, sizeof(mac_address_t));
     eth_hdr->ethertype = host_to_be16(ETH_P_EAPOL);
     memcpy(buff + sizeof(struct ieee8023_hdr), data, data_len);
-
 #ifdef WIFI_EMULATOR_CHANGE
     if ((access(ONEWIFI_TESTSUITE_TMPFILE, R_OK)) == 0) {
         if (fd_c < 0) {
@@ -16803,7 +16950,6 @@ int wifi_drv_get_sta_auth_type(void *priv, const u8 *addr, int auth_key,int fram
         key_mgmt = -1;
     }
     interface = (wifi_interface_info_t *)priv;
-
     if(interface == NULL) {
         wifi_hal_error_print("%s:%d interface is null\n", __func__, __LINE__);
         return RETURN_ERR;
@@ -16813,8 +16959,8 @@ int wifi_drv_get_sta_auth_type(void *priv, const u8 *addr, int auth_key,int fram
     memcpy(sta, addr, sizeof(mac_address_t));
     band = vap->radio_index;
     callbacks = get_hal_device_callbacks();
-
     if (callbacks == NULL) {
+        wifi_hal_info_print("%s:%d callbacks is null \n", __func__, __LINE__);
         return -1;
     }
 
@@ -16841,7 +16987,6 @@ int wifi_drv_get_sta_auth_type(void *priv, const u8 *addr, int auth_key,int fram
              callbacks->stamode_cb[i](vap->vap_index, to_mac_str(sta, sta_mac_str), key_mgmt, frame_type, band, mode);
          }
      }
-
     return RETURN_OK;
 }
 
