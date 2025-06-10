@@ -1194,8 +1194,13 @@ int update_hostap_bss(wifi_interface_info_t *interface)
 #if !defined(PLATFORM_LINUX)
     // connected_building_enabled
     if (is_wifi_hal_vap_hotspot_from_interfacename(conf->iface)) {
-        conf->connected_building_avp = vap->u.bss_info.connected_building_enabled;
-        wifi_hal_info_print("%s:%d:connected_building_enabled is %d  and ifacename is %s\n", __func__, __LINE__,conf->connected_building_avp,conf->iface);
+        if (vap->u.bss_info.mdu_phase_two_flag) {
+            conf->connected_building_avp = vap->u.bss_info.mdu_guest_hotspot_enabled;
+        }
+        else {
+            conf->connected_building_avp = vap->u.bss_info.connected_building_enabled;
+        }
+        wifi_hal_info_print("%s:%d:connected_building_enabled is %d mdu enabled = %d and ifacename is %s\n", __func__, __LINE__,conf->connected_building_avp, conf->mdu, conf->iface);
     }
 
     conf->speed_tier = vap->u.bss_info.am_config.npc.speed_tier;
