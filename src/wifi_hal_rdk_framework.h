@@ -125,13 +125,18 @@ typedef struct {
     struct rtnl_kvr_handle                  rtnl_kvr;
     wifi_newApAssociatedDevice_callback     assoc_cb[MAX_REGISTERED_CB_NUM];
     unsigned int                            num_assoc_cbs;
-    wifi_apDisassociatedDevice_callback     disassoc_cb[MAX_REGISTERED_CB_NUM];
+    wifi_apMaxClientRejection_callback      max_cli_rejection_cb;
+    wifi_device_disassociated_callback      disassoc_cb[MAX_REGISTERED_CB_NUM];
     unsigned int                            num_disassoc_cbs;
+    wifi_apStatusCode_callback              statuscode_cb[MAX_REGISTERED_CB_NUM];
+    unsigned int                            num_statuscode_cbs;
     unsigned int                            num_radius_eap_cbs;
     wifi_radiusEapFailure_callback          radius_eap_cb[MAX_REGISTERED_CB_NUM];
     unsigned int                            num_radius_fallback_failover_cbs;
     wifi_radiusFallback_failover_callback   radius_failover_fallback_cbs[MAX_REGISTERED_CB_NUM];
     unsigned int                            num_vapstatus_cbs;
+    unsigned int                            num_stamode_cbs;
+    wifi_stamode_callback                   stamode_cb[MAX_REGISTERED_CB_NUM];
     queue_t                                 *queue;
     wifi_RMBeaconReport_callback            bcnrpt_callback[MAX_AP_INDEX];
     wifi_BTM_callbacks_t                    btm_callback[MAX_AP_INDEX];
@@ -143,7 +148,7 @@ typedef struct {
     pthread_mutex_t                         lock;
     pthread_t                               notification_thread_id;
     bool                                    notification_framework_initialized;
-    wifi_apDeAuthEvent_callback             apDeAuthEvent_cb[MAX_REGISTERED_CB_NUM];
+    wifi_device_deauthenticated_callback    apDeAuthEvent_cb[MAX_REGISTERED_CB_NUM];
     wifi_vapstatus_callback                 vapstatus_cb[MAX_REGISTERED_CB_NUM];
     unsigned int                            num_apDeAuthEvent_cbs;
     wifi_receivedMgmtFrame_callback         mgmt_frame_rx_callback;

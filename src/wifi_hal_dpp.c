@@ -492,6 +492,8 @@ EC_POINT *dpp_build_point_from_connector_string(wifi_device_dpp_context_t *ctx, 
 
 	printf("%s:%d: point built\n", __func__, __LINE__);
 
+       cJSON_Delete(connector_json);
+
 	return instance->responder_connector;
 }
 
@@ -711,10 +713,13 @@ void dpp_build_config(wifi_device_dpp_context_t *ctx, char* str)
 	}
 
 	out = cJSON_Print(root);
-    printf("%s\n",out);
-
-	/*let input string have json */
-	strcpy(str, out);
+        if (out)
+        {
+            printf("%s\n",out);
+            /*let input string have json */
+            strcpy(str, out);
+            free(out);
+        }
 	
 	return;
 }

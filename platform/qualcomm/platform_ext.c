@@ -16,39 +16,24 @@
 #include "server_hal_ipc.h"
 #endif
 
-#define WIFI_AP_MAX_PASSPHRASE_LEN 300
-#define WIFI_MAX_RADIUS_KEY 128
-#define COUNTRY_LENGTH 10
-#define MAX_KEYPASSPHRASE_LEN 128
-#define MAX_SSID_LEN 33
-#define DEFAULT_SSID_SIZE 128
 #define DEFAULT_CMD_SIZE 256
 #define MAX_BUF_SIZE 300
-#define VAP_PREFIX "ath"
-#define RADIO_PREFIX "wifi"
-#define IPQ_XER5_MAX_NUM_RADIOS 2
+#define MAX_NUM_RADIOS 2
 #define OUI_QCA "0x001374"
 #define RETRY_LIMIT 7
-
-#define WIFI_24G_MAC_ADDR_KEY "WiFi 2.4GHz MAC address"
-#define WIFI_50G_MAC_ADDR_KEY "WiFi 5.0GHz MAC address"
-#define DEFAULT_24G_SSID_KEY "Default 2.4 GHz SSID"
-#define DEFAULT_50G_SSID_KEY "Default 5.0 GHz SSID"
-#define DEFAULT_WIFI_PASSWORD_KEY "Default WIFI Password"
-#define DEFAULT_XHS_SSID_KEY "Default XHS SSID for 2.4GHZ and 5.0GHZ"
 #define DEFAULT_XHS_PASSWORD_KEY "Default XHS Password"
-#define MAX_DEFAULT_VALUE_SIZE 128
-#define FACTORY_DEFAULTS_FILE "/tmp/factory_nvram.data"
 
-#define QCA_MAX_CMD_SZ 128
 #define MLD_PREFIX "mld"
+#define BACKHAUL_STA_SSID  "we.connect.yellowstone"
+#define BHAUL_CREDS_PATH   "/mnt/data/pstore/mesh_bhaul_creds"
+#define BHAUL_CREDS_LEN     50
+#define STATICCPGCFG_LEN    128
+#define CONFIG_PATH        "/usr/opensync/scripts"
+#define CONFIG_FILE        "getConfigFile.sh"
+#define STATICCPGCFG_1     "/tmp/.staticCpgCfg_1"
+#define STA_PWD_LEN         STATICCPGCFG_LEN
 
 extern INT wifi_setMLDaddr(INT apIndex, CHAR *mldMacAddress);
-extern int qca_getRadiosIndex();
-extern int qca_nl_cfg80211_init();
-extern int isValidAPIndex(int apIndex);
-
-static const char* getRadiusCfgFile = "radius.cfg";
 
 typedef enum radio_band {
     radio_2g = 0,
@@ -245,7 +230,7 @@ enum vap_enum_type {
     vap_mesh_sta,
     vap_invalid
 };
-typedef BOOL (*vap_type) (unsigned int ap_index);
+typedef bool (*vap_type) (unsigned int ap_index);
 
 vap_type vap_type_arr[10] = {
 
@@ -259,53 +244,26 @@ vap_type vap_type_arr[10] = {
     is_wifi_hal_vap_mesh_sta
 };
 
-static int read_from_factory_defaults(char *filename, char *key, char *value, int val_len)
+static char* getInterface(int Index)
 {
-    FILE *fp = NULL;
-    char buf[1024] = {0};
-    char *ptr = NULL;
-    int len;
-
-    memset(value, '\0', val_len);
-    if(access(filename, F_OK) == 0)
+    unsigned int idx = 0;
+    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
+    get_wifi_interface_info_map(interface_map);
+    for (idx = 0; idx < ARRAY_SZ(interface_map); idx++) 
     {
-        fp = fopen(filename, "r");
-    }
-    else
-    {
-        wifi_hal_error_print("%s:%d Factory file not found\n", __func__, __LINE__);
-        return -1;
-    }
-    while(!feof(fp))
-    {
-        memset(buf, '\0', sizeof(buf));
-        fgets(buf, sizeof(buf), fp);
-        if((ptr = strstr(buf, key)) != NULL)
+        if (Index == interface_map[idx].index)
         {
-            break;
+	   return interface_map[idx].interface_name;
         }
     }
-    if(ptr == NULL)
-    {
-        fclose(fp);
-        wifi_hal_error_print("%s:%d Key %s not found in factory file\n", __func__, __LINE__, key);
-        return -1;
-    }
-    ptr += strlen(key);
-    while(*ptr != '\0' && (*ptr == ' ' || *ptr == ':' ))
-    {
-        ++ptr;
-    }
-    strncpy(value, ptr, val_len);
-    len = strlen(value)-1;
-    if(value[len] == '\n')
-    {
-        value[len] = '\0';
-    }
-    fclose(fp);
-
-    return 0;
+    return " ";
 }
+
+bool isValidAPIndex(int index)
+{
+	return true;
+}
+
 
 int platform_pre_init()
 {
@@ -315,68 +273,6 @@ int platform_pre_init()
     return 0;
 }
 
-void qcacfg_nvram_set_str (const char *param, const char *val) {
-
-    char cmd[DEFAULT_CMD_SIZE] = {0};
-    if (param == NULL || val == NULL || strlen(param) == 0 || strlen(val) == 0) {
-        return;
-    }
-
-    snprintf(cmd,sizeof(cmd),"qc-config update %s %s",param,val);
-    system(cmd);
-}
-
-void qcacfg_nvram_set_int (const char *param, const int val) {
-
-    char cmd[DEFAULT_CMD_SIZE] = {0};
-    if (param == NULL || strlen(param) == 0) {
-        return;
-    }
-
-    snprintf(cmd,sizeof(cmd),"qc-config update %s %d",param,val);
-    system(cmd);
-}
-
-
-int qcacfg_nvram_get (const char *param, const char *val, const unsigned int size) {
-
-    if (param == NULL || val == NULL || size == 0 || strlen(param) == 0) {
-        wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
-        return -1;
-    }
-
-    char cmd[DEFAULT_CMD_SIZE] = {0};
-    FILE *fptr = NULL; char *context = NULL;
-
-    snprintf(cmd,sizeof(cmd),"qc-config get %s",param);
-    fptr = popen(cmd, "r");
-    if (fptr == NULL) {
-        wifi_hal_error_print("%s: popen error\n", __FUNCTION__);
-        return -1 ;
-    }
-    fgets(val,size,fptr);
-    pclose(fptr);
-    strtok_r(val, "\n", &context);
-    return 0;
-}
-
-int qcacfg_nvram_get_bool (const char *param, bool *val) {
-
-    char tmp[DEFAULT_CMD_SIZE] = {0};
-    if (param == NULL || val == NULL || strlen(param) == 0) {
-        wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
-        return -1;
-    }
-
-    qcacfg_nvram_get(param,tmp,sizeof(tmp));
-    if (strncmp(tmp,"1",1)) {
-        *val = true;
-    }
-    else {
-        *val = false;
-    }
-    return 0;
-}
 
 int is_interface_exists(const char *fname)
 {
@@ -392,12 +288,12 @@ int is_interface_exists(const char *fname)
 //check if radio  present in info map
 int check_radio_index(uint8_t radio_index)
 {
-    radio_interface_mapping_t platform_map_t[IPQ_XER5_MAX_NUM_RADIOS];
+    radio_interface_mapping_t platform_map_t[MAX_NUM_RADIOS];
     uint8_t i = 0;
 
     get_radio_interface_info_map(platform_map_t);
 
-    for (i = 0; i < IPQ_XER5_MAX_NUM_RADIOS ; i++) {
+    for (i = 0; i < MAX_NUM_RADIOS ; i++) {
         if (platform_map_t[i].radio_index == radio_index) {
 
             return 0;
@@ -408,68 +304,16 @@ int check_radio_index(uint8_t radio_index)
     return -1;
 }
 
-int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff)
-{
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
-    return 0;
-}
-
-int platform_set_acs_exclusion_list(wifi_radio_index_t index,char *buff)
-{
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
-    return 0;
-}
-
 int platform_post_init(wifi_vap_info_map_t *vap_map)
 {
-    char cmd[DEFAULT_CMD_SIZE];
-    int i, apIndex;
-    int ret = -1;
-
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
-
-    for (i = 0; i < IPQ_XER5_MAX_NUM_RADIOS; i++) {
-        if(i == RDK_2G_RADIO) {
-            for (apIndex = 0; apIndex < MAX_NUM_VAP_PER_RADIO; apIndex++) {
-                if (isValidAPIndex(VAP_RADIO_2G[apIndex])) {
-                    snprintf(cmd,sizeof(cmd), "cfg80211tool %s%d acsmindwell 51", VAP_PREFIX, VAP_RADIO_2G[apIndex]);
-                    ret = system(cmd);
-                    if(ret == -1) {
-                        wifi_hal_error_print("Unable to set min ACS dwell %s:%d \n", __func__, __LINE__);
-                    }
-                    snprintf(cmd,sizeof(cmd), "cfg80211tool %s%d acsmaxdwell 51", VAP_PREFIX, VAP_RADIO_2G[apIndex]);
-                    ret = system(cmd);
-                    if(ret == -1) {
-                        wifi_hal_error_print("Unable to set max ACS dwell %s:%d \n", __func__, __LINE__);
-                    }
-                }
-            }
-        }
-        if (i == RDK_5G_RADIO) {
-            for (apIndex = 0; apIndex < MAX_NUM_VAP_PER_RADIO; apIndex++) {
-                if (isValidAPIndex(VAP_RADIO_5G[apIndex])) {
-                    snprintf(cmd,sizeof(cmd), "cfg80211tool %s%d acsmindwell 51", VAP_PREFIX, VAP_RADIO_5G[apIndex]);
-                    ret = system(cmd);
-                    if(ret == -1) {
-                        wifi_hal_error_print("Unable to set min ACS dwell %s:%d \n", __func__, __LINE__);
-                    }
-                    snprintf(cmd,sizeof(cmd), "cfg80211tool %s%d acsmaxdwell 51", VAP_PREFIX, VAP_RADIO_5G[apIndex]);
-                    ret = system(cmd);
-                    if(ret == -1) {
-                        wifi_hal_error_print("Unable to set max ACS dwell %s:%d \n", __func__, __LINE__);
-                    }
-                }
-            }
-        }
-    }
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
     return 0;
 }
 
 void getprivatevap2G(unsigned int *index)
 {
     unsigned int idx = 0;
-    wifi_interface_name_idex_map_t interface_map[(IPQ_XER5_MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
+    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
     if (index == NULL) {
         wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
         return;
@@ -489,7 +333,7 @@ void getprivatevap2G(unsigned int *index)
 void getprivatevap5G(unsigned int *index)
 {
     unsigned int idx = 0;
-    wifi_interface_name_idex_map_t interface_map[(IPQ_XER5_MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
+    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
     if (index == NULL) {
         wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
         return;
@@ -507,7 +351,8 @@ void getprivatevap5G(unsigned int *index)
 
 void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
-    unsigned int apindex = 0;
+    unsigned int apindex = 0, i = 0; int band = -1;
+    size_t len = 0;
     char cmd[DEFAULT_CMD_SIZE] = {0};
     char tmp[DEFAULT_CMD_SIZE] = {0};
     char command[DEFAULT_CMD_SIZE] = {0};
@@ -518,10 +363,6 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
     wifi_channelBandwidth_t channelWidth = WIFI_CHANNELBANDWIDTH_80MHZ;
 
     variant = operationParam->variant; channelWidth = operationParam->channelWidth;
-    //wifi_interface_name_idex_map_t *interface_map;
-    wifi_interface_name_idex_map_t interface_map[(IPQ_XER5_MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
-
-    get_wifi_interface_info_map(interface_map);
 
     switch (operationParam->band) {
 
@@ -631,7 +472,7 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
         default:
             break;
     }
-    snprintf(command, DEFAULT_CMD_SIZE, "cfg80211tool %s%d get_mode | cut -d':' -f2",VAP_PREFIX,apindex);
+    snprintf(command, DEFAULT_CMD_SIZE, "cfg80211tool %s get_mode | cut -d':' -f2",getInterface(apindex));
     FILE *fp = popen(command, "r");
     if (fp == NULL) {
         wifi_hal_error_print("%s:%d Failed to run command \n",__func__,__LINE__);
@@ -639,11 +480,13 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
     }
     while (fgets(buffer, sizeof(buffer), fp) != NULL) {
         strncpy(output, buffer, DEFAULT_CMD_SIZE);
+        output[strcspn(output, "\n")] = '\0';
     }
     pclose(fp);
 
-    if (strncmp(output, cmd, strlen(cmd)) != 0 ) {
-        snprintf(tmp, DEFAULT_CMD_SIZE, "cfg80211tool %s%d mode %s",VAP_PREFIX,apindex,cmd);
+    len = strlen(output) > strlen(cmd) ? strlen(output) : strlen(cmd);
+    if (strncmp(output, cmd, len) != 0 ) {
+        snprintf(tmp, DEFAULT_CMD_SIZE, "cfg80211tool %s mode %s",getInterface(apindex),cmd);
         system(tmp);
     }
 
@@ -652,20 +495,12 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
 
 int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
-    char param [DEFAULT_CMD_SIZE] = {0};
     char temp_buff [MAX_BUF_SIZE] = {0};
     char cmd[MAX_BUF_SIZE] = {0};
     int ret = 0;
     uint32_t apIndex = 0, primary_vap_index = 0;// check private vap index
+    int channel = 0;
     char *guard_int = NULL;
-    wifi_radio_info_t *radio = NULL;
-
-
-    radio = get_radio_by_rdk_index(index);
-    if (radio == NULL) {
-        wifi_hal_error_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
-        return RETURN_ERR;
-    }
 
     if (operationParam == NULL || check_radio_index(index) != 0 ) {
         wifi_hal_error_print("%s:%d returning error param:%p index:%d\n",__func__,__LINE__, operationParam, index);
@@ -687,21 +522,11 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     qca_setRadioMode(index, operationParam);
     wifi_setRadioTransmitPower(index, operationParam->transmitPower);
 
-    memset(param, 0 ,sizeof(param));
-    snprintf(param,sizeof(param), "wifi%d.autochannel.enabled", index);
-    qcacfg_nvram_set_int(param, operationParam->autoChannelEnabled);
 
     wifi_setRadioObssCoexistenceEnable(primary_vap_index, operationParam->obssCoex);
     wifi_setRadioSTBCEnable(primary_vap_index, operationParam->stbcEnable);
     wifi_getRadioOperatingChannelBandwidth(index, temp_buff);
 
-    memset(param, 0 ,sizeof(param));
-    snprintf(param, sizeof(param), "%s%d.bandwidth", RADIO_PREFIX, index);
-    qcacfg_nvram_set_str(param, temp_buff);
-
-    memset(param, 0 ,sizeof(param));
-    snprintf(param, sizeof(param), "%s%d.dtimPeriod", RADIO_PREFIX, index);
-    qcacfg_nvram_set_int(param, operationParam->dtimPeriod);
 
     if (index == RDK_2G_RADIO){
         for (apIndex = 0; apIndex < MAX_NUM_VAP_PER_RADIO; apIndex++){
@@ -719,28 +544,6 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
         }
     }
 
-    memset(param, 0 ,sizeof(param));
-    snprintf(param, sizeof(param), "%s%d.fragmentationThreshold", RADIO_PREFIX, index);
-    qcacfg_nvram_set_int(param, operationParam->fragmentationThreshold);
-
-    memset(param, 0 ,sizeof(param));
-    snprintf(param, sizeof(param), "%s%d.band", RADIO_PREFIX, index);
-    qcacfg_nvram_set_int(param, operationParam->band);
-
-    memset(param, 0 ,sizeof(param));
-    memset(temp_buff, 0 ,sizeof(temp_buff));
-    snprintf(param, sizeof(param), "%s%d.operatingstandard", RADIO_PREFIX, index);
-    get_radio_variant_str_from_int(operationParam->variant, temp_buff);
-    qcacfg_nvram_set_str(param, temp_buff);
-
-    memset(param, 0 ,sizeof(param));
-    memset(temp_buff, 0 ,sizeof(temp_buff));
-    snprintf(param, sizeof(param), "%s%d.beaconInterval", RADIO_PREFIX, index);
-    qcacfg_nvram_set_int(param, operationParam->beaconInterval);
-
-    memset(param, 0 ,sizeof(param));
-    snprintf(param, sizeof(param), "%s.%d.guardInterval", RADIO_PREFIX, index);
-    qcacfg_nvram_set_int(param, operationParam->guardInterval);
     switch(operationParam->guardInterval)
     {
         case wifi_guard_interval_400:
@@ -755,8 +558,6 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
         case wifi_guard_interval_3200:
             guard_int = "3200nsec";
             break;
-	default:
-	    break;
     }
     if(guard_int != NULL)
     {
@@ -782,16 +583,13 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
         }
     }
 
-    // ACS will trigger only at bootup. Post that it shouldn't trigger unless OneWiFi gets
-    // restarted due to abnormal behaviour.
     if (operationParam->autoChannelEnabled) {
-        if(!radio->configured) {
-            snprintf(cmd, sizeof(cmd), "iwconfig %s%d channel 0",VAP_PREFIX, primary_vap_index);
-            ret = system(cmd);
-            if(ret == -1) {
-                wifi_hal_error_print("ACS set command failed %s:%d \n",__func__, __LINE__);
-            }
+        snprintf(cmd, sizeof(cmd), "iwconfig %s channel 0",getInterface(primary_vap_index));
+        ret = system(cmd);
+        if(ret == -1) {
+            wifi_hal_error_print("ACS set command failed %s:%d \n",__func__, __LINE__);
         }
+
     }
 
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
@@ -827,10 +625,6 @@ int nvram_get_radio_enable_status(bool *radio_enable, int radio_index)
 
 int nvram_get_vap_enable_status(bool *vap_enable, int vap_index)
 {
-    char param [DEFAULT_CMD_SIZE] = {0};
-    
-    snprintf(param, DEFAULT_CMD_SIZE, "%s%d.vap_enabled", VAP_PREFIX,vap_index);
-    qcacfg_nvram_get_bool(param, vap_enable);
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
     return 0;
 }
@@ -841,186 +635,213 @@ int nvram_get_current_security_mode(wifi_security_modes_t *security_mode,int vap
     return 0;
 }
 
-int platform_get_keypassphrase_default(char *password, int vap_index)
+int sta_security_keypassphrase_restore(char* password, int vap_index)
 {
-    int ret = 0;
-    char param [DEFAULT_CMD_SIZE] = {0};
-    char value[MAX_DEFAULT_VALUE_SIZE] = {0};
+    int line_number = 1;
+    FILE* fptr;
+    char credentials_file[BHAUL_CREDS_LEN];
+    if (!password)
+    {
+        return -1;
+    }
+    sprintf(credentials_file, "%s/%d", BHAUL_CREDS_PATH, vap_index);
 
-    if(is_wifi_hal_vap_private(vap_index))
+    fptr = fopen(credentials_file, "r");
+    if (fptr == NULL)
     {
-        ret = read_from_factory_defaults(FACTORY_DEFAULTS_FILE, DEFAULT_WIFI_PASSWORD_KEY,
-                                 value, sizeof(value));
+        return -1;
     }
-    else if(is_wifi_hal_vap_xhs(vap_index))
+
+    while (fgets(password, BHAUL_CREDS_LEN, fptr) != NULL) {
+        if (line_number == 2)
+        {
+            size_t len = strlen(password);
+            if (len > 0 && password[len - 1] == '\n') /* Remove a newline character */
+            {
+                password[len - 1] = '\0';
+            }
+            break;
+        }
+        line_number++;
+    }
+
+    fclose(fptr);
+
+    if (password[0] == '\0')
     {
-        ret = read_from_factory_defaults(FACTORY_DEFAULTS_FILE, DEFAULT_XHS_PASSWORD_KEY,
-                                 value, sizeof(value));
+        return -1;
     }
-    else
+    return 0;
+}
+
+int sta_security_ssid_restore(char* ssid, int vap_index)
+{
+    FILE* fptr;
+    char credentials_file[BHAUL_CREDS_LEN];
+    if (!ssid)
     {
-        snprintf(param, DEFAULT_CMD_SIZE, "%s%d.password", VAP_PREFIX, vap_index);
-        qcacfg_nvram_get(param, password, WIFI_AP_MAX_PASSPHRASE_LEN);
-        return 0;
+        return -1;
     }
-    if(ret == -1)
+    sprintf(credentials_file, "%s/%d", BHAUL_CREDS_PATH, vap_index);
+
+    fptr = fopen(credentials_file, "r");
+    if (fptr == NULL)
     {
-        wifi_hal_info_print("%s:%d Reading default password for vap %d from qca DB\n",
-                                                           __func__, __LINE__, vap_index);
-        snprintf(param, DEFAULT_CMD_SIZE, "%s%d.password", VAP_PREFIX, vap_index);
-        qcacfg_nvram_get(param, password, WIFI_AP_MAX_PASSPHRASE_LEN);
-        return 0;
+        return -1;
     }
-    strcpy(password, value);
+
+    if (fgets(ssid, BHAUL_CREDS_LEN, fptr) != NULL)
+    {
+        size_t len = strlen(ssid);
+        if (len > 0 && ssid[len - 1] == '\n') /* Remove a newline character */
+        {
+            ssid[len - 1] = '\0';
+        }
+    }
+    fclose(fptr);
+
+    if (ssid[0] == '\0')
+    {
+        return -1;
+    }
 
     return 0;
+}
+static bool sta_security_config_get(char *config_cmd, int cmd_len)
+{
+   if (!config_cmd) {
+      return false;
+   }
+
+   snprintf(config_cmd,cmd_len-1,"%s/%s %s | grep retval",CONFIG_PATH,CONFIG_FILE,STATICCPGCFG_1);
+   return true;
+}
+static bool sta_security_pwd_get(char *cmd, char *pwd)
+{
+
+   FILE *fcmd = NULL;
+   bool ret = false;
+   char buf[STA_PWD_LEN] = {0};
+
+   if (!cmd || !pwd) {
+      return false;
+   }
+
+    fcmd = popen(cmd, "r");
+    if (fcmd ==  NULL)
+    {
+        goto exit;
+    }
+    while (fgets(buf, sizeof(buf), fcmd) != NULL) {
+        wifi_hal_info_print("%s:%d: Res = [%s] \n", __func__, __LINE__, buf);
+    }
+    pclose(fcmd);
+    fcmd = NULL;
+    memset(buf,0,sizeof(buf));
+
+    fcmd = fopen(STATICCPGCFG_1,"r");
+    if (fcmd == NULL)
+    {
+        wifi_hal_error_print("%s, fopen() failed",__func__);
+        goto exit;
+    }
+
+    if (fgets(buf, STA_PWD_LEN-1,fcmd) != NULL)
+    {
+        buf[strlen(buf) - 1] = '\0';
+        strcpy(pwd, buf);
+        ret = true;
+    } else {
+        wifi_hal_error_print("%s, fgets() failed",__func__);
+        goto exit;
+    }
+exit:
+    if (fcmd != NULL) {
+        fclose(fcmd);
+    }
+
+    return ret;
+}
+
+static bool sta_security_pwd_clear()
+{
+     return remove(STATICCPGCFG_1);
+}
+
+int platform_get_keypassphrase_default(char *password, int vap_index)
+{
+   char config_cmd[STATICCPGCFG_LEN] = {0};
+
+   if (!password) {
+      wifi_hal_error_print("%s, Invalid input arguments.",__func__);
+      return -1;
+   }
+
+   if (!is_wifi_hal_vap_mesh_sta(vap_index)) {
+      return 0 ;
+   }
+
+   if (sta_security_keypassphrase_restore(password, vap_index) == 0){
+      return 0;
+   }
+
+   if (!sta_security_config_get(config_cmd,STATICCPGCFG_LEN)) {
+      return -1;
+   }
+
+   if (!sta_security_pwd_get(config_cmd, password))
+   {
+      return -1;
+   }
+   sta_security_pwd_clear();
+   wifi_hal_info_print("%s, Password fetch successful.",__func__);
+   return 0;
 }
 
 int platform_get_ssid_default(char *ssid, int vap_index)
 {
-    int ret = 0;
-    char param [DEFAULT_CMD_SIZE] = {0};
-    char value[MAX_DEFAULT_VALUE_SIZE] = {0};
+   if (!ssid) {
+      return -1;
+   }
 
-    if(is_wifi_hal_vap_private(vap_index))
-    {
-        ret = read_from_factory_defaults(FACTORY_DEFAULTS_FILE, DEFAULT_24G_SSID_KEY, value, sizeof(value));
+   if (is_wifi_hal_vap_mesh_sta(vap_index)) {
+        sta_security_ssid_restore(ssid, vap_index)  ? strcpy(ssid, BACKHAUL_STA_SSID) : (void)0 ;
     }
-    else if(is_wifi_hal_vap_xhs(vap_index))
-    {
-        ret = read_from_factory_defaults(FACTORY_DEFAULTS_FILE, DEFAULT_XHS_SSID_KEY, value, sizeof(value));
-    }
-    else
-    {
-        snprintf(param, DEFAULT_CMD_SIZE, "%s%d.ssid", VAP_PREFIX, vap_index);
-        qcacfg_nvram_get(param, ssid, WIFI_AP_MAX_SSID_LEN);
-        return 0;
-    }
-    if(ret == -1)
-    {
-        wifi_hal_info_print("%s:%d Reading default SSID for vap %d from qca DB\n",
-                                                           __func__, __LINE__, vap_index);
-        snprintf(param, DEFAULT_CMD_SIZE, "%s%d.ssid", VAP_PREFIX, vap_index);
-        qcacfg_nvram_get(param, ssid, WIFI_AP_MAX_SSID_LEN);
-        return 0;
-    }
-    strcpy(ssid, value);
-
     return 0;
 }
 
 int platform_get_wps_pin_default(char *pin)
 {
-    /* dummy pin value */
-    strcpy(pin,"45276453"); 
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     return 0;
 }
 
-void mac_print (u_int8_t *context, u_int8_t *mac)
-{
-    wifi_hal_info_print("%s %02x:%02x:%02x:%02x:%02x:%02x\n",context, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    return;
-}
 int platform_wps_event(wifi_wps_event_t data)
 {
-    union wps_event_data *wps = (union wps_event_data *) data.wps_data;
-    if (wps == NULL) {
-        wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
-        return -1;
-    }
-
-    u_int8_t event = data.event;
-    struct wps_event_success *success = NULL;
-    struct wps_event_pwd_auth_fail *auth_fail = NULL;
-    struct wps_event_fail *fail = NULL;
-
-    wifi_hal_info_print("%s:%d WPS EVENT Received %d %s\n", __func__, __LINE__, data.event, WPS_enum_to_str[data.event]);
-    switch (event) {
-        case WPS_EV_M2D:
-            wifi_hal_info_print("%s:%d WPS received %s\n", __func__, __LINE__, WPS_enum_to_str[data.event]);
-            break;
-        case WPS_EV_FAIL:
-            fail = &wps->fail;
-            mac_print( (uint8_t*) "WPS Registration Fail", fail->peer_macaddr);
-
-            if (fail->error_indication > 0 && fail->error_indication < NUM_WPS_EI_VALUES) {
-                wifi_hal_info_print("%s:%d WPS-FAIL msg=%d config_error=%d reason=%d (%s)\n",__func__, __LINE__, fail->msg, 
-                                    fail->config_error, fail->error_indication, WPS_ei_to_str[fail->error_indication]);
-            } else {
-                wifi_hal_info_print("%s:%d WPS-FAIL msg=%d config_error=%d reason=%d\n",__func__, __LINE__, fail->msg, 
-                                    fail->config_error, fail->error_indication);
-            }
-            break;
-        case WPS_EV_SUCCESS:
-            success = &wps->success;
-            mac_print( (uint8_t*) "WPS Registration Success", success->peer_macaddr);
-            break;
-        case WPS_EV_PWD_AUTH_FAIL:
-            auth_fail = &wps->pwd_auth_fail;
-            mac_print( (uint8_t*) "WPS: Authentication failure update", auth_fail->peer_macaddr);
-            break;
-        case WPS_EV_PBC_OVERLAP:
-            wifi_hal_info_print("%s:%d PBC Status: %s\n",__func__, __LINE__,pbc_status_str[WPS_PBC_STATUS_OVERLAP]);
-            break;
-        case WPS_EV_PBC_TIMEOUT:
-            wifi_hal_info_print("%s:%d PBC Status: %s\n",__func__, __LINE__,pbc_status_str[WPS_PBC_STATUS_TIMEOUT]);
-            break;
-        case WPS_EV_PBC_DISABLE:
-            wifi_hal_info_print("%s:%d PBC Status: %s\n",__func__, __LINE__,pbc_status_str[WPS_PBC_STATUS_DISABLE]);
-            break;
-        case WPS_EV_PBC_ACTIVE:
-            wifi_hal_info_print("%s:%d PBC Status: %s\n",__func__, __LINE__,pbc_status_str[WPS_PBC_STATUS_ACTIVE]);
-            break;
-        case WPS_EV_ER_AP_ADD:
-            wifi_hal_info_print("%s:%d WPS ER: AP added %s\n", __func__, __LINE__, WPS_enum_to_str[data.event]);
-            break;
-        case WPS_EV_ER_AP_REMOVE:
-            wifi_hal_info_print("%s:%d WPS ER: AP removed %s\n", __func__, __LINE__, WPS_enum_to_str[data.event]);
-            break;
-        case WPS_EV_ER_ENROLLEE_ADD:
-            wifi_hal_info_print("%s:%d WPS ER: Enrollee added %s\n", __func__, __LINE__, WPS_enum_to_str[data.event]);
-            break;
-        case WPS_EV_ER_ENROLLEE_REMOVE:
-            wifi_hal_info_print("%s:%d WPS ER: Enrollee removed %s\n", __func__, __LINE__, WPS_enum_to_str[data.event]);
-            break;
-        case WPS_EV_ER_AP_SETTINGS:
-            wifi_hal_info_print("%s:%d WPS ER: AP Settings learned %s\n", __func__, __LINE__, WPS_enum_to_str[data.event]);
-            break;
-        case WPS_EV_ER_SET_SELECTED_REGISTRAR:
-            wifi_hal_info_print("%s:%d WPS ER: SetSelectedRegistrar %s\n", __func__, __LINE__, WPS_enum_to_str[data.event]);
-            break;
-        case WPS_EV_AP_PIN_SUCCESS:
-            wifi_hal_info_print("%s:%d WPS External Registrar used correct AP PIN %s\n", __func__, __LINE__, WPS_enum_to_str[data.event]);
-            break;
-        default:
-            break;
-    }
     return 0;
 }
 
 int platform_get_country_code_default(char *code)
 {
-    strcpy(code,"US");
+    if (code == NULL) {
+        wifi_hal_error_print("%s:%d: code is NULL\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+#ifdef TARGET_GEMINI7_2
+        strcpy(code, "GR");
+#endif
     return 0;
 }
 
 int nvram_get_current_password(char *l_password, int vap_index)
 {
-    char param [DEFAULT_CMD_SIZE] = {0};
-
-    snprintf(param, DEFAULT_CMD_SIZE, "%s%d.password", VAP_PREFIX, vap_index);
-    qcacfg_nvram_get(param, l_password, WIFI_AP_MAX_PASSPHRASE_LEN);
-
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     return 0;
 }
 
 int nvram_get_current_ssid(char *l_ssid, int vap_index)
 {
-    char param [DEFAULT_CMD_SIZE] = {0};
-
-    snprintf(param, DEFAULT_CMD_SIZE, "%s%d.ssid", VAP_PREFIX,vap_index);
-    qcacfg_nvram_get(param, l_ssid, WIFI_AP_MAX_SSID_LEN);
-    
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     return 0;
 }
 
@@ -1063,11 +884,6 @@ static int qca_create_mld_interfaces(wifi_vap_info_map_t *map)
                                             vap->vap_index, MAC2STR(mld_mac_addr));
             wifi_hal_info_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
             system(cmd);
-	    if (is_wifi_hal_vap_mesh_backhaul(vap->vap_index)) {
-		    snprintf(cmd, sizeof(cmd), "ip link set dev mld%d mtu 1600", vap->vap_index);
-		    wifi_hal_info_print("adding 1600 MTU value to mld%d \n", vap->vap_index);
-		    system(cmd);
-	    }
         }
     }
     return RETURN_OK;
@@ -1086,19 +902,6 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         vap = &map->vap_array[vap_itr];
         get_interface_name_from_vap_index(vap->vap_index, interface_name);
         snprintf(param, sizeof(param), "ath%d.vap_enabled", vap->vap_index);
-        if (vap->vap_mode == wifi_vap_mode_ap) {
-            if (vap->u.bss_info.enabled) {
-                qcacfg_nvram_set_str(param, "1");
-            } else {
-                qcacfg_nvram_set_str(param, "0");
-            }
-        } else if (vap->vap_mode == wifi_vap_mode_sta) {
-            if (vap->u.sta_info.enabled) {
-                qcacfg_nvram_set_str(param, "1");
-            } else {
-                qcacfg_nvram_set_str(param, "0");
-            }
-        }
     }
     qca_create_mld_interfaces(map);
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
@@ -1136,11 +939,11 @@ int platform_get_channel_bandwidth(wifi_radio_index_t index,  wifi_channelBandwi
     u_int8_t seqCounter = 0;
 
     wifi_getRadioOperatingChannelBandwidth(index, temp_buff);
-    if (temp_buff[0] == '\0') {
+    if (temp_buff[0] == 0) {
         wifi_hal_error_print("%s:%d Channel Bandwidth is NULL\n", __func__, __LINE__);
         return -1;
     }
-
+ 
     for (seqCounter = 0; seqCounter < ARRAY_SZ(wifiChannelBandWidthMap); seqCounter++) {
         if (strncmp(temp_buff, wifiChannelBandWidthMap[seqCounter].wifiChanWidthName, strlen(wifiChannelBandWidthMap[seqCounter].wifiChanWidthName))) {
             *channelWidth = wifiChannelBandWidthMap[seqCounter].halWifiChanWidth;
@@ -1195,28 +998,7 @@ int platform_set_offload_mode(void* priv, uint offload_mode)
 
 int platform_get_radius_key_default(char *radius_key)
 {   
-    char nvram_name[NVRAM_NAME_SIZE] = {0};
-    char temp_buff[MAX_BUF_SIZE] = {0};
-    char val[WIFI_MAX_RADIUS_KEY] = {0};
-    FILE *fptr = NULL;
-
-    snprintf(temp_buff, sizeof(temp_buff), "/usr/bin/GetConfigFile %s stdout", getRadiusCfgFile);
-
-    fptr = popen(temp_buff, "r");
-    if (fptr == NULL) {
-        wifi_hal_dbg_print("%s: popen error\n", __FUNCTION__);
-        return -1;
-    }
-
-    if(fgets(val, sizeof(val), fptr) == NULL){
-        snprintf(nvram_name, sizeof(nvram_name), "auth_server_shared_secret");
-        qcacfg_nvram_get(nvram_name, val, WIFI_MAX_RADIUS_KEY);
-    }
-
-    pclose(fptr);
-    strncpy(radius_key, val, strlen(val));
-    memset(val, '\0', sizeof(val));
-
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     return 0;
 }
 
@@ -1261,7 +1043,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
      pclose(fptr);
      strtok_r(val, "\n", &context);
 
-     radioPhyTemperature->radio_Temperature = (val[0] != '\0') ? atoi(val) : 0;
+     radioPhyTemperature->radio_Temperature = (val ? atoi(val) : 0);
 
      return RETURN_OK;
 }
@@ -1285,24 +1067,6 @@ int platform_set_neighbor_report(uint index, uint add, mac_address_t mac)
 
 int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
-    wifi_radio_info_t *radio = NULL;
-
-    radio = get_radio_by_rdk_index(index);
-    if (radio == NULL) {
-        wifi_hal_error_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
-        return -1;
-    }
-
-    if (operationParam == NULL || check_radio_index(index) != 0 ) {
-        wifi_hal_error_print("%s:%d returning error param:%p index:%d\n",__func__,__LINE__, operationParam, index);
-        return -1;
-    }
-
-    if (wifi_setRadioDfsEnable(index, operationParam->DfsEnabled) != RETURN_OK) {
-        wifi_hal_error_print("%s:%d RadioDfsEnable Failed\n", __func__, __LINE__);
-        return RETURN_ERR;
-    }
-
     return 0;
 }
 
@@ -1372,7 +1136,7 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
     wifi_hal_dbg_print("%s:%d: EXIT\n", __func__, __LINE__);
     return res;
 #else
-#error "The nl80211_drv_mlo_msg is not implemented"
+#error "The wifi_drv_set_ap_mlo is not implemented"
 #endif /* CONFIG_MLO */
 }
 
@@ -1567,169 +1331,6 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     }
     wifi_hal_dbg_print("%s:%d Exit\n",__func__,__LINE__);
     return 0;
-}
-
-static bool is_bonding_slave(const char* mld_name, const char* ifname)
-{
-    char linebuf[512];
-    char slave_list[128];
-    char *slave;
-    char *rest;
-    FILE *fp;
-    bool ret = false;
-
-    snprintf(slave_list, sizeof(slave_list), "/sys/class/net/%s/bonding/slaves", mld_name);
-    fp = fopen(slave_list,"r");
-    if (NULL==fp) {
-        wifi_hal_error_print("%s:%d Failed to open file %s\n", __func__, __LINE__, slave_list);
-        return ret;
-    }
-
-    if (access(slave_list, F_OK ) == 0) {
-        linebuf[0] = '\0';
-        fgets(linebuf,sizeof(linebuf), fp);
-        if (strlen(linebuf) && linebuf[strlen(linebuf)-1] == '\n') {
-            linebuf[strlen(linebuf)-1] = '\0'; // remove trailing newline character (\n)
-        }
-        wifi_hal_dbg_print("%s:%d  slaves=%s\n", __func__, __LINE__, linebuf);
-        rest = linebuf;
-        while ((slave = strtok_r(rest, " ", &rest))) {
-            printf("%s ", slave);
-            if (strcmp(slave, ifname)==0) {
-                wifi_hal_dbg_print("%s:%d %s is bonding slave of %s\n", __func__, __LINE__, ifname, mld_name);
-                ret = true;
-                break;
-            }
-        }
-    }
-    fclose(fp);
-    if (!ret) {
-        wifi_hal_dbg_print("%s:%d %s is not a bonding slave of %s\n", __func__, __LINE__, ifname, mld_name);
-    }
-    return ret;
-}
-
-INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
-{
-    char cmd[QCA_MAX_CMD_SZ];
-    char mld_ifname[32];
-    char ifname[32];
-    char mld_mac_addr[ETH_ALEN];
-    char mld_mac_str[18];
-
-    if (interface == NULL || radio == NULL) {
-        wifi_hal_error_print("%s:%d: Invalid arguments\n", __func__, __LINE__);
-        return RETURN_ERR;
-    }
-    if ((int)interface->vap_info.vap_index >= 0) {
-        if (get_interface_name_from_vap_index(interface->vap_info.vap_index, ifname) != RETURN_OK ) {
-            wifi_hal_error_print("%s:%d: vap index:%d failed to get interface name from vap index\n",
-                __func__, __LINE__, interface->vap_info.vap_index);
-            return RETURN_ERR;
-        }
-        if (qca_get_vap_mld_addr(&interface->vap_info, mld_mac_addr) == RETURN_ERR) {
-            wifi_hal_error_print("%s:%d: vap index:%d failed to get mld address\n",
-                __func__, __LINE__, interface->vap_info.vap_index);
-            return RETURN_ERR;
-        }
-
-        snprintf(mld_mac_str, sizeof(mld_mac_str), MACSTR, MAC2STR(mld_mac_addr));
-        snprintf(mld_ifname, sizeof(mld_ifname), "mld%d", interface->vap_info.vap_index);
-
-        if ((!(radio->oper_param.variant & WIFI_80211_VARIANT_BE)) && is_bonding_slave(mld_ifname, ifname)) {
-            snprintf(cmd, sizeof(cmd), "cfg80211tool ath%d mode %s", interface->vap_info.vap_index,
-                (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND)? "11GHE20" : "11AHE80");
-            wifi_hal_info_print("%s:%d Executing: %s\n",__func__, __LINE__, cmd);
-            system(cmd);
-            wifi_hal_info_print("%s:%d Delete bonding between ifname:%s and mld:%s\n"
-                ,__func__, __LINE__, ifname, mld_ifname);
-            wifi_setMLDaddr(interface->vap_info.vap_index, "00:00:00:00:00:00");
-        } else if ((radio->oper_param.variant & WIFI_80211_VARIANT_BE) && (!is_bonding_slave(mld_ifname, ifname))) {
-            snprintf(cmd, sizeof(cmd), "cfg80211tool ath%d mode %s", interface->vap_info.vap_index,
-                (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND)? "11GEHT20" : "11AEHT80");
-            wifi_hal_info_print("%s:%d Executing: %s\n",__func__, __LINE__, cmd);
-            system(cmd);
-            wifi_hal_info_print("%s:%d Create bonding between ifname:%s and mld:%s [%s]\n"
-                ,__func__, __LINE__, ifname, mld_ifname, mld_mac_str);
-            wifi_setMLDaddr(interface->vap_info.vap_index, "00:00:00:00:00:00");
-            wifi_setMLDaddr(interface->vap_info.vap_index, mld_mac_str);
-        } else {
-            wifi_hal_dbg_print("%s:%d No need to changing bonding state for %s\n", __func__, __LINE__, ifname);
-        }
-    }
-    return RETURN_OK;
-}
-
-INT platform_set_radio_mld_bonding(wifi_radio_info_t *radio)
-{
-    char cmd[QCA_MAX_CMD_SZ];
-    wifi_interface_info_t *interface;
-    interface = hash_map_get_first(radio->interface_map);
-    char mld_ifname[32];
-    char ifname[32];
-    char mld_mac_addr[ETH_ALEN];
-    char mld_mac_str[18];
-
-    while (interface != NULL) {
-        if ((int)interface->vap_info.vap_index >= 0) {
-            if (get_interface_name_from_vap_index(interface->vap_info.vap_index, ifname) != RETURN_OK ) {
-                wifi_hal_error_print("%s:%d: vap index:%d failed to get interface name from vap index\n",
-                    __func__, __LINE__, interface->vap_info.vap_index);
-                return RETURN_ERR;
-            }
-            if (qca_get_vap_mld_addr(&interface->vap_info, mld_mac_addr) == RETURN_ERR) {
-                wifi_hal_error_print("%s:%d: vap index:%d failed to get mld address\n",
-                    __func__, __LINE__, interface->vap_info.vap_index);
-                return RETURN_ERR;
-            }
-
-            snprintf(mld_mac_str, sizeof(mld_mac_str), MACSTR, MAC2STR(mld_mac_addr));
-            snprintf(mld_ifname, sizeof(mld_ifname), "mld%d", interface->vap_info.vap_index);
-
-            if ( (!(radio->oper_param.variant & WIFI_80211_VARIANT_BE)) && is_bonding_slave(mld_ifname, ifname)) {
-                snprintf(cmd, sizeof(cmd), "cfg80211tool ath%d mode %s", interface->vap_info.vap_index,
-                    (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND)? "11GHE20" : "11AHE80");
-                wifi_hal_info_print("%s:%d Executing: %s\n",__func__, __LINE__, cmd);
-                system(cmd);
-                wifi_hal_info_print("%s:%d Delete bonding between ifname:%s and mld:%s\n"
-                    ,__func__, __LINE__, ifname, mld_ifname);
-                wifi_setMLDaddr(interface->vap_info.vap_index, "00:00:00:00:00:00");
-            } else if ((radio->oper_param.variant & WIFI_80211_VARIANT_BE) && (!is_bonding_slave(mld_ifname, ifname))) {
-                snprintf(cmd, sizeof(cmd), "cfg80211tool ath%d mode %s", interface->vap_info.vap_index,
-                    (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND)? "11GEHT20" : "11AEHT80");
-                wifi_hal_info_print("%s:%d Executing: %s\n",__func__, __LINE__, cmd);
-                system(cmd);
-                wifi_hal_info_print("%s:%d Create bonding between ifname:%s and mld:%s [%s]\n"
-                    ,__func__, __LINE__, ifname, mld_ifname, mld_mac_str);
-                wifi_setMLDaddr(interface->vap_info.vap_index, "00:00:00:00:00:00");
-                wifi_setMLDaddr(interface->vap_info.vap_index, mld_mac_str);
-            } else {
-                wifi_hal_dbg_print("%s:%d No need to changing bonding state for %s\n", __func__, __LINE__, ifname);
-            }
-        }
-        interface = hash_map_get_next(radio->interface_map, interface);
-    }
-    return RETURN_OK;
-}
-
-INT platform_create_interface_attributes(struct nl_msg **msg_ptr, wifi_radio_info_t *radio, wifi_vap_info_t *vap)
-{
-    char mld_mac_addr[ETH_ALEN];
-    (void)radio;
-
-    if (msg_ptr == NULL || *msg_ptr == NULL || vap == NULL) {
-        wifi_hal_dbg_print("%s:%d Invalid arguments\n", __func__, __LINE__);
-        return RETURN_ERR;
-    }
-    if (qca_get_vap_mld_addr(vap, mld_mac_addr) == RETURN_ERR) {
-        return RETURN_ERR;
-    }
-    wifi_hal_info_print("%s:%d:Adding MLD addr " MACSTR " for vap index:%d\n", __func__, __LINE__,
-        MAC2STR(mld_mac_addr), vap->vap_index);
-    if (nla_put(*msg_ptr, NL80211_ATTR_MLD_MAC, ETH_ALEN, mld_mac_addr) < 0) {
-        return RETURN_ERR;
-    }
-    return RETURN_OK;
 }
 
 INT wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
