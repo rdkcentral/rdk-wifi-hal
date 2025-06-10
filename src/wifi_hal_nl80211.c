@@ -16414,6 +16414,34 @@ static size_t wifi_drv_mbssid_hs20_indication(struct hostapd_data *bss, struct h
     return ie_len;
 }
 
+static size_t wifi_drv_mbssid_roaming_consortium(struct hostapd_data *bss, struct hostapd_data *tx_bss, u8 *buf)
+{
+    u8 ie_buf[64], tx_ie_buf[64];
+    size_t ie_len, tx_ie_len;
+    u8 *ie_end, *tx_ie_end;
+    ie_end = hostapd_eid_roaming_consortium(bss, ie_buf);
+    ie_len = ie_end - ie_buf;
+    
+    if (ie_len == 0) {
+        wifi_hal_dbg_print("%s:%d No Roaming Consortium IE present for bss, returning 0\n", 
+                          __func__, __LINE__);
+        return 0;
+    }
+    /* Generate Roaming Consortium IE for TX BSS */
+    tx_ie_end = hostapd_eid_roaming_consortium(tx_bss, tx_ie_buf);
+    tx_ie_len = tx_ie_end - tx_ie_buf;
+    /* Skip duplicate IEs in non-TX profiles */
+    if (ie_len == tx_ie_len && memcmp(ie_buf, tx_ie_buf, ie_len) == 0) {
+        return 0;
+    }
+
+    if (buf) {
+        memcpy(buf, ie_buf, ie_len);
+    }
+    
+    return ie_len;
+}
+
 static size_t wifi_drv_mbssid_mbo(struct hostapd_data *bss, u8 *buf)
 {
     u8 ie_buf[64];
@@ -16551,7 +16579,8 @@ static size_t wifi_drv_eid_mbssid_elem_len(wifi_radio_info_t *radio,
 
         nontx_profile_len += wifi_drv_mbssid_interworking(bss, tx_bss, NULL);
         nontx_profile_len += wifi_drv_mbssid_adv_proto(bss, tx_bss, NULL);
-	nontx_profile_len += wifi_drv_mbssid_hs20_indication(bss, tx_bss, NULL);
+	    nontx_profile_len += wifi_drv_mbssid_hs20_indication(bss, tx_bss, NULL);
+        nontx_profile_len += wifi_drv_mbssid_roaming_consortium(bss, tx_bss, NULL);
         nontx_profile_len += wifi_drv_mbssid_mbo(bss, NULL);
         nontx_profile_len += wifi_drv_mbssid_wmm(bss, NULL);
 
@@ -16643,7 +16672,8 @@ static u8 *wifi_drv_eid_mbssid_elem(wifi_radio_info_t *radio, wifi_interface_inf
 
         eid += wifi_drv_mbssid_interworking(bss, tx_bss, eid);
         eid += wifi_drv_mbssid_adv_proto(bss, tx_bss, eid);
-	eid += wifi_drv_mbssid_hs20_indication(bss, tx_bss, eid);
+	    eid += wifi_drv_mbssid_hs20_indication(bss, tx_bss, eid);
+        eid += wifi_drv_mbssid_roaming_consortium(bss, tx_bss, eid);
         eid += wifi_drv_mbssid_mbo(bss, eid);
         eid += wifi_drv_mbssid_wmm(bss, eid);
 
