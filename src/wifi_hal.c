@@ -745,7 +745,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     RADIO_INDEX_ASSERT(index);
     NULL_PTR_ASSERT(operationParam);
 
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
         wifi_hal_error_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
@@ -1591,7 +1591,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
 
         } else if (vap->vap_mode == wifi_vap_mode_sta) {
-#if defined(CONFIG_WIFI_EMULATOR) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+#if defined(CONFIG_WIFI_EMULATOR)
             if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
@@ -1610,6 +1610,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             //XXX set correct status after reconfigure and call conn status callback
             //nl80211_start_scan(interface);
             interface->vap_initialized = true;
+
+#ifdef CONFIG_WIFI_EMULATOR_EXT_AGENT
+            nl80211_interface_enable(interface->name, false);
+            nl80211_set_mac(interface);
+            nl80211_interface_enable(interface->name, true);
+#endif
             if (radio->configured && radio->oper_param.enable) {
                 wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
                     __LINE__, interface->name);
@@ -1619,7 +1625,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     interface->name);
                 nl80211_interface_enable(interface->name, false);
             }
-#endif //CONFIG_WIFI_EMULATOR || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+#endif //CONFIG_WIFI_EMULATOR
         }
 
         if (vap->vap_mode == wifi_vap_mode_ap) {

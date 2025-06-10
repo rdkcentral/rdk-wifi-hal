@@ -447,6 +447,10 @@ int update_hostap_data(wifi_interface_info_t *interface)
         wifi_hal_error_print("%s:%d:driver params is NULL\n", __func__, __LINE__);
         return RETURN_ERR;
     }
+#ifdef CONFIG_WIFI_EMULATOR_EXT_AGENT
+    interface->u.sta.wpa_sm = NULL;
+#endif
+
     return RETURN_OK;
 }
 

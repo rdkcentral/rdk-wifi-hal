@@ -3749,7 +3749,11 @@ int nl80211_set_mac(wifi_interface_info_t *interface)
         return NLE_NOMEM;
     }
 
+#ifdef CONFIG_WIFI_EMULATOR_EXT_AGENT
+    addr = nl_addr_build(AF_LLC, vap->u.sta_info.mac, ETH_ALEN);
+#else
     addr = nl_addr_build(AF_LLC, ether_aton(to_mac_str(vap->u.sta_info.mac, mac_str)), ETH_ALEN);
+#endif
     rtnl_link_set_addr(newlink, addr);
 
     ret = rtnl_link_change(sk, device, newlink, NLM_F_CREATE | NLM_F_REPLACE);
