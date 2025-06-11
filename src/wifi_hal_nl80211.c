@@ -6014,6 +6014,8 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
             if (is_backhaul_interface(interface)) {
                 interface_set_mtu(interface, 1600);
             }
+            // update vap mode , Default values are not yet applied 
+            update_vap_mode(interface);
         }
     }
 
