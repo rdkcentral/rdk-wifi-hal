@@ -1379,13 +1379,30 @@ static const wifi_enum_to_str_map_t wifi_bitrate_Map[] =
     {WIFI_BITRATE_54MBPS,  "54.0"    },
 };
 
+
+#if defined(TARGET_GEMINI7_2)
+static const radio_interface_mapping_t primary_interface_mapping[] = {
+    { 1, 0, "radio1", "home-ap-24"},
+    { 2, 1, "radio2", "home-ap-50"},
+    { 0 }
+};
+#endif
+
+/* int get_interface_name_from_radio_index (uint8_t radio_index, char* return_value)
+ * returns the primary interface name */
 int get_interface_name_from_radio_index(uint8_t radio_index, char *interface_name)
 {
     uint8_t i = 0;
-
+    radio_interface_mapping_t* temp_radio_map;
+#if defined(TARGET_GEMINI7_2)
+    temp_radio_map = primary_interface_mapping;
+    for (i = 0; primary_interface_mapping[i].radio_name != NULL ; i++) {
+#else
+    temp_radio_map = l_radio_interface_map;
     for (i = 0; i < get_sizeof_radio_interfaces_map(); i++) {
-        if (l_radio_interface_map[i].radio_index == radio_index) {
-            strncpy(interface_name, l_radio_interface_map[i].interface_name, strlen(l_radio_interface_map[i].interface_name));
+#endif
+        if (temp_radio_map[i].radio_index == radio_index) {
+            strncpy(interface_name, temp_radio_map[i].interface_name, strlen(temp_radio_map[i].interface_name));
             return RETURN_OK;
         }
     }
@@ -1486,6 +1503,22 @@ int is_backhaul_interface(wifi_interface_info_t *interface)
 
     vap = &interface->vap_info;
     return (strncmp(vap->vap_name, "mesh_backhaul", strlen("mesh_backhaul")) == 0) ? true : false;
+}
+
+void update_vap_mode(wifi_interface_info_t *interface)
+{
+    wifi_vap_info_t *vap;
+    vap = &interface->vap_info;
+    if (strncmp(vap->vap_name, "mesh_sta", strlen("mesh_sta")) == 0)
+    {
+            vap->vap_mode = wifi_vap_mode_sta;
+            wifi_hal_dbg_print(" mesh_sta , sta vap mode is updated \n");
+    }
+    else
+    {
+            vap->vap_mode = wifi_vap_mode_ap;
+    }
+    return;
 }
 
 void get_wifi_interface_info_map(wifi_interface_name_idex_map_t *interface_map)

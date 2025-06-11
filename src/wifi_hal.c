@@ -523,7 +523,7 @@ INT wifi_hal_init()
         update_hostap_config_params(radio);
         interface = hash_map_get_first(radio->interface_map);
 
-        while (interface != NULL) {
+        while (interface != NULL && interface->vap_info.vap_mode == wifi_vap_mode_ap) {
             if (update_hostap_data(interface) == RETURN_OK) {
                 update_hostap_iface(interface);
                 update_hostap_iface_flags(interface);
