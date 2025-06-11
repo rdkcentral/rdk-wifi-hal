@@ -16579,7 +16579,7 @@ static size_t wifi_drv_eid_mbssid_elem_len(wifi_radio_info_t *radio,
 
         nontx_profile_len += wifi_drv_mbssid_interworking(bss, tx_bss, NULL);
         nontx_profile_len += wifi_drv_mbssid_adv_proto(bss, tx_bss, NULL);
-	    nontx_profile_len += wifi_drv_mbssid_hs20_indication(bss, tx_bss, NULL);
+	nontx_profile_len += wifi_drv_mbssid_hs20_indication(bss, tx_bss, NULL);
         nontx_profile_len += wifi_drv_mbssid_roaming_consortium(bss, tx_bss, NULL);
         nontx_profile_len += wifi_drv_mbssid_mbo(bss, NULL);
         nontx_profile_len += wifi_drv_mbssid_wmm(bss, NULL);
@@ -16672,7 +16672,7 @@ static u8 *wifi_drv_eid_mbssid_elem(wifi_radio_info_t *radio, wifi_interface_inf
 
         eid += wifi_drv_mbssid_interworking(bss, tx_bss, eid);
         eid += wifi_drv_mbssid_adv_proto(bss, tx_bss, eid);
-	    eid += wifi_drv_mbssid_hs20_indication(bss, tx_bss, eid);
+	eid += wifi_drv_mbssid_hs20_indication(bss, tx_bss, eid);
         eid += wifi_drv_mbssid_roaming_consortium(bss, tx_bss, eid);
         eid += wifi_drv_mbssid_mbo(bss, eid);
         eid += wifi_drv_mbssid_wmm(bss, eid);
