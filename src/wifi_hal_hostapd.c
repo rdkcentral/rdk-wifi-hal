@@ -783,7 +783,6 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->radius->auth_servers[1].shared_secret = shared_secrets + shared_secret_chunk;
             conf->radius->fallback_already_done = false;
             conf->radius->retry_primary_interval = RADIUS_FALLBACK_TIMER_IN_SECS;
-            wifi_hal_info_print("%s:%d: Allocated memory for radius servers and basic initialization done\n", __func__, __LINE__);
         }
 
         char output[256] = {0};
@@ -1194,13 +1193,8 @@ int update_hostap_bss(wifi_interface_info_t *interface)
 #if !defined(PLATFORM_LINUX)
     // connected_building_enabled
     if (is_wifi_hal_vap_hotspot_from_interfacename(conf->iface)) {
-        if (vap->u.bss_info.mdu_phase_two_flag) {
-            conf->connected_building_avp = vap->u.bss_info.mdu_guest_hotspot_enabled;
-        }
-        else {
-            conf->connected_building_avp = vap->u.bss_info.connected_building_enabled;
-        }
-        wifi_hal_info_print("%s:%d:connected_building_enabled is %d mdu enabled = %d and ifacename is %s\n", __func__, __LINE__,conf->connected_building_avp, conf->mdu, conf->iface);
+        conf->connected_building_avp = vap->u.bss_info.connected_building_enabled;
+        wifi_hal_info_print("%s:%d:connected_building_enabled is %d and ifacename is %s\n", __func__, __LINE__,conf->connected_building_avp, conf->iface);
     }
 
     conf->speed_tier = vap->u.bss_info.am_config.npc.speed_tier;

@@ -1355,7 +1355,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
             if (validate_wifi_interface_vap_info_params(vap, msg, sizeof(msg)) != RETURN_OK) {
-                wifi_hal_error_print("%s:%d: Failed to validate interface vap_info params for vap_index: %d on radio index: %d. %s\n", __func__, __LINE__, vap->vap_index, index, msg);
+                wifi_hal_error_print("%s:%d:Failed to validate interface vap_info params for vap_index: %d on radio index: %d. %s\n", __func__, __LINE__, vap->vap_index, index, msg);
                 return WIFI_HAL_INVALID_ARGUMENTS;
             }
         }
@@ -1420,7 +1420,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #ifndef CONFIG_WIFI_EMULATOR
         if (vap->vap_mode == wifi_vap_mode_sta) {
             bool sta_4addr = 0;
-            wifi_hal_info_print("%s:%d:interface:%s remove from bridge\n", __func__, __LINE__,
+            wifi_hal_info_print("%s:%d: interface:%s remove from bridge\n", __func__, __LINE__,
                 interface->name);
             nl80211_remove_from_bridge(interface->name);
             if (get_sta_4addr_status(&sta_4addr) == RETURN_OK) {
@@ -1431,7 +1431,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         wifi_hal_info_print("%s:%d: interface:%s set mode:%d\n", __func__, __LINE__,
             interface->name, vap->vap_mode);
         if (nl80211_update_interface(interface) != 0) {
-            wifi_hal_error_print("%s:%d:interface:%s failed to set mode %d\n",__func__, __LINE__,
+            wifi_hal_error_print("%s:%d: interface:%s failed to set mode %d\n",__func__, __LINE__,
                 interface->name, vap->vap_mode);
             return RETURN_ERR;
         }
@@ -1444,7 +1444,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             if (nl80211_interface_enable(interface->name, true) != 0) {
                 ret = nl80211_retry_interface_enable(interface, true);
                 if (ret != 0) {
-                    wifi_hal_error_print("%s:%d:Retry of interface enable failed:%d\n", __func__,
+                    wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n", __func__,
                         __LINE__, ret);
                 }
             }
