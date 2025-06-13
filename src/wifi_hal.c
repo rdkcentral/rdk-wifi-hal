@@ -284,7 +284,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
         memset(hal->wifi_prop.al_1905_mac, 0, sizeof(hal->wifi_prop.al_1905_mac));
     }
 #endif
-
+#if (defined(EASY_MESH_NODE) || defined(EASY_MESH_COLOCATED_NODE))
     /* Read the al_mac address from EM_CFG_FILE */
     ret = json_parse_string(EM_CFG_FILE, "Al_MAC_ADDR", al_ctrl_mac, sizeof(al_ctrl_mac));
     if (ret == 0) {
@@ -339,7 +339,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
         __func__, __LINE__, hal->wifi_prop.serialNo, hal->wifi_prop.manufacturerModel,
         hal->wifi_prop.software_version, hal->wifi_prop.manufacturer,
         to_mac_str(hal->wifi_prop.al_1905_mac, al_ctrl_mac), hal->wifi_prop.colocated_mode);
-
+#endif
     for (i = 0; i < hal->wifi_prop.numRadios; i++) {
         radio_band = 0;
         is_band_found = false;
@@ -1423,9 +1423,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             wifi_hal_info_print("%s:%d: interface:%s remove from bridge\n", __func__, __LINE__,
                 interface->name);
             nl80211_remove_from_bridge(interface->name);
+#if (defined(EASY_MESH_NODE) || defined(EASY_MESH_COLOCATED_NODE))
             if (get_sta_4addr_status(&sta_4addr) == RETURN_OK) {
                 interface->u.sta.sta_4addr = (int)sta_4addr;
             }
+#endif
         }
 #endif
         wifi_hal_info_print("%s:%d: interface:%s set mode:%d\n", __func__, __LINE__,

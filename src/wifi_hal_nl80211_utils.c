@@ -4294,6 +4294,7 @@ static inline void init_static_interface_map(void)
 void init_interface_map(void)
 {
     unsigned int i;
+#if !defined(TARGET_GEMINI7_2)
     int json_ret;
 
     json_ret = init_json_interface_map();
@@ -4303,7 +4304,10 @@ void init_interface_map(void)
 
     wifi_hal_info_print("%s:%d: Using %s Interface Map\n", __func__, __LINE__,
         ((json_ret < 0) ? "STATIC" : "JSON"));
-
+#else
+    init_static_interface_map();
+    wifi_hal_info_print("%s:%d: Using Static Interface Map\n", __func__, __LINE__);
+#endif
     wifi_hal_info_print("%s:%d: Interface Index Map(%u):\n", __func__, __LINE__,
         interface_index_map_size);
     for (i = 0; i < interface_index_map_size; i++) {
