@@ -43,6 +43,7 @@
 #include <wifi-include/wlioctl.h>
 #elif defined(SKYSR213_PORT)
 #include <wlioctl.h>
+#include <wlioctl_defs.h>
 #else
 #include <wifi/wlioctl.h>
 #endif

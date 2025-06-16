@@ -368,8 +368,10 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
                     radio_band = WIFI_FREQUENCY_6_BAND;
                 }
             }
-            wifi_hal_info_print("%s:%d: interface name: %s, vap index: %d, vap name: %s\n", __func__, __LINE__,
-                    interface->name, vap->vap_index, vap->vap_name);
+            strncpy(interface->firmware_version, hal->wifi_prop.software_version, sizeof(interface->firmware_version) - 1);
+            interface->firmware_version[sizeof(interface->firmware_version) - 1] = '\0';
+            wifi_hal_info_print("%s:%d:interface name: %s, interface->firmware_version: %s, vap index: %d, vap name: %s\n", __func__, __LINE__,
+                    interface->name, interface->firmware_version, vap->vap_index, vap->vap_name);
             interface = hash_map_get_next(radio->interface_map, interface);
         }
 
@@ -743,7 +745,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     RADIO_INDEX_ASSERT(index);
     NULL_PTR_ASSERT(operationParam);
 
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
         wifi_hal_error_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
@@ -1348,8 +1350,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     for (i = 0; i < map->num_vaps; i++) {
         vap = &map->vap_array[i];
 
-        wifi_hal_info_print("%s:%d: vap index:%d create vap\n", __func__, __LINE__,
-            vap->vap_index);
+        wifi_hal_info_print("%s:%d: vap index:%d vap_name = %s create vap\n", __func__, __LINE__,
+            vap->vap_index, vap->vap_name);
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
             if (validate_wifi_interface_vap_info_params(vap, msg, sizeof(msg)) != RETURN_OK) {
@@ -1360,8 +1362,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         interface = get_interface_by_vap_index(vap->vap_index);
         if (interface == NULL) {
-            wifi_hal_info_print("%s:%d: vap index:%d create interface\n", __func__, __LINE__,
-                vap->vap_index);
+            wifi_hal_info_print("%s:%d:vap index:%d vap_name = %s create interface\n", __func__, __LINE__,
+                vap->vap_index, vap->vap_name);
             if ((nl80211_create_interface(radio, vap, &interface) != 0) || (interface == NULL)) {
                 wifi_hal_error_print("%s:%d: vap index:%d failed to create interface\n", __func__,
                     __LINE__, vap->vap_index);
@@ -1393,8 +1395,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             continue;
         }
 #endif
-        wifi_hal_info_print("%s:%d: vap index:%d interface:%s mode:%d\n", __func__, __LINE__,
-            vap->vap_index, interface->name, vap->vap_mode);
+        wifi_hal_info_print("%s:%d: vap index:%d interface:%s mode:%d vap_name:%s\n", __func__, __LINE__,
+            vap->vap_index, interface->name, vap->vap_mode, vap->vap_name);
         if (vap->vap_mode == wifi_vap_mode_ap) {
             wifi_hal_info_print("%s:%d: vap_enable_status:%d\n", __func__, __LINE__, vap->u.bss_info.enabled);
             memcpy(vap->u.bss_info.bssid, interface->mac, sizeof(vap->u.bss_info.bssid));
@@ -1589,7 +1591,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
 
         } else if (vap->vap_mode == wifi_vap_mode_sta) {
-#if defined(CONFIG_WIFI_EMULATOR) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+#if defined(CONFIG_WIFI_EMULATOR)
             if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
@@ -1608,6 +1610,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             //XXX set correct status after reconfigure and call conn status callback
             //nl80211_start_scan(interface);
             interface->vap_initialized = true;
+
+#ifdef CONFIG_WIFI_EMULATOR_EXT_AGENT
+            nl80211_interface_enable(interface->name, false);
+            nl80211_set_mac(interface);
+            nl80211_interface_enable(interface->name, true);
+#endif
             if (radio->configured && radio->oper_param.enable) {
                 wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
                     __LINE__, interface->name);
@@ -1617,7 +1625,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     interface->name);
                 nl80211_interface_enable(interface->name, false);
             }
-#endif //CONFIG_WIFI_EMULATOR || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+#endif //CONFIG_WIFI_EMULATOR
         }
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
