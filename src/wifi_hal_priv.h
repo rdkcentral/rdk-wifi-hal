@@ -964,6 +964,7 @@ int wifi_drv_getApAclDeviceNum(int vap_index, uint *acl_count);
 int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char* buff);
 int wifi_drv_set_acs_exclusion_list(unsigned int radioIndex, char* str);
 int platform_get_acl_num(int vap_index, uint *acl_hal_count);
+time_t get_boot_time_in_sec(void);
 
 int get_total_num_of_vaps(void);
 int wifi_setQamPlus(void *priv);
