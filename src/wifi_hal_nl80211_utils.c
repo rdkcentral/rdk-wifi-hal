@@ -1488,6 +1488,17 @@ int is_backhaul_interface(wifi_interface_info_t *interface)
     return (strncmp(vap->vap_name, "mesh_backhaul", strlen("mesh_backhaul")) == 0) ? true : false;
 }
 
+void update_vap_mode(wifi_interface_info_t *interface)
+{
+    wifi_vap_info_t *vap = &interface->vap_info;
+
+    if (strncmp(vap->vap_name, "mesh_sta", strlen("mesh_sta")) == 0) {
+        vap->vap_mode = wifi_vap_mode_sta;
+    } else {
+        vap->vap_mode = wifi_vap_mode_ap;
+    }
+}
+
 void get_wifi_interface_info_map(wifi_interface_name_idex_map_t *interface_map)
 {
     memcpy(interface_map, interface_index_map, get_sizeof_interfaces_index_map()*sizeof(wifi_interface_name_idex_map_t));
