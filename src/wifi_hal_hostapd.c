@@ -2109,12 +2109,13 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     }
 
     if (param->variant & WIFI_80211_VARIANT_AX) {
-        if (param->band == WIFI_FREQUENCY_5_BAND) {
+        if (param->band == WIFI_FREQUENCY_5_BAND || param->band == WIFI_FREQUENCY_5L_BAND ||
+            param->band == WIFI_FREQUENCY_5H_BAND) {
             iconf->hw_mode = HOSTAPD_MODE_IEEE80211A;
             iconf->ieee80211ac = 1;
         } else if (param->band == WIFI_FREQUENCY_6_BAND) {
             iconf->hw_mode = HOSTAPD_MODE_IEEE80211A;
-       } else {
+        } else {
             iconf->hw_mode = HOSTAPD_MODE_IEEE80211G;
         }
         iconf->ieee80211ax = 1;
