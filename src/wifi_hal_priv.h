@@ -898,6 +898,7 @@ void get_radio_interface_info_map(radio_interface_mapping_t *radio_interface_map
 int validate_radio_operation_param(wifi_radio_operationParam_t *param);
 int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg, int len);
 int is_backhaul_interface(wifi_interface_info_t *interface);
+void update_vap_mode(wifi_interface_info_t *interface);
 int get_interface_name_from_vap_index(unsigned int vap_index, char *interface_name);
 int get_ap_vlan_id(char *interface_name);
 int get_vap_mode_str_from_int_mode(unsigned char vap_mode, char *vap_mode_str);
