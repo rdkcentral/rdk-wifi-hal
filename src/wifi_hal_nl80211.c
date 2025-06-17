@@ -7549,7 +7549,7 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
     if (vap->vap_mode == wifi_vap_mode_ap) {
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
     } else {
-
+#ifndef TARGET_GEMINI7_2
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
 
         if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
@@ -7566,6 +7566,7 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
         }
 
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_INTERFACE);
+#endif
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_STATION);
 
         if (interface->u.sta.sta_4addr) {
