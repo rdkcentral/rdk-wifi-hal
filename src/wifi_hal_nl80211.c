@@ -598,7 +598,8 @@ void create_connect_steering_event(wifi_interface_info_t *interface, wifi_steeri
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
 
-    if (radio->oper_param.band == WIFI_FREQUENCY_5_BAND) {
+    if (radio->oper_param.band == WIFI_FREQUENCY_5_BAND || radio->oper_param.band == WIFI_FREQUENCY_5L_BAND ||
+        radio->oper_param.band == WIFI_FREQUENCY_5H_BAND) {
         steering_event->bandCap5G = 1;
     } else if (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND) {
         steering_event->bandCap2G = 1;
@@ -4184,8 +4185,16 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
         if ((freq >= MIN_FREQ_MHZ_2G) && (freq <= MAX_FREQ_MHZ_2G)) {
             freq_band = WIFI_FREQUENCY_2_4_BAND;
             band = NL80211_BAND_2GHZ;
-        } else if ((freq >= MIN_FREQ_MHZ_5G) && (freq <= MAX_FREQ_MHZ_5G)) {
+        } else if ((freq >= MIN_FREQ_MHZ_5G) || (freq <= MAX_FREQ_MHZ_5G)) {
+#if defined (XLE_PORT)
+            if (freq < 5500) {
+                freq_band = WIFI_FREQUENCY_5L_BAND;
+            } else {
+                freq_band = WIFI_FREQUENCY_5H_BAND;
+            }
+#else
             freq_band = WIFI_FREQUENCY_5_BAND;
+#endif
             band = NL80211_BAND_5GHZ;
 #if HOSTAPD_VERSION >= 210
         } else if ((freq >= MIN_FREQ_MHZ_6G) && (freq <= MAX_FREQ_MHZ_6G)) {
@@ -9153,11 +9162,12 @@ static void parse_supprates(const uint8_t type, uint8_t len,
         }
         else if ( r/2 == 54 )
         {
-            if (bss->oper_freq_band & WIFI_FREQUENCY_5_BAND) {
+            if (bss->oper_freq_band & WIFI_FREQUENCY_5_BAND ||
+                bss->oper_freq_band & WIFI_FREQUENCY_5L_BAND ||
+                bss->oper_freq_band & WIFI_FREQUENCY_5H_BAND) {
                 bss->supp_standards |= WIFI_80211_VARIANT_A;
                 bss->oper_standards = WIFI_80211_VARIANT_A;
-            }
-            else{
+            } else {
                 bss->supp_standards |= WIFI_80211_VARIANT_G;
                 bss->oper_standards = WIFI_80211_VARIANT_G;
             }
@@ -9553,7 +9563,8 @@ static void parse_vht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
             break;
     }
 
-    if (bss->oper_freq_band & WIFI_FREQUENCY_5_BAND) {
+    if (bss->oper_freq_band & WIFI_FREQUENCY_5_BAND || bss->oper_freq_band & WIFI_FREQUENCY_5L_BAND ||
+        bss->oper_freq_band & WIFI_FREQUENCY_5H_BAND) {
         bss->supp_standards |= WIFI_80211_VARIANT_AC;
         bss->oper_standards = WIFI_80211_VARIANT_AC;
     }
@@ -9584,13 +9595,15 @@ static void parse_he_capa(const uint8_t type, uint8_t len, const uint8_t *data,
     }
 
     /* B1 indicates support for a 40 MHz and 80 MHz channel width in 5GHz */
-    if ((bss->oper_freq_band & WIFI_FREQUENCY_5_BAND) && (he_supported_chan_width_set & BIT(1))) {
+    if ((bss->oper_freq_band & WIFI_FREQUENCY_5_BAND || bss->oper_freq_band & WIFI_FREQUENCY_5L_BAND ||
+         bss->oper_freq_band & WIFI_FREQUENCY_5H_BAND) && (he_supported_chan_width_set & BIT(1))) {
         bss->supp_chan_bw |= (WIFI_CHANNELBANDWIDTH_40MHZ | WIFI_CHANNELBANDWIDTH_80MHZ);
     }
 
     /* B2 indicates support for a 160 MHz channel width in 5GHz
     * B3 indicates support for a 160/80+80 MHz channel width in 5GHz */
-    if ((bss->oper_freq_band & WIFI_FREQUENCY_5_BAND) && (he_supported_chan_width_set & (BIT(2) | BIT(3)))) {
+    if ((bss->oper_freq_band & WIFI_FREQUENCY_5_BAND || bss->oper_freq_band & WIFI_FREQUENCY_5L_BAND ||
+         bss->oper_freq_band & WIFI_FREQUENCY_5H_BAND) && (he_supported_chan_width_set & (BIT(2) | BIT(3)))) {
         bss->supp_chan_bw |= WIFI_CHANNELBANDWIDTH_160MHZ;
     }
 
@@ -9611,7 +9624,8 @@ static void parse_he_oper(const uint8_t type, uint8_t len, const uint8_t *data,
 
     /* [0] = elem_id ; [1-3] = HE Oper Params ; [4-4] = BSS color; [5-6] = MCS NSS; [7-9] VHT oper info;
     * HE_Oper_Params.bits[14] = VHT Oper Info Present boolean */
-    if ((bss->oper_freq_band & WIFI_FREQUENCY_5_BAND) && (data[2] & BIT(6))) {
+    if ((bss->oper_freq_band & WIFI_FREQUENCY_5_BAND || bss->oper_freq_band & WIFI_FREQUENCY_5L_BAND ||
+         bss->oper_freq_band & WIFI_FREQUENCY_5H_BAND) && (data[2] & BIT(6))) {
         if (len > 9) {
             data += 7;
 
@@ -9982,11 +9996,16 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
 
         if ( freq >= 5955 ) {
             scan_info_ap->oper_freq_band = WIFI_FREQUENCY_6_BAND;
-        }
-        else if( freq >= 5180 ) {
+#if defined(XLE_PORT)
+        } else if( freq < 5500 ) {
+            scan_info_ap->oper_freq_band = WIFI_FREQUENCY_5L_BAND;
+        } else if( freq >= 5500 ) {
+            scan_info_ap->oper_freq_band = WIFI_FREQUENCY_5H_BAND;
+#else
+        } else if( freq >= 5180 ) {
             scan_info_ap->oper_freq_band = WIFI_FREQUENCY_5_BAND;
-        }
-        else {
+#endif
+        } else {
             scan_info_ap->oper_freq_band = WIFI_FREQUENCY_2_4_BAND;
         }
     }

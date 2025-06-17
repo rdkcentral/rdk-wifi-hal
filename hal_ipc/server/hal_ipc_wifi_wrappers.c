@@ -228,7 +228,9 @@ INT wifi_hal_getRadioOperatingFrequencyBand(INT radioIndex,
       return RETURN_ERR;
     }
 
-    if (radio->oper_param.band == WIFI_FREQUENCY_5_BAND) {
+    if (radio->oper_param.band == WIFI_FREQUENCY_5_BAND ||
+        radio->oper_param.band == WIFI_FREQUENCY_5L_BAND ||
+        radio->oper_param.band == WIFI_FREQUENCY_5H_BAND) {
         snprintf(output_string, 64, "5GHz");
     } else if (radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
         snprintf(output_string, 64, "6GHz");
