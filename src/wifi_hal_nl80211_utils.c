@@ -254,9 +254,9 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {1, 1,  "wl1",     "",         0,     15,     "mesh_sta_5g"},
     {0, 2,  "wl2.1",   "brlan0",   100,   16,     "private_ssid_6g"},
     {0, 2,  "wl2.2",   "brlan1",   101,   17,     "iot_ssid_6g"},
-    {0, 2,  "wl2.3",   "bropen6g", 2253,  18,     "hotspot_open_6g"},
+    {0, 2,  "wl2.3",   "bropen6g", 2183,  18,     "hotspot_open_6g"},
     {0, 2,  "wl2.4",   "br106",    106,   19,     "lnf_psk_6g"},
-    {0, 2,  "wl2.5",   "brsecure6g",2256, 20,     "hotspot_secure_6g"},
+    {0, 2,  "wl2.5",   "brsecure6g",2186, 20,     "hotspot_secure_6g"},
 #if 0
     {0, 2,  "wl2.6",   "br106",    106,   21,     "lnf_radius_6g"},
 #endif
@@ -283,9 +283,9 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {2, 1,  "wl1",     "",         0,     15,     "mesh_sta_5g"},
     {0, 2,  "wl2.1",   "brlan0",   100,   16,     "private_ssid_6g"},
     {0, 2,  "wl2.2",   "brlan1",   101,   17,     "iot_ssid_6g"},
-    {0, 2,  "wl2.3",   "bropen6g", 2253,  18,     "hotspot_open_6g"},
+    {0, 2,  "wl2.3",   "bropen6g", 2183,  18,     "hotspot_open_6g"},
     {0, 2,  "wl2.4",   "br106",    106,   19,     "lnf_psk_6g"},
-    {0, 2,  "wl2.5",   "brsecure6g",2256, 20,     "hotspot_secure_6g"},
+    {0, 2,  "wl2.5",   "brsecure6g",2186, 20,     "hotspot_secure_6g"},
 #if 0
     {0, 2,  "wl2.6",   "br106",    106,   21,     "lnf_radius_6g"},
 #endif
