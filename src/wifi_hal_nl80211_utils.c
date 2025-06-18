@@ -235,6 +235,13 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {2, 2,  "wl2",     "",         0,     23,     "mesh_sta_6g"},
 #endif
 
+// ifdef EXPERIMENTAL_BPI // FIXME(ldk): Hacky way to embed info about multiple links (_[256]g suffix)
+    {0, 0, "mld-ap0_2g", "brlan0", 100, 0, "private_ssid_2g"},
+    {0, 0, "mld-ap0_5g", "brlan0", 100, 1, "private_ssid_5g"},
+    // {0, 1, "radio2g", "brlan0", 101, 2, "iot_ssid_2g"},
+    // {0, 0, "mld-ap0_6g", "brlan0", 100, 16, "private_ssid_6g"},
+// endif EXPERIMENTAL_BPI
+
 #ifdef XB10_PORT
     {2, 0,  "wl0.1",   "brlan0",   100,   0,      "private_ssid_2g"},
     {1, 1,  "wl1.1",   "brlan0",   100,   1,      "private_ssid_5g"},
@@ -340,6 +347,11 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 1, 1, "radio2", "wl1"},
     { 0, 2, "radio3", "wl2"},
 #endif
+
+// ifdef EXPERIMENTAL_BPI // FIXME(ldk): Introduce concept of link?
+    { 0, 0, "radio0", "mld-ap0" },
+    // { 0, 1, "radio2g", "wifi2g" },
+// endif EXPERIMENTAL_BPI
 
 #if defined(SCXER10_PORT) 
     { 1, 0, "radio1", "wl0"},
@@ -1401,10 +1413,22 @@ wifi_radio_info_t *get_radio_by_phy_index(wifi_radio_index_t index)
 int get_rdk_radio_index_from_interface_name(char *interface_name)
 {
     uint8_t i = 0;
+    char tmp[30];
     const wifi_interface_name_idex_map_t *map = NULL;
     for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
         map = &interface_index_map[i];
-        if ((strcmp(interface_name, map->interface_name) == 0)) {
+	wifi_hal_dbg_print("%s:%d: map interface name: %s\n", __func__, __LINE__, map->interface_name);
+	// strip _suffix
+	strncpy(tmp, map->interface_name, sizeof(tmp));
+	tmp[sizeof(tmp) - 1] = 0x0;
+	if (!memcmp(tmp, "mld", 3)) {
+	    char *x = strchr(tmp, '_');
+	    if (x) {
+	        *x = 0x0;
+	    }
+	}
+        //if ((strcmp(interface_name, map->interface_name) == 0)) {
+        if ((strcmp(interface_name, tmp) == 0)) {
             wifi_hal_dbg_print("%s:%d rdk_radio_index:%d for interface:%s\n", __func__, __LINE__,
                 map->rdk_radio_index, interface_name);
             return map->rdk_radio_index;
@@ -1615,7 +1639,19 @@ int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *inte
     /* Set interface properties for VAP interfaces */
     for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
         map = &interface_index_map[i];
-        if ((strcmp(interface->name, map->interface_name) == 0) &&
+	wifi_hal_dbg_print("%s:%d: compare \"%s\" with \"%s\"\n",
+	    __func__, __LINE__, interface->name, map->interface_name);
+	char tmp[30];
+	strncpy(tmp, map->interface_name, sizeof(tmp));
+	tmp[sizeof(tmp) - 1] = 0x0;
+	if (!strncmp(tmp, "mld", 3)) {
+	    char *x = strchr(tmp, '_');
+	    if (x) {
+		*x = 0x0;
+	    }
+	}
+        //if ((strcmp(interface->name, map->interface_name) == 0) &&
+        if ((strcmp(interface->name, tmp) == 0) &&
             (phy_index == map->phy_index)) {
             vap->radio_index = map->rdk_radio_index;
             vap->vap_index = map->index;
