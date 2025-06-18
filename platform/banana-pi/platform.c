@@ -154,9 +154,9 @@ int platform_create_interfaces(void)
 int platform_post_init(wifi_vap_info_map_t *vap_map)
 {
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
-    system("brctl addif brlan0 wifi0");
-    system("brctl addif brlan0 wifi1");
-    system("brctl addif brlan0 wifi2");
+    // system("brctl addif brlan0 wifi0");
+    // system("brctl addif brlan0 wifi1");
+    // system("brctl addif brlan0 wifi2");
     return 0;
 }
 
@@ -230,7 +230,8 @@ int platform_get_ssid_default(char *ssid, int vap_index)
             return 0;
         }
     }
-    snprintf(ssid,BPI_LEN_16,"BPI_RDKB-AP%d",vap_index);
+    //snprintf(ssid,BPI_LEN_16,"BPI_RDKB-AP%d",vap_index);
+    snprintf(ssid,BPI_LEN_16,"2-LDK-1-VAP%d",vap_index);
     return 0;
 }
 
