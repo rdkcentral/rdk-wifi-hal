@@ -524,7 +524,7 @@ INT wifi_hal_init()
         interface = hash_map_get_first(radio->interface_map);
 
         while (interface != NULL) {
-            if (update_hostap_data(interface) == RETURN_OK) {
+            if (interface->vap_info.vap_mode == wifi_vap_mode_ap && update_hostap_data(interface) == RETURN_OK) {
                 update_hostap_iface(interface);
                 update_hostap_iface_flags(interface);
                 init_hostap_hw_features(interface);
