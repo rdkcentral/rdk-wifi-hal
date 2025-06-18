@@ -1179,6 +1179,7 @@ char *get_wifi_drv_name();
 wifi_device_info_t get_device_info_details();
 typedef char * PCHAR;
 extern int platform_pre_init();
+extern int platform_create_interfaces(void);
 #if HAL_IPC
 extern int platform_post_init(wifi_hal_post_init_t *post_init_struct);
 #else

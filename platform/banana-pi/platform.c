@@ -100,6 +100,54 @@ static int json_parse_backhaul_ssid(char *backhaul_ssid)
 int platform_pre_init()
 {
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+
+    // Cannot use this function to create interfaces here.
+    // nl80211_id is not initialized, yet.
+    // g_wifi_hal.nl80211_id is initialized in init_nl80211()
+
+    return 0;
+}
+
+int platform_create_interfaces(void)
+{
+    struct nl_msg *msg;
+    int ret;
+    /* FIXME(ldk): Read from JSON/use static map? */
+    const int wiphy = 0;
+    const char ifname[] = "mld-ap0";
+
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_NEW_INTERFACE);
+    if (msg == NULL) {
+        return -1;
+    }
+
+    /* TODO(ldk): ? */
+    /* if (nla_put_u32(msg, NL80211_ATTR_VIF_RADIO_MASK, 0x6) < 0) {
+        nlmsg_free(msg);
+        return -1;
+    } */
+
+    if (nla_put_u32(msg, NL80211_ATTR_WIPHY, wiphy) < 0) {
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    if (nla_put_string(msg, NL80211_ATTR_IFNAME, ifname) < 0) {
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    if (nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP) < 0) {
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    if ((ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL))) {
+        wifi_hal_error_print("%s:%d: Error creating %s interface on dev:%d error: %d (%s)\n", __func__, __LINE__,
+            ifname, wiphy, ret, strerror(-ret));
+        return -1;
+    }
+
     return 0;
 }
 

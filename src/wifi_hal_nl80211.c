@@ -6463,6 +6463,11 @@ int init_nl80211()
     g_wifi_hal.nl_event_fd = nl_socket_get_fd((struct nl_sock *)g_wifi_hal.nl_event);
     wifi_hal_info_print("%s:%d: hal nl sock: %d\n", __func__, __LINE__, g_wifi_hal.nl_event_fd);
 
+    if (platform_create_interfaces() < 0) {
+	wifi_hal_error_print("%s:%d: platform_create_interfaces returned error\n", __func__, __LINE__);
+	/* FIXME(ldk): return -1; ? */
+    }
+
     // dump all phy info
     g_wifi_hal.num_radios = 0;
 #ifdef CONFIG_WIFI_EMULATOR
