@@ -7708,6 +7708,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     wifi_device_callbacks_t *callbacks;
     wifi_finish_data_t *finish_data = (wifi_finish_data_t *)arg;
     wifi_interface_info_t   *interface = (wifi_interface_info_t *)finish_data->arg;
+    bool is_wildcard_ssid = false;
 
     wifi_hal_stats_dbg_print("%s:%d: [SCAN] ENTER\n", __func__, __LINE__);
 
@@ -7739,10 +7740,13 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     }
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-        // STA mode: filter result
+        is_wildcard_ssid = strlen(interface->vap_info.u.sta_info.ssid) == 0;
+
+        // STA mode: filter result (unless wildcard SSID)
         scan_info = hash_map_get_first(interface->scan_info_map);
         while (scan_info != NULL) {
-            if (strcmp(scan_info->ssid, interface->vap_info.u.sta_info.ssid) == 0){
+            if (strcmp(scan_info->ssid, interface->vap_info.u.sta_info.ssid) == 0 ||
+                is_wildcard_ssid) {
 #if defined(_PLATFORM_BANANAPI_R4_)
                 int scan_info_radio_index = -1;
                 wifi_convert_freq_band_to_radio_index(scan_info->oper_freq_band,
@@ -7765,7 +7769,13 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
             scan_info = hash_map_get_next(interface->scan_info_map, scan_info);
         }
         pthread_mutex_unlock(&interface->scan_info_mutex);
-        wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan found %u results with ssid:%s\n", __func__, __LINE__, ssid_found_count, interface->vap_info.u.sta_info.ssid);
+        if (is_wildcard_ssid) {
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan found %u results\n", __func__, __LINE__,
+                ssid_found_count);
+        } else {
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan found %u results with ssid:%s\n", __func__,
+                __LINE__, ssid_found_count, interface->vap_info.u.sta_info.ssid);
+        }
     }
     else {
         // AP mode: copy all
@@ -10053,7 +10063,9 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     }
 
     if (vap->vap_mode == wifi_vap_mode_sta) {
-        if (strcmp(scan_info_ap->ssid, vap->u.sta_info.ssid) == 0) {
+        // Wildcard STA VAP SSIDs cannot be used to set the backhaul BSSID
+        if (strcmp(scan_info_ap->ssid, vap->u.sta_info.ssid) == 0 &&
+            strlen(vap->u.sta_info.ssid) > 0) {
             wifi_hal_stats_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d on freq:%d for ssid:%s\n", __func__, __LINE__,
                         to_mac_str(bssid, bssid_str), scan_info_ap->rssi, scan_info_ap->freq, scan_info_ap->ssid);
             memcpy(vap->u.sta_info.bssid, bssid, sizeof(bssid_t));
@@ -10121,6 +10133,9 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
 
     // - create or update the scan info in 'scan_info_map'
     if (ssid[0] != '\0') {
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] found bss:%s rssi:%d ssid:%s on freq:%d \n",
+            __func__, __LINE__, to_mac_str(bssid, bssid_str), scan_info_ap->rssi,
+            scan_info_ap->ssid, scan_info_ap->freq);
         wifi_bss_info_t *scan_info = NULL;
         pthread_mutex_lock(&interface->scan_info_mutex);
         scan_info = hash_map_get(interface->scan_info_map, key);
