@@ -362,7 +362,7 @@ int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg
         snprintf(msg + strlen(msg), len - strlen(msg), " showSsid: %d", bss_info->showSsid);
     }
     if (strncmp(vap_info->bridge_name, "", strlen(vap_info->bridge_name)) == 0) {
-        ret = RETURN_ERR;
+	//Bridge Name is not mandatory for all vaps
         snprintf(msg + strlen(msg), len - strlen(msg), " Bridge name is null for vap index %u", vap_info->vap_index);
     }
 
