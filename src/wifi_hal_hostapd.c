@@ -82,8 +82,9 @@ void wifi_authenticator_run()
 
 void init_radius_config(wifi_interface_info_t *interface)
 {
-    if (!interface->vap_initialized) {
-        struct hostapd_bss_config *conf;
+    struct hostapd_bss_config *conf = &interface->u.ap.conf;
+
+    if (!interface->vap_initialized && conf->ssid.wpa_passphrase == NULL) {
         char *config_methods = (char *)malloc(WPS_METHODS_SIZE);
         memset(config_methods, '\0', WPS_METHODS_SIZE);
 
@@ -93,13 +94,11 @@ void init_radius_config(wifi_interface_info_t *interface)
         // vap = &interface->vap_info;
         //  ap_index = vap->vap_index;
 
-        conf = &interface->u.ap.conf;
         conf->radius = &interface->u.ap.radius;
         conf->radius->num_acct_servers = 0;
 
         conf->nas_identifier = interface->u.ap.nas_identifier;
-        char *wpa_passphrase = (char *)malloc(256);
-        conf->ssid.wpa_passphrase = wpa_passphrase;
+        conf->ssid.wpa_passphrase = calloc(1, 256);
 #ifdef CONFIG_WPS
         conf->config_methods = config_methods;
         conf->ap_pin = calloc(1, WPS_PIN_SIZE);
