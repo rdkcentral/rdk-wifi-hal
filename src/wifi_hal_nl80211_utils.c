@@ -3520,7 +3520,10 @@ enum nl80211_band get_nl80211_band_from_rdk_radio_index(unsigned int rdk_radio_i
         case 1:
             return NL80211_BAND_5GHZ;
         case 2:
-    #if HOSTAPD_VERSION >= 210
+#if defined (XLE_PORT)
+            return NL80211_BAND_5GHZ;
+#endif
+#if HOSTAPD_VERSION >= 210 && !defined (XLE_PORT)
             return NL80211_BAND_6GHZ;
     #endif
         default:
@@ -4344,10 +4347,18 @@ void concat_band_to_vap_name(wifi_vap_name_t vap_name, unsigned int rdk_radio_in
         strncat((char *)vap_name, "2g", strlen("2g") + 1);
         break;
     case 1:
+#if defined(XLE_PORT)
+        strncat((char *)vap_name, "5gl", strlen("5gl") + 1);
+#else
         strncat((char *)vap_name, "5g", strlen("5g") + 1);
+#endif
         break;
     case 2:
+#if defined(XLE_PORT)
+        strncat((char *)vap_name, "5gh", strlen("5gh") + 1);
+#else
         strncat((char *)vap_name, "6g", strlen("6g") + 1);
+#endif
         break;
     default:
         wifi_hal_error_print("%s:%d: Invalid rdk_radio_index:%d for vap_name:%s\n", __func__,
