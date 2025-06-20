@@ -1620,6 +1620,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
                     __LINE__, interface->name);
                 wifi_drv_set_operstate(interface, 1);
+#ifdef TARGET_GEMINI7_2
+		if (!vap->u.sta_info.enabled) {
+                    nl80211_delete_interface(radio->index, interface->name, interface->index);
+		}
+#endif
             } else {
                 wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__,
                     interface->name);
