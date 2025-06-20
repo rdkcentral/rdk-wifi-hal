@@ -48,7 +48,10 @@
 #include "ap/dfs.h"
 #include "ap/wmm.h"
 #include <sys/wait.h>
+#include <linux/if_ether.h>
+#ifdef __GLIBC__
 #include <netinet/ether.h>
+#endif
 #include <linux/filter.h>
 #include <fcntl.h>
 
@@ -2103,6 +2106,15 @@ void *nl_recv_func(void *arg)
     wifi_hal_priv_t *priv = (wifi_hal_priv_t *)arg;
     wifi_interface_info_t *interface;
     int eloop_timeout_ms;
+#if defined (_PLATFORM_BANANAPI_R4_)
+    size_t stack_size2;
+    pthread_attr_t attr;
+
+    pthread_attr_init(&attr);
+    pthread_attr_getstacksize(&attr, &stack_size2);
+    wifi_hal_dbg_print("%s:%d Thread stack size = %ld bytes \n", __func__, __LINE__, stack_size2);
+    pthread_attr_destroy(&attr);
+#endif
 
     prctl(PR_SET_NAME,  __func__, 0, 0, 0);
 
@@ -2749,7 +2761,7 @@ int ovs_add_br(const char *brname)
 {
     wifi_hal_dbg_print("%s:%d ovs-vsctl add-br %s\n", __func__, __LINE__, brname);
     int rc = run_prog("/usr/bin/ovs-vsctl",
-#if !defined(_PLATFORM_RASPBERRYPI_)
+#if !defined(_PLATFORM_RASPBERRYPI_) && !defined(_PLATFORM_BANANAPI_R4_)
                       "--may-exist",
 #endif
                       "add-br", brname);
@@ -2800,7 +2812,7 @@ int ovs_br_add_if(const char *brname, const char *ifname)
 {
     wifi_hal_dbg_print("%s:%d ovs-vsctl add-port %s %s\n", __func__, __LINE__, brname, ifname);
     int rc = run_prog("/usr/bin/ovs-vsctl",
-#if !defined(_PLATFORM_RASPBERRYPI_)
+#if !defined(_PLATFORM_RASPBERRYPI_) && !defined(_PLATFORM_BANANAPI_R4_)
                       "--may-exist",
 #endif
                       "add-port", brname, ifname);
@@ -8828,7 +8840,7 @@ int nl80211_update_beacon_params(wifi_interface_info_t *interface)
 }
 
 static int nl80211_send_frame_cmd(wifi_interface_info_t *interface,
-                                  unsigned int freq,
+                                  unsigned int freq, unsigned int wait,
                                   const u8 *buf, size_t buf_len,
                                   int save_cookie, int no_ack,
                                   const u16 *csa_offs,
@@ -8843,6 +8855,8 @@ static int nl80211_send_frame_cmd(wifi_interface_info_t *interface,
 
     if (!(msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_FRAME)) ||
         (freq && nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ, freq)) ||
+	    (wait && nla_put_u32(msg, NL80211_ATTR_DURATION, wait)) ||
+	    ((freq != 0) && nla_put_flag(msg, NL80211_ATTR_OFFCHANNEL_TX_OK)) ||
         (no_ack && nla_put_flag(msg, NL80211_ATTR_DONT_WAIT_FOR_ACK)) ||
         (csa_offs && nla_put(msg, NL80211_ATTR_CSA_C_OFFSETS_TX,
                              csa_offs_len * sizeof(u16), csa_offs)) ||
@@ -9621,7 +9635,7 @@ int wifi_drv_send_action(void *priv,
         // *csa_offs = <csa offset data>
     }
 
-    ret = nl80211_send_frame_cmd(interface, freq, buf, 24 + data_len,
+    ret = nl80211_send_frame_cmd(interface, freq, wait_time, buf, 24 + data_len,
             use_cookie, no_ack, csa_offs, csa_offs_len);
 
     free(csa_offs);
@@ -9798,7 +9812,7 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
 send_frame_cmd:
 
     //wifi_hal_dbg_print("nl80211: send_mlme -> send_frame_cmd\n");
-    res = nl80211_send_frame_cmd(interface, freq, data, data_len,
+    res = nl80211_send_frame_cmd(interface, freq, wait, data, data_len,
               use_cookie, noack, csa_offs, csa_offs_len);
 
     return res;
@@ -9886,7 +9900,7 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
 
     wifi_hal_dbg_print("%s:%d: Enter %s %d\n", __func__, __LINE__, to_mac_str(addr, mac_str), reason);
 
-#if defined(_PLATFORM_RASPBERRYPI_)
+#if defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
     wifi_device_callbacks_t *callbacks;
 
     callbacks = get_hal_device_callbacks();
@@ -9896,7 +9910,7 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
             callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(addr, mac_str), 0);
         }
     }
-#endif
+#endif // _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
     if (drv->device_ap_sme) {
         return wifi_sta_remove(interface, addr, 0, reason);
     }
@@ -13427,7 +13441,7 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_KEY);
 
     nla_put_u8(msg, NL80211_ATTR_KEY_IDX, params->key_idx);
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(_PLATFORM_RASPBERRYPI_)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
     // NL80211_KEY_DEFAULT_BEACON enum is not defined in broadcom nl80211.h header
     nla_put_flag(msg, wpa_alg_bip(params->alg) ? NL80211_ATTR_KEY_DEFAULT_MGMT : NL80211_ATTR_KEY_DEFAULT);
 #else
@@ -15365,7 +15379,7 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .update_connect_params = wifi_drv_update_connection_params,
     .send_external_auth_status = wifi_drv_send_external_auth_status,
     .set_4addr_mode = wifi_drv_set_4addr_mode,
-#if !defined(PLATFORM_LINUX)
+#if !defined(PLATFORM_LINUX) && !defined(_PLATFORM_BANANAPI_R4_)
     .get_aid = wifi_drv_get_aid,
     .free_aid = wifi_drv_free_aid,
 #endif
