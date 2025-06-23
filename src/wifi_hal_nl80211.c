@@ -6468,6 +6468,8 @@ int init_nl80211()
 	/* FIXME(ldk): return -1; ? */
     }
 
+    wifi_hal_dbg_print("%s:%d: ---------------------------------------------------------\n", __func__, __LINE__);
+
     // dump all phy info
     g_wifi_hal.num_radios = 0;
 #ifdef CONFIG_WIFI_EMULATOR
@@ -6498,11 +6500,15 @@ int init_nl80211()
         return -1;
     }
 
+    wifi_hal_dbg_print("%s:%d: ---------------------------------------------------------\n", __func__, __LINE__);
+
     if (nl80211_send_and_recv(msg, wiphy_dump_handler, &g_wifi_hal, NULL, NULL)) {
         return -1;
     }
 
     wifi_hal_dbg_print("%s:%d: Number of supported radios: %d\n", __func__, __LINE__, g_wifi_hal.num_radios);
+
+    wifi_hal_dbg_print("%s:%d: ---------------------------------------------------------\n", __func__, __LINE__);
 
     g_wifi_hal.link_fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
     if (g_wifi_hal.link_fd  > 0) {
@@ -6587,13 +6593,20 @@ int init_nl80211()
         if (msg == NULL) {
             return -1;
         }
+
+        wifi_hal_dbg_print("%s:%d: ---------------------------------------------------------\n", __func__, __LINE__);
+
         nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index);
         if (nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL)) {
             return -1;
         }
 
+        wifi_hal_dbg_print("%s:%d: ---------------------------------------------------------\n", __func__, __LINE__);
+
         wifi_hal_dbg_print("%s:%d: Found %d interfaces on radio index:%d\n", __func__, __LINE__,
             hash_map_count(radio->interface_map), radio->index);
+
+        wifi_hal_dbg_print("%s:%d: ---------------------------------------------------------\n", __func__, __LINE__);
     }
 
     return 0;
@@ -10171,6 +10184,7 @@ static int nl80211_send_frame_cmd(wifi_interface_info_t *interface, unsigned int
     u64 cookie;
     int ret = -1;
 
+    wifi_hal_dbg_print("%s:%d: nl80211: CMD_FRAME freq=%u no_ack=%d\n", __func__, __LINE__, freq, no_ack);
     wpa_printf(MSG_MSGDUMP, "nl80211: CMD_FRAME freq=%u no_ack=%d \n", freq, no_ack);
     wpa_hexdump(MSG_MSGDUMP, "CMD_FRAME", buf, buf_len);
 

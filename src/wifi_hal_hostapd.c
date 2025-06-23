@@ -2188,9 +2188,11 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     // initialize the default params
+    wifi_hal_dbg_print("%s:%d: ------------- update_hostap_data -----------\n", __func__, __LINE__);
     if (update_hostap_data(interface) != RETURN_OK) {
         goto exit;
     }
+    wifi_hal_dbg_print("%s:%d: -------------- update_hostap_bss --------------\n", __func__, __LINE__);
     if (update_hostap_bss(interface) != RETURN_OK) {
 #ifdef CONFIG_SAE
         if (interface->u.ap.conf.sae_groups) {
@@ -2200,6 +2202,7 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
 #endif
         goto exit;
     }
+    wifi_hal_dbg_print("%s:%d: --------------- update_hostap_iface --------------\n", __func__, __LINE__);
     if (update_hostap_iface(interface) != RETURN_OK) {
 #ifdef CONFIG_SAE
         if (interface->u.ap.conf.sae_groups) {
@@ -2210,6 +2213,7 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
         goto exit;
     }
 #ifdef CONFIG_IEEE80211BE
+    wifi_hal_dbg_print("%s:%d: ----------------- update_hostap_mlo ------------------\n", __func__, __LINE__);
     if (update_hostap_mlo(interface) != RETURN_OK) {
         goto exit;
     }
@@ -2939,10 +2943,12 @@ int start_bss(wifi_interface_info_t *interface)
     }
     //my_print_hex_dump(conf->ssid.ssid_len, conf->ssid.ssid);
 #if HOSTAPD_VERSION >= 211 //2.11
+    wifi_hal_dbg_print("%s:%d: hostapd_setup_bss HOSTAPD_VERSION >= 211\n", __func__, __LINE__);
     ret = hostapd_setup_bss(hapd, 1, true);
 #elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
     ret = hostapd_setup_bss(hapd, 1, true);
 #else
+    wifi_hal_dbg_print("%s:%d: hostapd_setup_bss HOSTAPD_VERSION < 211\n", __func__, __LINE__);
     ret = hostapd_setup_bss(hapd, 1);
 #endif
 
