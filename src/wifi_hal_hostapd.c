@@ -491,10 +491,10 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
     conf->wpa_key_mgmt_rsno = 0;
 #endif /* HOSTAPD_VERSION >= 210 */
 
-#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
-    conf->wpa_key_mgmt_rsno_2 = 0;
-    conf->rsn_pairwise_rsno_2 = 0;
-#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
+//#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+//    conf->wpa_key_mgmt_rsno_2 = 0;
+//    conf->rsn_pairwise_rsno_2 = 0;
+//#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
 
     conf->wpa = 0;
     memset(&test_ip, 0, sizeof(test_ip));
@@ -570,12 +570,12 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
                 conf->wpa_key_mgmt = WPA_KEY_MGMT_SAE;
                 conf->wpa_key_mgmt_rsno = 0;
             }
-            if(!conf->disable_11be) {
-                conf->wpa_key_mgmt_rsno_2 = WPA_KEY_MGMT_SAE_EXT_KEY;
-                conf->rsn_pairwise_rsno_2 = WPA_CIPHER_GCMP_256;
-            }
+            //if(!conf->disable_11be) {
+            //    conf->wpa_key_mgmt_rsno_2 = WPA_KEY_MGMT_SAE_EXT_KEY;
+            //    conf->rsn_pairwise_rsno_2 = WPA_CIPHER_GCMP_256;
+            //}
             wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d wpa_key_mgmt:%d wpa_key_mgmt_rsno_2:%d \n",
-                __FUNCTION__, __LINE__, conf->iface, conf->disable_11be, conf->wpa_key_mgmt, conf->wpa_key_mgmt_rsno_2);
+                __FUNCTION__, __LINE__, conf->iface, conf->disable_11be, conf->wpa_key_mgmt, -1);//conf->wpa_key_mgmt_rsno_2);
 #endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
             conf->sae_pwe = 2;
 #endif /* HOSTAPD_VERSION >= 210 */
