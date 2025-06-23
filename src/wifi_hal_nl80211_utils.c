@@ -237,7 +237,7 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
 
 // ifdef EXPERIMENTAL_BPI // FIXME(ldk): Hacky way to embed info about multiple links (_[256]g suffix)
     {0, 0, "mld-ap0_2g", "brlan0", 100, 0, "private_ssid_2g"},
-    {0, 0, "mld-ap0_5g", "brlan0", 100, 1, "private_ssid_5g"},
+    // {0, 0, "mld-ap0_5g", "brlan0", 100, 1, "private_ssid_5g"},
     // {0, 1, "radio2g", "brlan0", 101, 2, "iot_ssid_2g"},
     // {0, 0, "mld-ap0_6g", "brlan0", 100, 16, "private_ssid_6g"},
 // endif EXPERIMENTAL_BPI
