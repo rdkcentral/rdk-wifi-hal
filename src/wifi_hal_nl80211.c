@@ -6695,6 +6695,8 @@ int nl80211_enable_ap(wifi_interface_info_t *interface, bool enable)
         return -1;
     }
 
+    nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, 0);
+
 
     wifi_hal_dbg_print("%s:%d: %s ap on interface: %d\n", __func__, __LINE__,
         enable ? "Starting" : "Stopping", interface->index);
@@ -10173,6 +10175,7 @@ static int nl80211_send_frame_cmd(wifi_interface_info_t *interface, unsigned int
     wpa_hexdump(MSG_MSGDUMP, "CMD_FRAME", buf, buf_len);
 
     if (!(msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_FRAME)) ||
+		    (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, 0) < 0) ||
         (freq && nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ, freq)) ||
 	    (wait && nla_put_u32(msg, NL80211_ATTR_DURATION, wait)) ||
 	    (offchanok && nla_put_flag(msg, NL80211_ATTR_OFFCHANNEL_TX_OK)) ||
@@ -10980,6 +10983,8 @@ static int nl80211_set_channel(wifi_interface_info_t *interface,
         return -1;
     }
 
+    nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, 0);
+
     ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
     if (ret == 0) {
         interface->u.ap.iface.freq = freq->freq;
@@ -11139,9 +11144,9 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
         freq = interface_freq;
     }
 
-    if (noack || WLAN_FC_GET_TYPE(fc) != WLAN_FC_TYPE_MGMT ||
-            WLAN_FC_GET_STYPE(fc) != WLAN_FC_STYPE_ACTION)
-          use_cookie = 0;
+    //if (noack || WLAN_FC_GET_TYPE(fc) != WLAN_FC_TYPE_MGMT ||
+    //        WLAN_FC_GET_STYPE(fc) != WLAN_FC_STYPE_ACTION)
+    //      use_cookie = 0;
 send_frame_cmd:
 
     if (freq == 0 || ((int)freq == interface->u.ap.iface.freq && interface->beacon_set) ||
@@ -11589,6 +11594,7 @@ int wifi_drv_get_seqnum(const char *iface, void *priv, const u8 *addr, int idx, 
                                 NL80211_CMD_GET_KEY, if_nametoindex(iface));
     if (!msg ||
         (addr && nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr)) ||
+       (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, 0) < 0) ||
         nla_put_u8(msg, NL80211_ATTR_KEY_IDX, idx)) {
 
         nlmsg_free(msg);
@@ -11877,6 +11883,7 @@ int nl80211_tx_control_port(wifi_interface_info_t *interface, const u8 *dest,
         nla_put_u16(msg, NL80211_ATTR_CONTROL_PORT_ETHERTYPE, proto) ||
         nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, dest) ||
         nla_put(msg, NL80211_ATTR_FRAME, len, buf) ||
+	nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, 0) ||
         (no_encrypt &&
         nla_put_flag(msg, NL80211_ATTR_CONTROL_PORT_NO_ENCRYPT))) {
         nlmsg_free(msg);
@@ -13810,6 +13817,7 @@ static int nl80211_set_bss(wifi_interface_info_t *interface, int cts, int preamb
         (slot >= 0 && nla_put_u8(msg, NL80211_ATTR_BSS_SHORT_SLOT_TIME, slot)) ||
         (ht_opmode >= 0 && nla_put_u16(msg, NL80211_ATTR_BSS_HT_OPMODE, ht_opmode)) ||
         (ap_isolate >= 0 && nla_put_u8(msg, NL80211_ATTR_AP_ISOLATE, ap_isolate)) ||
+	nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, 0) ||
         nl80211_put_basic_rates(msg, basic_rates)) {
         nlmsg_free(msg);
         return -ENOBUFS;
@@ -13829,7 +13837,9 @@ int set_bss_param(void *priv, struct wpa_driver_ap_params *params)
         wifi_hal_error_print("%s:%d: Failed to create message\n", __func__, __LINE__);
         return -1;
     }
+
     nla_put_u8(msg, NL80211_ATTR_AP_ISOLATE, params->isolate);
+        nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, 0);
     wifi_hal_info_print("Set AP isolate:%d \r\n", params->isolate);
     ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
     if (ret != 0) {
@@ -13996,9 +14006,20 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     wifi_hal_dbg_print("%s:%d:Enter, interface name:%s vap index:%d radio index:%d beacon_set %d\n", __func__, __LINE__,
         interface->name, vap->vap_index, radio->index, beacon_set);
 
+    //{
+    //char interface_map_name[100];
+    //memset(interface_map_name, 0x0, sizeof(interface_map_name));
+    //int rc = get_interface_name_from_vap_index(vap->vap_index, interface_map_name);
+    //interface_map_name[sizeof(interface_map_name) - 1] = 0x0;
+    //wifi_hal_dbg_print("%s:%d: MLO: rc: %d, interface_map_name: \"%s\"\n",
+    //    __func__, __LINE__, rc, interface_map_name);
+    //}
+
     if (beacon_set) {
         cmd = NL80211_CMD_SET_BEACON;
     }
+
+    nl80211_set_channel(interface, params->freq, 1);
 
     if ((msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, cmd)) == NULL) {
         wifi_hal_error_print("%s:%d: Failed to create message\n", __func__, __LINE__);
@@ -14028,6 +14049,13 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
         //wifi_hal_dbg_print("%s:%d: probe response (offload)\n", __func__, __LINE__);
         //my_print_hex_dump(params->proberesp_len, params->proberesp);
         nla_put(msg, NL80211_ATTR_PROBE_RESP, params->proberesp_len, params->proberesp);
+    }
+
+
+    {
+
+        wifi_hal_dbg_print("%s:%d: MLO: nl80211: link_id=%u\n", __func__, __LINE__, 0);
+        nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, 0);
     }
 
     switch (params->hide_ssid) {
@@ -15008,11 +15036,15 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
         return -1;
     }
 
+        nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, 0);
+
     nla_put(msg, NL80211_ATTR_KEY_DATA, key_len, key);
     nla_put_u32(msg, NL80211_ATTR_KEY_CIPHER, suite);
     if (seq && seq_len) {
         nla_put(msg, NL80211_ATTR_KEY_SEQ, seq_len, seq);
     }
+
+
 
     if (addr && !is_broadcast_ether_addr(addr)) {
         nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr);
@@ -15075,6 +15107,7 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
         wifi_hal_dbg_print("%s:%d:Failed to allocate nl80211 message\n", __func__, __LINE__);
         return -1;
     }
+        nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, 0);
 
     nla_put(msg, NL80211_ATTR_KEY_DATA, params->key_len, params->key);
     nla_put_u32(msg, NL80211_ATTR_KEY_CIPHER, suite);
@@ -15125,6 +15158,8 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
       return ret;
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_KEY);
+
+        nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, 0);
 
     nla_put_u8(msg, NL80211_ATTR_KEY_IDX, params->key_idx);
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
@@ -16981,6 +17016,70 @@ int wifi_drv_get_sta_auth_type(void *priv, const u8 *addr, int auth_key,int fram
     return RETURN_OK;
 }
 
+static int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx) {
+    wifi_interface_info_t *interface;
+    struct nl_msg *msg;
+    int ret;
+
+    interface = (wifi_interface_info_t *)priv;
+
+    wifi_hal_dbg_print("%s:%d nl80211: MLD: add link_id=%u, addr=" MACSTR "\n", __func__, __LINE__,
+        link_id, MAC2STR(addr));
+
+    if (interface->type != NL80211_IFTYPE_AP) {
+        wifi_hal_error_print("%s:%d nl80211: MLD: cannot add link to iftype=%u\n", __func__, __LINE__,
+            interface->type);
+        return -EINVAL;
+    }
+
+    if (link_id >= MAX_NUM_MLD_LINKS) {
+        wifi_hal_error_print("%s:%d nl80211: invalid link_id=%u\n", __func__, __LINE__, link_id);
+        return -EINVAL;
+    }
+
+    if (interface->valid_links & BIT(link_id)) {
+        wifi_hal_dbg_print("%s:%d nl80211: MLD: Link %u already set\n", __func__, __LINE__,
+            link_id);
+        return -EINVAL;
+    }
+
+    if (!interface->valid_links) {
+        /* Becoming MLD, verify we were not beaconing */
+        if (interface->beacon_set) {
+            wifi_hal_error_print("%s:%d nl80211: BSS already beaconing\n", __func__, __LINE__);
+            return -EINVAL;
+        }
+    }
+
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_ADD_LINK);
+    if (msg == NULL || nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index) < 0 ||
+        nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0 ||
+        nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr) < 0) {
+        nlmsg_free(msg);
+        return -ENOBUFS;
+    }
+
+    ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
+    if (ret < 0) {
+        wifi_hal_error_print("%s:%d nl80211: add link failed. ret=%d\n", __func__, __LINE__, ret);
+        return ret;
+    }
+
+    interface->links[link_id] = (wifi_interface_info_t *)bss_ctx;
+
+    // /* The new link is the first one, make it the default */
+    // if (!interface->valid_links) {
+    //     interface->flink = interface->links[link_id];
+    // }
+
+    interface->valid_links |= BIT(link_id);
+
+    wifi_hal_info_print("%s:%d nl80211: MLD: valid_links=0x%04x on %s\n", __func__, __LINE__,
+        interface->valid_links, interface->name);
+
+    return 0;
+}
+
 const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .name = "nl80211",
     .desc = "Linux nl80211/cfg80211",
@@ -17021,6 +17120,9 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .get_hw_feature_data = wifi_drv_get_hw_feature_data,
     .sta_add = wifi_drv_sta_add,
     .sta_remove = wifi_drv_sta_remove,
+/////
+    .link_add = wifi_drv_link_add,
+/////
     .hapd_send_eapol = wifi_drv_hapd_send_eapol,
     .sta_set_flags = wifi_drv_sta_set_flags,
     .sta_set_airtime_weight = wifi_drv_sta_set_airtime_weight,

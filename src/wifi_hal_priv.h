@@ -501,6 +501,9 @@ typedef struct wifi_interface_info_t {
     struct wpa_supplicant wpa_s;
     struct wpa_ssid current_ssid_info;
 #endif
+
+    struct wifi_interface_info_t *links[MAX_NUM_MLD_LINKS];
+    u16 valid_links;
 } wifi_interface_info_t;
 
 #define MAX_RATES   16
