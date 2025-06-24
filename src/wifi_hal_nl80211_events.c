@@ -628,12 +628,18 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     mac_addr_str_t bssid_str;
     wifi_bss_info_t *backhaul;
     wifi_vap_security_t *sec;
+    wifi_radio_info_t *radio;
+    wifi_radio_operationParam_t *radio_param;
+
     sec = &interface->vap_info.u.sta_info.security;
 
     backhaul = &interface->u.sta.backhaul;
 
     wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s\n", __func__, __LINE__,
         to_mac_str(backhaul->bssid, bssid_str), backhaul->freq, backhaul->ssid);
+    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    radio_param = &radio->oper_param;
+
 
     assoc_req = interface->u.sta.assoc_req;
     assoc_rsp = interface->u.sta.assoc_rsp;
@@ -660,6 +666,8 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
             to_mac_str(mac, mac_str));
 
     }
+
+    ieee80211_freq_to_channel_ext(backhaul->freq,0,0,(unsigned char*)&radio_param->operatingClass, (unsigned char*)&radio_param->channel);
 
     if (tb[NL80211_ATTR_REQ_IE] == NULL) { 
         wifi_hal_dbg_print("%s:%d: req ie attribute absent\n", __func__, __LINE__);
