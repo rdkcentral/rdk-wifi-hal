@@ -135,7 +135,14 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 #if !defined(_PLATFORM_RASPBERRYPI_)
     /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
+#if defined (_PLATFORM_BANANAPI_R4_)
+    _syscmd("cat /etc/machine-id", output, sizeof(output));
+    if (strlen(output) == 0) {
+        strncpy(output, "bpi-123", sizeof(output));
+    }
+#else
     _syscmd("grep -a 'Serial' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
+#endif
     len = strnlen(output, sizeof(output));
     if (len != 0 && output[len - 1] == '\n') {
         output[len - 1] = '\0';
@@ -143,7 +150,14 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     strcpy(hal->wifi_prop.serialNo,output);
 
     memset(output, '\0', sizeof(output));
+#if defined (_PLATFORM_BANANAPI_R4_)
+    _syscmd("cat /proc/device-tree/model | tr -d ' '", output, sizeof(output));
+    if (strlen(output) == 0) {
+        strncpy(output, "Banana Pi - R4", sizeof(output));
+    }
+#else
     _syscmd("grep -a 'MODEL' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
+#endif 
     len = strnlen(output, sizeof(output));
     if (len != 0 && output[len - 1] == '\n') {
         output[len - 1] = '\0';
@@ -153,6 +167,11 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
     memset(output, '\0', sizeof(output));
     _syscmd("grep 'imagename:' /version.txt | cut -d ':' -f2 ", output, sizeof(output));
+#if defined(_PLATFORM_BANANAPI_R4_)
+    if (strlen(output) == 0) {
+        strncpy(output, "Banana Pi - R4 V1.0", sizeof(output));
+    }
+#endif
     len = strnlen(output, sizeof(output));
     if (len != 0 && output[len - 1] == '\n') {
         output[len - 1] = '\0';
@@ -161,7 +180,14 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
     // CM mac
     memset(output, '\0', sizeof(output));
+#if defined (_PLATFORM_BANANAPI_R4_)
+    _syscmd("ifconfig erouter0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+    if (strlen(output) == 0) {
+        _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+    }
+#else
     _syscmd("grep -a 'CM' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
+#endif
     len = strnlen(output, sizeof(output));
     if (len != 0 && output[len - 1] == '\n') {
         output[len - 1] = '\0';
@@ -169,7 +195,14 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     to_mac_bytes(output,hal->wifi_prop.cm_mac);
 
     memset(output, '\0', sizeof(output));
+#if defined (_PLATFORM_BANANAPI_R4_)
+    _syscmd("ifconfig erouter0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+    if (strlen(output) == 0) {
+        _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+    }
+#else
     _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
+#endif
     len = strnlen(output, sizeof(output));
     if (len != 0 && output[len - 1] == '\n') {
         output[len - 1] = '\0';
@@ -305,9 +338,15 @@ INT wifi_hal_init()
     platform_get_radio_caps_t get_radio_caps_fn;
     platform_flags_init_t flags_init_fn;
 #endif
+    pthread_attr_t *attrp = NULL;
+#if defined(_PLATFORM_BANANAPI_R4_)
+    ssize_t stack_size = 0x800000; /* 8MB */
+    pthread_attr_t attr;
+    int ret = 0;
+#endif
     char *drv_name;
+
     wifi_hal_info_print("%s:%d: start\n", __func__, __LINE__);
-    
     if ((drv_name = get_wifi_drv_name()) == NULL) {
         wifi_hal_error_print("%s:%d: driver not found, get drv name failed\n", __func__, __LINE__);
         return RETURN_ERR;
@@ -347,9 +386,25 @@ INT wifi_hal_init()
         return RETURN_ERR;
     }
 
-    if (pthread_create(&g_wifi_hal.nl_tid, NULL, nl_recv_func, &g_wifi_hal) != 0) {
+#if defined(_PLATFORM_BANANAPI_R4_)
+    attrp = &attr;
+    pthread_attr_init(&attr);
+    ret = pthread_attr_setstacksize(&attr, stack_size);
+    if (ret != 0) {
+        wifi_hal_error_print("%s:%d pthread_attr_setstacksize failed for size:%ld ret:%d\n",
+            __func__, __LINE__, stack_size, ret);
+    }
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+#endif
+    if (pthread_create(&g_wifi_hal.nl_tid, attrp, nl_recv_func, &g_wifi_hal) != 0) {
         wifi_hal_error_print("%s:%d:ssp_main create failed\n", __func__, __LINE__);
+        if(attrp != NULL) {
+            pthread_attr_destroy(attrp);
+        }
         return RETURN_ERR;
+    }
+    if(attrp != NULL) {
+        pthread_attr_destroy(attrp);
     }
 #ifndef CONFIG_WIFI_EMULATOR
     if (eap_server_register_methods() != 0) {
@@ -840,12 +895,12 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         goto reload_config;
     }
 
-#if !defined(_PLATFORM_RASPBERRYPI_)
+#if !defined(_PLATFORM_RASPBERRYPI_) && !defined(_PLATFORM_BANANAPI_R4_)
     // Call Vendor HAL
     if (wifi_setRadioDfsAtBootUpEnable(index,operationParam->DfsEnabledBootup) != 0) {
         wifi_hal_dbg_print("%s:%d:Failed to Enable DFSAtBootUp on radio %d\n", __func__, __LINE__, index);
     }
-#endif
+#endif // PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
 
 Exit:
     if ((set_radio_params_fn = get_platform_set_radio_fn()) != NULL) {
@@ -1139,7 +1194,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     int set_acl = 0;
 #else
     int filtermode;
-#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_
+#endif
     //bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 #if defined(VNTXER5_PORT)
     char mld_ifname[32];
@@ -1209,6 +1264,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             set_acl = 1;
         }
 #endif
+
 #if defined(VNTXER5_PORT)
         if (platform_set_intf_mld_bonding(radio, interface) != RETURN_OK) {
             wifi_hal_error_print("%s:%d: vap index:%d failed to create bonding\n", __func__, __LINE__,
@@ -4057,7 +4113,7 @@ wifi_device_frame_hooks_t *get_device_frame_hooks()
 }
 
 
-void wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char *data,size_t data_len,unsigned int freq)
+int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char *data,size_t data_len,unsigned int freq, unsigned int wait)
 {
 
     wifi_hal_dbg_print("%s:%d:Enter interface for ap index:%d\n", __func__, __LINE__, apIndex);
@@ -4065,11 +4121,12 @@ void wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char
     u8 *buf;
     struct ieee80211_hdr *hdr;
     mac_address_t bssid_buf;
+    int res = 0;
     memset(bssid_buf, 0xff, sizeof(bssid_buf));
 
     buf = os_zalloc(24 + data_len);
     if (buf == NULL)
-        return ;
+        return -1;
     os_memcpy(buf + 24, data, data_len);
     hdr = (struct ieee80211_hdr *) buf;
     hdr->frame_control =
@@ -4078,22 +4135,24 @@ void wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char
     if ((interface = get_interface_by_vap_index(apIndex)) == NULL) {
         wifi_hal_error_print("%s:%d:interface for ap index:%d not found\n", __func__, __LINE__, apIndex);
         os_free(buf);
-        return ;
+        return -1;
     }
     os_memcpy(hdr->addr1, sta, ETH_ALEN);
     os_memcpy(hdr->addr2, interface->mac, ETH_ALEN);
     os_memcpy(hdr->addr3, bssid_buf, ETH_ALEN);
 
+    
 #ifdef HOSTAPD_2_11 // 2.11
-    wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, 0, NULL, 0, 0, 0, 0);
+    res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait, 0);
 #elif HOSTAPD_2_10 // 2.10
-    wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, 0, NULL, 0, 0, 0);
+    res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait);
 #else
-    wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, 0, NULL, 0);
+    res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0);
 #endif
 
     os_free(buf);
     wifi_hal_dbg_print("%s:%d:Exit for mgmt fame on %d\n", __func__, __LINE__, apIndex);
+    return res;
 }
 
 void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac)

@@ -46,7 +46,7 @@ int no_seq_check(struct nl_msg *msg, void *arg)
     return NL_OK;
 }
 
-#if defined(_PLATFORM_RASPBERRYPI_)
+#if defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
 int notify_assoc_data(wifi_interface_info_t *interface, struct nlattr **tb,
     union wpa_event_data event)
 {
@@ -58,7 +58,6 @@ int notify_assoc_data(wifi_interface_info_t *interface, struct nlattr **tb,
     mac_addr_str_t sta_mac_str;
     wifi_frame_t mgmt_frame;
     int sig_dbm = -100;
-    int phy_rate = 60;
     wifi_mgmtFrameType_t mgmt_type;
     wifi_direction_t dir;
     struct ieee80211_mgmt *mgmt = NULL;
@@ -105,18 +104,8 @@ int notify_assoc_data(wifi_interface_info_t *interface, struct nlattr **tb,
 #ifdef WIFI_HAL_VERSION_3_PHASE2
         callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame);
 #else
-#if defined(RDK_ONEWIFI) &&                                                                     \
-    (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-        defined(TCHCBRV2_PORT) || defined(SCXER10_PORT))
-        if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
-            phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]);
-        }
-        callbacks->mgmt_frame_rx_callback(vap->vap_index, sta_mac, (unsigned char *)mgmt, frame_len,
-            mgmt_type, dir, sig_dbm, phy_rate);
-#else
         callbacks->mgmt_frame_rx_callback(vap->vap_index, sta_mac, (unsigned char *)mgmt, frame_len,
             mgmt_type, dir);
-#endif
 #endif
 
         for (unsigned int i = 0; i < hooks->num_hooks; i++) {
@@ -129,6 +118,7 @@ cleanup:
     if (mgmt) {
         free(mgmt);
     }
+    return NL_SKIP;
 }
 
 static void nl80211_new_station_event(wifi_interface_info_t *interface, struct nlattr **tb)
@@ -185,7 +175,7 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     event.disassoc_info.addr = mac;
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
 }
-#endif
+#endif //_PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
 
 #ifdef CONFIG_WIFI_EMULATOR
 static void nl80211_parse_wmm_params(struct nlattr *wmm_attr,
@@ -344,6 +334,28 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         dir = wifi_direction_uplink;
     } else {
         wifi_hal_dbg_print("%s:%d: unknown interface... dropping\n", __func__, __LINE__);
+        return;
+    }
+
+    if (vap->vap_mode != wifi_vap_mode_ap) {
+        // If a station just sent a TX frame (and therefore here received a TX status as an ACK), 
+        // it doesn't need to do anything with that information. Action frames are not sent to the
+        // RX handler. Additionally, following commands depend on `hapd` which is not present for 
+        // non-AP modes.
+        // We'll debug out the info though, for programmer convenience.
+        
+        char tmp[256] = "";
+        sprintf(tmp, "%s:%d:", __func__, __LINE__);
+        if (addr) sprintf(tmp + strlen(tmp), " MAC: "MACSTR",", MAC2STR((u8*)nla_data(addr)));
+        if (cookie) sprintf(tmp + strlen(tmp), " cookie: %llu,", (unsigned long long)nla_get_u64(cookie));
+        if (ack) sprintf(tmp + strlen(tmp), " ack: %d,", nla_get_flag(ack));
+        
+        sprintf(tmp + strlen(tmp), " type: %d, stype: %d",
+                WLAN_FC_GET_TYPE(fc), WLAN_FC_GET_STYPE(fc));
+        
+        wifi_hal_dbg_print("%s\n", tmp);
+
+        wifi_hal_dbg_print("%s:%d: vap mode is not AP, dropping\n", __func__, __LINE__);
         return;
     }
 
@@ -1476,7 +1488,7 @@ static void nl80211_vendor_event(wifi_interface_info_t *interface,
 static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, struct nlattr **tb)
 {
     switch (cmd) {
-#if defined(_PLATFORM_RASPBERRYPI_) 
+#if defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_) 
     case NL80211_CMD_NEW_STATION:
         nl80211_new_station_event(interface, tb);
         break;
@@ -1484,7 +1496,7 @@ static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, stru
     case NL80211_CMD_DEL_STATION:
         nl80211_del_station_event(interface, tb);
         break;
-#endif
+#endif // _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
     case NL80211_CMD_FRAME_TX_STATUS:
         nl80211_frame_tx_status_event(interface, tb);
         break;
