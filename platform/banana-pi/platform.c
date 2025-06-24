@@ -829,14 +829,13 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         struct hostapd_mld *mld = os_zalloc(sizeof(struct hostapd_mld));
         strcpy(mld->name, conf->iface);
         dl_list_init(&mld->links);
-        //mld->mld_addr[0] = 0xde;
-        //mld->mld_addr[1] = 0xad;
-        //mld->mld_addr[2] = 0xbe;
-        //mld->mld_addr[3] = 0xef;
-        //mld->mld_addr[4] = 0x01;
-        //mld->mld_addr[5] = 0x02;
+	// Only for first bss
         os_memcpy(mld->mld_addr, hapd->own_addr, ETH_ALEN);
-        mld->mld_addr[5] += 1;
+	/* Derivate mac addr from own_addr
+	 * mld_linkd is either 0, 1 or 2
+	 */
+        //mld->mld_addr[5] += (mld_link_type + 1);
+	hapd->own_addr[5] += (mld_link_type + 1);
 
         hapd->mld = mld;
         hapd->ctrl_sock = -1;
