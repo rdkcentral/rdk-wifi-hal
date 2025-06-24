@@ -804,102 +804,73 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     wifi_hal_dbg_print("%s:%d: MLO: vap name: %s\n", __func__, __LINE__,
 	vap->vap_name);
 
-    char interface_map_name[100];
-    memset(interface_map_name, 0x0, sizeof(interface_map_name));
-    int rc = get_interface_name_from_vap_index(vap->vap_index, interface_map_name);
-    interface_map_name[sizeof(interface_map_name) - 1] = 0x0;
-    wifi_hal_dbg_print("%s:%d: MLO: rc: %d, interface_map_name: \"%s\"\n",
-	__func__, __LINE__, rc, interface_map_name);
 
-    // 0x8 - mld
-    // 0x4 - 6g
-    // 0x2 - 5g
-    // 0x1 - 2g
-    unsigned char is_mld = 0x0;
-    if (!strncmp(interface_map_name, "mld", 3)) {
-	is_mld |= 0x8;
+    char mld_interface[20];
+    unsigned int mld_link_id;
+
+    int rc = get_mld_interface_name_from_vap_index(vap->vap_index,
+        mld_interface, sizeof(mld_interface) - 1, &mld_link_id);
+    if (rc == RETURN_ERR) {
+        return RETURN_ERR;
     }
 
-    char *suffix = strrchr(interface_map_name, '_');
-    if (suffix != NULL) {
-        wifi_hal_dbg_print("%s:%d: suffix: \"%s\"\n", __func__, __LINE__, suffix);
-	if (!strcmp(suffix, "_2g")) {
-	    is_mld |= 0x1;
-	} else if (!strcmp(suffix, "_5g")) {
-	    is_mld |= 0x2;
-	} else if (!strcmp(suffix, "_6g")) {
-            is_mld |= 0x4;
-	}
-    }
+    if (mld_link_id == 0) {
+        wifi_hal_dbg_print("%s:%d: MLO: Configure Link 0\n", __func__, __LINE__);
+        struct hostapd_data *hapd = &interface->u.ap.hapd;
+        struct hostapd_bss_config *conf = hapd->conf;
 
-    switch (is_mld) {
-    case 0x9: {
-	wifi_hal_dbg_print("%s:%d: MLO: Configure Link 0\n", __func__, __LINE__);
-	struct hostapd_data *hapd = &interface->u.ap.hapd;
-	struct hostapd_bss_config *conf = hapd->conf;
-	if (1) {
-            conf->mld_ap = 1;
-	    conf->okc = 1;
+        conf->mld_ap = 1;
+        conf->okc = 1;
 
-	    wifi_hal_dbg_print("%s:%d: MLO: conf iface: \"%s\"\n",
-		__func__, __LINE__, conf->iface);
+        wifi_hal_dbg_print("%s:%d: MLO: conf iface: \"%s\"\n",
+            __func__, __LINE__, conf->iface);
 
-            // TOOD(ldk): replace with hostapd_bss_setup_multi_link?
-            struct hostapd_mld *mld = os_zalloc(sizeof(struct hostapd_mld));
-            strcpy(mld->name, conf->iface);
-            dl_list_init(&mld->links);
-            //mld->mld_addr[0] = 0xde;
-            //mld->mld_addr[1] = 0xad;
-            //mld->mld_addr[2] = 0xbe;
-            //mld->mld_addr[3] = 0xef;
-            //mld->mld_addr[4] = 0x01;
-            //mld->mld_addr[5] = 0x02;
-	    os_memcpy(mld->mld_addr, hapd->own_addr, ETH_ALEN);
-	    mld->mld_addr[5] += 1;
+        // TOOD(ldk): replace with hostapd_bss_setup_multi_link?
+        struct hostapd_mld *mld = os_zalloc(sizeof(struct hostapd_mld));
+        strcpy(mld->name, conf->iface);
+        dl_list_init(&mld->links);
+        //mld->mld_addr[0] = 0xde;
+        //mld->mld_addr[1] = 0xad;
+        //mld->mld_addr[2] = 0xbe;
+        //mld->mld_addr[3] = 0xef;
+        //mld->mld_addr[4] = 0x01;
+        //mld->mld_addr[5] = 0x02;
+        os_memcpy(mld->mld_addr, hapd->own_addr, ETH_ALEN);
+        mld->mld_addr[5] += 1;
 
-            hapd->mld = mld;
-	    hapd->ctrl_sock = -1;
-	    wifi_hal_dbg_print("%s:%d: MLO: drv_priv: %p\n",
-		__func__, __LINE__, hapd->drv_priv);
+        hapd->mld = mld;
+        hapd->ctrl_sock = -1;
+        wifi_hal_dbg_print("%s:%d: MLO: drv_priv: %p\n",
+            __func__, __LINE__, hapd->drv_priv);
 
-	    mld->refcount++;
-	    hapd->mld_link_id = mld->next_link_id++;
+        mld->refcount++;
+        hapd->mld_link_id = mld->next_link_id++;
 
-	    wifi_hal_dbg_print("%s:%d: MLO: Setup of first link (%d) BSS of MLD %s\n",
-			       __func__, __LINE__,
-			       hapd->mld_link_id, hapd->conf->iface);
-	    if (hostapd_mld_add_link(hapd) != 0) {
-		wifi_hal_dbg_print("%s:%d: MLO: Failed to add MLO link\n", __func__, __LINE__);
-	    }
+        wifi_hal_dbg_print("%s:%d: MLO: Setup of first link (%d) BSS of MLD %s\n",
+                           __func__, __LINE__,
+                           hapd->mld_link_id, hapd->conf->iface);
+        if (hostapd_mld_add_link(hapd) != 0) {
+            wifi_hal_dbg_print("%s:%d: MLO: Failed to add MLO link\n", __func__, __LINE__);
+        }
 
-	    if (hapd->drv_priv == NULL)
-		wifi_hal_dbg_print("%s:%d: MLO: hapd->drv_priv NULL\n", __func__, __LINE__);
-	    if (hapd->driver == NULL)
-		wifi_hal_dbg_print("%s:%d: MLO: hapd->driver NULL\n", __func__, __LINE__);
-	    else if (hapd->driver->link_add == NULL)
-		wifi_hal_dbg_print("%s:%d: MLO: hapd->driver->link_add NULL\n", __func__, __LINE__);
+        if (hapd->drv_priv == NULL)
+            wifi_hal_dbg_print("%s:%d: MLO: hapd->drv_priv NULL\n", __func__, __LINE__);
+        if (hapd->driver == NULL)
+            wifi_hal_dbg_print("%s:%d: MLO: hapd->driver NULL\n", __func__, __LINE__);
+        else if (hapd->driver->link_add == NULL)
+            wifi_hal_dbg_print("%s:%d: MLO: hapd->driver->link_add NULL\n", __func__, __LINE__);
 
-	    wifi_hal_dbg_print("%s:%d: MLO: Set link_id=%u, mld_addr=" MACSTR
-			       ", own_addr=" MACSTR "\n", __func__, __LINE__,
-			       hapd->mld_link_id,
-			       MAC2STR(hapd->mld->mld_addr),
-			       MAC2STR(hapd->own_addr));
-	    if (hostapd_drv_link_add(hapd, hapd->mld_link_id, hapd->own_addr) != 0) {
-		wifi_hal_dbg_print("%s:%d: MLO: Failed to add hostapd_drv_link_add\n", __func__, __LINE__);
-	    }
+        wifi_hal_dbg_print("%s:%d: MLO: Set link_id=%u, mld_addr=" MACSTR
+                           ", own_addr=" MACSTR "\n", __func__, __LINE__,
+                           hapd->mld_link_id,
+                           MAC2STR(hapd->mld->mld_addr),
+                           MAC2STR(hapd->own_addr));
+        if (hostapd_drv_link_add(hapd, hapd->mld_link_id, hapd->own_addr) != 0) {
+        //if (hostapd_drv_link_add(hapd, hapd->mld_link_id, mld->mld_addr) != 0) {
+            wifi_hal_dbg_print("%s:%d: MLO: Failed to add hostapd_drv_link_add\n", __func__, __LINE__);
+        }
 
-	    wifi_hal_dbg_print("%s:%d: MLO: done\n", __func__, __LINE__);
-	}
-	break;
-    }
-
-    case 0xa:
-	wifi_hal_dbg_print("%s:%d: MLO: Configure Link 1\n", __func__, __LINE__);
-	break;
-
-    case 0xc:
-	wifi_hal_dbg_print("%s:%d: MLO: Configure Link 2\n", __func__, __LINE__);
-	break;
+        wifi_hal_dbg_print("%s:%d: MLO: done\n", __func__, __LINE__);
     }
 
     return 0;
