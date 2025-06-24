@@ -3540,6 +3540,7 @@ static void platform_set_eht(wifi_radio_index_t index, bool enable)
 {
     bool eht_enabled;
     bool radio_up;
+    int bss;
 
     eht_enabled = platform_is_eht_enabled(index);
     if (eht_enabled == enable) {
@@ -3551,6 +3552,10 @@ static void platform_set_eht(wifi_radio_index_t index, bool enable)
         v_secure_system("wl -i wl%d down", index);
     }
     v_secure_system("wl -i wl%d eht %d", index, (enable) ? 1 : 0);
+    v_secure_system("wl -i wl%d eht bssehtmode %d", index, (enable) ? 1 : 0);
+    for (bss = 1; bss <= 7; bss++) {
+        v_secure_system("wl -i wl%d.%d eht bssehtmode %d", index, bss, (enable) ? 1 : 0);
+    }
     wifi_hal_dbg_print("%s: wl%d eht changed to %d\n", __func__, index, (enable == true) ? 1 : 0);
     if (radio_up) {
         l_eht_set = false;
