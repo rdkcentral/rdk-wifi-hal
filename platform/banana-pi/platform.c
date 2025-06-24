@@ -108,47 +108,60 @@ int platform_pre_init()
     return 0;
 }
 
-int platform_create_interfaces(void)
+static int platform_create_interface(const char *ifname, int wiphy)
 {
     struct nl_msg *msg;
     int ret;
-    /* FIXME(ldk): Read from JSON/use static map? */
-    const int wiphy = 0;
-    const char ifname[] = "mld-ap0";
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_NEW_INTERFACE);
     if (msg == NULL) {
-        return -1;
+        return RETURN_ERR;
     }
 
     /* TODO(ldk): ? */
     /* if (nla_put_u32(msg, NL80211_ATTR_VIF_RADIO_MASK, 0x6) < 0) {
         nlmsg_free(msg);
-        return -1;
+        return RETURN_ERR;
     } */
 
     if (nla_put_u32(msg, NL80211_ATTR_WIPHY, wiphy) < 0) {
         nlmsg_free(msg);
-        return -1;
+        return RETURN_ERR;
     }
 
     if (nla_put_string(msg, NL80211_ATTR_IFNAME, ifname) < 0) {
         nlmsg_free(msg);
-        return -1;
+        return RETURN_ERR;
     }
 
     if (nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP) < 0) {
         nlmsg_free(msg);
-        return -1;
+        return RETURN_ERR;
     }
 
-    if ((ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL))) {
-        wifi_hal_error_print("%s:%d: Error creating %s interface on dev:%d error: %d (%s)\n", __func__, __LINE__,
-            ifname, wiphy, ret, strerror(-ret));
-        return -1;
+    if ((ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL)) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: Error creating %s interface on dev:%d error: %d (%s)\n",
+            __func__, __LINE__, ifname, wiphy, ret, strerror(-ret));
+        return RETURN_ERR;
     }
 
-    return 0;
+    wifi_hal_dbg_print("%s:%d: Platform created interface: \"%s\", wiphy: %d\n",
+        __func__, __LINE__, ifname, wiphy);
+
+    return RETURN_OK;
+}
+
+int platform_create_interfaces(void)
+{
+    /* FIXME(ldk): Read from JSON/use static map? */
+    const int wiphy = 0;
+    const char ifname[] = "mld-ap0";
+
+    if (platform_create_interface(ifname, wiphy) != RETURN_OK) {
+        return RETURN_ERR;
+    }
+
+    return RETURN_OK;
 }
 
 int platform_post_init(wifi_vap_info_map_t *vap_map)
