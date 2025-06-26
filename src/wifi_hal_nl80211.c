@@ -9923,9 +9923,8 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     mac_address_t   bssid;
     mac_addr_str_t  bssid_str = {0};
     wifi_vap_info_t *vap;
-    ieee80211_tlv_t *rsn_ie = NULL;
-    ieee80211_tlv_t *ie = NULL;
-    ieee80211_tlv_t *beacon_ies = NULL;
+    uint8_t *ie = NULL;
+    uint8_t *beacon_ies = NULL;
     signed int len, beacon_ie_len;
     const char *key = NULL;
     wifi_bss_info_t *scan_info_ap = NULL;
