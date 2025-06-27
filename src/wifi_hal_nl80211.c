@@ -9925,7 +9925,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     wifi_vap_info_t *vap;
     uint8_t *ie = NULL;
     uint8_t *beacon_ies = NULL;
-    signed int len, beacon_ie_len;
+    signed int len, beacon_ie_len = 0;
     const char *key = NULL;
     wifi_bss_info_t *scan_info_ap = NULL;
 
