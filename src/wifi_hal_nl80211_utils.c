@@ -3514,20 +3514,44 @@ enum nl80211_band wifi_freq_band_to_nl80211_band(wifi_freq_bands_t band)
 
 enum nl80211_band get_nl80211_band_from_rdk_radio_index(unsigned int rdk_radio_index)
 {
-    switch(rdk_radio_index) {
-        case 0:
-            return NL80211_BAND_2GHZ;
-        case 1:
-            return NL80211_BAND_5GHZ;
-        case 2:
-    #if HOSTAPD_VERSION >= 210
-            return NL80211_BAND_6GHZ;
-    #endif
-        default:
-            //not supported case
-            return NUM_NL80211_BANDS;
+    unsigned int i;
+    const char *vap_name = NULL;
+    const char *suffix = NULL;
+    const char *band_str = NULL;
 
+    for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
+        if (interface_index_map[i].rdk_radio_index == rdk_radio_index) {
+            vap_name = interface_index_map[i].vap_name;
+            if (!vap_name) {
+                break;
+            }
+
+            suffix = strrchr(vap_name, '_');
+            if (suffix && strlen(suffix + 1) > 0) {
+                band_str = suffix + 1;
+
+                if (strncmp(band_str, "2g", 2) == 0) {
+                    return NL80211_BAND_2GHZ;
+                } else if (strncmp(band_str, "5g", 2) == 0 ||
+                           strncmp(band_str, "5gl", 3) == 0 ||
+                           strncmp(band_str, "5gh", 3) == 0) {
+                    return NL80211_BAND_5GHZ;
+#if HOSTAPD_VERSION >= 210 && !defined(XLE_PORT)
+                } else if (strncmp(band_str, "6g", 2) == 0) {
+                    return NL80211_BAND_6GHZ;
+#endif
+                }
+            }
+
+            wifi_hal_error_print("%s:%d: Unable to parse band from vap_name: %s\n",
+                                 __func__, __LINE__, vap_name);
+            break;
+        }
     }
+
+    wifi_hal_error_print("%s:%d: Failed to resolve band for rdk_radio_index: %u\n",
+                         __func__, __LINE__, rdk_radio_index);
+    return NUM_NL80211_BANDS;
 }
 
 const char* get_chan_dfs_state(struct hostapd_channel_data *chan)
@@ -4339,20 +4363,29 @@ void init_interface_map(void)
 
 void concat_band_to_vap_name(wifi_vap_name_t vap_name, unsigned int rdk_radio_index)
 {
-    switch (rdk_radio_index) {
-    case 0:
-        strncat((char *)vap_name, "2g", strlen("2g") + 1);
-        break;
-    case 1:
-        strncat((char *)vap_name, "5g", strlen("5g") + 1);
-        break;
-    case 2:
-        strncat((char *)vap_name, "6g", strlen("6g") + 1);
-        break;
-    default:
-        wifi_hal_error_print("%s:%d: Invalid rdk_radio_index:%d for vap_name:%s\n", __func__,
-            __LINE__, rdk_radio_index, vap_name);
+    unsigned int i;
+    const char *vap_name_str = NULL;
+    const char *suffix = NULL;
+
+    for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
+        if (interface_index_map[i].rdk_radio_index == rdk_radio_index) {
+            wifi_hal_info_print("%s:%d: Found vap_name:%s for rdk_radio_index:%u\n",
+                                __func__, __LINE__, interface_index_map[i].vap_name, rdk_radio_index);
+
+            vap_name_str = interface_index_map[i].vap_name;
+            suffix = strrchr(vap_name_str, '_');
+
+            if (suffix && strlen(suffix + 1) > 0) {
+                strncat((char *)vap_name, suffix + 1, sizeof(wifi_vap_name_t) - strlen(vap_name) - 1);
+                wifi_hal_info_print("%s:%d: Updated vap_name to %s for rdk_radio_index:%u\n",
+                                    __func__, __LINE__, vap_name, rdk_radio_index);
+                return;
+            }
+        }
     }
+
+    wifi_hal_error_print("%s:%d: Failed to find valid suffix for vap_name:%s "
+                         "for rdk_radio_index:%u\n", __func__, __LINE__, vap_name, rdk_radio_index);
 }
 
 int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
