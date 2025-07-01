@@ -12,7 +12,12 @@
 #define BUFFER_LENGTH_WIFIDB 256
 #define BUFLEN_128  128
 #undef ENABLE
+#define wpa_ptk _wpa_ptk
+#define wpa_gtk _wpa_gtk
+#define mld_link_info _mld_link_info
+#if !defined(WLDM_21_2) && (HOSTAPD_VERSION >= 210)
 #include <wlioctl.h>
+#endif
 
 /*
 If include secure_wrapper.h, will need to convert other system calls with v_secure_system calls
@@ -691,6 +696,8 @@ int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *oper
     return 0;
 }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+
 static int get_rates(char *ifname, int *rates, size_t rates_size, unsigned int *num_rates)
 {
     wl_rateset_t rs;
@@ -872,6 +879,14 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 
     return RETURN_OK;
 }
+
+#else
+
+int platform_get_radio_caps(wifi_radio_index_t index)
+{
+    return RETURN_OK;
+}
+#endif //defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 
 INT wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
 {
