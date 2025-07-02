@@ -131,23 +131,84 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
     char output_val[RPI_LEN_32];
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
 
-    if (map == NULL)
-    {
+    if (map == NULL) {
         wifi_hal_dbg_print("%s:%d: wifi_vap_info_map_t *map is NULL \n", __func__, __LINE__);
     }
-    for (index = 0; index < map->num_vaps; index++)
-    {
-      if (map->vap_array[index].vap_mode == wifi_vap_mode_ap)
-      {
-	//   Assigning default radius values 
-	    wifi_nvram_defaultRead("radius_s_port",output_val);
-	    map->vap_array[index].u.bss_info.security.u.radius.s_port = atoi(output_val);
-	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[index].u.bss_info.security.u.radius.s_ip);
-	    wifi_nvram_defaultRead("radius_key",map->vap_array[index].u.bss_info.security.u.radius.s_key);
-      }
-    } 
+    for (index = 0; index < map->num_vaps; index++) {
+        if (map->vap_array[index].vap_mode == wifi_vap_mode_ap) {
+            //   Assigning default radius values
+            wifi_nvram_defaultRead("radius_s_port", output_val);
+            map->vap_array[index].u.bss_info.security.u.radius.s_port = atoi(output_val);
+            wifi_nvram_defaultRead("radius_s_ip",
+                map->vap_array[index].u.bss_info.security.u.radius.s_ip);
+            wifi_nvram_defaultRead("radius_key",
+                map->vap_array[index].u.bss_info.security.u.radius.s_key);
+
+            if (map->vap_array[index].u.bss_info.security.mode == wifi_security_mode_none ||
+                map->vap_array[index].u.bss_info.security.mode ==
+                    wifi_security_mode_enhanced_open) {
+
+                strcpy(map->vap_array[index].u.bss_info.security.u.radius.s_ip, "0.0.0.0");
+                strcpy(map->vap_array[index].u.bss_info.security.u.radius.s_key, "12345678");
+                strcpy(map->vap_array[index].u.bss_info.security.u.radius.ip, "0.0.0.0");
+                strcpy(map->vap_array[index].u.bss_info.security.u.radius.key, "12345678");
+                strcpy(map->vap_array[index].u.bss_info.security.u.radius.daskey, "12345678");
+            }
+            if (map->vap_array[index].u.bss_info.security.mode == wifi_security_mode_wpa_personal ||
+                map->vap_array[index].u.bss_info.security.mode ==
+                    wifi_security_mode_wpa2_personal ||
+                map->vap_array[index].u.bss_info.security.mode ==
+                    wifi_security_mode_wpa_wpa2_personal ||
+                map->vap_array[index].u.bss_info.security.mode ==
+                    wifi_security_mode_wpa3_personal ||
+                map->vap_array[index].u.bss_info.security.mode ==
+                    wifi_security_mode_wpa3_transition ||
+                map->vap_array[index].u.bss_info.security.mode ==
+                    wifi_security_mode_wpa3_compatibility) {
+
+                strcpy(map->vap_array[index].u.bss_info.security.repurposed_radius.s_ip, "0.0.0.0");
+                strcpy(map->vap_array[index].u.bss_info.security.repurposed_radius.s_key,
+                    "12345678");
+                strcpy(map->vap_array[index].u.bss_info.security.repurposed_radius.ip, "0.0.0.0");
+                strcpy(map->vap_array[index].u.bss_info.security.repurposed_radius.key, "12345678");
+                strcpy(map->vap_array[index].u.bss_info.security.repurposed_radius.daskey,
+                    "12345678");
+            }
+        } else if (map->vap_array[index].vap_mode == wifi_vap_mode_sta) {
+            if (map->vap_array[index].u.sta_info.security.mode == wifi_security_mode_none ||
+                map->vap_array[index].u.sta_info.security.mode ==
+                    wifi_security_mode_enhanced_open) {
+
+                strcpy(map->vap_array[index].u.sta_info.security.u.radius.s_ip, "0.0.0.0");
+                strcpy(map->vap_array[index].u.sta_info.security.u.radius.s_key, "12345678");
+                strcpy(map->vap_array[index].u.sta_info.security.u.radius.ip, "0.0.0.0");
+                strcpy(map->vap_array[index].u.sta_info.security.u.radius.key, "12345678");
+                strcpy(map->vap_array[index].u.sta_info.security.u.radius.daskey, "12345678");
+            }
+            if (map->vap_array[index].u.sta_info.security.mode == wifi_security_mode_wpa_personal ||
+                map->vap_array[index].u.sta_info.security.mode ==
+                    wifi_security_mode_wpa2_personal ||
+                map->vap_array[index].u.sta_info.security.mode ==
+                    wifi_security_mode_wpa_wpa2_personal ||
+                map->vap_array[index].u.sta_info.security.mode ==
+                    wifi_security_mode_wpa3_personal ||
+                map->vap_array[index].u.sta_info.security.mode ==
+                    wifi_security_mode_wpa3_transition ||
+                map->vap_array[index].u.sta_info.security.mode ==
+                    wifi_security_mode_wpa3_compatibility) {
+
+                strcpy(map->vap_array[index].u.sta_info.security.repurposed_radius.s_ip, "0.0.0.0");
+                strcpy(map->vap_array[index].u.sta_info.security.repurposed_radius.s_key,
+                    "12345678");
+                strcpy(map->vap_array[index].u.sta_info.security.repurposed_radius.ip, "0.0.0.0");
+                strcpy(map->vap_array[index].u.sta_info.security.repurposed_radius.key, "12345678");
+                strcpy(map->vap_array[index].u.sta_info.security.repurposed_radius.daskey,
+                    "12345678");
+            }
+        }
+    }
     return 0;
 }
 
