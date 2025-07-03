@@ -699,36 +699,45 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         wifi_hal_dbg_print("%s:%d: pmkid attribute absent\n", __func__, __LINE__);
     }
 
-    update_wpa_sm_params(interface);
-
     if (sec->mode != wifi_security_mode_none) {
-        update_eapol_sm_params(interface);
+        eapol_sm_notify_eap_fail(interface->u.sta.wpa_sm->eapol, 0);
+        eapol_sm_notify_eap_success(interface->u.sta.wpa_sm->eapol, 0);
         eapol_sm_notify_portEnabled(interface->u.sta.wpa_sm->eapol, TRUE);
     }
 
     if (interface->u.sta.pending_rx_eapol) {
-        struct ieee802_1x_hdr *hdr;
-
+        void *hdr;
+        int buff_len;
+#ifdef EAPOL_OVER_NL
+        hdr = interface->u.sta.rx_eapol_buff;
+        buff_len = interface->u.sta.buff_len;
+#else
         hdr = (struct ieee802_1x_hdr *)(interface->u.sta.rx_eapol_buff + sizeof(struct ieee8023_hdr));
+        buff_len = interface->u.sta.buff_len - sizeof(struct ieee8023_hdr);
+#endif
 
         //XXX: eapol_sm_rx_eapol
 #if HOSTAPD_VERSION >= 211 //2.11
-        wpa_sm_rx_eapol(interface->u.sta.wpa_sm, (unsigned char *)&interface->u.sta.src_addr, (unsigned char *)hdr,
-            interface->u.sta.buff_len - sizeof(struct ieee8023_hdr), FRAME_ENCRYPTION_UNKNOWN);
+        wpa_sm_rx_eapol(interface->u.sta.wpa_sm, (unsigned char *)&interface->u.sta.src_addr,
+            (unsigned char *)hdr, buff_len, FRAME_ENCRYPTION_UNKNOWN);
 #else
-        wpa_sm_rx_eapol(interface->u.sta.wpa_sm, (unsigned char *)&interface->u.sta.src_addr, (unsigned char *)hdr,
-            interface->u.sta.buff_len - sizeof(struct ieee8023_hdr));
+        wpa_sm_rx_eapol(interface->u.sta.wpa_sm, (unsigned char *)&interface->u.sta.src_addr,
+            (unsigned char *)hdr, buff_len);
 #endif
         interface->u.sta.pending_rx_eapol = false;
     }
 
     if (sec->mode == wifi_security_mode_none) {
         wpa_sm_set_state(interface->u.sta.wpa_sm, WPA_COMPLETED);
+        interface->u.sta.state = WPA_COMPLETED;
+        wifi_drv_set_supp_port(interface, 1);
+    } else {
+        wpa_sm_set_state(interface->u.sta.wpa_sm, WPA_ASSOCIATED);
+        interface->u.sta.state = WPA_ASSOCIATED;
     }
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
 #endif
-    interface->u.sta.state = WPA_ASSOCIATED;
 }
 
 static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nlattr **tb)

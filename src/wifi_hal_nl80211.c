@@ -223,7 +223,6 @@ int get_biggest_in_fdset(wifi_hal_priv_t *priv)
                     sock_fd = (vap->vap_mode == wifi_vap_mode_ap) ?
                                     interface->u.ap.br_sock_fd:interface->u.sta.sta_sock_fd;
                 }
-                if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
 #ifdef EAPOL_OVER_NL
                     if (sock_fd < interface->bss_nl_connect_event_fd) {
                         sock_fd = interface->bss_nl_connect_event_fd;
@@ -235,7 +234,6 @@ int get_biggest_in_fdset(wifi_hal_priv_t *priv)
                     if (sock_fd < interface->spurious_nl_event_fd) {
                         sock_fd = interface->spurious_nl_event_fd;
                     }
-                }
 
             }
 
@@ -286,7 +284,6 @@ bool bss_fd_isset(wifi_hal_priv_t *priv, wifi_interface_info_t **intf)
         interface = hash_map_get_first(radio->interface_map);
         while (interface != NULL) {
             if (interface->vap_configured == true &&
-                interface->vap_info.vap_mode == wifi_vap_mode_ap &&
                 interface->bss_frames_registered == 1 &&
                     FD_ISSET(interface->bss_nl_connect_event_fd, &priv->drv_rfds)) {
                 found = true;
@@ -3363,6 +3360,10 @@ static int nl80211_set_rx_control_port_owner(struct nl_msg *msg,
 
     if (!msg) {
         return -ENOMEM;
+    }
+
+    if (nla_put_flag(msg, NL80211_ATTR_CONTROL_PORT)) {
+        wifi_hal_error_print("%s:%d: NL Control port set failed\n", __func__, __LINE__);
     }
 
     if (handle) {
@@ -8785,6 +8786,15 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     sme_send_authentication(&interface->wpa_s, curr_bss, interface->wpa_s.current_ssid, 1);
     return 0;
 #else
+    if (interface->u.sta.pending_rx_eapol) {
+        interface->u.sta.pending_rx_eapol = false;
+    }
+    // EAPOL states should be initialised before sending CMD_CONNECT
+    update_wpa_sm_params(interface);
+    update_eapol_sm_params(interface);
+    eapol_sm_notify_portEnabled(interface->u.sta.wpa_sm->eapol, FALSE);
+    eapol_sm_notify_portValid(interface->u.sta.wpa_sm->eapol, FALSE);
+
     if ((msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_CONNECT)) == NULL) {
         return -1;
     }
@@ -8905,8 +8915,16 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
         wifi_hal_dbg_print("security mode open:%d encr:%d\n", security->mode, security->encr);
     }
-
-    ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
+#ifdef EAPOL_OVER_NL
+    if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_CONTROL_PORT_FRAME &&
+        interface->bss_nl_connect_event_fd >= 0) {
+        ret = nl80211_set_rx_control_port_owner(msg, interface);
+    } else {
+#endif
+        ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
+#ifdef EAPOL_OVER_NL
+    }
+#endif
     if (ret == 0) {
         return 0;
     }
@@ -13888,9 +13906,36 @@ static void nl80211_control_port_frame (wifi_interface_info_t* interface, struct
                     MAC2STR(src_addr));
             break;
         case ETH_P_PAE:
-            drv_event_eapol_rx(&interface->u.ap.hapd, src_addr,
-                    nla_data(tb[NL80211_ATTR_FRAME]),
-                    nla_len(tb[NL80211_ATTR_FRAME]));
+            if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+                drv_event_eapol_rx(&interface->u.ap.hapd, src_addr,
+                    nla_data(tb[NL80211_ATTR_FRAME]), nla_len(tb[NL80211_ATTR_FRAME]));
+            } else {
+                if (interface->u.sta.wpa_sm && interface->u.sta.state >= WPA_ASSOCIATED) {
+#if HOSTAPD_VERSION >= 211 // 2.11
+                    if (!interface->u.sta.wpa_sm->eapol ||
+                        !eapol_sm_rx_eapol(interface->u.sta.wpa_sm->eapol, src_addr,
+                            nla_data(tb[NL80211_ATTR_FRAME]), nla_len(tb[NL80211_ATTR_FRAME]),
+                            FRAME_ENCRYPTION_UNKNOWN)) {
+                        wpa_sm_rx_eapol(interface->u.sta.wpa_sm, src_addr,
+                            nla_data(tb[NL80211_ATTR_FRAME]), nla_len(tb[NL80211_ATTR_FRAME]),
+                            FRAME_ENCRYPTION_UNKNOWN);
+                    }
+#else
+                    if (!interface->u.sta.wpa_sm->eapol ||
+                        !eapol_sm_rx_eapol(interface->u.sta.wpa_sm->eapol, src_addr,
+                            nla_data(tb[NL80211_ATTR_FRAME]), nla_len(tb[NL80211_ATTR_FRAME]))) {
+                        wpa_sm_rx_eapol(interface->u.sta.wpa_sm, src_addr,
+                            nla_data(tb[NL80211_ATTR_FRAME]), nla_len(tb[NL80211_ATTR_FRAME]));
+                    }
+#endif
+                } else {
+                    interface->u.sta.pending_rx_eapol = true;
+                    memcpy(interface->u.sta.rx_eapol_buff, nla_data(tb[NL80211_ATTR_FRAME]),
+                        nla_len(tb[NL80211_ATTR_FRAME]));
+                    interface->u.sta.buff_len = nla_len(tb[NL80211_ATTR_FRAME]);
+                    memcpy(interface->u.sta.src_addr, src_addr, strlen((char *)src_addr) + 1);
+                }
+            }
             break;
         default:
             wifi_hal_dbg_print("nl80211: Unxpected ethertype 0x%04x from "
@@ -14289,7 +14334,7 @@ int wifi_drv_set_supp_port(void *priv, int authorized)
     interface = (wifi_interface_info_t *)priv;
     backhaul = &interface->u.sta.backhaul;
 
-#ifdef CONFIG_VENDOR_COMMANDS
+#if defined(CONFIG_VENDOR_COMMANDS) || (TARGET_GEMINI7_2)
     if (interface->u.sta.state <= WPA_ASSOCIATED && !authorized) {
         wifi_hal_error_print("nl80211: Skip set_supp_port(unauthorized) while not associated\n");
         return 0;
@@ -14653,7 +14698,13 @@ int wifi_drv_set_operstate(void *priv, int state)
         interface->u.sta.sta_sock_fd = sock_fd;
     }
 
-#endif
+#else
+    if (vap->vap_mode == wifi_vap_mode_sta) {
+        if (nl80211_register_bss_frames(interface) != 0) {
+            wifi_hal_error_print("%s:%d: Failed to register for bss frames\n", __func__, __LINE__);
+        }
+    }
+#endif // EAPOL_OVER_NL
     interface->bridge_configured = true;
     interface->vap_configured = true;
     wifi_hal_info_print("%s:%d: Exit, interface:%s bridge:%s driver configured for 802.11\n",

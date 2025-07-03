@@ -1798,7 +1798,7 @@ BOOL get_ie_ext_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_
     return false;
 }
 
-BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len)
+BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, size_t *ie_out_len)
 {
     ieee80211_tlv_t *ie = NULL;
     signed int len;
