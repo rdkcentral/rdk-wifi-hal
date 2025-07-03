@@ -603,6 +603,21 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     RADIO_INDEX_ASSERT(index);
     NULL_PTR_ASSERT(operationParam);
 
+#ifdef CONFIG_WIFI_EMULATOR
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
+        return RETURN_ERR;
+    }
+
+    radio->configured = true;
+    radio->oper_param.enable = true;
+    memcpy((unsigned char *)&radio->oper_param, (unsigned char *)operationParam,
+        sizeof(wifi_radio_operationParam_t));
+
+    return RETURN_OK;
+#endif
+
     if ((op_class = get_op_class_from_radio_params(operationParam)) == -1) {
         wifi_hal_error_print("%s:%d:Could not find country code for radio index:%d\n", __func__, __LINE__, index);
         return WIFI_HAL_INVALID_ARGUMENTS; // RDKB-47696: Passing invalid channel should return WIFI_HAL_INVALID_ARGUMENTS(-4)
@@ -1709,22 +1724,6 @@ INT wifi_hal_getScanResults(wifi_radio_index_t index, wifi_channel_t *channel, w
     return RETURN_OK;
 }
 
-static int chann_to_freq(unsigned char chan)
-{
-    if (chan >= MIN_CHANNEL_2G && chan <= MAX_CHANNEL_2G) {
-        return 2407 + 5 * chan;
-    }
-
-    if (chan >= MIN_CHANNEL_5G && chan <= MAX_CHANNEL_5G) {
-        return 5000 + 5 * chan;
-    }
-
-    wifi_hal_error_print("%s:%d: Failed to convert channel %u to frequency\n", __func__, __LINE__,
-        chan);
-
-    return 0;
-}
-
 #ifdef WIFI_HAL_VERSION_3_PHASE2
 INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
 {
@@ -2114,10 +2113,11 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
     bool found = false;
-    wifi_radio_operationParam_t *radio_param;
+    wifi_radio_operationParam_t *radio_param, param;
     char country[8] = {0}, tmp_str[32] = {0}, chan_list_str[512] = {0};
     unsigned int freq_list[32], i;
     ssid_t  ssid_list[8];
+    int op_class, freq_num = 0;
 
     wifi_hal_dbg_print("%s:%d: index: %d mode: %d dwell time: %d\n", __func__, __LINE__, index,
         scan_mode, dwell_time);
@@ -2169,16 +2169,30 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     }
 
     get_coutry_str_from_code(radio_param->countryCode, country);
+    memcpy((unsigned char *)&param, (unsigned char *)radio_param, sizeof(wifi_radio_operationParam_t));
 
     for (i = 0; i < num; i++) {
-        //freq_list[i] = ieee80211_chan_to_freq(country, radio_param->op_class, (scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN)? radio_param->channel:chan_list[i]);
-        freq_list[i] = chann_to_freq((scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN) ?
-            radio_param->channel : chan_list[i]);
-        if (freq_list[i] == 0) {
-            return RETURN_ERR;
+        param.channel = (scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN) ?
+            radio_param->channel : chan_list[i]; 
+
+        if ((op_class = get_op_class_from_radio_params(&param)) == -1) {
+            wifi_hal_error_print("%s:%d: Invalid channel %d\n", __func__, __LINE__, param.channel);
+            continue;
         }
-        sprintf(tmp_str, "%d ", freq_list[i]);
+
+        freq_list[freq_num] = ieee80211_chan_to_freq(country, op_class, param.channel);
+        if (freq_list[freq_num] == 0) {
+            continue;
+        }
+        sprintf(tmp_str, "%d ", freq_list[freq_num]);
         strcat(chan_list_str, tmp_str);
+
+	freq_num++;
+    }
+
+    if (freq_num == 0) {
+        wifi_hal_error_print("%s:%d: No valid channels\n", __func__, __LINE__);
+        return RETURN_ERR;
     }
 
     strcpy(ssid_list[0], vap->u.sta_info.ssid);
@@ -2188,7 +2202,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     hash_map_cleanup(interface->scan_info_map);
     pthread_mutex_unlock(&interface->scan_info_mutex);
 
-    return (nl80211_start_scan(interface, 0, num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+    return (nl80211_start_scan(interface, 0, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
 }
 
 /*****************************/
