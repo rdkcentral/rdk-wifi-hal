@@ -284,6 +284,10 @@ void init_oem_config(wifi_interface_info_t *interface)
     conf->manufacturer_url = (char *)&interface->manufacturer_url;
     conf->model_description = (char *)&interface->model_description;
     conf->model_url = (char *)&interface->model_url;
+    conf->fw_version = malloc(strlen(interface->firmware_version) + 1);
+    if (conf->fw_version != NULL) {
+        strcpy(conf->fw_version, interface->firmware_version);
+    }
 
     if(wps_dev_type_str2bin("6-0050F204-1", conf->device_type)) {
         wifi_hal_dbg_print("%s:%d: WPS, invalid device_type\n", __func__, __LINE__);
@@ -650,10 +654,19 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
     conf->rdkb_eap_request_timeout = sec->eap_req_timeout;
     conf->rdkb_eap_request_retries = sec->eap_req_retries;
 #endif
-    if (conf->ieee802_1x || is_open_sec_radius_auth(sec)) {
+    if (conf->ieee802_1x || is_open_sec_radius_auth(sec) || conf->mdu) {
+        wifi_radius_settings_t *radius_cfg;
+        if (conf->mdu) {
+            radius_cfg = &sec->repurposed_radius;
+            strcpy(conf->ssid.wpa_passphrase, sec->u.key.key);
+            conf->ssid.wpa_passphrase_set = true;
+            conf->osen = 0;
+            conf->wpa_psk_radius = PSK_RADIUS_DURING_4WAY_HS;
+        } else {
+            radius_cfg = &sec->u.radius;
+        }
         conf->disable_pmksa_caching = sec->disable_pmksa_caching;
-
-        if (sec->u.radius.ip == 0) {
+        if (radius_cfg->ip == 0) {
             wifi_hal_error_print("%s:%d:Invalid radius server IP configuration in VAP setting\n", __func__, __LINE__);
             return RETURN_ERR;
         }
@@ -686,9 +699,10 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         // nas_identifier
         memset(output, '\0', sizeof(output));
         _syscmd("sh /usr/sbin/deviceinfo.sh -emac", output, sizeof(output));
-	if (output[strlen(output) - 1] == '\n') {
+	    if (output[strlen(output) - 1] == '\n') {
            output[strlen(output) - 1] = '\0';
         }
+
         conf->nas_identifier = strdup(output);
         wifi_hal_dbg_print("%s:%d, Updating NAS identifier %s\n", __func__, __LINE__, output);
         memset(output, '\0', sizeof(output));
@@ -696,61 +710,60 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         conf->radius_auth_req_attr = hostapd_parse_radius_attr(output);
 
 #ifdef WIFI_HAL_VERSION_3_PHASE2
-        if (inet_ntop(AF_INET, &sec->u.radius.ip, test_ip, sizeof(test_ip))) {
+        if (inet_ntop(AF_INET, &radius_cfg->ip, test_ip, sizeof(test_ip))) {
             conf->radius->auth_servers[0].addr.af = AF_INET;
-            conf->radius->auth_servers[0].addr.u.v4 = sec->u.radius.ip;
+            conf->radius->auth_servers[0].addr.u.v4 = radius_cfg->ip;
         }
 #ifdef CONFIG_IPV6
-        else if(inet_ntop(AF_INET6, &sec->u.radius.ip, test_ip, sizeof(test_ip))) {
+        else if(inet_ntop(AF_INET6, &radius_cfg->ip, test_ip, sizeof(test_ip))) {
             conf->radius->auth_servers[0].addr.af = AF_INET6;
-            conf->radius->auth_servers[0].addr.u.v6 = sec->u.radius.ip;
+            conf->radius->auth_servers[0].addr.u.v6 = radius_cfg->ip;
         }
 #endif //CONFIG_IPV6
 #else  //WIFI_HAL_VERSION_3_PHASE2
-        if (inet_pton(AF_INET, (const char *)sec->u.radius.ip, &ipaddr)) {
+        if (inet_pton(AF_INET, (const char *)radius_cfg->ip, &ipaddr)) {
             conf->radius->auth_servers[0].addr.af = AF_INET;
             conf->radius->auth_servers[0].addr.u.v4 = ipaddr;
         }
 #ifdef CONFIG_IPV6
-        else if(inet_pton(AF_INET6, (const char *)sec->u.radius.ip, &ipaddrv6)) {
+        else if(inet_pton(AF_INET6, (const char *)radius_cfg->ip, &ipaddrv6)) {
             conf->radius->auth_servers[0].addr.af = AF_INET6;
             conf->radius->auth_servers[0].addr.u.v6 = ipaddrv6;
         }
 #endif //CONFIG_IPV6
 #endif //WIFI_HAL_VERSION_3_PHASE2
 
-        strcpy(conf->radius->auth_servers[0].shared_secret, sec->u.radius.key);
+        strcpy(conf->radius->auth_servers[0].shared_secret, radius_cfg->key);
         conf->radius->auth_servers[0].shared_secret_len = strlen(conf->radius->auth_servers[0].shared_secret);
-        conf->radius->auth_servers[0].port = sec->u.radius.port;
-
-
+        conf->radius->auth_servers[0].port = radius_cfg->port;
+        
 #ifdef WIFI_HAL_VERSION_3_PHASE2
-        if (inet_ntop(AF_INET, &sec->u.radius.s_ip, test_ip, sizeof(test_ip))) {
+        if (inet_ntop(AF_INET, &radius_cfg->s_ip, test_ip, sizeof(test_ip))) {
             conf->radius->auth_servers[1].addr.af = AF_INET;
-            conf->radius->auth_servers[1].addr.u.v4 = sec->u.radius.s_ip;
+            conf->radius->auth_servers[1].addr.u.v4 = radius_cfg->s_ip;
         }
 #ifdef CONFIG_IPV6
-        else if(inet_ntop(AF_INET6, &sec->u.radius.s_ip, test_ip, sizeof(test_ip))) {
+        else if(inet_ntop(AF_INET6, &radius_cfg->s_ip, test_ip, sizeof(test_ip))) {
             conf->radius->auth_servers[1].addr.af = AF_INET6;
-            conf->radius->auth_servers[1].addr.u.v6 = sec->u.radius.s_ip;
+            conf->radius->auth_servers[1].addr.u.v6 = radius_cfg->s_ip;
         }
 #endif //CONFIG_IPV6
 #else  //WIFI_HAL_VERSION_3_PHASE2
-        if (inet_pton(AF_INET, (const char *)&sec->u.radius.s_ip, &ipaddr)) {
+        if (inet_pton(AF_INET, (const char *)&radius_cfg->s_ip, &ipaddr)) {
             conf->radius->auth_servers[1].addr.af = AF_INET;
             conf->radius->auth_servers[1].addr.u.v4 = ipaddr;
         }
 #ifdef CONFIG_IPV6
-        else if(inet_pton(AF_INET6, (const char *)&sec->u.radius.s_ip, &ipaddrv6)) {
+        else if(inet_pton(AF_INET6, (const char *)&radius_cfg->s_ip, &ipaddrv6)) {
             conf->radius->auth_servers[1].addr.af = AF_INET6;
             conf->radius->auth_servers[1].addr.u.v6 = ipaddrv6;
         }
 #endif //CONFIG_IPV6
 #endif //WIFI_HAL_VERSION_3_PHASE2
 
-        strcpy(conf->radius->auth_servers[1].shared_secret, sec->u.radius.s_key);
+        strcpy(conf->radius->auth_servers[1].shared_secret, radius_cfg->s_key);
         conf->radius->auth_servers[1].shared_secret_len = strlen(conf->radius->auth_servers[1].shared_secret);
-        conf->radius->auth_servers[1].port = sec->u.radius.s_port;
+        conf->radius->auth_servers[1].port = radius_cfg->s_port;
 
         if (is_open_sec_radius_auth(sec)) {
             conf->radius_das_port = sec->u.radius.dasport;
@@ -1049,6 +1062,8 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     //wme_enabled, uapsd_enabled
     conf->wmm_enabled = vap->u.bss_info.wmm_enabled;
     conf->wmm_uapsd = vap->u.bss_info.UAPSDEnabled;
+    
+    conf->mdu = vap->u.bss_info.mdu_enabled;
 
     if (update_security_config(&vap->u.bss_info.security, conf) == -1) {
         wifi_hal_error_print("%s:%d:update_security_config failed \n", __func__, __LINE__);
@@ -1086,8 +1101,10 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     // connected_building_enabled
     if (is_wifi_hal_vap_hotspot_from_interfacename(conf->iface)) {
         conf->connected_building_avp = vap->u.bss_info.connected_building_enabled;
-        wifi_hal_info_print("%s:%d:connected_building_enabled is %d  and ifacename is %s\n", __func__, __LINE__,conf->connected_building_avp,conf->iface);
+        wifi_hal_info_print("%s:%d:connected_building_enabled is %d and ifacename is %s\n", __func__, __LINE__,conf->connected_building_avp, conf->iface);
     }
+
+    conf->speed_tier = vap->u.bss_info.am_config.npc.speed_tier;
    // rdk_greylist
     conf->rdk_greylist = vap->u.bss_info.network_initiated_greylist;
     if(conf->rdk_greylist) {

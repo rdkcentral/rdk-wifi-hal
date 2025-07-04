@@ -422,7 +422,7 @@ typedef struct wifi_interface_info_t {
 
     char   wpa_passphrase[64];
     char   device_name[64], manufacturer[64], model_name[64], model_number[64];
-    char   serial_number[64], friendly_name[64], manufacturer_url[64];
+    char   serial_number[64], friendly_name[64], manufacturer_url[64], firmware_version[64];
     char   model_description[64], model_url[64];
     int    vlan;
     char   ctrl_interface[32];
@@ -952,6 +952,7 @@ BOOL is_wifi_hal_vap_hotspot_secure(UINT ap_index);
 BOOL is_wifi_hal_vap_lnf_radius(UINT ap_index);
 BOOL is_wifi_hal_vap_mesh_sta(UINT ap_index);
 BOOL is_wifi_hal_vap_hotspot_from_interfacename(char *interface_name);
+wifi_vap_info_t* get_wifi_vap_info_from_interfacename(char *interface_name);
 
 BOOL is_wifi_hal_6g_radio_from_interfacename(char *interface_name);
 
