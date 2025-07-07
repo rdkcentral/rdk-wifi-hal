@@ -7905,6 +7905,7 @@ int nl80211_disconnect_sta(wifi_interface_info_t *interface)
 }
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(CONFIG_WIFI_EMULATOR)
 #define SEM_NAME "/semlock"
 
 int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
@@ -7996,7 +7997,6 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
     return RETURN_OK;
 }
 
-#if defined (CONFIG_WIFI_EMULATOR)
 int wifi_hal_emu_set_radio_diag_stats(unsigned int radio_index, bool emu_state,
     wifi_radioTrafficStats2_t *radio_diag_stat, unsigned int count, unsigned int phy_index,
     unsigned int interface_index)
@@ -8132,7 +8132,6 @@ int wifi_hal_emu_set_radio_diag_stats(unsigned int radio_index, bool emu_state,
     free(interface);
     return 0;
 }
-#endif /* CONFIG_WIFI_EMULATOR */
 
 typedef struct {
     const char *str;
@@ -8177,7 +8176,6 @@ static void wl_cfgvendor_get_station_bw(wifi_associated_dev3_t *sta_info, u8 *bw
     }
 }
 
-#if defined(CONFIG_WIFI_EMULATOR)
 static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, bool emu_state, wifi_associated_dev3_t *stats, unsigned int count, wifi_interface_info_t *interface)
 {
     wifi_hal_stats_dbg_print("%s:%d: value of vap index %d emu_enable %d and count is %d\n", __func__, __LINE__, vap_index, emu_state, count);
