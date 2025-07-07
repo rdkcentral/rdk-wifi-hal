@@ -906,7 +906,7 @@ int     nl80211_retry_interface_enable(wifi_interface_info_t *interface, bool en
 void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *event);
 int     nl80211_connect_sta(wifi_interface_info_t *interface);
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
-if defined(CONFIG_WIFI_EMULATOR)
+#if defined(CONFIG_WIFI_EMULATOR)
 typedef struct {
     bool emu_enable;
     uint32_t radio_index;
