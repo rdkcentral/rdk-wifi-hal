@@ -241,7 +241,6 @@ static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map)
 }
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
-#if defined WIFI_EMULATOR_CHANGE
 #define SEM_NAME "/semlock"
 
 int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_array,
@@ -341,7 +340,6 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     sem_close(sem);
     return RETURN_OK;
 }
-#endif // WIFI_EMULATOR_CHANGE
 #endif
 
 INT wifi_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, INT dwell_time, UINT chan_num, UINT *chan_list)
