@@ -906,7 +906,7 @@ int     nl80211_retry_interface_enable(wifi_interface_info_t *interface, bool en
 void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *event);
 int     nl80211_connect_sta(wifi_interface_info_t *interface);
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
-
+if defined(CONFIG_WIFI_EMULATOR)
 typedef struct {
     bool emu_enable;
     uint32_t radio_index;
@@ -919,6 +919,7 @@ int     wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_st
 int     wifi_hal_emu_set_radio_temp (unsigned int radio_index, bool emu_state, int temperature, unsigned int phy_index, unsigned int interface_index);
 int     wifi_hal_emu_set_radio_diag_stats(unsigned int radio_index, bool emu_state, wifi_radioTrafficStats2_t *radio_diag_stat, unsigned int count, unsigned int phy_index, unsigned int interface_index);
 int     wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state, wifi_neighbor_ap2_t *neighbor_stats, unsigned int count);
+#endif //CONFIG_WIFI_EMULATOR
 #endif
 int     nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         unsigned int num_freq, unsigned int  *freq_list, unsigned int dwell_time,
