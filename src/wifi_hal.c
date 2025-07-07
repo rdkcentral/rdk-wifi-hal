@@ -250,8 +250,10 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
                     radio_band = WIFI_FREQUENCY_6_BAND;
                 }
             }
-            wifi_hal_info_print("%s:%d: interface name: %s, vap index: %d, vap name: %s\n", __func__, __LINE__,
-                    interface->name, vap->vap_index, vap->vap_name);
+            strncpy(interface->firmware_version, hal->wifi_prop.software_version, sizeof(interface->firmware_version) - 1);
+            interface->firmware_version[sizeof(interface->firmware_version) - 1] = '\0';
+            wifi_hal_info_print("%s:%d:interface name: %s, interface->firmware_version: %s, vap index: %d, vap name: %s\n", __func__, __LINE__,
+                    interface->name, interface->firmware_version, vap->vap_index, vap->vap_name);
             interface = hash_map_get_next(radio->interface_map, interface);
         }
 
@@ -1172,8 +1174,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     for (i = 0; i < map->num_vaps; i++) {
         vap = &map->vap_array[i];
 
-        wifi_hal_info_print("%s:%d: vap index:%d create vap\n", __func__, __LINE__,
-            vap->vap_index);
+        wifi_hal_info_print("%s:%d: vap index:%d vap_name = %s create vap\n", __func__, __LINE__,
+            vap->vap_index, vap->vap_name);
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
             if (validate_wifi_interface_vap_info_params(vap, msg, sizeof(msg)) != RETURN_OK) {
@@ -1184,8 +1186,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         interface = get_interface_by_vap_index(vap->vap_index);
         if (interface == NULL) {
-            wifi_hal_info_print("%s:%d: vap index:%d create interface\n", __func__, __LINE__,
-                vap->vap_index);
+            wifi_hal_info_print("%s:%d:vap index:%d vap_name = %s create interface\n", __func__, __LINE__,
+                vap->vap_index, vap->vap_name);
             if ((nl80211_create_interface(radio, vap, &interface) != 0) || (interface == NULL)) {
                 wifi_hal_error_print("%s:%d: vap index:%d failed to create interface\n", __func__,
                     __LINE__, vap->vap_index);
@@ -1216,8 +1218,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             continue;
         }
 #endif
-        wifi_hal_info_print("%s:%d: vap index:%d interface:%s mode:%d\n", __func__, __LINE__,
-            vap->vap_index, interface->name, vap->vap_mode);
+        wifi_hal_info_print("%s:%d: vap index:%d interface:%s mode:%d vap_name:%s\n", __func__, __LINE__,
+            vap->vap_index, interface->name, vap->vap_mode, vap->vap_name);
         if (vap->vap_mode == wifi_vap_mode_ap) {
             wifi_hal_info_print("%s:%d: vap_enable_status:%d\n", __func__, __LINE__, vap->u.bss_info.enabled);
             memcpy(vap->u.bss_info.bssid, interface->mac, sizeof(vap->u.bss_info.bssid));
