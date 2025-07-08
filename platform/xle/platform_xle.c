@@ -1,10 +1,23 @@
 #include <stddef.h>
 #include "wifi_hal.h"
 #include "wifi_hal_priv.h"
+#if defined(WLDM_21_2)
+#include "wlcsm_lib_api.h"
+#else
+#include "nvram_api.h"
+#endif // defined(WLDM_21_2)
+#include "wlcsm_lib_wl.h"
 #include "wlcsm_lib_api.h"
 #include "rdkconfig.h"
 #define BUFFER_LENGTH_WIFIDB 256
 #define BUFLEN_128  128
+#undef ENABLE
+#define wpa_ptk _wpa_ptk
+#define wpa_gtk _wpa_gtk
+#define mld_link_info _mld_link_info
+#if !defined(WLDM_21_2) && (HOSTAPD_VERSION >= 210)
+#include <wlioctl.h>
+#endif
 
 /*
 If include secure_wrapper.h, will need to convert other system calls with v_secure_system calls
@@ -146,12 +159,49 @@ void set_decimal_nvram_param(char *param_name, unsigned int value)
     char temp_buff[8];
     memset(temp_buff, 0 ,sizeof(temp_buff));
     snprintf(temp_buff, sizeof(temp_buff), "%d", value);
+#if defined(WLDM_21_2)
     wlcsm_nvram_set(param_name, temp_buff);
+#else
+    nvram_set(param_name, temp_buff);
+#endif // defined(WLDM_21_2)
 }
 
 void set_string_nvram_param(char *param_name, char *value)
 {
+#if defined(WLDM_21_2)
     wlcsm_nvram_set(param_name, value);
+#else
+    nvram_set(param_name, value);
+#endif // defined(WLDM_21_2)
+}
+
+static int disable_dfs_auto_channel_change(int radio_index, int disable)
+{
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    char radio_dev[IFNAMSIZ];
+
+    snprintf(radio_dev, sizeof(radio_dev), "wl%d", radio_index);
+
+    if (wl_ioctl(radio_dev, WLC_DOWN, NULL, 0) < 0) {
+        wifi_hal_error_print("%s:%d failed to set radio down for %s, err: %d (%s)\n", __func__,
+            __LINE__, radio_dev, errno, strerror(errno));
+        return -1;
+    }
+
+    if (wl_iovar_set(radio_dev, "dfs_auto_channel_change_disable", &disable, sizeof(disable)) < 0) {
+        wifi_hal_error_print("%s:%d failed to set dfs_auto_channel_change_disable %d for %s, "
+                             "err: %d (%s)\n",
+            __func__, __LINE__, disable, radio_dev, errno, strerror(errno));
+        return -1;
+    }
+
+    if (wl_ioctl(radio_dev, WLC_UP, NULL, 0) < 0) {
+        wifi_hal_error_print("%s:%d failed to set radio up for %s, err: %d (%s)\n", __func__,
+            __LINE__, radio_dev, errno, strerror(errno));
+        return -1;
+    }
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
+    return 0;
 }
 
 int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
@@ -189,6 +239,11 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         sprintf(param_name, "wl%d_country_code", index);
         set_string_nvram_param(param_name, temp_buff);
     }
+
+    if (radio->oper_param.DfsEnabled != operationParam->DfsEnabled) {
+        /* userspace selects new channel and configures CSA when radar detected */
+        disable_dfs_auto_channel_change(index, true);
+    }
     
     return 0;
 }
@@ -199,9 +254,116 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     return 0;
 }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+
+#define ASSOC_DRIVER_CTRL 0
+#define ASSOC_HOSTAP_STATUS_CTRL 1
+#define ASSOC_HOSTAP_FULL_CTRL 2
+
+static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, int enable)
+{
+    int assoc_ctrl;
+    char buf[128] = {0};
+    char interface_name[8] = {0};
+    struct maclist *maclist = (struct maclist *)buf;
+
+    if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d failed to get interface name for vap index: %d, err: %d (%s)\n",
+            __func__, __LINE__, vap_index, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    if (wl_iovar_set(interface_name, "usr_beacon", &enable, sizeof(enable)) < 0) {
+        wifi_hal_error_print("%s:%d failed to set usr_beacon %d for %s, err: %d (%s)\n", __func__,
+            __LINE__, enable, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    if (wl_iovar_set(interface_name, "usr_probresp", &enable, sizeof(enable)) < 0) {
+        wifi_hal_error_print("%s:%d failed to set usr_probresp %d for %s, err: %d (%s)\n", __func__,
+            __LINE__, enable, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    maclist->count = 0;
+    if (wl_ioctl(interface_name, WLC_SET_PROBE_FILTER, maclist, sizeof(maclist->count)) < 0) {
+        wifi_hal_error_print("%s:%d failed to reset probe filter for %s, err: %d (%s)\n", __func__,
+            __LINE__, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    if (enable) {
+        maclist->count = 1;
+        memset(&maclist->ea[0], 0xff, sizeof(maclist->ea[0]));
+        if (wl_ioctl(interface_name, WLC_SET_PROBE_FILTER, maclist, sizeof(buf)) < 0) {
+            wifi_hal_error_print("%s:%d failed to set probe filter for %s, err: %d (%s)\n",
+                __func__, __LINE__, interface_name, errno, strerror(errno));
+            return RETURN_ERR;
+        }
+    }
+
+    if (wl_iovar_set(interface_name, "usr_auth", &enable, sizeof(enable)) < 0) {
+        wifi_hal_error_print("%s:%d failed to set usr_auth %d for %s, err: %d (%s)\n", __func__,
+            __LINE__, enable, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    if (enable) {
+        assoc_ctrl = ASSOC_HOSTAP_FULL_CTRL;
+    } else if (is_wifi_hal_vap_hotspot_open(vap_index) ||
+        is_wifi_hal_vap_hotspot_secure(vap_index)) {
+        assoc_ctrl = ASSOC_HOSTAP_STATUS_CTRL;
+    } else {
+        assoc_ctrl = ASSOC_DRIVER_CTRL;
+    }
+
+    if (wl_ioctl(interface_name, WLC_DOWN, NULL, 0) < 0) {
+         wifi_hal_error_print("%s:%d failed to set interface down for %s, err: %d (%s)\n", __func__,
+             __LINE__, interface_name, errno, strerror(errno));
+         return RETURN_ERR;
+    }
+
+    if (wl_iovar_set(interface_name, "split_assoc_req", &assoc_ctrl, sizeof(assoc_ctrl)) < 0) {
+        wifi_hal_error_print("%s:%d failed to set split_assoc_req %d for %s, err: %d (%s)\n",
+            __func__, __LINE__, assoc_ctrl, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    if (wl_ioctl(interface_name, WLC_UP, NULL, 0) < 0) {
+         wifi_hal_error_print("%s:%d failed to set interface up for %s, err: %d (%s)\n", __func__,
+             __LINE__, interface_name, errno, strerror(errno));
+         return RETURN_ERR;
+    }
+
+    return RETURN_OK;
+}
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
+
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
-    wifi_hal_dbg_print("%s \n", __func__);
+    int vap_index = 0;
+    wifi_radio_info_t *radio;
+
+    wifi_hal_dbg_print("%s:%d: Entering Radio index %d\n", __func__, __LINE__, index);
+
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
+        return RETURN_ERR;
+    }
+
+    for (vap_index = 0; vap_index < map->num_vaps; vap_index++) {
+        if (map->vap_array[vap_index].vap_mode == wifi_vap_mode_ap) {
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+            wifi_hal_info_print("%s:%d: vap_index:%d, hostap_mgt_frame_ctrl:%d\n", __func__,
+                __LINE__, map->vap_array[vap_index].vap_index,
+                map->vap_array[vap_index].u.bss_info.hostap_mgt_frame_ctrl);
+            platform_set_hostap_ctrl(radio, map->vap_array[vap_index].vap_index,
+                map->vap_array[vap_index].u.bss_info.hostap_mgt_frame_ctrl);
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
+        }
+    }
+
     return 0;
 }
 
@@ -233,7 +395,11 @@ int nvram_get_default_password(char *l_password, int vap_index)
     memset(interface_name, 0, sizeof(interface_name));
     get_interface_name_from_vap_index(vap_index, interface_name);
     snprintf(nvram_name, sizeof(nvram_name), "%s_wpa_psk", interface_name);
+#if defined(WLDM_21_2)
     key_passphrase = wlcsm_nvram_get(nvram_name);
+#else
+    key_passphrase = nvram_get(nvram_name);
+#endif // defined(WLDM_21_2)
     if (key_passphrase == NULL) {
         wifi_hal_error_print("%s:%d nvram key_passphrase value is NULL\r\n", __func__, __LINE__);
         return -1;
@@ -263,7 +429,11 @@ int platform_get_radius_key_default(char *radius_key)
     char *key;
 
     snprintf(nvram_name, sizeof(nvram_name), "default_radius_key");
+#if defined(WLDM_21_2)
     key = wlcsm_nvram_get(nvram_name);
+#else
+    key = nvram_get(nvram_name);
+#endif // defined(WLDM_21_2)
     if (key == NULL) {
         wifi_hal_error_print("%s:%d nvram  radius_keydefault value is NULL\r\n", __func__, __LINE__);
         return -1;
@@ -348,7 +518,11 @@ int nvram_get_current_ssid(char *l_ssid, int vap_index)
     memset(interface_name, 0, sizeof(interface_name));
     get_interface_name_from_vap_index(vap_index, interface_name);
     snprintf(nvram_name, sizeof(nvram_name), "%s_ssid", interface_name);
+#if defined(WLDM_21_2)
     ssid = wlcsm_nvram_get(nvram_name);
+#else
+    ssid = nvram_get(nvram_name);
+#endif // defined(WLDM_21_2)
     if (ssid == NULL) {
         wifi_hal_error_print("%s:%d nvram ssid value is NULL\r\n", __func__, __LINE__);
         return -1;
@@ -378,15 +552,31 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         snprintf(param, sizeof(param), "%s_bss_enabled", interface_name);
         if (vap->vap_mode == wifi_vap_mode_ap) {
             if (vap->u.bss_info.enabled) {
+#if defined(WLDM_21_2)
                 wlcsm_nvram_set(param, "1");
+#else
+                nvram_set(param, "1");
+#endif // defined(WLDM_21_2)
             } else {
+#if defined(WLDM_21_2)
                 wlcsm_nvram_set(param, "0");
+#else
+                nvram_set(param, "0");
+#endif // defined(WLDM_21_2)
             }
         } else if (vap->vap_mode == wifi_vap_mode_sta) {
             if (vap->u.sta_info.enabled) {
+#if defined(WLDM_21_2)
                 wlcsm_nvram_set(param, "1");
+#else
+                nvram_set(param, "1");
+#endif // defined(WLDM_21_2)
             } else {
+#if defined(WLDM_21_2)
                 wlcsm_nvram_set(param, "0");
+#else
+                nvram_set(param, "0");
+#endif // defined(WLDM_21_2)
             }
         }
     }
@@ -396,12 +586,29 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
 int platform_flags_init(int *flags)
 {
-    *flags = PLATFORM_FLAGS_STA_INACTIVITY_TIMER;
+    *flags = PLATFORM_FLAGS_PROBE_RESP_OFFLOAD | PLATFORM_FLAGS_STA_INACTIVITY_TIMER;
     return 0;
 }
 
 int platform_get_aid(void* priv, u16* aid, const u8* addr)
 {
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    int ret;
+    sta_info_t sta_info;
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
+
+    ret = wl_iovar_getbuf(interface->name, "sta_info", addr, ETHER_ADDR_LEN, &sta_info,
+        sizeof(sta_info));
+    if (ret < 0) {
+        wifi_hal_error_print("%s:%d failed to get sta info, err: %d (%s)\n", __func__, __LINE__,
+            errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    *aid = sta_info.aid;
+
+    wifi_hal_dbg_print("%s:%d sta aid %d\n", __func__, __LINE__, *aid);
+#endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     return 0;
 }
 
@@ -489,10 +696,197 @@ int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *oper
     return 0;
 }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+
+static int get_rates(char *ifname, int *rates, size_t rates_size, unsigned int *num_rates)
+{
+    wl_rateset_t rs;
+
+    if (wl_ioctl(ifname, WLC_GET_CURR_RATESET, &rs, sizeof(wl_rateset_t)) < 0) {
+        wifi_hal_error_print("%s:%d: failed to get rateset for %s, err %d (%s)\n", __func__,
+            __LINE__, ifname, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    if (rates_size < rs.count) {
+        wifi_hal_error_print("%s:%d: rates size %zu is less than %u\n", __func__, __LINE__,
+            rates_size, rs.count);
+        rs.count = rates_size;
+    }
+
+    for (unsigned int i = 0; i < rs.count; i++) {
+        // clear basic rate flag and convert 500 kbps to 100 kbps units
+        rates[i] = (rs.rates[i] & 0x7f) * 5;
+    }
+    *num_rates = rs.count;
+
+    return RETURN_OK;
+}
+
+static void platform_get_radio_caps_common(wifi_radio_info_t *radio,
+    wifi_interface_info_t *interface)
+{
+    unsigned int num_rates;
+    int rates[WL_MAXRATES_IN_SET];
+    struct hostapd_iface *iface = &interface->u.ap.iface;
+
+    if (get_rates(interface->name, rates, ARRAY_SZ(rates), &num_rates) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: failed to get rates for %s\n", __func__, __LINE__,
+            interface->name);
+        return;
+    }
+
+    for (int i = 0; i < iface->num_hw_features; i++) {
+        if (iface->hw_features[i].num_rates >= num_rates) {
+            memcpy(iface->hw_features[i].rates, rates, num_rates * sizeof(rates[0]));
+            iface->hw_features[i].num_rates = num_rates;
+        }
+    }
+}
+
+static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
+{
+    // Set values from driver beacon, NL values are not valid.
+    // SCS bit is not set in driver
+    static const u8 ext_cap[] = { 0x85, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x40, 0x00, 0x00,
+        0x20 };
+    static const u8 ht_mcs[16] = { 0xff, 0xff, 0xff, 0xff };
+    static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
+    static const u8 he_mcs[HE_MAX_MCS_CAPAB_SIZE] = { 0xaa, 0xff, 0xaa, 0xff };
+    static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x1b, 0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
+    static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x0f, 0x03, 0x95,
+        0x18, 0x00, 0xcc, 0x00 };
+    struct hostapd_iface *iface = &interface->u.ap.iface;
+
+    radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD;
+
+    free(radio->driver_data.extended_capa);
+    radio->driver_data.extended_capa = malloc(sizeof(ext_cap));
+    memcpy(radio->driver_data.extended_capa, ext_cap, sizeof(ext_cap));
+    free(radio->driver_data.extended_capa_mask);
+    radio->driver_data.extended_capa_mask = malloc(sizeof(ext_cap));
+    memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
+    radio->driver_data.extended_capa_len = sizeof(ext_cap);
+
+    for (int i = 0; i < iface->num_hw_features; i++) {
+        iface->hw_features[i].ht_capab = 0x11ef;
+        iface->hw_features[i].a_mpdu_params &= ~(0x07 << 2);
+        iface->hw_features[i].a_mpdu_params |= 0x05 << 2;
+        memcpy(iface->hw_features[i].mcs_set, ht_mcs, sizeof(ht_mcs));
+
+        memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mac_cap, he_mac_cap,
+            sizeof(he_mac_cap));
+        memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].phy_cap, he_phy_cap,
+            sizeof(he_phy_cap));
+        memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mcs, he_mcs, sizeof(he_mcs));
+        memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].ppet, he_ppet, sizeof(he_ppet));
+
+        for (int ch = 0; ch < iface->hw_features[i].num_channels; ch++) {
+            iface->hw_features[i].channels[ch].max_tx_power = 30; // dBm
+        }
+    }
+}
+
+static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
+{
+    static const u8 ext_cap[] = { 0x84, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x40, 0x00, 0x40,
+        0x20 };
+    static const u8 ht_mcs[16] = { 0xff, 0xff, 0xff, 0xff };
+    static const u8 vht_mcs[8] = { 0xaa, 0xff, 0x00, 0x00, 0xaa, 0xff, 0x00, 0x20 };
+    static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
+    static const u8 he_mcs[HE_MAX_MCS_CAPAB_SIZE] = { 0xaa, 0xff, 0xaa, 0xff, 0xaa, 0xff, 0xaa,
+        0xff };
+    static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x7b, 0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71,
+        0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
+    static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x6f, 0x1b, 0x95,
+        0x18, 0x00, 0xcc, 0x00 };
+    struct hostapd_iface *iface = &interface->u.ap.iface;
+
+    radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD | WPA_DRIVER_FLAGS_DFS_OFFLOAD;
+
+    free(radio->driver_data.extended_capa);
+    radio->driver_data.extended_capa = malloc(sizeof(ext_cap));
+    memcpy(radio->driver_data.extended_capa, ext_cap, sizeof(ext_cap));
+    free(radio->driver_data.extended_capa_mask);
+    radio->driver_data.extended_capa_mask = malloc(sizeof(ext_cap));
+    memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
+    radio->driver_data.extended_capa_len = sizeof(ext_cap);
+
+    for (int i = 0; i < iface->num_hw_features; i++) {
+        iface->hw_features[i].ht_capab = 0x01ef;
+        iface->hw_features[i].a_mpdu_params &= ~(0x07 << 2);
+        iface->hw_features[i].a_mpdu_params |= 0x05 << 2;
+        memcpy(iface->hw_features[i].mcs_set, ht_mcs, sizeof(ht_mcs));
+        iface->hw_features[i].vht_capab = 0x0f8b69b5;
+        memcpy(iface->hw_features[i].vht_mcs_set, vht_mcs, sizeof(vht_mcs));
+        memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mac_cap, he_mac_cap,
+            sizeof(he_mac_cap));
+        memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].phy_cap, he_phy_cap,
+            sizeof(he_phy_cap));
+        memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mcs, he_mcs, sizeof(he_mcs));
+        memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].ppet, he_ppet, sizeof(he_ppet));
+
+        for (int ch = 0; ch < iface->hw_features[i].num_channels; ch++) {
+            if (iface->hw_features[i].channels[ch].flag & HOSTAPD_CHAN_RADAR) {
+                iface->hw_features[i].channels[ch].max_tx_power = 24; // dBm
+            } else {
+                iface->hw_features[i].channels[ch].max_tx_power = 30; // dBm
+            }
+
+            /* Re-enable DFS channels disabled due to missing WPA_DRIVER_FLAGS_DFS_OFFLOAD flag */
+            if (iface->hw_features[i].channels[ch].flag & HOSTAPD_CHAN_DISABLED &&
+                iface->hw_features[i].channels[ch].flag & HOSTAPD_CHAN_RADAR) {
+                iface->hw_features[i].channels[ch].flag &= ~HOSTAPD_CHAN_DISABLED;
+            }
+        }
+    }
+}
+
 int platform_get_radio_caps(wifi_radio_index_t index)
 {
-    return 0;
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface;
+
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+            index);
+        return RETURN_ERR;
+    }
+
+    for (interface = hash_map_get_first(radio->interface_map); interface != NULL;
+        interface = hash_map_get_next(radio->interface_map, interface)) {
+
+        if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+            wifi_hal_info_print("%s:%d: skipping interface %s, vap mode is STA\n",
+                __func__, __LINE__, interface->name);
+            continue;
+        }
+
+        platform_get_radio_caps_common(radio, interface);
+
+        if (strstr(interface->vap_info.vap_name, "2g")) {
+            platform_get_radio_caps_2g(radio, interface);
+        } else if (strstr(interface->vap_info.vap_name, "5gl") ||
+                   strstr(interface->vap_info.vap_name, "5gh")) {
+            platform_get_radio_caps_5g(radio, interface);
+        } else {
+            wifi_hal_error_print("%s:%d: unknown interface %s\n", __func__, __LINE__,
+                interface->vap_info.vap_name);
+            return RETURN_ERR;
+        }
+    }
+
+    return RETURN_OK;
 }
+
+#else
+
+int platform_get_radio_caps(wifi_radio_index_t index)
+{
+    return RETURN_OK;
+}
+#endif //defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 
 INT wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
 {
