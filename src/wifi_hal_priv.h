@@ -722,11 +722,12 @@ INT wifi_hal_cancelRMBeaconRequest(UINT apIndex, UCHAR dialogToken);
 INT wifi_hal_configNeighborReports(UINT apIndex, bool enable, bool auto_resp);
 INT wifi_hal_setNeighborReports(UINT apIndex, UINT numNeighborReports, wifi_NeighborReport_t *neighborReports);
 void wifi_hal_newApAssociatedDevice_callback_register(wifi_newApAssociatedDevice_callback func);
-void wifi_hal_apDisassociatedDevice_callback_register(wifi_apDisassociatedDevice_callback func);
+void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_callback func);
 void wifi_hal_stamode_callback_register(wifi_stamode_callback func);
+void wifi_hal_apStatusCode_callback_register(wifi_apStatusCode_callback func);
 void wifi_hal_radiusEapFailure_callback_register(wifi_radiusEapFailure_callback func);
 void wifi_hal_radiusFallback_failover_callback_register(wifi_radiusFallback_failover_callback func);
-void wifi_hal_apDeAuthEvent_callback_register(wifi_apDeAuthEvent_callback func);
+void wifi_hal_apDeAuthEvent_callback_register(wifi_device_deauthenticated_callback func);
 void wifi_hal_ap_max_client_rejection_callback_register(wifi_apMaxClientRejection_callback func);
 INT wifi_hal_BTMQueryRequest_callback_register(UINT apIndex,
                                             wifi_BTMQueryRequest_callback btmQueryCallback,
