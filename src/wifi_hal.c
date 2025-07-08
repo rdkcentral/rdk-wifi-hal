@@ -105,6 +105,8 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     bool is_band_found = false;
     unsigned int radio_band = 0;
     char output[256] = {0};
+    size_t len;
+
     NULL_PTR_ASSERT(hal);
 
     hal->version.major = WIFI_HAL_MAJOR;
@@ -134,38 +136,43 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
     _syscmd("grep -a 'Serial' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.serialNo,output);
 
     memset(output, '\0', sizeof(output));
     _syscmd("grep -a 'MODEL' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.manufacturerModel,output);
     strcpy(hal->wifi_prop.manufacturer,output);
 
     memset(output, '\0', sizeof(output));
     _syscmd("grep 'imagename:' /version.txt | cut -d ':' -f2 ", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.software_version, output);
 
     // CM mac
     memset(output, '\0', sizeof(output));
     _syscmd("grep -a 'CM' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.cm_mac);
 
     memset(output, '\0', sizeof(output));
     _syscmd("ifconfig eth0 | grep -oE 'HWaddr [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') { 
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.al_1905_mac);
     wifi_hal_error_print("serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s eth0=%s Line=%d\n",hal->wifi_prop.serialNo,hal->wifi_prop.manufacturerModel,hal->wifi_prop.software_version,hal->wifi_prop.manufacturer,output,__LINE__);
@@ -173,38 +180,43 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
    /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
     _syscmd("grep -a 'Serial' /proc/cpuinfo | cut -d ':' -f2", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.serialNo,output);
 
     memset(output, '\0', sizeof(output));
     _syscmd("grep -a 'Model' /proc/cpuinfo | cut -d ':' -f2", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.manufacturerModel,output);
     strcpy(hal->wifi_prop.manufacturer,output);
 
     memset(output, '\0', sizeof(output));
     _syscmd("vcgencmd version | grep 'version' | cut -d ' ' -f2", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.software_version, output);
 
     // CM mac
     memset(output, '\0', sizeof(output));
     _syscmd("ifconfig eth0 | grep -oE 'ether [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.cm_mac);
 
     memset(output, '\0', sizeof(output));
     _syscmd("ifconfig eth0 | grep -oE 'ether [[:alnum:]:]+' | awk '{print $2}'", output, sizeof(output));
-    if (output[strlen(output) - 1] == '\n') {
-        output[strlen(output) - 1] = '\0';
+    len = strnlen(output, sizeof(output));
+    if (len != 0 && output[len - 1] == '\n') {
+        output[len - 1] = '\0';
     }
     to_mac_bytes(output,hal->wifi_prop.al_1905_mac);
     wifi_hal_error_print("serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s eth0=%s Line=%d\n",hal->wifi_prop.serialNo,hal->wifi_prop.manufacturerModel,hal->wifi_prop.software_version,hal->wifi_prop.manufacturer,output,__LINE__);
@@ -238,8 +250,10 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
                     radio_band = WIFI_FREQUENCY_6_BAND;
                 }
             }
-            wifi_hal_info_print("%s:%d: interface name: %s, vap index: %d, vap name: %s\n", __func__, __LINE__,
-                    interface->name, vap->vap_index, vap->vap_name);
+            strncpy(interface->firmware_version, hal->wifi_prop.software_version, sizeof(interface->firmware_version) - 1);
+            interface->firmware_version[sizeof(interface->firmware_version) - 1] = '\0';
+            wifi_hal_info_print("%s:%d:interface name: %s, interface->firmware_version: %s, vap index: %d, vap name: %s\n", __func__, __LINE__,
+                    interface->name, interface->firmware_version, vap->vap_index, vap->vap_name);
             interface = hash_map_get_next(radio->interface_map, interface);
         }
 
@@ -590,6 +604,21 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
 
     RADIO_INDEX_ASSERT(index);
     NULL_PTR_ASSERT(operationParam);
+
+#ifdef CONFIG_WIFI_EMULATOR
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
+        return RETURN_ERR;
+    }
+
+    radio->configured = true;
+    radio->oper_param.enable = true;
+    memcpy((unsigned char *)&radio->oper_param, (unsigned char *)operationParam,
+        sizeof(wifi_radio_operationParam_t));
+
+    return RETURN_OK;
+#endif
 
     if ((op_class = get_op_class_from_radio_params(operationParam)) == -1) {
         wifi_hal_error_print("%s:%d:Could not find country code for radio index:%d\n", __func__, __LINE__, index);
@@ -1160,8 +1189,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     for (i = 0; i < map->num_vaps; i++) {
         vap = &map->vap_array[i];
 
-        wifi_hal_info_print("%s:%d: vap index:%d create vap\n", __func__, __LINE__,
-            vap->vap_index);
+        wifi_hal_info_print("%s:%d: vap index:%d vap_name = %s create vap\n", __func__, __LINE__,
+            vap->vap_index, vap->vap_name);
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
             if (validate_wifi_interface_vap_info_params(vap, msg, sizeof(msg)) != RETURN_OK) {
@@ -1172,8 +1201,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         interface = get_interface_by_vap_index(vap->vap_index);
         if (interface == NULL) {
-            wifi_hal_info_print("%s:%d: vap index:%d create interface\n", __func__, __LINE__,
-                vap->vap_index);
+            wifi_hal_info_print("%s:%d:vap index:%d vap_name = %s create interface\n", __func__, __LINE__,
+                vap->vap_index, vap->vap_name);
             if ((nl80211_create_interface(radio, vap, &interface) != 0) || (interface == NULL)) {
                 wifi_hal_error_print("%s:%d: vap index:%d failed to create interface\n", __func__,
                     __LINE__, vap->vap_index);
@@ -1204,8 +1233,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             continue;
         }
 #endif
-        wifi_hal_info_print("%s:%d: vap index:%d interface:%s mode:%d\n", __func__, __LINE__,
-            vap->vap_index, interface->name, vap->vap_mode);
+        wifi_hal_info_print("%s:%d: vap index:%d interface:%s mode:%d vap_name:%s\n", __func__, __LINE__,
+            vap->vap_index, interface->name, vap->vap_mode, vap->vap_name);
         if (vap->vap_mode == wifi_vap_mode_ap) {
             wifi_hal_info_print("%s:%d: vap_enable_status:%d\n", __func__, __LINE__, vap->u.bss_info.enabled);
             memcpy(vap->u.bss_info.bssid, interface->mac, sizeof(vap->u.bss_info.bssid));
@@ -1697,22 +1726,6 @@ INT wifi_hal_getScanResults(wifi_radio_index_t index, wifi_channel_t *channel, w
     return RETURN_OK;
 }
 
-static int chann_to_freq(unsigned char chan)
-{
-    if (chan >= MIN_CHANNEL_2G && chan <= MAX_CHANNEL_2G) {
-        return 2407 + 5 * chan;
-    }
-
-    if (chan >= MIN_CHANNEL_5G && chan <= MAX_CHANNEL_5G) {
-        return 5000 + 5 * chan;
-    }
-
-    wifi_hal_error_print("%s:%d: Failed to convert channel %u to frequency\n", __func__, __LINE__,
-        chan);
-
-    return 0;
-}
-
 #ifdef WIFI_HAL_VERSION_3_PHASE2
 INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
 {
@@ -1728,6 +1741,10 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
         return RETURN_ERR;
     }
     vap = &interface->vap_info;
+    if (is_wifi_hal_vap_hotspot_from_interfacename(interface->name) && !vap->u.bss_info.enabled) {
+        wifi_hal_info_print("%s:%d Skipping addition of MAC Entry to ACL since %s is not enabled\n",__func__,__LINE__,interface->name);
+        return RETURN_OK;
+    }
 
     key = to_mac_str(DeviceMacAddress, sta_mac_str);
     
@@ -1791,6 +1808,10 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
         return RETURN_ERR;
     }
     vap = &interface->vap_info;
+    if (is_wifi_hal_vap_hotspot_from_interfacename(interface->name) && !vap->u.bss_info.enabled) {
+        wifi_hal_info_print("%s:%d Skipping addition of MAC Entry to ACL since %s is not enabled\n",__func__,__LINE__,interface->name);
+        return RETURN_OK;
+    }
     
     wifi_hal_dbg_print("%s:%d: Interface: %s MAC: %s\n",  __func__, __LINE__, interface->name, DeviceMacAddress);
 
@@ -2094,10 +2115,11 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
     bool found = false;
-    wifi_radio_operationParam_t *radio_param;
+    wifi_radio_operationParam_t *radio_param, param;
     char country[8] = {0}, tmp_str[32] = {0}, chan_list_str[512] = {0};
     unsigned int freq_list[32], i;
     ssid_t  ssid_list[8];
+    int op_class, freq_num = 0;
 
     wifi_hal_dbg_print("%s:%d: index: %d mode: %d dwell time: %d\n", __func__, __LINE__, index,
         scan_mode, dwell_time);
@@ -2149,16 +2171,30 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     }
 
     get_coutry_str_from_code(radio_param->countryCode, country);
+    memcpy((unsigned char *)&param, (unsigned char *)radio_param, sizeof(wifi_radio_operationParam_t));
 
     for (i = 0; i < num; i++) {
-        //freq_list[i] = ieee80211_chan_to_freq(country, radio_param->op_class, (scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN)? radio_param->channel:chan_list[i]);
-        freq_list[i] = chann_to_freq((scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN) ?
-            radio_param->channel : chan_list[i]);
-        if (freq_list[i] == 0) {
-            return RETURN_ERR;
+        param.channel = (scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN) ?
+            radio_param->channel : chan_list[i]; 
+
+        if ((op_class = get_op_class_from_radio_params(&param)) == -1) {
+            wifi_hal_error_print("%s:%d: Invalid channel %d\n", __func__, __LINE__, param.channel);
+            continue;
         }
-        sprintf(tmp_str, "%d ", freq_list[i]);
+
+        freq_list[freq_num] = ieee80211_chan_to_freq(country, op_class, param.channel);
+        if (freq_list[freq_num] == 0) {
+            continue;
+        }
+        sprintf(tmp_str, "%d ", freq_list[freq_num]);
         strcat(chan_list_str, tmp_str);
+
+	freq_num++;
+    }
+
+    if (freq_num == 0) {
+        wifi_hal_error_print("%s:%d: No valid channels\n", __func__, __LINE__);
+        return RETURN_ERR;
     }
 
     strcpy(ssid_list[0], vap->u.sta_info.ssid);
@@ -2168,7 +2204,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     hash_map_cleanup(interface->scan_info_map);
     pthread_mutex_unlock(&interface->scan_info_mutex);
 
-    return (nl80211_start_scan(interface, 0, num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+    return (nl80211_start_scan(interface, 0, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
 }
 
 /*****************************/
@@ -3803,7 +3839,7 @@ void wifi_hal_newApAssociatedDevice_callback_register(wifi_newApAssociatedDevice
     callbacks->num_assoc_cbs++;
 }
 
-void wifi_hal_apDeAuthEvent_callback_register(wifi_apDeAuthEvent_callback func)
+void wifi_hal_apDeAuthEvent_callback_register(wifi_device_deauthenticated_callback func)
 {
     wifi_device_callbacks_t *callbacks;
 
@@ -3843,7 +3879,7 @@ void wifi_hal_ap_max_client_rejection_callback_register(wifi_apMaxClientRejectio
     callbacks->max_cli_rejection_cb = func;
 }
 
-void wifi_hal_apDisassociatedDevice_callback_register(wifi_apDisassociatedDevice_callback func)
+void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_callback func)
 {
     wifi_device_callbacks_t *callbacks;
 
@@ -3869,6 +3905,20 @@ void wifi_hal_stamode_callback_register(wifi_stamode_callback func)
 
     callbacks->stamode_cb[callbacks->num_stamode_cbs] = func;
     callbacks->num_stamode_cbs++;
+}
+
+void wifi_hal_apStatusCode_callback_register(wifi_apStatusCode_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+
+    if (callbacks == NULL || callbacks->num_statuscode_cbs> MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+
+    callbacks->statuscode_cb[callbacks->num_statuscode_cbs] = func;
+    callbacks->num_statuscode_cbs++;
 }
 
 void wifi_hal_radius_eap_failure_callback_register(wifi_radiusEapFailure_callback func)

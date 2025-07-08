@@ -422,7 +422,7 @@ typedef struct wifi_interface_info_t {
 
     char   wpa_passphrase[64];
     char   device_name[64], manufacturer[64], model_name[64], model_number[64];
-    char   serial_number[64], friendly_name[64], manufacturer_url[64];
+    char   serial_number[64], friendly_name[64], manufacturer_url[64], firmware_version[64];
     char   model_description[64], model_url[64];
     int    vlan;
     char   ctrl_interface[32];
@@ -538,6 +538,13 @@ typedef struct {
     wifi_hal_frame_hook_fn_t frame_hooks_fn[MAX_APPS];
 } wifi_device_frame_hooks_t;
 
+typedef struct wifi_hal_rate_limit {
+    bool enabled;
+    int rate_limit;
+    int window_size;
+    int cooldown_time;
+} wifi_hal_mgt_frame_rate_limit_t;
+
 typedef struct {
     pthread_t nl_tid;
     pthread_t hapd_eloop_tid;
@@ -561,6 +568,8 @@ typedef struct {
 #endif
     pthread_mutexattr_t hapd_lock_attr;
     pthread_mutex_t hapd_lock;
+    hash_map_t *mgt_frame_rate_limit_hashmap;
+    wifi_hal_mgt_frame_rate_limit_t mgt_frame_rate_limit;
 } wifi_hal_priv_t;
 
 extern wifi_hal_priv_t g_wifi_hal;
@@ -713,11 +722,12 @@ INT wifi_hal_cancelRMBeaconRequest(UINT apIndex, UCHAR dialogToken);
 INT wifi_hal_configNeighborReports(UINT apIndex, bool enable, bool auto_resp);
 INT wifi_hal_setNeighborReports(UINT apIndex, UINT numNeighborReports, wifi_NeighborReport_t *neighborReports);
 void wifi_hal_newApAssociatedDevice_callback_register(wifi_newApAssociatedDevice_callback func);
-void wifi_hal_apDisassociatedDevice_callback_register(wifi_apDisassociatedDevice_callback func);
+void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_callback func);
 void wifi_hal_stamode_callback_register(wifi_stamode_callback func);
+void wifi_hal_apStatusCode_callback_register(wifi_apStatusCode_callback func);
 void wifi_hal_radiusEapFailure_callback_register(wifi_radiusEapFailure_callback func);
 void wifi_hal_radiusFallback_failover_callback_register(wifi_radiusFallback_failover_callback func);
-void wifi_hal_apDeAuthEvent_callback_register(wifi_apDeAuthEvent_callback func);
+void wifi_hal_apDeAuthEvent_callback_register(wifi_device_deauthenticated_callback func);
 void wifi_hal_ap_max_client_rejection_callback_register(wifi_apMaxClientRejection_callback func);
 INT wifi_hal_BTMQueryRequest_callback_register(UINT apIndex,
                                             wifi_BTMQueryRequest_callback btmQueryCallback,
@@ -942,6 +952,7 @@ BOOL is_wifi_hal_vap_hotspot_secure(UINT ap_index);
 BOOL is_wifi_hal_vap_lnf_radius(UINT ap_index);
 BOOL is_wifi_hal_vap_mesh_sta(UINT ap_index);
 BOOL is_wifi_hal_vap_hotspot_from_interfacename(char *interface_name);
+wifi_vap_info_t* get_wifi_vap_info_from_interfacename(char *interface_name);
 
 BOOL is_wifi_hal_6g_radio_from_interfacename(char *interface_name);
 
@@ -955,6 +966,7 @@ int wifi_drv_getApAclDeviceNum(int vap_index, uint *acl_count);
 int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char* buff);
 int wifi_drv_set_acs_exclusion_list(unsigned int radioIndex, char* str);
 int platform_get_acl_num(int vap_index, uint *acl_hal_count);
+time_t get_boot_time_in_sec(void);
 
 int get_total_num_of_vaps(void);
 int wifi_setQamPlus(void *priv);
@@ -970,6 +982,9 @@ int update_hostap_mlo(wifi_interface_info_t *interface);
 
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio);
 void wifi_hal_configure_mbssid(wifi_radio_info_t *radio);
+
+void wifi_hal_set_mgt_frame_rate_limit(bool enable, int rate_limit, int window_size,
+    int cooldown_time);
 
 #ifdef __cplusplus
 }
