@@ -241,7 +241,7 @@ static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map)
 }
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
-#if defined(CONFIG_WIFI_EMULATOR)
+#if defined WIFI_EMULATOR_CHANGE
 #define SEM_NAME "/semlock"
 
 int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_array,
@@ -341,7 +341,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     sem_close(sem);
     return RETURN_OK;
 }
-#endif // CONFIG_WIFI_EMULATOR
+#endif // WIFI_EMULATOR_CHANGE
 #endif
 
 INT wifi_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, INT dwell_time, UINT chan_num, UINT *chan_list)
@@ -360,12 +360,12 @@ INT wifi_getNeighboringWiFiStatus(INT radio_index, wifi_neighbor_ap2_t **neighbo
         wifi_hal_stats_error_print("%s:%d: wifi_hal_getNeighboringWiFiStatus failed\n", __func__,
             __LINE__);
     }
-#if defined(CONFIG_WIFI_EMULATOR)
+#if defined WIFI_EMULATOR_CHANGE
     if (get_emu_neighbor_stats(radio_index, neighbor_ap_array, output_array_size) != RETURN_OK) {
         wifi_hal_stats_error_print("%s:%d: get_emu_neighbor_stats failed\n", __func__, __LINE__);
         return RETURN_ERR;
     }
-#endif // CONFIG_WIFI_EMULATOR
+#endif // WIFI_EMULATOR_CHANGE
     return ret;
 }
 

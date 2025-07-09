@@ -907,7 +907,7 @@ void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *e
 int     nl80211_connect_sta(wifi_interface_info_t *interface);
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
 
-#if defined(CONFIG_WIFI_EMULATOR)
+// emu_neighbor_stats_t is used by both CCI and Onewifi
 typedef struct {
     bool emu_enable;
     uint32_t radio_index;
@@ -915,6 +915,7 @@ typedef struct {
     wifi_neighbor_ap2_t data[];  // flexible array member
 } emu_neighbor_stats_t;
 
+#if defined(CONFIG_WIFI_EMULATOR)
 int     wifi_hal_emu_set_radio_channel_stats(unsigned int radio_index, bool emu_state, wifi_channelStats_t *chan_stat, unsigned int count, unsigned int phy_index, unsigned int interface_index);
 int     wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state, wifi_associated_dev3_t *assoc_cli_stat, unsigned int count, unsigned int phy_index, unsigned int interface_index);
 int     wifi_hal_emu_set_radio_temp (unsigned int radio_index, bool emu_state, int temperature, unsigned int phy_index, unsigned int interface_index);
