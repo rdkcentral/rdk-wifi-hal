@@ -391,7 +391,7 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
 
     if (nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0),
         NULL) < 0) {
-        wifi_hal_error_print("%s:%d Failed to parse sta data\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse sta data\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -413,13 +413,13 @@ static int get_sta_list(wifi_interface_info_t *interface, sta_list_t *sta_list)
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, NLM_F_DUMP, NL80211_CMD_GET_STATION);
     if (msg == NULL) {
-        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
         return -1;
     }
 
     ret = nl80211_send_and_recv(msg, get_sta_list_handler, sta_list, NULL, NULL);
     if (ret < 0) {
-        wifi_hal_error_print("%s:%d Failed to execute NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to execute NL command\n", __func__, __LINE__);
         return -1;
     }
 
@@ -537,13 +537,13 @@ INT wifi_getApAssociatedDeviceDiagnosticResult3(INT apIndex,
 
     interface = get_interface_by_vap_index(apIndex);
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d Failed to get interface for index %d\n", __func__, __LINE__, apIndex);
+        wifi_hal_stats_error_print("%s:%d Failed to get interface for index %d\n", __func__, __LINE__, apIndex);
         return -1;
     }
 
     ret = get_sta_list(interface, &sta_list);
     if (ret < 0) {
-        wifi_hal_error_print("%s:%d Failed to get sta list\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to get sta list\n", __func__, __LINE__);
         goto exit;
     }
 
@@ -554,7 +554,7 @@ INT wifi_getApAssociatedDeviceDiagnosticResult3(INT apIndex,
     for (i = 0; i < sta_list.num; i++) {
         ret = get_sta_stats(interface, sta_list.macs[i], &(*associated_dev_array)[i]);
         if (ret < 0) {
-            wifi_hal_error_print("%s:%d Failed to get sta stats\n", __func__, __LINE__);
+            wifi_hal_stats_error_print("%s:%d Failed to get sta stats\n", __func__, __LINE__);
             free(*associated_dev_array);
             *associated_dev_array = NULL;
             *output_array_size = 0;

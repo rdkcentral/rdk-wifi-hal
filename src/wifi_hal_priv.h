@@ -997,11 +997,30 @@ typedef enum {
     WIFI_HAL_LOG_LVL_MAX
 }wifi_hal_log_level_t;
 
+
+//wifi_halstats
+typedef enum {
+    WIFI_HAL_STATS_LOG_LVL_DEBUG,
+    WIFI_HAL_STATS_LOG_LVL_INFO,
+    WIFI_HAL_STATS_LOG_LVL_ERROR,
+    WIFI_HAL_STATS_LOG_LVL_MAX
+}wifi_hal_stats_log_level_t;
+
 void wifi_hal_print(wifi_hal_log_level_t level, const char *format, ...)__attribute__((format(printf, 2, 3)));
+
+
+//wifi_halstats
+void wifi_hal_stats_print(wifi_hal_stats_log_level_t level, const char *format, ...)__attribute__((format(printf, 2, 3)));
 
 #define wifi_hal_dbg_print(format, ...)  wifi_hal_print(WIFI_HAL_LOG_LVL_DEBUG, format, ##__VA_ARGS__)
 #define wifi_hal_info_print(format, ...)  wifi_hal_print(WIFI_HAL_LOG_LVL_INFO, format, ##__VA_ARGS__)
 #define wifi_hal_error_print(format, ...)  wifi_hal_print(WIFI_HAL_LOG_LVL_ERROR, format, ##__VA_ARGS__)
+
+
+//wifi_halstats
+#define wifi_hal_stats_dbg_print(format, ...)  wifi_hal_stats_print(WIFI_HAL_STATS_LOG_LVL_DEBUG, format, ##__VA_ARGS__)
+#define wifi_hal_stats_info_print(format, ...)  wifi_hal_stats_print(WIFI_HAL_STATS_LOG_LVL_INFO, format, ##__VA_ARGS__)
+#define wifi_hal_stats_error_print(format, ...)  wifi_hal_stats_print(WIFI_HAL_STATS_LOG_LVL_ERROR, format, ##__VA_ARGS__)
 
 bool lsmod_by_name(const char *name);
 wifi_device_callbacks_t *get_hal_device_callbacks();

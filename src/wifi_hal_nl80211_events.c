@@ -541,14 +541,14 @@ static void nl80211_new_scan_results_event(wifi_interface_info_t *interface, str
     int rem;
     struct nlattr *nl;
 
-    wifi_hal_dbg_print("%s:%d: [SCAN] new scan results for interface '%s'\n", __func__, __LINE__, interface->name);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] new scan results for interface '%s'\n", __func__, __LINE__, interface->name);
     
     if (tb[NL80211_ATTR_SCAN_SSIDS]) {
         nla_for_each_nested(nl, tb[NL80211_ATTR_SCAN_SSIDS], rem) {
             ;//wifi_hal_dbg_print("%s:%d: Scan probed for SSID '%s'", __func__, __LINE__, nla_data(nl));
         }
     } else {
-        wifi_hal_info_print("%s:%d: [SCAN] attribute scan_ssids not present\n", __func__, __LINE__);
+        wifi_hal_stats_info_print("%s:%d: [SCAN] attribute scan_ssids not present\n", __func__, __LINE__);
     }
 
     nl80211_get_scan_results(interface);
@@ -556,17 +556,17 @@ static void nl80211_new_scan_results_event(wifi_interface_info_t *interface, str
 
 static void nl80211_new_trigger_scan_event(wifi_interface_info_t *interface, struct nlattr **tb)
 {
-    wifi_hal_dbg_print("%s:%d: [SCAN] scan started for interface '%s'\n", __func__, __LINE__, interface->name);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan started for interface '%s'\n", __func__, __LINE__, interface->name);
 }
 
 static void nl80211_new_scan_aborted_event(wifi_interface_info_t *interface, struct nlattr **tb)
 {
-    wifi_hal_dbg_print("%s:%d: [SCAN] scan aborted for interface '%s'\n", __func__, __LINE__, interface->name);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan aborted for interface '%s'\n", __func__, __LINE__, interface->name);
 
     pthread_mutex_lock(&interface->scan_state_mutex);
     if (interface->scan_state != WIFI_SCAN_STATE_STARTED) {
         pthread_mutex_unlock(&interface->scan_state_mutex);
-        wifi_hal_dbg_print("%s:%d: [SCAN] received scan abort for scan not triggered by us\n", __func__, __LINE__);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] received scan abort for scan not triggered by us\n", __func__, __LINE__);
         return;
     }
     interface->scan_state = WIFI_SCAN_STATE_ABORTED;
