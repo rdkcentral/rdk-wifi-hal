@@ -100,15 +100,76 @@ static int json_parse_backhaul_ssid(char *backhaul_ssid)
 int platform_pre_init()
 {
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+
+    // Cannot use this function to create interfaces here.
+    // nl80211_id is not initialized, yet.
+    // g_wifi_hal.nl80211_id is initialized in init_nl80211()
+
     return 0;
+}
+
+static int platform_create_interface(const char *ifname, int wiphy)
+{
+    struct nl_msg *msg;
+    int ret;
+
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_NEW_INTERFACE);
+    if (msg == NULL) {
+        return RETURN_ERR;
+    }
+
+    /* TODO(ldk): ? */
+    /* if (nla_put_u32(msg, NL80211_ATTR_VIF_RADIO_MASK, 0x6) < 0) {
+        nlmsg_free(msg);
+        return RETURN_ERR;
+    } */
+
+    if (nla_put_u32(msg, NL80211_ATTR_WIPHY, wiphy) < 0) {
+        nlmsg_free(msg);
+        return RETURN_ERR;
+    }
+
+    if (nla_put_string(msg, NL80211_ATTR_IFNAME, ifname) < 0) {
+        nlmsg_free(msg);
+        return RETURN_ERR;
+    }
+
+    if (nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP) < 0) {
+        nlmsg_free(msg);
+        return RETURN_ERR;
+    }
+
+    if ((ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL)) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: Error creating %s interface on dev:%d error: %d (%s)\n",
+            __func__, __LINE__, ifname, wiphy, ret, strerror(-ret));
+        return RETURN_ERR;
+    }
+
+    wifi_hal_dbg_print("%s:%d: Platform created interface: \"%s\", wiphy: %d\n",
+        __func__, __LINE__, ifname, wiphy);
+
+    return RETURN_OK;
+}
+
+int platform_create_interfaces(void)
+{
+    /* FIXME(ldk): Read from JSON/use static map? */
+    const int wiphy = 0;
+    const char ifname[] = "mld-ap0";
+
+    if (platform_create_interface(ifname, wiphy) != RETURN_OK) {
+        return RETURN_ERR;
+    }
+
+    return RETURN_OK;
 }
 
 int platform_post_init(wifi_vap_info_map_t *vap_map)
 {
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
-    system("brctl addif brlan0 wifi0");
-    system("brctl addif brlan0 wifi1");
-    system("brctl addif brlan0 wifi2");
+    // system("brctl addif brlan0 wifi0");
+    // system("brctl addif brlan0 wifi1");
+    // system("brctl addif brlan0 wifi2");
     return 0;
 }
 
@@ -182,7 +243,9 @@ int platform_get_ssid_default(char *ssid, int vap_index)
             return 0;
         }
     }
-    snprintf(ssid,BPI_LEN_16,"BPI_RDKB-AP%d",vap_index);
+    //snprintf(ssid,BPI_LEN_16,"BPI_RDKB-AP%d",vap_index);
+    //snprintf(ssid,BPI_LEN_16,"2-LDK-1-VAP%d",vap_index);
+    snprintf(ssid,BPI_LEN_16,"2-LDK-MLD-VAP%1d",vap_index);
     return 0;
 }
 
@@ -744,7 +807,83 @@ void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nla
 
 int update_hostap_mlo(wifi_interface_info_t *interface)
 {
-    (void)interface;
+    wifi_hal_dbg_print("%s:%d: Called update_hostap_mlo\n", __func__, __LINE__);
+
+    wifi_hal_dbg_print("%s:%d: MLO: interface name: %s, index: %d, phy_index: %d, rdk_radio_index: %d\n",
+	__func__, __LINE__, interface->name, interface->index, interface->phy_index,
+	interface->rdk_radio_index);
+
+    wifi_vap_info_t *vap = &interface->vap_info;
+    wifi_hal_dbg_print("%s:%d: MLO: vap name: %s\n", __func__, __LINE__,
+	vap->vap_name);
+
+
+    char mld_interface[20];
+    unsigned int mld_link_id;
+
+    int rc = get_mld_interface_name_from_vap_index(vap->vap_index,
+        mld_interface, sizeof(mld_interface) - 1, &mld_link_id);
+    if (rc == RETURN_ERR) {
+        return RETURN_ERR;
+    }
+
+    if (mld_link_id == 0) {
+        wifi_hal_dbg_print("%s:%d: MLO: Configure Link 0\n", __func__, __LINE__);
+        struct hostapd_data *hapd = &interface->u.ap.hapd;
+        struct hostapd_bss_config *conf = hapd->conf;
+
+        conf->mld_ap = 1;
+        conf->okc = 1;
+
+        wifi_hal_dbg_print("%s:%d: MLO: conf iface: \"%s\"\n",
+            __func__, __LINE__, conf->iface);
+
+        // TOOD(ldk): replace with hostapd_bss_setup_multi_link?
+        struct hostapd_mld *mld = os_zalloc(sizeof(struct hostapd_mld));
+        strcpy(mld->name, conf->iface);
+        dl_list_init(&mld->links);
+	// Only for first bss
+        os_memcpy(mld->mld_addr, hapd->own_addr, ETH_ALEN);
+	/* Derivate mac addr from own_addr
+	 * mld_linkd is either 0, 1 or 2
+	 */
+        //mld->mld_addr[5] += (mld_link_type + 1);
+	hapd->own_addr[5] += (mld_link_type + 1);
+
+        hapd->mld = mld;
+        hapd->ctrl_sock = -1;
+        wifi_hal_dbg_print("%s:%d: MLO: drv_priv: %p\n",
+            __func__, __LINE__, hapd->drv_priv);
+
+        mld->refcount++;
+        hapd->mld_link_id = mld->next_link_id++;
+
+        wifi_hal_dbg_print("%s:%d: MLO: Setup of first link (%d) BSS of MLD %s\n",
+                           __func__, __LINE__,
+                           hapd->mld_link_id, hapd->conf->iface);
+        if (hostapd_mld_add_link(hapd) != 0) {
+            wifi_hal_dbg_print("%s:%d: MLO: Failed to add MLO link\n", __func__, __LINE__);
+        }
+
+        if (hapd->drv_priv == NULL)
+            wifi_hal_dbg_print("%s:%d: MLO: hapd->drv_priv NULL\n", __func__, __LINE__);
+        if (hapd->driver == NULL)
+            wifi_hal_dbg_print("%s:%d: MLO: hapd->driver NULL\n", __func__, __LINE__);
+        else if (hapd->driver->link_add == NULL)
+            wifi_hal_dbg_print("%s:%d: MLO: hapd->driver->link_add NULL\n", __func__, __LINE__);
+
+        wifi_hal_dbg_print("%s:%d: MLO: Set link_id=%u, mld_addr=" MACSTR
+                           ", own_addr=" MACSTR "\n", __func__, __LINE__,
+                           hapd->mld_link_id,
+                           MAC2STR(hapd->mld->mld_addr),
+                           MAC2STR(hapd->own_addr));
+        if (hostapd_drv_link_add(hapd, hapd->mld_link_id, hapd->own_addr) != 0) {
+        //if (hostapd_drv_link_add(hapd, hapd->mld_link_id, mld->mld_addr) != 0) {
+            wifi_hal_dbg_print("%s:%d: MLO: Failed to add hostapd_drv_link_add\n", __func__, __LINE__);
+        }
+
+        wifi_hal_dbg_print("%s:%d: MLO: done\n", __func__, __LINE__);
+    }
 
     return 0;
 }
