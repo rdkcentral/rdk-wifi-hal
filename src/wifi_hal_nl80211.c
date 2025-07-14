@@ -10102,7 +10102,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
             wifi_ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
             wifi_ie_info_t *beacon_ie = &interface->beacon_elem_ie[radio_index];
 
-            // `realloc` mallocs a buffer of size 'beacon_ie_len' if buff == NULL
+            // `realloc` mallocs a buffer of size 'len' if buff == NULL
             if (ie && (bss_ie->buff = (u8 *)realloc(bss_ie->buff, len)) != NULL) {
 
                 // ie and len previously parsed
@@ -10117,21 +10117,22 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
                     __LINE__, radio_index);
                 bss_ie->buff_len = 0;
             }
-
+            // `realloc` mallocs a buffer of size 'beacon_ie_len' if buff == NULL
             if (beacon_ies &&
                 (beacon_ie->buff = (u8 *)realloc(beacon_ie->buff, beacon_ie_len)) != NULL) {
 
-                // ie and len previously parsed
-                bss_ie->buff_len = beacon_ie_len;
-                memcpy(bss_ie->buff, beacon_ies, bss_ie->buff_len);
+                // beacon_ies and beacon_ie_len previously parsed
+                beacon_ie->buff_len = beacon_ie_len;
+                memcpy(beacon_ie->buff, beacon_ies, beacon_ie->buff_len);
 
-                wifi_hal_stats_dbg_print("%s:%d: bss ie for radio:%d\n", __func__, __LINE__,
+                wifi_hal_stats_dbg_print("%s:%d: beacon ies for radio:%d\n", __func__, __LINE__,
                     radio_index);
-                wpa_hexdump(MSG_MSGDUMP, "SCAN_BSS_IE", bss_ie->buff, bss_ie->buff_len);
+                wpa_hexdump(MSG_MSGDUMP, "SCAN_BSS_BEACON_IE", beacon_ie->buff,
+                    beacon_ie->buff_len);
             } else {
-                wifi_hal_stats_error_print("%s:%d bss ie not updated for radio:%d\r\n", __func__,
-                    __LINE__, radio_index);
-                bss_ie->buff_len = 0;
+                wifi_hal_stats_error_print("%s:%d beacon ies not updated for radio: %d\r\n",
+                    __func__, __LINE__, radio_index);
+                beacon_ie->buff_len = 0;
             }
 #endif
         }
