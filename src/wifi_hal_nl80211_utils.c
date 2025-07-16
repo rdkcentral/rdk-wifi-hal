@@ -160,7 +160,32 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
 
 #ifdef XLE_PORT // for Broadcom XLE
 
-#ifdef XLE_3_RADIO_SUPPORT
+#if defined (XLE_3_RADIO_SUPPORT) && defined(XLE_BCM_SDK_504L04P3)
+    {1, 0,  "wl0.1",   "brlan0",  100,    0,      "private_ssid_2g"},
+    {2, 1,  "wl1.1",   "brlan0",  100,    1,      "private_ssid_5gl"},
+    {1, 0,  "wl0.2",   "brlan1",  101,    2,      "iot_ssid_2g"},
+    {2, 1,  "wl1.2",   "brlan1",  101,    3,      "iot_ssid_5gl"},
+    {1, 0,  "wl0.3",   "brlan2",  102,    4,      "hotspot_open_2g"},
+    {2, 1,  "wl1.3",   "brlan3",  103,    5,      "hotspot_open_5gl"},
+    {1, 0,  "wl0.4",   "br106",   106,    6,      "lnf_psk_2g"},
+    {2, 1,  "wl1.4",   "br106",   106,    7,      "lnf_psk_5gl"},
+    {1, 0,  "wl0.5",   "brlan4",  104,    8,      "hotspot_secure_2g"},
+    {2, 1,  "wl1.5",   "brlan5",  105,    9,      "hotspot_secure_5gl"},
+    {1, 0,  "wl0.6",   "br106",   106,    10,     "lnf_radius_2g"},
+    {2, 1,  "wl1.6",   "br106",   106,    11,     "lnf_radius_5gl"},
+    {1, 0,  "wl0.7",   "brlan112",112,    12,     "mesh_backhaul_2g"},
+    {2, 1,  "wl1.7",   "brlan113",113,    13,     "mesh_backhaul_5gl"},
+    {1, 0,  "wl0",     "",          0,    14,     "mesh_sta_2g"},
+    {2, 1,  "wl1",     "",          0,    15,     "mesh_sta_5gl"},
+    {0, 2,  "wl2.1",   "brlan0",  100,    16,     "private_ssid_5gh"},
+    {0, 2,  "wl2.2",   "brlan1",  101,    17,     "iot_ssid_5gh"},
+    {0, 2,  "wl2.3",   "brlan3",  103,    18,     "hotspot_open_5gh"},
+    {0, 2,  "wl2.4",   "br106",   106,    19,     "lnf_psk_5gh"},
+    {0, 2,  "wl2.5",   "brlan5",  105,    20,     "hotspot_secure_5gh"},
+    {0, 2,  "wl2.6",   "br106",   106,    21,     "lnf_radius_5gh"},
+    {0, 2,  "wl2.7",   "brlan113",114,    22,     "mesh_backhaul_5gh"},
+    {0, 2,  "wl2",     "",          0,    23,     "mesh_sta_5gh"},
+#elif defined (XLE_3_RADIO_SUPPORT)
     {0, 0,  "wl0.1",   "brlan0",  100,    0,      "private_ssid_2g"},
     {1, 1,  "wl1.1",   "brlan0",  100,    1,      "private_ssid_5gl"},
     {0, 0,  "wl0.2",   "brlan1",  101,    2,      "iot_ssid_2g"},
