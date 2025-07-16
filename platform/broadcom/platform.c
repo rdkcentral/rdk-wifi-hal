@@ -1207,6 +1207,9 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     char temp_buff[BUF_SIZE];
     char param_name[NVRAM_NAME_SIZE];
     char chspecbuf[NVRAM_NAME_SIZE];
+    int ret = 0;
+    char *guard_int = NULL;
+
     memset(chspecbuf, 0 ,sizeof(chspecbuf));
     memset(param_name, 0 ,sizeof(param_name));
     memset(temp_buff, 0 ,sizeof(temp_buff));
@@ -1257,6 +1260,34 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     memset(param_name, 0 ,sizeof(param_name));
     sprintf(param_name, "wl%d_bcn", index);
     set_decimal_nvram_param(param_name, operationParam->beaconInterval);
+
+    switch(operationParam->guardInterval)
+    {
+        case wifi_guard_interval_400:
+            guard_int = "400nsec";
+            break;
+        case wifi_guard_interval_800:
+            guard_int = "800nsec";
+            break;
+        case wifi_guard_interval_1600:
+            guard_int = "1600nsec";
+            break;
+        case wifi_guard_interval_3200:
+            guard_int = "3200nsec";
+            break;
+        case wifi_guard_interval_auto:
+            guard_int = "auto";
+            break;
+    }
+    wifi_hal_dbg_print("%s:%d Setting guard interval to %s\n", __func__, __LINE__, guard_int);
+    if(guard_int != NULL)
+    {
+        ret = wifi_setRadioGuardInterval(index, guard_int);
+        if(ret != RETURN_OK) {
+            wifi_hal_dbg_print("%s:%d Failed to set Guard Interval\n",__func__, __LINE__);
+        }
+    }
+
 
     return 0;
 }
