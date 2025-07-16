@@ -8950,7 +8950,7 @@ static int conn_get_interface_handler(struct nl_msg *msg, void *arg)
     wifi_station_stats_t sta;
     wifi_radio_info_t *radio =  NULL;
     wifi_radio_operationParam_t *radio_param = NULL;
-    int op_class;
+    int op_class = 0;
     u8 channel;
 
 
@@ -9018,16 +9018,22 @@ static int conn_get_interface_handler(struct nl_msg *msg, void *arg)
         return NL_SKIP;
     }
 
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
     if ((op_class = get_op_class_from_radio_params(radio_param)) == -1) {
         wifi_hal_error_print("%s:%d: could not find op_class for radio index:%d\n", __func__, __LINE__, interface->vap_info.radio_index);
         return NL_SKIP;
     }
+#endif
 
     sta.channel = channel;
     sta.op_class = op_class;
     sta.channelWidth = channel_width;
 
+#ifdef CONFIG_WIFI_EMULATOR_EXT_AGENT
+    sta.vap_index = interface->index;
+#else
     sta.vap_index = vap->vap_index;
+#endif
     sta.connect_status = wifi_connection_status_connected;
 
     callbacks = get_hal_device_callbacks();

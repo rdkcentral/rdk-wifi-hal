@@ -460,9 +460,11 @@ INT wifi_hal_init()
         wifi_hal_error_print("%s:%d: Failed to create the ECO mode interfaces\n", __func__, __LINE__);
     }
 
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
     if (nl80211_init_primary_interfaces() != 0) {
         return RETURN_ERR;
     }
+#endif //CONFIG_WIFI_EMULATOR_EXT_AGENT
 
     if (nl80211_init_radio_info() != 0) {
         return RETURN_ERR;
@@ -1417,7 +1419,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface->name);
         nl80211_interface_enable(interface->name, false);
-#ifndef CONFIG_WIFI_EMULATOR
+#if  !defined(CONFIG_WIFI_EMULATOR) && !defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
         if (vap->vap_mode == wifi_vap_mode_sta) {
             bool sta_4addr = 0;
             wifi_hal_info_print("%s:%d: interface:%s remove from bridge\n", __func__, __LINE__,

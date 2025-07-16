@@ -2288,9 +2288,13 @@ static void wpa_sm_sta_set_state(void *ctx, enum wpa_states state)
         wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
         if (callbacks->sta_conn_status_callback) {
             memcpy(&bss, &interface->u.sta.backhaul, sizeof(wifi_bss_info_t));
-
+#ifdef CONFIG_WIFI_EMULATOR_EXT_AGENT
+            sta.vap_index = interface->index;
+#else
             sta.vap_index = vap->vap_index;
+#endif
             sta.connect_status = wifi_connection_status_disconnected;
+
 
             callbacks->sta_conn_status_callback(vap->vap_index, &bss, &sta);
         }
