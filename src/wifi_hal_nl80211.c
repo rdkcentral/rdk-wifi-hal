@@ -82,6 +82,19 @@
 #define KEY_MGMT_SAE_EXT 67108864
 #define MAX_MBSSID_INTERFACES 8
 
+#if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
+#define CSA_TAG_ID 37
+#define CSA_IE_MIN_LENGTH 3
+#define TAG_HEADER_LENGTH 2
+#define CSA_SWITCH_MODE_OFFSET 0
+#define CSA_NEW_CHANNEL_OFFSET 1
+#define CSA_SWITCH_COUNT_OFFSET 2
+#define TAG_NUMBER_OFFSET 0
+#define TAG_LENGTH_OFFSET 1
+#define NL_SOCKET_RX_BUFFER_SIZE (2 * 1024 * 1024)  /* 2MB Buffer Size */
+#define CSA_COUNT 20
+#endif
+
 #if defined(WIFI_EMULATOR_CHANGE) ||  defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
 static unsigned char eapol_qos_info[] = {0x88,0x02,0x3c,0x00,0x04,0xf0,0x21,0x5f,0x03,0x7c,0xe2,0xdb,0xd1,0xe4,0xdf,0x53,0xe2,0xdb,0xd1,0xe4,0xdf,0x53,0x10,0x00,0x05,0x00};
 
@@ -89,7 +102,6 @@ static unsigned char llc_info[] = {0xaa, 0xaa, 0x03, 0x00,0x00,0x00,0x88,0x8e};
 #endif // defined(WIFI_EMULATOR_CHANGE) ||  defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
 
 static int scan_info_handler(struct nl_msg *msg, void *arg);
-static int nl80211_register_mgmt_frames(wifi_interface_info_t *interface);
 static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface);
 
 struct family_data {
@@ -1860,6 +1872,18 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     unsigned int total_len=0;
     bool send_mgmt_to_char_dev = false;
 #endif
+
+#if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
+    static uint8_t last_csa_channel = 0;
+    static uint8_t last_csa_switch_count = 0;
+    wifi_bss_info_t *backhaul;
+    const uint8_t *ie;
+    int ie_len;
+    bool process_csa = false;
+    uint8_t tag_number, tag_length;
+    uint8_t switch_mode, new_channel, switch_count;
+#endif
+
     u16 reasoncode;
     if (mgmt == NULL) {
         return -1;
@@ -2157,6 +2181,68 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         send_mgmt_to_char_dev = true;
 #endif
         break;
+
+#if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
+    case WLAN_FC_STYPE_BEACON:
+        mgmt_type = WIFI_MGMT_FRAME_TYPE_BEACON;
+        backhaul = &interface->u.sta.backhaul;
+
+        if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.beacon))
+            return -1;
+
+        // Only process if STA is connected and frame is from the connected AP
+        if (interface->vap_info.vap_mode != wifi_vap_mode_sta ||
+            interface->u.sta.state != WPA_COMPLETED ||
+            memcmp(backhaul->bssid, mgmt->bssid, sizeof(bssid_t)) != 0) {
+            return -1;
+        }
+
+        ie = mgmt->u.beacon.variable;
+        ie_len = len - (IEEE80211_HDRLEN + sizeof(mgmt->u.beacon));
+
+        while (ie_len >= TAG_HEADER_LENGTH) {
+            tag_number = ie[TAG_NUMBER_OFFSET];
+            tag_length = ie[TAG_LENGTH_OFFSET];
+
+            if (tag_length + TAG_HEADER_LENGTH > ie_len)
+                break;
+
+            if (tag_number == CSA_TAG_ID && tag_length >= CSA_IE_MIN_LENGTH) {
+                switch_mode = ie[TAG_HEADER_LENGTH + CSA_SWITCH_MODE_OFFSET];
+                new_channel = ie[TAG_HEADER_LENGTH + CSA_NEW_CHANNEL_OFFSET];
+                switch_count = ie[TAG_HEADER_LENGTH + CSA_SWITCH_COUNT_OFFSET];
+
+                // Detect if this is a new CSA frame event
+                if (new_channel != last_csa_channel || switch_count > last_csa_switch_count) {
+                    last_csa_channel = new_channel;
+                    last_csa_switch_count = switch_count;
+                    process_csa = true;
+                }
+
+                if (!process_csa) {
+                    return -1; // Duplicate CSA beacon ignored
+                }
+
+                wifi_hal_info_print(
+                    "%s:%d: CSA beacon processed - mode:%u new_channel:%u switch_count:%u\n",
+                    __func__, __LINE__, switch_mode, new_channel, switch_count);
+                break;
+            }
+
+            ie_len -= (TAG_HEADER_LENGTH + tag_length);
+            ie += (TAG_HEADER_LENGTH + tag_length);
+        }
+
+        if (!process_csa) {
+            return -1;
+        }
+
+        wifi_hal_info_print("%s:%d: Beacon from connected AP with CSA tag detected\n", __func__,
+            __LINE__);
+        forward_frame = false;
+        nl80211_unregister_mgmt_frames(interface);
+        break;
+#endif // EASY_MESH_NODE && _PLATFORM_BANANAPI_R4_
 
     default:
         drop = true;
@@ -7140,7 +7226,9 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
         csa_settings.cs_count = 5;
         csa_settings.block_tx = 0;
     }
-
+#if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
+    csa_settings.cs_count = CSA_COUNT;
+#endif
     os_memset(&csa_settings.freq_params, 0, sizeof(struct hostapd_freq_params));
 
     csa_settings.freq_params.mode = radio->iconf.hw_mode;
@@ -7366,11 +7454,14 @@ int nl80211_set_regulatory_domain(wifi_countrycode_type_t country_code)
     return RETURN_OK;
 }
 
-static int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
+int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
 {
     struct nl_msg *msg;
     unsigned int i;
     int ret;
+#if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
+    int err;
+#endif
 
     /**
      * While stations are able to register for Action, Probe Request, and Authentication frames,
@@ -7390,6 +7481,9 @@ static int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
         /*WLAN_FC_STYPE_AUTH,*/ // Uneeded and requires extra info
         /*WLAN_FC_STYPE_PROBE_REQ,*/ // Unneeded 
         WLAN_FC_STYPE_ACTION,
+#if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
+        WLAN_FC_STYPE_BEACON,
+#endif
     };
 
     const int stypes_ap[] = {
@@ -7437,6 +7531,16 @@ static int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
         nl_cb_put(interface->nl_cb);
         return -1;
     }
+
+#if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
+    err = nl_socket_set_buffer_size((struct nl_sock *)interface->nl_event, NL_SOCKET_RX_BUFFER_SIZE,
+        0);
+    if (err < 0) {
+        wifi_hal_info_print("%s:%d:nl80211: Could not set nl_socket RX buffer size: %s", __func__,
+            __LINE__, nl_geterror(err));
+        /* continue anyway with the default (smaller) buffer */
+    }
+#endif
 
     interface->nl_event_fd = nl_socket_get_fd((struct nl_sock *)interface->nl_event);
     wifi_hal_info_print("%s:%d: interface:%s ifindex:%d nl sock:%d\n", __func__, __LINE__,
