@@ -8894,6 +8894,14 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         }
         else {
             pos += ret;
+#if HOSTAPD_VERSION >= 210
+            if (interface->u.sta.wpa_sm->assoc_rsnxe_len > 0 &&
+                interface->u.sta.wpa_sm->assoc_rsnxe_len <= (sizeof(rsn_ie) - ret)) {
+                os_memcpy(pos, interface->u.sta.wpa_sm->assoc_rsnxe,
+                    interface->u.sta.wpa_sm->assoc_rsnxe_len);
+                pos += interface->u.sta.wpa_sm->assoc_rsnxe_len;
+            }
+#endif
             nla_put(msg, NL80211_ATTR_IE, pos - rsn_ie, rsn_ie);
         }
 
