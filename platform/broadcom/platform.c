@@ -441,6 +441,106 @@ void set_string_nvram_param(char *param_name, char *value)
 #endif // defined(WLDM_21_2)
 }
 
+#if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT)
+#define MAX_MLO_RADIOS			(4)
+
+static int mlo_MAP = -1;		/* Main AP index */
+static int mlo_config[MAX_MLO_RADIOS] =
+{ -1, -1, -1, -1 };			/* wl_mlo_config values */
+static int mlo_radio_cnt = 0;		/* Number of MLO radios */
+static int mlo_radio_map = 0;		/* Bitmap, set if a radio is MLO enabled */
+static int mlo_init_map = -1;		/* Bitmap, set if creatVAP is called to init this radio */
+extern int wl_iovar_get(char *ifname, char *iovar, void *bufptr, int buflen);
+
+int platform_mlo_init(void)
+{
+	int i, rc = 0;
+	char *value = nvram_get("wl_mlo_config");
+	char cmd[BUFLEN_256] = {0};
+
+	mlo_radio_cnt = mlo_radio_map = 0;
+	mlo_MAP = mlo_init_map = -1;
+	mlo_config[0] = mlo_config[1] = mlo_config[2] = mlo_config[3] = -1;
+	if (value == NULL)
+		return 0;
+
+	if (sscanf(value, "%d %d %d %d", &mlo_config[0], &mlo_config[1], &mlo_config[2], &mlo_config[3]) != 4) {
+		mlo_config[0] = mlo_config[1] = mlo_config[2] = mlo_config[3] = -1;
+		return 0;
+	}
+
+	for (i = 0; i < MAX_MLO_RADIOS; i++) {
+		char osifname[32];
+		char buf[WLC_IOCTL_MEDLEN];
+
+		snprintf(osifname, sizeof(osifname), "wl%d", i);
+		if (wl_iovar_get(osifname, "cap", (void *)buf, sizeof(buf)) ||
+		    strstr(buf, " mlo ") == NULL) {
+			mlo_config[i] = -1;
+		}
+
+		if (mlo_config[i] == -1)
+			continue;
+		if (mlo_config[i] == 0)
+			mlo_MAP = i;
+		mlo_radio_cnt++;
+		mlo_radio_map |= 1 << i;
+	}
+	mlo_init_map = 0;
+	wifi_hal_info_print("### %s: wl_mlo_config=[%s] MAP=%d radio_cnt %d radio_map %d init_map %d ###\n",
+		__func__, value, mlo_MAP, mlo_radio_cnt, mlo_radio_map, mlo_init_map);
+	snprintf(cmd, sizeof(cmd), "wl -p down");
+	rc = system(cmd);
+	wifi_hal_info_print("### %s: cmd=[%s] rc=%d ###\n", __func__, cmd, rc);
+	return mlo_radio_cnt;
+}
+
+int platform_mlo_up(void)
+{
+	int rc = 0;
+	char cmd[BUFLEN_256] = {0};
+
+	snprintf(cmd, sizeof(cmd), "wl -p up");
+	rc = system(cmd);
+	wifi_hal_info_print("### %s: cmd=[%s] rc=%d ###\n", __func__, cmd, rc);
+	snprintf(cmd, sizeof(cmd), "wl -i wl%d mlo_up", mlo_MAP);
+	rc = system(cmd);
+	wifi_hal_info_print("### %s: cmd=[%s] rc=%d ###\n", __func__, cmd, rc);
+	return rc;
+}
+
+int platform_post_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
+{
+	if (index >= MAX_MLO_RADIOS || index < 0 || mlo_config[index] == -1 || (mlo_radio_map & (1 << index)) == 0) {
+		wifi_hal_error_print("### %s: mlo_config[%d]=%d, mlo_radio_map=%d ###\n",
+			__func__, index, mlo_config[index], mlo_radio_map);
+		return 0;
+	}
+
+	wifi_hal_info_print("### %s: index=%d mlo_init_map=%d mlo_radio_map=%d\n",
+		__func__, index, mlo_init_map, mlo_radio_map);
+	if (mlo_init_map != mlo_radio_map) {
+		mlo_init_map |= (1 << index);
+		if (mlo_init_map != mlo_radio_map) {
+			return 0;
+		}
+	} else {
+		platform_mlo_up();
+	}
+	return 0;
+}
+
+void platform_mlo_post_init(void)
+{
+	wifi_hal_info_print("### %s: mlo_init_map=%d mlo_radio_map=%d ###\n",
+		__func__, mlo_init_map, mlo_radio_map);
+	if (mlo_init_map != mlo_radio_map) {
+		return;
+	}
+	platform_mlo_up();
+}
+#endif /* CONFIG_IEEE80211BE && XB10_PORT */
+
 int platform_pre_init()
 {
     wifi_hal_dbg_print("%s:%d \r\n", __func__, __LINE__);
@@ -463,6 +563,9 @@ int platform_pre_init()
     system("wl -i wl1.1 gmode_protection_control 0");
     wifi_hal_dbg_print("%s:%d: wifi param set success\r\n", __func__, __LINE__);
 #endif
+#if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT)
+    platform_mlo_init();
+#endif /* CONFIG_IEEE80211BE && XB10_PORT */
     return 0;
 }
 
@@ -714,6 +817,9 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
     char param_name[NVRAM_NAME_SIZE];
     char interface_name[8];
 
+#if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT)
+    platform_mlo_post_init();
+#endif /* CONFIG_IEEE80211BE && XB10_PORT */
     memset(param_name, 0 ,sizeof(param_name));
     memset(interface_name, 0, sizeof(interface_name));
 
@@ -1641,6 +1747,9 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
         }
     }
 
+#if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT)
+    platform_post_create_vap(r_index, map);
+#endif /* CONFIG_IEEE80211BE && XB10_PORT */
     return 0;
 }
 
