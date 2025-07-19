@@ -1869,6 +1869,23 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     hooks = get_device_frame_hooks();
     vap = &interface->vap_info;
 
+    static uint8_t last_csa_channel = 0;
+    static uint8_t last_csa_switch_count = 0;
+    static bool csa_processed = false;
+
+    mac_addr_str_t int_mac, sa_mac, da_mac;
+    wifi_bss_info_t *backhaul;
+    const uint8_t *ie;
+    int ie_len;
+    bool csa_found = false;
+    uint8_t tag_number, tag_length;
+    uint8_t switch_mode, new_channel, switch_count;
+
+    backhaul = &interface->u.sta.backhaul;
+    to_mac_str(interface->mac, int_mac);
+    to_mac_str(mgmt->sa, sa_mac);
+    to_mac_str(mgmt->da, da_mac);
+
     if (memcmp(mgmt->da, interface->mac, sizeof(mac_address_t)) == 0) {
         memcpy(sta, mgmt->sa, sizeof(mac_address_t));
         dir = wifi_direction_uplink;
@@ -2156,6 +2173,67 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #ifdef WIFI_EMULATOR_CHANGE
         send_mgmt_to_char_dev = true;
 #endif
+        break;
+
+    case WLAN_FC_STYPE_BEACON:
+        mgmt_type = WIFI_MGMT_FRAME_TYPE_BEACON;
+
+        if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.beacon))
+            return -1;
+
+        // Only process if STA is connected and frame is from the connected AP
+        if (interface->vap_info.vap_mode != wifi_vap_mode_sta ||
+            interface->u.sta.state != WPA_COMPLETED ||
+            memcmp(backhaul->bssid, mgmt->bssid, sizeof(bssid_t)) != 0) {
+            return -1;
+        }
+
+        ie = mgmt->u.beacon.variable;
+        ie_len = len - (IEEE80211_HDRLEN + sizeof(mgmt->u.beacon));
+        csa_found = false;
+
+        while (ie_len >= 2) {
+            tag_number = ie[0];
+            tag_length = ie[1];
+
+            if (tag_length + 2 > ie_len)
+                break;
+
+            if (tag_number == 37 && tag_length >= 3) {
+                csa_found = true;
+
+                switch_mode = ie[2];
+                new_channel = ie[3];
+                switch_count = ie[4];
+
+                // Detect if this is a new CSA frame
+                if (new_channel != last_csa_channel || switch_count > last_csa_switch_count) {
+                    last_csa_channel = new_channel;
+                    last_csa_switch_count = switch_count;
+                    csa_processed = false;
+                }
+
+                if (!csa_processed) {
+                    csa_processed = true;
+                    wifi_hal_info_print("%s:%d: CSA beacon processed - mode:%u new_channel:%u switch_count:%u\n", 
+                        __func__, __LINE__, switch_mode, new_channel, switch_count);
+                } else {
+                    return -1; // Duplicate CSA beacon ignored
+                }
+                break;
+            }
+
+            ie_len -= (2 + tag_length);
+            ie += (2 + tag_length);
+        }
+
+        if (!csa_found) {
+            return -1;
+        }
+
+        wifi_hal_info_print("%s:%d: Beacon from connected AP with CSA tag detected\n", __func__, __LINE__);
+        forward_frame = false;
+        nl80211_unregister_mgmt_frames(interface);
         break;
 
     default:
@@ -7141,6 +7219,10 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
         csa_settings.block_tx = 0;
     }
 
+    // Increased the cs_count to make easymesh externders to swtich channel
+    // without backhaul disconnection.
+    csa_settings.cs_count = 50;
+
     os_memset(&csa_settings.freq_params, 0, sizeof(struct hostapd_freq_params));
 
     csa_settings.freq_params.mode = radio->iconf.hw_mode;
@@ -7182,6 +7264,15 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
         }
         is_first_interface = false;
     }
+
+    hash_map_foreach(radio->interface_map, interface) {
+        if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+            wifi_hal_dbg_print("%s:%d: Register mgmt frames for STA interface\n", __func__,
+                __LINE__);
+            nl80211_register_mgmt_frames(interface);
+        }
+    }
+
     return 0;
 }
 
@@ -7370,7 +7461,7 @@ static int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
 {
     struct nl_msg *msg;
     unsigned int i;
-    int ret;
+    int ret, err;
 
     /**
      * While stations are able to register for Action, Probe Request, and Authentication frames,
@@ -7390,6 +7481,7 @@ static int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
         /*WLAN_FC_STYPE_AUTH,*/ // Uneeded and requires extra info
         /*WLAN_FC_STYPE_PROBE_REQ,*/ // Unneeded 
         WLAN_FC_STYPE_ACTION,
+        WLAN_FC_STYPE_BEACON,
     };
 
     const int stypes_ap[] = {
@@ -7436,6 +7528,12 @@ static int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
     if (interface->nl_event == NULL) {
         nl_cb_put(interface->nl_cb);
         return -1;
+    }
+
+    err = nl_socket_set_buffer_size((struct nl_sock *)interface->nl_event, 2097152, 0);
+    if (err < 0) {
+        wifi_hal_info_print("%s:%d:nl80211: Could not set nl_socket RX buffer size: %s", __func__, __LINE__, nl_geterror(err));
+        /* continue anyway with the default (smaller) buffer */
     }
 
     interface->nl_event_fd = nl_socket_get_fd((struct nl_sock *)interface->nl_event);
