@@ -4363,29 +4363,20 @@ void init_interface_map(void)
 
 void concat_band_to_vap_name(wifi_vap_name_t vap_name, unsigned int rdk_radio_index)
 {
-    unsigned int i;
-    const char *vap_name_str = NULL;
-    const char *suffix = NULL;
-
-    for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
-        if (interface_index_map[i].rdk_radio_index == rdk_radio_index) {
-            wifi_hal_info_print("%s:%d: Found vap_name:%s for rdk_radio_index:%u\n",
-                                __func__, __LINE__, interface_index_map[i].vap_name, rdk_radio_index);
-
-            vap_name_str = interface_index_map[i].vap_name;
-            suffix = strrchr(vap_name_str, '_');
-
-            if (suffix && strlen(suffix + 1) > 0) {
-                strncat((char *)vap_name, suffix + 1, sizeof(wifi_vap_name_t) - strlen(vap_name) - 1);
-                wifi_hal_info_print("%s:%d: Updated vap_name to %s for rdk_radio_index:%u\n",
-                                    __func__, __LINE__, vap_name, rdk_radio_index);
-                return;
-            }
-        }
+    switch (rdk_radio_index) {
+    case 0:
+        strncat((char *)vap_name, "2g", strlen("2g") + 1);
+        break;
+    case 1:
+        strncat((char *)vap_name, "5g", strlen("5g") + 1);
+        break;
+    case 2:
+        strncat((char *)vap_name, "6g", strlen("6g") + 1);
+        break;
+    default:
+        wifi_hal_error_print("%s:%d: Invalid rdk_radio_index:%d for vap_name:%s\n", __func__,
+            __LINE__, rdk_radio_index, vap_name);
     }
-
-    wifi_hal_error_print("%s:%d: Failed to find valid suffix for vap_name:%s "
-                         "for rdk_radio_index:%u\n", __func__, __LINE__, vap_name, rdk_radio_index);
 }
 
 int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
