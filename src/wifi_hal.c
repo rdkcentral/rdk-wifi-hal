@@ -1628,11 +1628,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         if (vap->vap_mode == wifi_vap_mode_ap) {
 #if defined(EASY_MESH_NODE)
             if (is_wifi_hal_vap_mesh_backhaul(vap->vap_index)) {
-#if defined(_PLATFORM_RASPBERRYPI_)
                 interface->vap_info.u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
-#elif defined(_PLATFORM_BANANAPI_R4_)
-                vap->u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
-#endif
             }
 #endif // EASY_MESH_NODE
         }
