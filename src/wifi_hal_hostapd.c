@@ -2486,6 +2486,9 @@ static int wpa_sm_sta_get_beacon_ie(void *ctx)
     wifi_bss_info_t *backhaul;
     wifi_bss_info_t *bss;
     ieee80211_tlv_t *rsn_ie = NULL;
+#if HOSTAPD_VERSION >= 210
+    ieee80211_tlv_t *rsnx_ie = NULL;
+#endif
     int ret = -1;
 
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
@@ -2499,13 +2502,27 @@ static int wpa_sm_sta_get_beacon_ie(void *ctx)
         if (memcmp(backhaul->bssid, bss->bssid, sizeof(bssid_t)) == 0 && bss->ie != NULL) {
 
             rsn_ie = (ieee80211_tlv_t *)get_ie((unsigned char *)bss->ie, bss->ie_len, WLAN_EID_RSN);
+#if HOSTAPD_VERSION >= 210
+            rsnx_ie = (ieee80211_tlv_t *)get_ie((unsigned char *)bss->ie, bss->ie_len,
+                WLAN_EID_RSNX);
+            if (rsn_ie == NULL && rsnx_ie == NULL) {
+#else
             if (rsn_ie == NULL) {
+#endif
                 bss = hash_map_get_next(interface->scan_info_map, bss);
                 continue;
             }
 
-            ret = wpa_sm_set_ap_rsn_ie(interface->u.sta.wpa_sm, (const unsigned char *)rsn_ie,
-                rsn_ie->length + sizeof(ieee80211_tlv_t));
+            if (rsn_ie != NULL) {
+                ret = wpa_sm_set_ap_rsn_ie(interface->u.sta.wpa_sm, (const unsigned char *)rsn_ie,
+                    rsn_ie->length + sizeof(ieee80211_tlv_t));
+            }
+#if HOSTAPD_VERSION >= 210
+            if (rsnx_ie != NULL) {
+                ret = wpa_sm_set_ap_rsnxe(interface->u.sta.wpa_sm, (const unsigned char *)rsnx_ie,
+                    rsnx_ie->length + sizeof(ieee80211_tlv_t));
+            }
+#endif
             pthread_mutex_unlock(&interface->scan_info_mutex);
             return ret;
         }
@@ -2568,7 +2585,9 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
     int wpa_key_mgmt_11w = 0;
     ieee80211_tlv_t *rsn_ie = NULL;
     unsigned short max_wpa_ie_len = 500;
-
+#if HOSTAPD_VERSION >= 210
+    unsigned short max_rsnx_ie_len = 50;
+#endif
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
     backhaul = &interface->u.sta.backhaul;
@@ -2738,12 +2757,29 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         if (ie) {
             ie_len = max_wpa_ie_len;
             if (wpa_sm_set_assoc_wpa_ie_default(sm, ie, &ie_len)) {
-                os_free(ie);
                 wifi_hal_dbg_print("Failures in wpa_sm_set_assoc_wpa_ie_default");
-                ie = NULL;
             }
+            os_free(ie);
+            ie = NULL;
+            ie_len = 0;
         }
     }
+#if HOSTAPD_VERSION >= 210
+    if (get_ie_by_eid(WLAN_EID_RSNX, assoc_req, interface->u.sta.assoc_req_len, &ie, &ie_len) ==
+        true) {
+        wpa_sm_set_assoc_rsnxe(sm, ie, ie_len);
+    } else {
+        ie = os_malloc(max_rsnx_ie_len);
+        ie_len = max_rsnx_ie_len;
+        if (ie) {
+            if (wpa_sm_set_assoc_rsnxe_default(sm, ie, &ie_len)) {
+                wifi_hal_dbg_print("Failed to add rsnxe default value");
+            }
+            os_free(ie);
+            ie = NULL;
+        }
+    }
+#endif
     wpa_sm_notify_assoc(sm, sm->bssid);
 }
 

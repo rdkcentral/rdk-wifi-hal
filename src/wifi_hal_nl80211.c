@@ -8894,6 +8894,14 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         }
         else {
             pos += ret;
+#if HOSTAPD_VERSION >= 210
+            if (interface->u.sta.wpa_sm->assoc_rsnxe_len > 0 &&
+                interface->u.sta.wpa_sm->assoc_rsnxe_len <= (sizeof(rsn_ie) - ret)) {
+                os_memcpy(pos, interface->u.sta.wpa_sm->assoc_rsnxe,
+                    interface->u.sta.wpa_sm->assoc_rsnxe_len);
+                pos += interface->u.sta.wpa_sm->assoc_rsnxe_len;
+            }
+#endif
             nla_put(msg, NL80211_ATTR_IE, pos - rsn_ie, rsn_ie);
         }
 
@@ -9198,9 +9206,11 @@ static void parse_supprates(const uint8_t type, uint8_t len,
             if (bss->oper_freq_band & WIFI_FREQUENCY_5_BAND) {
                 bss->supp_standards |= WIFI_80211_VARIANT_A;
                 bss->oper_standards = WIFI_80211_VARIANT_A;
-            } else {
+            } else if (bss->oper_freq_band & WIFI_FREQUENCY_2_4_BAND){
                 bss->supp_standards |= WIFI_80211_VARIANT_G;
                 bss->oper_standards = WIFI_80211_VARIANT_G;
+            } else {
+                wifi_hal_dbg_print("%s:%d: [SCAN] Ignoring legacy rate for 6 GHz \n",__func__, __LINE__);
             }
         }
 
@@ -10102,7 +10112,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
             wifi_ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
             wifi_ie_info_t *beacon_ie = &interface->beacon_elem_ie[radio_index];
 
-            // `realloc` mallocs a buffer of size 'beacon_ie_len' if buff == NULL
+            // `realloc` mallocs a buffer of size 'len' if buff == NULL
             if (ie && (bss_ie->buff = (u8 *)realloc(bss_ie->buff, len)) != NULL) {
 
                 // ie and len previously parsed
@@ -10117,21 +10127,22 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
                     __LINE__, radio_index);
                 bss_ie->buff_len = 0;
             }
-
+            // `realloc` mallocs a buffer of size 'beacon_ie_len' if buff == NULL
             if (beacon_ies &&
                 (beacon_ie->buff = (u8 *)realloc(beacon_ie->buff, beacon_ie_len)) != NULL) {
 
-                // ie and len previously parsed
-                bss_ie->buff_len = beacon_ie_len;
-                memcpy(bss_ie->buff, beacon_ies, bss_ie->buff_len);
+                // beacon_ies and beacon_ie_len previously parsed
+                beacon_ie->buff_len = beacon_ie_len;
+                memcpy(beacon_ie->buff, beacon_ies, beacon_ie->buff_len);
 
-                wifi_hal_stats_dbg_print("%s:%d: bss ie for radio:%d\n", __func__, __LINE__,
+                wifi_hal_stats_dbg_print("%s:%d: beacon ies for radio:%d\n", __func__, __LINE__,
                     radio_index);
-                wpa_hexdump(MSG_MSGDUMP, "SCAN_BSS_IE", bss_ie->buff, bss_ie->buff_len);
+                wpa_hexdump(MSG_MSGDUMP, "SCAN_BSS_BEACON_IE", beacon_ie->buff,
+                    beacon_ie->buff_len);
             } else {
-                wifi_hal_stats_error_print("%s:%d bss ie not updated for radio:%d\r\n", __func__,
-                    __LINE__, radio_index);
-                bss_ie->buff_len = 0;
+                wifi_hal_stats_error_print("%s:%d beacon ies not updated for radio: %d\r\n",
+                    __func__, __LINE__, radio_index);
+                beacon_ie->buff_len = 0;
             }
 #endif
         }
