@@ -70,53 +70,56 @@ static void set_wl_runtime_configs(const wifi_vap_info_map_t *vap_map)
 }
 
 /* Get default encrypted PSK key. */
-static int get_default_encrypted_password (char* password) {
-
+static int get_default_encrypted_password(char *password)
+{
     if (NULL == password) {
         wifi_hal_error_print("%s:%d Invalid parameter \r\n", __func__, __LINE__);
         return -1;
     }
 
-    const char* default_pwd_encrypted_key = "onewifidefaultcred";
-    uint8_t    *encrypted_key=NULL;
+    const char *default_pwd_encrypted_key = "onewifidefaultcred";
+    char *encrypted_key = NULL;
     size_t encrypted_keysize;
-    if(rdkconfig_get(&encrypted_key, &encrypted_keysize, default_pwd_encrypted_key))
-    {
+
+    if (rdkconfig_getStr(&encrypted_key, &encrypted_keysize, default_pwd_encrypted_key) !=
+        RDKCONFIG_OK) {
         wifi_hal_error_print("%s:%d Extraction failure for onewifi value \r\n", __func__, __LINE__);
         return -1;
     }
 
-    strncpy(password, (const char*)encrypted_key, BUFLEN_128 - 1);
+    strncpy(password, (const char *)encrypted_key, BUFLEN_128 - 1);
     password[BUFLEN_128 - 1] = '\0';
 
-    if(rdkconfig_free(&encrypted_key, encrypted_keysize)  == RDKCONFIG_FAIL) {
-        wifi_hal_info_print("%s:%d Memory deallocation for onewifi value failed \r\n", __func__, __LINE__);
+    if (rdkconfig_freeStr(&encrypted_key, encrypted_keysize) == RDKCONFIG_FAIL) {
+        wifi_hal_info_print("%s:%d Memory deallocation for onewifi value failed \r\n", __func__,
+            __LINE__);
     }
     return 0;
 }
 
 /* Get default encrypted SSID. */
-static int get_default_encrypted_ssid (char* ssid) {
+static int get_default_encrypted_ssid(char *ssid)
+{
 
     if (NULL == ssid) {
         wifi_hal_error_print("%s:%d Invalid parameter \r\n", __func__, __LINE__);
         return -1;
     }
 
-    const char* default_ssid_encrypted_key = "onewifidefaultssid";
-    uint8_t    *ssid_key=NULL;
+    const char *default_ssid_encrypted_key = "onewifidefaultssid";
+    char *ssid_key = NULL;
     size_t ssid_keysize;
-    if(rdkconfig_get(&ssid_key, &ssid_keysize, default_ssid_encrypted_key))
-    {
+    if (rdkconfig_getStr(&ssid_key, &ssid_keysize, default_ssid_encrypted_key) != RDKCONFIG_OK) {
         wifi_hal_error_print("%s:%d Extraction failure for onewifi value \r\n", __func__, __LINE__);
         return -1;
     }
 
-    strncpy(ssid, (const char*)ssid_key, BUFLEN_128 -1);
+    strncpy(ssid, (const char *)ssid_key, BUFLEN_128 - 1);
     ssid[BUFLEN_128 - 1] = '\0';
 
-    if(rdkconfig_free(&ssid_key, ssid_keysize)  == RDKCONFIG_FAIL) {
-        wifi_hal_info_print("%s:%d Memory deallocation for onewifi value failed \r\n", __func__, __LINE__);
+    if (rdkconfig_freeStr(&ssid_key, ssid_keysize) == RDKCONFIG_FAIL) {
+        wifi_hal_info_print("%s:%d Memory deallocation for onewifi value failed \r\n", __func__,
+            __LINE__);
     }
     return 0;
 }
