@@ -1638,11 +1638,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         if (vap->vap_mode == wifi_vap_mode_ap) {
 #if (defined(EASY_MESH_NODE) || defined(EASY_MESH_COLOCATED_NODE))
             if (isVapMeshBackhaul(vap->vap_index)) {
-#if defined(_PLATFORM_RASPBERRYPI_)
                 interface->vap_info.u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
-#elif defined(_PLATFORM_BANANAPI_R4_)
-                vap->u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
-#endif
             }
 #endif // EASY_MESH_NODE || EASY_MESH_COLOCATED_NODE
 #ifdef NL80211_ACL
@@ -2923,19 +2919,21 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
 {
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
-    uint freq, op_class, on_chan;
+    uint freq, op_class;
     uint i;
     char country[8] = { 0 };
     bool is_ap_mode = false;
     int radioIndex, res;
     ssid_t ssid_list[1] = { "" };
     bool is_active_scan = false;
+    uint current_channel = 0;
 
-    wifi_hal_stats_dbg_print("%s:%d: [SCAN] == ENTER (mode:%u, dwell_time:%d) ==\n", __func__, __LINE__,
-        scan_mode, dwell_time);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] == ENTER (mode:%u, dwell_time:%d) ==\n", __func__,
+        __LINE__, scan_mode, dwell_time);
 
     if (dwell_time < 0) {
-        wifi_hal_stats_error_print("%s:%d: invalid dwell time: %d\n", __func__, __LINE__, dwell_time);
+        wifi_hal_stats_error_print("%s:%d: invalid dwell time: %d\n", __func__, __LINE__,
+            dwell_time);
         return WIFI_HAL_INVALID_ARGUMENTS;
     }
 
@@ -2967,8 +2965,9 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
     op_class = radio->oper_param.operatingClass;
     {
         unsigned global_op_class = country_to_global_op_class(country, op_class);
-        wifi_hal_stats_dbg_print("%s:%d: [SCAN] country code: %s, op_class:%d, global_op_class:%d\n",
-            __func__, __LINE__, country, op_class, global_op_class);
+        wifi_hal_stats_dbg_print(
+            "%s:%d: [SCAN] country code: %s, op_class:%d, global_op_class:%d\n", __func__, __LINE__,
+            country, op_class, global_op_class);
     }
 
     /* Scanning is performed for the radio, so the status and results of the scan are stored in the
@@ -2977,15 +2976,15 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
 #if OPTION_GET_CHANNELS_FROM_HOSTAP == 0
     interface = get_primary_interface(radio);
     if (interface == NULL) {
-        wifi_hal_stats_error_print("%s:%d: [SCAN] primary interface for radio '%s' not found\n", __func__,
-            __LINE__, radio->name);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] primary interface for radio '%s' not found\n",
+            __func__, __LINE__, radio->name);
         return WIFI_HAL_ERROR;
     }
 #else
     interface = get_private_vap_interface(radio);
     if (interface == NULL) {
-        wifi_hal_stats_error_print("%s:%d: [SCAN] private interface for radio '%s' not found\n", __func__,
-            __LINE__, radio->name);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] private interface for radio '%s' not found\n",
+            __func__, __LINE__, radio->name);
         return WIFI_HAL_ERROR;
     }
 #endif
@@ -2996,16 +2995,17 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
             interface->scan_state);
 
         if (interface->scan_has_results & WIFI_SCAN_RES_COLLECTED_API) {
-            wifi_hal_stats_dbg_print("%s:%d: [SCAN] Starting new scan, although results for radio %d "
-                               "(%s) from previous scan weren't collected\n",
+            wifi_hal_stats_dbg_print(
+                "%s:%d: [SCAN] Starting new scan, although results for radio %d "
+                "(%s) from previous scan weren't collected\n",
                 __func__, __LINE__, radioIndex, interface->name);
         }
 
         // - Check if scan was already triggered and is in progress
         if (interface->scan_state == WIFI_SCAN_STATE_STARTED) {
             pthread_mutex_unlock(&interface->scan_state_mutex);
-            wifi_hal_stats_dbg_print("%s:%d: [SCAN] Scan already triggered for radio %d (%s)\n", __func__,
-                __LINE__, radioIndex, interface->name);
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] Scan already triggered for radio %d (%s)\n",
+                __func__, __LINE__, radioIndex, interface->name);
             return WIFI_HAL_INTERNAL_ERROR;
         }
 
@@ -3013,7 +3013,7 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
         interface->scan_state = WIFI_SCAN_STATE_NONE;
 
         /* Cleanup scan data (scan_info_ap_map[0]) before the new scan. Result data
-         *  (scan_info_ap_map[1]) stays unchanged. 
+         *  (scan_info_ap_map[1]) stays unchanged.
          */
         pthread_mutex_lock(&interface->scan_info_mutex);
         hash_map_cleanup(interface->scan_info_map);
@@ -3027,34 +3027,86 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
 
     if ((scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN) && (dwell_time == 0)) {
         // - special case:
-        wifi_hal_stats_dbg_print("%s:%d: [SCAN] On channel scan with dwell time 0 => not triggering "
-                           "scan, requesting scan results immediately\n",
+        wifi_hal_stats_dbg_print(
+            "%s:%d: [SCAN] On channel scan with dwell time 0 => not triggering "
+            "scan, requesting scan results immediately\n",
             __func__, __LINE__);
 
         // - get the current channel
-        on_chan = radio->oper_param.channel;
-        if (on_chan == 0) {
-            wifi_hal_stats_error_print("%s:%d: [SCAN] Channel is 0, failure!\n", __func__, __LINE__);
-            return WIFI_HAL_ERROR;
+        if (chan_num == 0 || chan_list == NULL) {
+            chan_num = 1;
+            current_channel = radio->oper_param.channel;
         }
 
-        if (RETURN_OK != wifi_channel_to_freq(country, op_class, on_chan, &freq)) {
-            wifi_hal_stats_error_print("%s:%d: [SCAN] Failed to get frequency for channel %u\n", __func__,
-                __LINE__, on_chan);
+        // - allocate space for freq list
+        if (RETURN_OK != set_freqs_filter(interface, chan_num, NULL))
             return WIFI_HAL_ERROR;
+
+        // - convert channels to freqs
+        for (i = 0; i < chan_num; i++) {
+            if (is_ap_mode) {
+                // - verify the channel number (it is possible only in AP mode)
+                int i_freq;
+#if OPTION_GET_CHANNELS_FROM_HOSTAP == 0
+                if (current_channel != 0) {
+                    i_freq = channel_is_valid_from_radio(radio, current_channel);
+                } else {
+                    i_freq = channel_is_valid_from_radio(radio, chan_list[i]);
+                }
+#else
+                pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+                if (current_channel != 0) {
+                    i_freq = channel_is_valid_from_hapd(&interface->u.ap.hapd, current_channel);
+                } else {
+                    i_freq = channel_is_valid_from_hapd(&interface->u.ap.hapd, chan_list[i]);
+                }
+                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+#endif // OPTION_GET_CHANNELS_FROM_HOSTAP
+                if (i_freq < 0) {
+                    if (current_channel != 0) {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] channel %u is invalid for radio %d\n", __func__,
+                            __LINE__, current_channel, radioIndex);
+                    } else {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] channel %u is invalid for radio %d\n", __func__,
+                            __LINE__, chan_list[i], radioIndex);
+                    }
+                    return WIFI_HAL_ERROR;
+                }
+                freq = i_freq;
+            } else {
+                if (current_channel != 0) {
+                    if (RETURN_OK !=
+                        wifi_channel_to_freq(country, op_class, current_channel, &freq)) {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] Couldn't get frequency for channel %u\n", __func__,
+                            __LINE__, current_channel);
+                        return WIFI_HAL_ERROR;
+                    }
+                } else {
+                    if (RETURN_OK != wifi_channel_to_freq(country, op_class, chan_list[i], &freq)) {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] Couldn't get frequency for channel %u\n", __func__,
+                            __LINE__, chan_list[i]);
+                        return WIFI_HAL_ERROR;
+                    }
+                }
+
+                interface->scan_filter.values[i] = freq;
+                if (current_channel != 0) {
+                    wifi_hal_stats_dbg_print("%s:%d: [SCAN] chan:%u -> freq:%u (current channel)\n",
+                        __func__, __LINE__, current_channel, freq);
+                } else {
+                    wifi_hal_stats_dbg_print("%s:%d: [SCAN] chan:%u -> freq:%u\n", __func__,
+                        __LINE__, chan_list[i], freq);
+                }
+            }
+
+            pthread_mutex_lock(&interface->scan_state_mutex);
+            interface->scan_state = WIFI_SCAN_STATE_STARTED;
+            pthread_mutex_unlock(&interface->scan_state_mutex);
         }
-
-        if (RETURN_OK != set_freqs_filter(interface, 1, &freq))
-            return WIFI_HAL_ERROR;
-
-        wifi_hal_stats_info_print(
-            "%s:%d: [SCAN] Requested ONCHAN scan for the current channel %u, freq %u\n", __func__,
-            __LINE__, on_chan, freq);
-
-        pthread_mutex_lock(&interface->scan_state_mutex);
-        interface->scan_state = WIFI_SCAN_STATE_STARTED;
-        pthread_mutex_unlock(&interface->scan_state_mutex);
-
         // - scan_state is changed by nl80211_get_scan_results()
         if (nl80211_get_scan_results(interface) != RETURN_OK)
             return WIFI_HAL_ERROR;
@@ -3062,29 +3114,79 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
         return WIFI_HAL_SUCCESS;
     }
 
-    wifi_hal_stats_dbg_print("%s:%d: [SCAN] oper_param.opclass:%d, oper_param.channel:%d\n", __func__,
-        __LINE__, radio->oper_param.operatingClass, radio->oper_param.channel);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] oper_param.opclass:%d, oper_param.channel:%d\n",
+        __func__, __LINE__, radio->oper_param.operatingClass, radio->oper_param.channel);
     switch (scan_mode) {
     case WIFI_RADIO_SCAN_MODE_ONCHAN: {
-        // - get the current channel
-        on_chan = radio->oper_param.channel;
-        if (on_chan == 0) {
-            wifi_hal_stats_error_print("%s:%d: [SCAN] Channel is 0, failure!\n", __func__, __LINE__);
-            return WIFI_HAL_ERROR;
+        if (chan_num == 0 || chan_list == NULL) {
+            chan_num = 1;
+            current_channel = radio->oper_param.channel;
         }
 
-        if (RETURN_OK != wifi_channel_to_freq(country, op_class, on_chan, &freq)) {
-            wifi_hal_stats_error_print("%s:%d: [SCAN] Failed to get frequency for channel %u\n", __func__,
-                __LINE__, on_chan);
+        // - allocate space for freq list
+        if (RETURN_OK != set_freqs_filter(interface, chan_num, NULL))
             return WIFI_HAL_ERROR;
+
+        // - convert channels to freqs
+        for (i = 0; i < chan_num; i++) {
+            if (is_ap_mode) {
+                // - verify the channel number (it is possible only in AP mode)
+                int i_freq;
+#if OPTION_GET_CHANNELS_FROM_HOSTAP == 0
+                if (current_channel != 0) {
+                    i_freq = channel_is_valid_from_radio(radio, current_channel);
+                } else {
+                    i_freq = channel_is_valid_from_radio(radio, chan_list[i]);
+                }
+#else
+                pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+                if (current_channel != 0) {
+                    i_freq = channel_is_valid_from_hapd(&interface->u.ap.hapd, current_channel);
+                } else {
+                    i_freq = channel_is_valid_from_hapd(&interface->u.ap.hapd, chan_list[i]);
+                }
+                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+#endif // OPTION_GET_CHANNELS_FROM_HOSTAP
+                if (i_freq < 0) {
+                    if (current_channel != 0) {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] channel %u is invalid for radio %d\n", __func__,
+                            __LINE__, current_channel, radioIndex);
+                    } else {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] channel %u is invalid for radio %d\n", __func__,
+                            __LINE__, chan_list[i], radioIndex);
+                    }
+                    return WIFI_HAL_ERROR;
+                }
+                freq = i_freq;
+            } else {
+                if (current_channel != 0) {
+                    if (RETURN_OK !=
+                        wifi_channel_to_freq(country, op_class, current_channel, &freq)) {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] Couldn't get frequency for channel %u\n", __func__,
+                            __LINE__, current_channel);
+                    }
+                } else {
+                    if (RETURN_OK != wifi_channel_to_freq(country, op_class, chan_list[i], &freq)) {
+                        wifi_hal_stats_error_print(
+                            "%s:%d: [SCAN] Couldn't get frequency for channel %u\n", __func__,
+                            __LINE__, chan_list[i]);
+                        return WIFI_HAL_ERROR;
+                    }
+                }
+            }
+
+            interface->scan_filter.values[i] = freq;
+            if (current_channel != 0) {
+                wifi_hal_stats_dbg_print("%s:%d: [SCAN] chan:%u -> freq:%u (current channel)\n",
+                    __func__, __LINE__, current_channel, freq);
+            } else {
+                wifi_hal_stats_dbg_print("%s:%d: [SCAN] chan:%u -> freq:%u\n", __func__, __LINE__,
+                    chan_list[i], freq);
+            }
         }
-
-        if (RETURN_OK != set_freqs_filter(interface, 1, &freq))
-            return WIFI_HAL_ERROR;
-
-        wifi_hal_stats_dbg_print(
-            "%s:%d: [SCAN] Requested ONCHAN scan for the current channel %u, freq %u\n", __func__,
-            __LINE__, on_chan, freq);
         break;
     }
 
@@ -3119,8 +3221,9 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
                 freq = i_freq;
             } else {
                 if (RETURN_OK != wifi_channel_to_freq(country, op_class, chan_list[i], &freq)) {
-                    wifi_hal_stats_error_print("%s:%d: [SCAN] Couldn't get frequency for channel %u\n",
-                        __func__, __LINE__, chan_list[i]);
+                    wifi_hal_stats_error_print(
+                        "%s:%d: [SCAN] Couldn't get frequency for channel %u\n", __func__, __LINE__,
+                        chan_list[i]);
                     return WIFI_HAL_ERROR;
                 }
             }
@@ -3134,8 +3237,8 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
 
     case WIFI_RADIO_SCAN_MODE_FULL: {
         if (!is_ap_mode) {
-            wifi_hal_stats_error_print("%s:%d: [SCAN] Full mode is not supported for STA interface\n",
-                __func__, __LINE__);
+            wifi_hal_stats_error_print(
+                "%s:%d: [SCAN] Full mode is not supported for STA interface\n", __func__, __LINE__);
             return WIFI_HAL_ERROR;
         }
 
@@ -3161,15 +3264,15 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
         for (i = 0; i < interface->scan_filter.num; i++) {
             uint chan = 0;
             wifi_freq_to_channel(interface->scan_filter.values[i], &chan);
-            wifi_hal_stats_dbg_print("%s:%d: [SCAN] freq[%u]: %u (channel %u)\n", __func__, __LINE__, i,
-                interface->scan_filter.values[i], chan);
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] freq[%u]: %u (channel %u)\n", __func__,
+                __LINE__, i, interface->scan_filter.values[i], chan);
         }
         break;
     }
 
     case WIFI_RADIO_SCAN_MODE_SELECT_CHANNELS: {
 
-        if (!chan_num || !chan_list) {
+        if (chan_num != 0 || chan_list != NULL) {
             wifi_hal_error_print("%s:%d: [SCAN] Needs chan_num and chan_list param\n", __func__,
                 __LINE__);
             return WIFI_HAL_INVALID_ARGUMENTS;
@@ -3207,8 +3310,9 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
     }
 
     default:
-        wifi_hal_stats_error_print("%s:%d: [SCAN] scan mode %d is not supported! only supports: "
-                             "SCAN_MODE_ONCHAN(%d), SCAN_MODE_OFFCHAN(%d) and SCAN_MODE_FULL(%d)\n",
+        wifi_hal_stats_error_print(
+            "%s:%d: [SCAN] scan mode %d is not supported! only supports: "
+            "SCAN_MODE_ONCHAN(%d), SCAN_MODE_OFFCHAN(%d) and SCAN_MODE_FULL(%d)\n",
             __func__, __LINE__, scan_mode, WIFI_RADIO_SCAN_MODE_ONCHAN,
             WIFI_RADIO_SCAN_MODE_OFFCHAN, WIFI_RADIO_SCAN_MODE_FULL);
         return WIFI_HAL_ERROR;
@@ -3240,8 +3344,8 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
         pthread_mutex_lock(&interface->scan_state_mutex);
         interface->scan_state = WIFI_SCAN_STATE_NONE;
         pthread_mutex_unlock(&interface->scan_state_mutex);
-        wifi_hal_stats_error_print("%s:%d: [SCAN] scan trigger failed for '%s'\n", __func__, __LINE__,
-            interface->name);
+        wifi_hal_stats_error_print("%s:%d: [SCAN] scan trigger failed for '%s'\n", __func__,
+            __LINE__, interface->name);
         return WIFI_HAL_ERROR;
     }
 
