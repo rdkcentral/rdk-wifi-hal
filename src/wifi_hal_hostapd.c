@@ -1112,7 +1112,7 @@ int update_hostap_bss(wifi_interface_info_t *interface)
 
 #ifdef CONFIG_IEEE80211BE
     conf->disable_11be = !radio->iconf.ieee80211be;
-#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(XB10_PORT) && !defined(SCXER10_PORT)
     conf->mld_ap = vap->u.bss_info.mld_info.common_info.mld_enable;
 #endif
 #endif /* CONFIG_IEEE80211BE */
