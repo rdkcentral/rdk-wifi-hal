@@ -1933,7 +1933,7 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
         return RETURN_ERR;
     }
     vap = &interface->vap_info;
-    if (is_wifi_hal_vap_hotspot_from_interfacename(interface->name) && !vap->u.bss_info.enabled) {
+    if (!vap->u.bss_info.enabled) {
         wifi_hal_info_print("%s:%d Skipping addition of MAC Entry to ACL since %s is not enabled\n",__func__,__LINE__,interface->name);
         return RETURN_OK;
     }
@@ -2000,7 +2000,7 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
         return RETURN_ERR;
     }
     vap = &interface->vap_info;
-    if (is_wifi_hal_vap_hotspot_from_interfacename(interface->name) && !vap->u.bss_info.enabled) {
+    if (!vap->u.bss_info.enabled) {
         wifi_hal_info_print("%s:%d Skipping addition of MAC Entry to ACL since %s is not enabled\n",__func__,__LINE__,interface->name);
         return RETURN_OK;
     }
