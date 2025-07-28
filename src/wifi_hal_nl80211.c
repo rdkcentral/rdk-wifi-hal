@@ -8585,6 +8585,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     struct wpa_bss *bss;
     wifi_radio_info_t *radio;
     uint32_t radio_index = 0;
+    const u8 *rsnxe;
+    u8 rsnxe_capa = 0;
 
     wifi_convert_freq_band_to_radio_index(backhaul->oper_freq_band,
         (int *)&radio_index);
@@ -8756,9 +8758,13 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     curr_bss->beacon_ie_len = beacon_ie->buff_len;
     if (bss_ie->buff != NULL) {
         memcpy(curr_bss + 1, bss_ie->buff, bss_ie->buff_len);
+        rsnxe = get_ie(bss_ie->buff, bss_ie->buff_len, WLAN_EID_RSNX);
+        if (rsnxe && rsnxe[1] >= 1)
+            rsnxe_capa = rsnxe[2]; 
     }
 
-    if (radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
+    if (rsnxe_capa & BIT(WLAN_RSNX_CAPAB_SAE_H2E) ||
+        radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
         interface->wpa_s.conf->sae_pwe = 1;
 
         interface->wpa_s.current_ssid->pt = sae_derive_pt(interface->wpa_s.conf->sae_groups,
