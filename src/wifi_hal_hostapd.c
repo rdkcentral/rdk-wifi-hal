@@ -2989,6 +2989,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
 #endif // CONFIG_WIFI_EMULATOR
             interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
             interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
+	    wifi_hal_error_print("%s:%d: Radius identity is %s\n", __func__, __LINE__, interface->u.sta.wpa_eapol_config.identity);
             interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
             interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
             interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.radius.key);
