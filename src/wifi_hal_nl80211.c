@@ -7320,8 +7320,26 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 #ifdef CONFIG_WIFI_EMULATOR
     struct wpa_bss *bss;
     wifi_radio_info_t *radio;
+    uint32_t radio_index = 0;
+    const u8 *rsnxe;
+    u8 rsnxe_capa = 0;
+
     wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s\n", __func__, __LINE__,
         to_mac_str(backhaul->bssid, bssid_str), backhaul->freq, backhaul->ssid);
+    wifi_convert_freq_band_to_radio_index(backhaul->oper_freq_band,
+        (int *)&radio_index);
+    wifi_ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
+    wifi_ie_info_t *beacon_ie = &interface->beacon_elem_ie[radio_index];
+
+    wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s sta radio:%d for vap radio:%d\n",
+        __func__, __LINE__, to_mac_str(backhaul->bssid, bssid_str),
+        backhaul->freq, backhaul->ssid, radio_index, vap->radio_index);
+
+    if (interface->wpa_s.current_ssid == NULL) {
+        interface->wpa_s.current_ssid = get_wifi_wpa_current_ssid(interface);
+        wifi_hal_info_print("%s:%d: point to - wpa_s.current_ssid:[%p]\n",
+            __func__, __LINE__, interface->wpa_s.current_ssid);
+    }
 
     if ((interface->wpa_s.current_ssid == NULL) || (interface->wpa_s.p2pdev == NULL) ||
         (interface->wpa_s.conf == NULL)) {
@@ -7464,13 +7482,24 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     curr_bss->ssid_len = strlen(backhaul->ssid);
     memcpy(curr_bss->bssid, backhaul->bssid, ETH_ALEN);
     curr_bss->freq = backhaul->freq;
+<<<<<<< HEAD
     curr_bss->ie_len = interface->ie_len;
     curr_bss->beacon_ie_len = interface->beacon_ie_len;
     if (interface->ie != NULL) {
         memcpy(curr_bss + 1, interface->ie, interface->ie_len);
+=======
+    curr_bss->ie_len = bss_ie->buff_len;
+    curr_bss->beacon_ie_len = beacon_ie->buff_len;
+    if (bss_ie->buff != NULL) {
+        memcpy(curr_bss + 1, bss_ie->buff, bss_ie->buff_len);
+        rsnxe = get_ie(bss_ie->buff, bss_ie->buff_len, WLAN_EID_RSNX);
+        if (rsnxe && rsnxe[1] >= 1)
+            rsnxe_capa = rsnxe[2]; 
+>>>>>>> 876d01b... RDKB-60479: Check rsnxe for H2E requirement (#281)
     }
 
-    if (radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
+    if (rsnxe_capa & BIT(WLAN_RSNX_CAPAB_SAE_H2E) ||
+        radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
         interface->wpa_s.conf->sae_pwe = 1;
 
         interface->wpa_s.current_ssid->pt = sae_derive_pt(interface->wpa_s.conf->sae_groups,
