@@ -514,6 +514,8 @@ int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             snprintf(cmd, sizeof(cmd), "cfg80211tool %s ap_bridge 1", interface_name);
             wifi_hal_dbg_print("%s:%d Executing %s\n",__func__,__LINE__, cmd);
             system(cmd);
+            snprintf(cmd, sizeof(cmd), "cfg80211tool %s athnewind 1", interface_name);
+            system(cmd);
         }
     }
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);

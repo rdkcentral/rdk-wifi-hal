@@ -7997,7 +7997,18 @@ int nl80211_disconnect_sta(wifi_interface_info_t *interface)
     if ((msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_DISCONNECT)) == NULL) {
         return -1;
     }
-    ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
+#ifdef EAPOL_OVER_NL
+    if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_CONTROL_PORT_FRAME &&
+        interface->bss_nl_connect_event_fd >= 0) {
+        wifi_hal_error_print("%s:%d: disconnect command send via control port \n", __func__,
+            __LINE__);
+        ret = nl80211_set_rx_control_port_owner(msg, interface);
+    } else {
+#endif
+        ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
+#ifdef EAPOL_OVER_NL
+    }
+#endif
     if (ret == 0) {
         return 0;
     }
