@@ -120,13 +120,6 @@ librdk_wifihal_la_SOURCES += ../platform/raspberry-pi/platform_pi.c
 endif
 include_HEADERS = wifi_hal_rdk.h wifi_hal_rdk_framework.h ieee80211.h ../util_crypto/aes_siv.h
 
-if BANANA_PI_PORT
-librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/banana-pi -I${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk-wifi-libhostap/wpa_supplicant
-librdk_wifihal_la_SOURCES += ../platform/banana-pi/platform.c
-endif
-
-include_HEADERS = wifi_hal_rdk.h wifi_hal_rdk_framework.h ieee80211.h ../util_crypto/aes_siv.h 
-
 if ONE_WIFIBUILD
 include_HEADERS += wifi_hal_priv.h wifi_hal_wnm_rrm.h
 endif
