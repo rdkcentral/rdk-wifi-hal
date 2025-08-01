@@ -2569,8 +2569,32 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
             wpa_sm_set_param(sm, WPA_PARAM_PAIRWISE, WPA_CIPHER_NONE);
             wpa_sm_set_param(sm, WPA_PARAM_GROUP, WPA_CIPHER_NONE);
         } else {
-            sel = (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK |
-                WPA_KEY_MGMT_PSK_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+#if defined(CONFIG_WIFI_EMULATOR)
+            if (sec->mode != wifi_security_mode_none) {
+                if (sec->mode == wifi_security_mode_wpa2_personal) {
+                    sel = (WPA_KEY_MGMT_PSK | wpa_key_mgmt_11w) & data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_wpa2_enterprise) {
+                    sel = (WPA_KEY_MGMT_IEEE8021X | wpa_key_mgmt_11w) & data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_wpa3_transition) {
+                    sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w) &
+                        data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_wpa3_personal) {
+                    sel = (WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w) & data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_wpa3_enterprise) {
+                    sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
+                    sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE) & data.key_mgmt;
+                } else {
+                    wifi_hal_error_print("Unsupported security mode : 0x%x\n", sec->mode);
+                    return;
+                }
+            } else
+#endif
+            {
+                sel = (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK |
+                    WPA_KEY_MGMT_PSK_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+            }
+
             key_mgmt = pick_akm_suite(sel); 
 
             if (key_mgmt == -1) {
