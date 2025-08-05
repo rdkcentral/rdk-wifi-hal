@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include "wifi_hal_priv.h"
 #include "wifi_hal.h"
+#include "platform.h"
 
 #define NULL_CHAR '\0'
 #define NEW_LINE '\n'
@@ -48,6 +49,8 @@ typedef struct {
     mac_address_t *macs;
     unsigned int num;
 } sta_list_t;
+
+csi_info_map_t csi_radio_info[MAX_NUM_RADIOS];
 
 int wifi_nvram_defaultRead(char *in,char *out)
 {
@@ -750,3 +753,759 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
 }
 #endif /* CONFIG_IEEE80211BE */
 
+csi_info_map_t *get_csi_radio_info_map(uint8_t radio_index)
+{
+    if (radio_index >= MAX_NUM_RADIOS) {
+        wifi_hal_error_print("%s:%d: wrong radio index:%d\n", __func__, __LINE__, radio_index);
+        return NULL;
+    }
+
+    return &csi_radio_info[radio_index];
+}
+
+int add_link_elem_info(link_element_t **head, void *data, uint32_t data_len)
+{
+    link_element_t *temp = malloc(sizeof(link_element_t));
+    if (temp == NULL) {
+        wifi_hal_error_print("%s:%d: memory alloc is falied\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    temp->data = malloc(data_len);
+    if (temp->data == NULL) {
+        wifi_hal_error_print("%s:%d: memory alloc is falied for data:%d\n",
+            __func__, __LINE__, data_len);
+        return RETURN_ERR;
+    }
+
+    memcpy(temp->data, data, data_len);
+
+    temp->next = *head;
+    *head = temp;
+
+    return RETURN_OK;
+}
+
+void *pick_link_elem_info(link_element_t *head, void *data, uint32_t data_len)
+{
+    while(head) {
+        if (memcmp(head->data, data, data_len) == 0) {
+            return head->data;
+        }
+        head = head->next;
+    }
+
+    return NULL;
+}
+
+int del_link_elem_info(link_element_t **head, void *data, uint32_t data_len)
+{
+    link_element_t *cur = *head, *pre;
+
+    if (cur == NULL) {
+        return RETURN_ERR;
+    }
+
+    if (cur->data && (memcmp(cur->data, data, data_len) == 0)) {
+        free(cur->data);
+        *head = cur->next;
+    } else {
+        pre = cur;
+        cur = cur->next;
+        while(cur) {
+            if (cur->data && (memcmp(cur->data, data, data_len) == 0)) {
+                free(cur->data);
+                pre->next = cur->next;
+                free(cur);
+                return RETURN_OK;
+            }
+            pre = cur;
+            cur = cur->next;
+        }
+    }
+
+    return RETURN_ERR;
+}
+
+bool is_link_elem_data_present(link_element_t *head, void *data, uint32_t data_len)
+{
+    while(head) {
+        if (memcmp(head->data, data, data_len) == 0) {
+            return true;
+        }
+        head = head->next;
+    }
+
+    return false;
+}
+
+int set_csi_radio_info_map(uint8_t radio_index, bool status, uint8_t *sta_mac)
+{
+    csi_info_map_t *csi_map = get_csi_radio_info_map(radio_index);
+
+    if (csi_map == NULL) {
+        return RETURN_ERR;
+    }
+
+    csi_map->csi_active_radio = status;
+    if (status) {
+        return add_link_elem_info(&csi_map->sta_info, sta_mac, ETH_ALEN);
+    } else {
+        return del_link_elem_info(&csi_map->sta_info, sta_mac, ETH_ALEN);
+    }
+}
+
+int nl80211_csi_set(uint8_t radio_index, uint8_t mode, uint8_t cfg, uint8_t value1, uint32_t value2, uint8_t *mac)
+{
+    struct nl_msg *msg;
+    wifi_interface_info_t *interface = NULL;
+    wifi_radio_info_t *radio = NULL;
+    struct nlattr *nlattr_vendor = NULL;
+    struct nlattr *tb1 = NULL, *tb2 = NULL;
+    int ret = RETURN_ERR;
+
+    wifi_hal_dbg_print("%s:%d: set csi for radio index:%d mode:%d cfg:%d value1:%d value2:%d\n", __func__,
+        __LINE__, radio_index, mode, cfg, value1, value2);
+    radio = get_radio_by_rdk_index(radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get radio for index:%d\n", __func__, __LINE__,
+            radio_index);
+        return ret;
+    }
+
+    interface = get_primary_interface(radio);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get interface for radio index:%d\n", __func__,
+            __LINE__, radio_index);
+        return ret;
+    }
+
+    // Create the vendor-specific command message
+    msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, RDKB_OUI_MTK,
+        NL80211_MTK_VENDOR_SUB_CMD_CSI);
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
+        return ret;
+    }
+
+    nlattr_vendor = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA | NLA_F_NESTED);
+    if (!nlattr_vendor) {
+        wifi_hal_error_print("%s:%d: Failed to set nest vendor data\n", __func__, __LINE__);
+        goto fail;
+    }
+
+    tb1 = nla_nest_start(msg, NL_MTK_VENDOR_ATTR_CSI_CTRL_CFG | NLA_F_NESTED);
+    if (!tb1) {
+        wifi_hal_error_print("%s:%d: Failed to set nl attr csi cfg for radio_index:%d\n", __func__, __LINE__, radio_index);
+        goto fail;
+    }
+
+    if (nla_put_u8(msg, NL_MTK_VENDOR_ATTR_CSI_CTRL_CFG_MODE, mode) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set mode attr for radio_index:%d\n", __func__, __LINE__, radio_index);
+        goto fail;
+    }
+    if (nla_put_u8(msg, NL_MTK_VENDOR_ATTR_CSI_CTRL_CFG_TYPE, cfg) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set type attr for radio_index:%d\n", __func__, __LINE__, radio_index);
+        goto fail;
+    }
+    if (nla_put_u8(msg, NL_MTK_VENDOR_ATTR_CSI_CTRL_CFG_VAL1, value1) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set val1 attr for radio_index:%d\n", __func__, __LINE__, radio_index);
+        goto fail;
+    }
+    if (nla_put_u32(msg, NL_MTK_VENDOR_ATTR_CSI_CTRL_CFG_VAL2, value2) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set val2 attr for radio_index:%d\n", __func__, __LINE__, radio_index);
+        goto fail;
+    }
+
+    nla_nest_end(msg, tb1);
+
+    if (mac) {
+        tb2 = nla_nest_start(msg, NL_MTK_VENDOR_ATTR_CSI_CTRL_MAC_ADDR | NLA_F_NESTED);
+        if (!tb2) {
+            wifi_hal_error_print("%s:%d: Failed to set nl attr csi mac for radio_index:%d\n",
+                __func__, __LINE__, radio_index);
+            goto fail;
+        }
+
+        wifi_hal_info_print("%s:%d: csi set mac for radio_index:%d\n",
+                __func__, __LINE__, radio_index);
+        for (uint32_t i = 0; i < ETH_ALEN; i++) {
+            wifi_hal_info_print("%x\n", mac[i]);
+            nla_put_u8(msg, i, mac[i]);
+        }
+
+        nla_nest_end(msg, tb2);
+    }
+
+    if (nla_put_u8(msg, NL_MTK_VENDOR_ATTR_CSI_CTRL_BAND_IDX, radio_index) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set nl radio_index:%d\n", __func__, __LINE__, radio_index);
+        goto fail;
+    }
+
+    nla_nest_end(msg, nlattr_vendor);
+
+    ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
+    if (ret) {
+        wifi_hal_error_print("%s:%d:Failed to set csi. ret=%d (%s)",
+                        __func__, __LINE__, ret, strerror(-ret));
+    }
+
+    wifi_hal_info_print("%s:%d: set csi success for radio_index:%d\n", __func__, __LINE__, radio_index);
+    return ret;
+fail:
+    nlmsg_free(msg);
+    return ret;
+}
+
+#ifdef DEBUG_LOGS
+void wifi_hexdump(const char *title, const uint8_t *buf, size_t len)
+{
+    size_t i;
+    static FILE *fpg = NULL;
+
+    if ((access("/nvram/wifiHexDump", R_OK)) == 0) {
+        if (fpg == NULL) {
+            fpg = fopen("/tmp/wifiCsiHex", "a+");
+            if (fpg == NULL) {
+                return;
+            }
+        }
+
+        fprintf(fpg, "%s - hexdump(len=%lu):", title, (unsigned long) len);
+
+        if (buf == NULL) {
+            fprintf(fpg, " [NULL]");
+        } else {
+            for (i = 0; i < len; i++) {
+                fprintf(fpg, " %02x", buf[i]);
+                if ((i != 0) && (i % 16 == 0)) {
+                    fprintf(fpg, "\n");
+                }
+            }
+        }
+
+        fprintf(fpg, "\n");
+        fflush(fpg);
+    }
+}
+#endif
+
+static int mt76_csi_dump_cb(struct nl_msg *msg, void *arg)
+{
+    struct nlattr *tb[NL80211_ATTR_MAX + 1];
+    struct nlattr *tb1[NL_NUM_MTK_VENDOR_ATTRS_CSI_CTRL];
+    struct nlattr *tb2[NL_NUM_MTK_VENDOR_ATTRS_CSI_DATA];
+    struct nlattr *attr, *cur, *data;
+    int len = 0, rem, idx;
+    struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+    struct csi_resp_data *csi_resp = (struct csi_resp_data *)arg;
+    struct csi_data *csi_data_info = csi_resp->csi_buf;
+    mac_address_t sta_mac = { 0 };
+    mac_address_t null_mac = { 0 };
+    mac_address_t broadcast_mac;
+
+    memset(broadcast_mac, 0xff, ETH_ALEN);
+
+    struct nla_policy csi_ctrl_policy[NL_NUM_MTK_VENDOR_ATTRS_CSI_CTRL] = {
+        [NL_MTK_VENDOR_ATTR_CSI_CTRL_BAND_IDX] = { .type = NLA_U8 },
+        [NL_MTK_VENDOR_ATTR_CSI_CTRL_CFG] = { .type = NLA_NESTED },
+        [NL_MTK_VENDOR_ATTR_CSI_CTRL_CFG_MODE] = { .type = NLA_U8 },
+        [NL_MTK_VENDOR_ATTR_CSI_CTRL_CFG_TYPE] = { .type = NLA_U8 },
+        [NL_MTK_VENDOR_ATTR_CSI_CTRL_CFG_VAL1] = { .type = NLA_U8 },
+        [NL_MTK_VENDOR_ATTR_CSI_CTRL_CFG_VAL2] = { .type = NLA_U32 },
+        [NL_MTK_VENDOR_ATTR_CSI_CTRL_MAC_ADDR] = { .type = NLA_NESTED },
+        [NL_MTK_VENDOR_ATTR_CSI_CTRL_DUMP_NUM] = { .type = NLA_U16 },
+        [NL_MTK_VENDOR_ATTR_CSI_CTRL_DATA] = { .type = NLA_NESTED },
+    };
+
+    struct nla_policy csi_data_policy[NL_NUM_MTK_VENDOR_ATTRS_CSI_DATA] = {
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_VER] = { .type = NLA_U8 },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_TS] = { .type = NLA_U32 },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_RSSI] = { .type = NLA_U8 },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_SNR] = { .type = NLA_U8 },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_BW] = { .type = NLA_U8 },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_CH_IDX] = { .type = NLA_U8 },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_TA] = { .type = NLA_NESTED },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_NUM] = { .type = NLA_U32 },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_I] = { .type = NLA_NESTED },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_Q] = { .type = NLA_NESTED },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_INFO] = { .type = NLA_U32 },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_TX_ANT] = { .type = NLA_U8 },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_RX_ANT] = { .type = NLA_U8 },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_MODE] = { .type = NLA_U8 },
+        [NL_MTK_VENDOR_ATTR_CSI_DATA_CHAIN_INFO] = { .type = NLA_U32 },
+    };
+
+    if (csi_resp->usr_need_cnt <= csi_resp->buf_cnt) {
+        wifi_hal_error_print("%s:%d: csi data buffer overflow: max:%d cur:%d\n",
+            __func__, __LINE__, csi_resp->usr_need_cnt, csi_resp->buf_cnt);
+        return NL_SKIP;
+    }
+
+    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
+        genlmsg_attrlen(gnlh, 0), NULL);
+
+    attr = tb[NL80211_ATTR_VENDOR_DATA];
+    if (!attr) {
+        wifi_hal_error_print("%s:%d: csi data attr is NULL\n", __func__, __LINE__);
+        return NL_SKIP;
+    }
+
+    nla_parse_nested(tb1, NL_MTK_VENDOR_ATTR_CSI_CTRL_MAX, attr, csi_ctrl_policy);
+
+    if (!tb1[NL_MTK_VENDOR_ATTR_CSI_CTRL_DATA]) {
+        wifi_hal_error_print("%s:%d: csi data tb1 attr is NULL\n", __func__, __LINE__);
+        return NL_SKIP;
+    }
+
+    nla_parse_nested(tb2, NL_MTK_VENDOR_ATTR_CSI_DATA_MAX,
+        tb1[NL_MTK_VENDOR_ATTR_CSI_CTRL_DATA], csi_data_policy);
+
+    if (!(tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_VER] &&
+        tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_TS] &&
+        tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_RSSI] &&
+        tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_SNR] &&
+        tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_BW] &&
+        tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_CH_IDX] &&
+        tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_TA] &&
+        tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_I] &&
+        tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_Q] &&
+        tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_INFO] &&
+        tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_MODE] &&
+        tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_CHAIN_INFO])) {
+        wifi_hal_error_print("%s:%d:Attributes error for CSI data\n", __func__, __LINE__);
+        return NL_SKIP;
+    }
+
+    idx = 0;
+    nla_for_each_nested(cur, tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_TA], rem) {
+    if (idx < ETH_ALEN)
+        sta_mac[idx++] = nla_get_u8(cur);
+    }
+
+    if ((memcmp(sta_mac, null_mac, ETH_ALEN) == 0) ||
+        (memcmp(sta_mac, broadcast_mac, ETH_ALEN) == 0)) {
+        wifi_hal_dbg_print("%s:%d null/broadcast:" MACSTR " packet is skip\n",
+            __func__, __LINE__, MAC2STR(sta_mac));
+        return NL_SKIP;
+    }
+
+    csi_data_info += csi_resp->buf_cnt;
+
+    memcpy(csi_data_info->ta, sta_mac, ETH_ALEN);
+
+    csi_data_info->rssi = nla_get_u8(tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_RSSI]);
+    csi_data_info->snr = nla_get_u8(tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_SNR]);
+    csi_data_info->data_bw = nla_get_u8(tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_BW]);
+    csi_data_info->pri_ch_idx = nla_get_u8(tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_CH_IDX]);
+    csi_data_info->rx_mode = nla_get_u8(tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_MODE]);
+
+    csi_data_info->tx_idx = nla_get_u16(tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_TX_ANT]);
+    csi_data_info->rx_idx = nla_get_u16(tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_RX_ANT]);
+
+    csi_data_info->ext_info = nla_get_u32(tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_INFO]);
+    csi_data_info->chain_info = nla_get_u32(tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_CHAIN_INFO]);
+
+    csi_data_info->ts = nla_get_u32(tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_TS]);
+
+    csi_data_info->data_num = nla_get_u32(tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_NUM]);
+
+    idx = 0;
+    nla_for_each_nested(cur, tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_I], rem) {
+    if (idx < csi_data_info->data_num)
+        csi_data_info->data_i[idx++] = nla_get_u16(cur);
+    }
+
+    idx = 0;
+    nla_for_each_nested(cur, tb2[NL_MTK_VENDOR_ATTR_CSI_DATA_Q], rem) {
+    if (idx < csi_data_info->data_num)
+        csi_data_info->data_q[idx++] = nla_get_u16(cur);
+    }
+
+    csi_resp->buf_cnt++;
+
+    return NL_SKIP;
+}
+
+int nl80211_csi_dump(uint8_t radio_index, void *dump_buf)
+{
+    struct nl_msg *msg;
+    struct nlattr *data;
+    int ret = RETURN_ERR;
+    struct csi_resp_data *csi_resp;
+    uint16_t pkt_num, i;
+    wifi_interface_info_t *interface = NULL;
+    wifi_radio_info_t *radio = NULL;
+
+    if (dump_buf == NULL) {
+        wifi_hal_error_print("%s:%d: wrong nl csi resp buffer data\n", __func__, __LINE__);
+        return ret;
+    }
+
+    csi_resp = (csi_resp_data_t *)dump_buf;
+    pkt_num =  csi_resp->usr_need_cnt / 2;
+
+    if (pkt_num > MAX_CSI_DUMP_PKT_CNT) {
+        wifi_hal_error_print("%s:%d: wrong nl csi dump packet num:%d\n", __func__, __LINE__, pkt_num);
+        return ret;
+    }
+
+    wifi_hal_dbg_print("%s:%d: dump csi data for radio index:%d packet num:%d\n", __func__,
+        __LINE__, radio_index, pkt_num);
+    radio = get_radio_by_rdk_index(radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get radio for index:%d\n", __func__, __LINE__,
+            radio_index);
+        return ret;
+    }
+
+    interface = get_primary_interface(radio);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get interface for radio index:%d\n", __func__,
+            __LINE__, radio_index);
+        return ret;
+    }
+
+    for (i = 0; i < pkt_num / CSI_DUMP_PER_NUM; i++) {
+        // Create the vendor-specific command message
+        msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, NLM_F_DUMP, RDKB_OUI_MTK,
+            NL80211_MTK_VENDOR_SUB_CMD_CSI);
+        //msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, RDKB_OUI_MTK,
+            //NL80211_MTK_VENDOR_SUB_CMD_CSI);
+        if (msg == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
+            return ret;
+        }
+
+        data = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA | NLA_F_NESTED);
+        if (!data) {
+            goto fail;
+        }
+
+        if (nla_put_u16(msg, NL_MTK_VENDOR_ATTR_CSI_CTRL_DUMP_NUM, CSI_DUMP_PER_NUM) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set csi cnt attr for radio_index:%d\n",
+                __func__, __LINE__, radio_index);
+            goto fail;
+        }
+        if (nla_put_u8(msg, NL_MTK_VENDOR_ATTR_CSI_CTRL_BAND_IDX, radio_index) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set csi band attr for radio_index:%d\n",
+                __func__, __LINE__, radio_index);
+            goto fail;
+        }
+
+        nla_nest_end(msg, data);
+
+        if (nl80211_send_and_recv(msg, mt76_csi_dump_cb, dump_buf, NULL, NULL)) {
+            wifi_hal_error_print("%s:%d: Error getting sta info\n", __func__, __LINE__);
+            goto fail;
+        }
+        //usleep(10 * 1000);//10 ms
+    }
+
+    wifi_hal_info_print("%s:%d: csi data dump is success for radio_index:%d\n", __func__,
+        __LINE__, radio_index);
+    return RETURN_OK;
+fail:
+    nlmsg_free(msg);
+    return ret;
+}
+
+void wlan_wifi_parse_csi_matrix_data(csi_data_t *drv_csi_data, wifi_csi_data_t *hal_csi_data)
+{
+    uint32_t index;
+
+#ifdef DEBUG_LOGS
+    wifi_hexdump("rx_idex", &drv_csi_data->rx_idx, sizeof(drv_csi_data->rx_idx));
+    wifi_hexdump("higher data_i", drv_csi_data->data_i, drv_csi_data->data_num);
+    wifi_hexdump("lower data_q", drv_csi_data->data_q, drv_csi_data->data_num);
+#endif
+    for (index = 0; index < drv_csi_data->data_num; index++) {
+        hal_csi_data->csi_matrix[index][drv_csi_data->rx_idx][0] =
+            COMBINE_SHORTS_TO_UINT(drv_csi_data->data_i[index], drv_csi_data->data_q[index]);
+    }
+    hal_csi_data->frame_info.Nr = drv_csi_data->rx_idx;
+    hal_csi_data->frame_info.Nc = drv_csi_data->tx_idx;
+    hal_csi_data->frame_info.num_sc = drv_csi_data->data_num;
+}
+
+void append_second_stream_data(csi_data_t *drv_csi_data, wifi_csi_data_t *hal_csi_data)
+{
+    uint32_t index;
+
+#ifdef DEBUG_LOGS
+    wifi_hexdump("append rx_idex", &drv_csi_data->rx_idx, sizeof(drv_csi_data->rx_idx));
+    wifi_hexdump("append higher data_i", drv_csi_data->data_i, drv_csi_data->data_num);
+    wifi_hexdump("append lower data_q", drv_csi_data->data_q, drv_csi_data->data_num);
+#endif
+    for (index = 0; index < drv_csi_data->data_num; index++) {
+        hal_csi_data->csi_matrix[index][drv_csi_data->rx_idx][0] =
+            COMBINE_SHORTS_TO_UINT(drv_csi_data->data_i[index], drv_csi_data->data_q[index]);
+    }
+    if (drv_csi_data->rx_idx > hal_csi_data->frame_info.Nr) {
+        hal_csi_data->frame_info.Nr = drv_csi_data->rx_idx;
+    }
+    if (drv_csi_data->tx_idx > hal_csi_data->frame_info.Nc) {
+        hal_csi_data->frame_info.Nc = drv_csi_data->tx_idx;
+    }
+    hal_csi_data->frame_info.num_sc = drv_csi_data->data_num;
+}
+
+int convert_wifi_drv_to_hal_csi_data(csi_data_t *drv_csi_data, wifi_csi_data_t *hal_csi_data,
+    uint8_t *sta_mac)
+{
+    mac_addr_str_t sta_mac_str;
+
+    memcpy(sta_mac, drv_csi_data->ta, ETH_ALEN);
+
+    hal_csi_data->frame_info.time_stamp = drv_csi_data->ts;
+    hal_csi_data->frame_info.channel = drv_csi_data->chain_info;
+
+    wlan_wifi_parse_csi_matrix_data(drv_csi_data, hal_csi_data);
+
+    //Remaining params I will do it later
+#ifdef DEBUG_LOGS
+    wifi_hal_info_print("%s:%d CSI data for sta:%s time:%llu ch:%d\r\n",
+        __func__, __LINE__, to_mac_str(sta_mac, sta_mac_str),
+        hal_csi_data->frame_info.time_stamp, hal_csi_data->frame_info.channel);
+    wifi_hal_info_print("%s:%d CSI data size:%u time:%llu\r\n",
+        __func__, __LINE__, drv_csi_data->data_num, drv_csi_data->ts);
+#endif
+}
+
+void send_user_csi_data(csi_resp_data_t *csi_rsp_data)
+{
+    uint16_t index;
+    wifi_csi_data_t hal_csi = { 0 };
+    wifi_device_callbacks_t *callbacks;
+    mac_address_t sta_mac = { 0 };
+    uint8_t *mac;
+    csi_data_t pre_csi_data;
+    bool is_trigger_data_set = false;
+    mac_addr_str_t sta_mac_str;
+
+    memset(&pre_csi_data, 0, sizeof(pre_csi_data));
+    //memset(broadcast_mac, 0xff, ETH_ALEN);
+
+    callbacks = get_hal_device_callbacks();
+
+    for (index = 0; index < csi_rsp_data->buf_cnt; index++) {
+        mac = csi_rsp_data->csi_buf[index].ta;
+        csi_data_t *drv_csi_data = &csi_rsp_data->csi_buf[index];
+        wifi_hal_dbg_print("frame:[%s] rx_idx:%d tx_idx:%d sc:%d time:%llu, pre_time:%llu\r\n", to_mac_str(mac, sta_mac_str),
+            drv_csi_data->rx_idx, drv_csi_data->tx_idx, drv_csi_data->data_num, drv_csi_data->ts, pre_csi_data.ts);
+        //convert driver to Onewifi frame packet.
+        if (pre_csi_data.ts != csi_rsp_data->csi_buf[index].ts) {
+            if ((is_trigger_data_set == true) && callbacks && callbacks->csi_callback) {
+                callbacks->csi_callback(sta_mac, &hal_csi);
+                is_trigger_data_set = false;
+            } else if (is_trigger_data_set == false) {
+                wifi_hal_info_print("%s:%d is_trigger_data_set is false\n", __func__, __LINE__);
+            } else {
+                wifi_hal_info_print("%s:%d wifi csi callback is NULL\n", __func__, __LINE__);
+            }
+            convert_wifi_drv_to_hal_csi_data(&csi_rsp_data->csi_buf[index],
+                &hal_csi, (uint8_t *)sta_mac);
+            memcpy(&pre_csi_data, &csi_rsp_data->csi_buf[index], sizeof(csi_data_t));
+        } else {
+            append_second_stream_data(&csi_rsp_data->csi_buf[index], &hal_csi);
+            is_trigger_data_set = true;
+        }
+    }
+
+    if ((is_trigger_data_set == true) && callbacks && callbacks->csi_callback) {
+        callbacks->csi_callback(sta_mac, &hal_csi);
+        is_trigger_data_set = false;
+    } else if (is_trigger_data_set == false) {
+        wifi_hal_info_print("%s:%d is_trigger_data_set is false\n", __func__, __LINE__);
+    } else {
+        wifi_hal_info_print("%s:%d wifi csi callback is NULL\n", __func__, __LINE__);
+    }
+}
+
+unsigned long long int get_cur_ms_time(void)
+{
+    struct timeval tv_now = { 0 };
+    unsigned long long int milliseconds = 0;
+    gettimeofday(&tv_now, NULL);
+    milliseconds = (tv_now.tv_sec*1000LL + tv_now.tv_usec/1000);
+    return milliseconds;
+}
+
+uint32_t dump_total_csi_packets(unsigned long long int curr_time_ms,
+    unsigned long long int old_time_ms)
+{
+    uint32_t diff_time_ms;
+    uint32_t pkt_num = 0;
+
+    curr_time_ms = get_cur_ms_time();
+    diff_time_ms = curr_time_ms - old_time_ms;
+
+    pkt_num = (diff_time_ms / MAX_READ_CSI_PKT_INTERVAL) * 4;
+    if (pkt_num > MAX_CSI_DUMP_PKT_CNT) {
+        wifi_hal_info_print("%s:%d:wrong packet size:%d, time diff:%d, new time:%llu old:%llu\n",
+            __func__, __LINE__, pkt_num, diff_time_ms, curr_time_ms, old_time_ms);
+        pkt_num = MAX_CSI_DUMP_PKT_CNT;
+    }
+
+    return pkt_num;
+}
+
+void *csi_data_get_from_driver(void *data)
+{
+    uint32_t radio_index = 0, csi_rsp_buff_len = 0;
+    csi_resp_data_t csi_rsp_data = { 0 };
+    wifi_device_callbacks_t *callbacks;
+    csi_info_map_t *csi_map;
+    bool all_radio_disable = true;
+    unsigned long long int old_time_ms = get_cur_ms_time();
+    unsigned long long int curr_time_ms = get_cur_ms_time();
+    callbacks = get_hal_device_callbacks();
+
+    csi_rsp_data.usr_need_cnt = 70;
+    csi_rsp_data.buf_cnt = 0;
+
+    csi_rsp_buff_len = sizeof(struct csi_data) * csi_rsp_data.usr_need_cnt;
+
+    csi_rsp_data.csi_buf = (struct csi_data *)malloc(csi_rsp_buff_len);
+    if (csi_rsp_data.csi_buf == NULL) {
+        wifi_hal_error_print("%s:%d:Error in memory allocation\n", __func__, __LINE__);
+        return NULL;
+    }
+
+    while(1) {
+        all_radio_disable = true;
+        curr_time_ms = get_cur_ms_time();
+
+        for (radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+            csi_info_map_t *csi_map = get_csi_radio_info_map(radio_index);
+            if (csi_map && csi_map->csi_active_radio) {
+                memset(csi_rsp_data.csi_buf, 0, csi_rsp_buff_len);
+                csi_rsp_data.buf_cnt = 0;
+                nl80211_csi_dump(radio_index, &csi_rsp_data);
+                //Send data to OneWifi CB
+                send_user_csi_data(&csi_rsp_data);
+                usleep(100 * 1000);//100 ms
+                all_radio_disable = false;
+            }
+        }
+        if (all_radio_disable) {
+            sleep(1);//1s
+        } else {
+            usleep(MAX_CSI_DATA_POLLING_PERIOD_MS * 1000);//500 ms
+        }
+        old_time_ms = curr_time_ms;
+    }
+
+    free(csi_rsp_data.csi_buf);
+    return NULL;
+}
+
+void process_csi_data_thread_start(void)
+{
+    static bool is_thread_started = false;
+    if (is_thread_started == false) {
+        static pthread_t csi_data_thread_id;
+        pthread_attr_t attr;
+        pthread_attr_t *attrp = NULL;
+        ssize_t stack_size = 0x800000; /* 8MB */
+
+        attrp = &attr;
+        pthread_attr_init(&attr);
+        int ret = pthread_attr_setstacksize(&attr, stack_size);
+        if (ret != 0) {
+            wifi_hal_error_print("%s:%d pthread_attr_setstacksize failed for size:%d ret:%d\n",
+                __func__, __LINE__, stack_size, ret);
+        }
+        pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_DETACHED );
+        if (pthread_create(&csi_data_thread_id, attrp, csi_data_get_from_driver, NULL) != 0) {
+            if(attrp != NULL) {
+                pthread_attr_destroy(attrp);
+            }
+            wifi_hal_error_print( "CSI data process thread create error\n");
+            return RETURN_ERR;
+        }
+
+        wifi_hal_info_print("%s:%d CSI data process thread is started successfully\n", __func__, __LINE__);
+
+        if (attrp != NULL) {
+            pthread_attr_destroy(attrp);
+        }
+        is_thread_started = true;
+    } else {
+        wifi_hal_info_print("%s:%d CSI data process thread is already started\n", __func__, __LINE__);
+    }
+
+    return RETURN_OK;
+}
+
+INT wifi_enableCSIEngine(INT ap_index, mac_address_t sta_mac, BOOL enable)
+{
+    uint8_t radio_index = 0;
+    mac_addr_str_t sta_mac_str;
+    int ret;
+    mac_address_t empty_sta_mac = { 0 };
+
+    ret = get_rdk_radio_index_from_vap_index(ap_index);
+    if (ret != RETURN_ERR) {
+        radio_index = (uint8_t)ret;
+    }
+
+    if (enable) {
+        csi_param_cfg_t csi_cfg[] = {
+            //Active CSI
+            { 1, 0, 0, 0, 0 },
+            //Configure CSI
+            // { 2, 8, 1, 1, 1 },
+            { 2, 9, 0, 1, 1 },
+            { 2, 9, 2, 100, 0 }
+	};
+        uint8_t *p_str_mac = NULL;
+        csi_param_cfg_t *ptr;
+
+        for (uint32_t index = 0; index < ARRAY_SIZE(csi_cfg); index++) {
+            if (csi_cfg[index].is_mac_addr_used) {
+                p_str_mac = (uint8_t *)sta_mac;
+	    } else {
+                p_str_mac = (uint8_t *)empty_sta_mac;
+                //p_str_mac = NULL;
+            }
+            ptr = &csi_cfg[index];
+            if (nl80211_csi_set(radio_index, ptr->mode, ptr->cfg,
+                ptr->param_value1, ptr->param_value2, p_str_mac) != RETURN_OK) {
+                wifi_hal_error_print("%s:%d CSI set nl command is"
+                    " failed\r\n", __func__, __LINE__);
+                return RETURN_ERR;
+            }
+        }
+        set_csi_radio_info_map(radio_index, true, sta_mac);
+        wifi_hal_info_print( "%s:%d Radio:%d CSI is actived for sta:%s\r\n",
+            __func__, __LINE__, radio_index, to_mac_str(sta_mac, sta_mac_str));
+    } else {
+        //Disable CSI
+        if (nl80211_csi_set(radio_index, 0, 0, 0, 0, (uint8_t *)empty_sta_mac) != RETURN_OK) {
+            wifi_hal_error_print("%s:%d CSI set nl command is failed\r\n", __func__, __LINE__);
+            return RETURN_ERR;
+        }
+        if (nl80211_csi_set(radio_index, 2, 9, 0, 0, (uint8_t *)sta_mac) != RETURN_OK) {
+            wifi_hal_error_print("%s:%d CSI set nl command is failed\r\n", __func__, __LINE__);
+            return RETURN_ERR;
+        }
+        set_csi_radio_info_map(radio_index, false, sta_mac);
+        wifi_hal_info_print("%s:%d Radio:%d CSI is disabled for sta:%s\r\n",
+            __func__, __LINE__, radio_index, to_mac_str(sta_mac, sta_mac_str));
+    }
+    return RETURN_OK;
+}
+
+void wifi_csi_callback_register(wifi_csi_callback callback_proc)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+    if (callbacks == NULL) {
+        return;
+    }
+
+    callbacks->csi_callback = callback_proc;
+    process_csi_data_thread_start();
+}
