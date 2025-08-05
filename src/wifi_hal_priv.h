@@ -496,6 +496,7 @@ typedef struct wifi_interface_info_t {
     /* Wi-Fi band steering sta_list_map */
     hash_map_t  *bm_sta_map;
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#error 1
     wifi_ie_info_t bss_elem_ie[MAX_NUM_RADIOS];
     wifi_ie_info_t beacon_elem_ie[MAX_NUM_RADIOS];
     struct wpa_supplicant wpa_s;
