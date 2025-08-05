@@ -923,6 +923,7 @@ int     wifi_hal_emu_set_radio_diag_stats(unsigned int radio_index, bool emu_sta
 int     wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state, wifi_neighbor_ap2_t *neighbor_stats, unsigned int count);
 #endif //CONFIG_WIFI_EMULATOR
 #endif
+int     nl80211_register_mgmt_frames(wifi_interface_info_t *interface);
 int     nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         unsigned int num_freq, unsigned int  *freq_list, unsigned int dwell_time,
         unsigned int num_ssid,  ssid_t *ssid_list);

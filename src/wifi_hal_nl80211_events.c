@@ -870,6 +870,9 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     int l_channel_width, hostap_channel_width, op_class;
     enum nl80211_radar_event event_type = 0;
     wifi_radio_info_t *radio;
+#if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
+    wifi_interface_info_t *sta_interface;
+#endif
 
     wifi_hal_dbg_print("%s:%d: wifi_chan_event_type: %d interface: %s\n", __func__, __LINE__,
         wifi_chan_event_type, interface->name);
@@ -1002,6 +1005,15 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         cf1, cf2, op_class, ch_type, event_type);
 
     if (wifi_chan_event_type == WIFI_EVENT_CHANNELS_CHANGED) {
+#if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
+        hash_map_foreach(radio->interface_map, sta_interface) {
+            if (sta_interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+                wifi_hal_dbg_print("%s:%d: register mgmt frames for STA interface\n", __func__,
+                    __LINE__);
+                nl80211_register_mgmt_frames(sta_interface);
+            }
+        }
+#endif // EASY_MESH_NODE && _PLATFORM_BANANAPI_R4_
         radio_param->channel = channel;
         radio_param->channelWidth = l_channel_width;
         radio_param->operatingClass = op_class;
