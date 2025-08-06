@@ -154,10 +154,10 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
      * returned HAL capabilities but this routine tweaks HAL caps based on platform and
      * it's requirements.
      */
-#if defined(_SKY_HUB_COMMON_PRODUCT_REQ_) && !defined(_SR213_PRODUCT_REQ_) && !defined(_SCER11BEL_PRODUCT_REQ_)
+#if defined(_SKY_HUB_COMMON_PRODUCT_REQ_) && !defined(_SR213_PRODUCT_REQ_) && !defined(_SCER11BEL_PRODUCT_REQ_) && !defined(_SCXF11BFL_PRODUCT_REQ_)
     /* For SKY platforms, set as per _SKY macro defined */
     hal->wifi_prop.BssMaxStaAllow = BSS_MAX_NUM_STA_SKY;
-#elif defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT)
+#elif defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(SCXF10_PORT)
     /* For TCHXB8 platforms, set as per _XB8 macro defined */
     hal->wifi_prop.BssMaxStaAllow = BSS_MAX_NUM_STA_XB8;
 #else
