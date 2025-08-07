@@ -3025,7 +3025,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
 
             interface->u.sta.wpa_eapol_config.eap_methods = &interface->u.sta.wpa_eapol_method;
             interface->wpa_s.current_ssid->eap.eap_methods = &interface->u.sta.wpa_eapol_method;
-            eapol_sm_notify_config(interface->u.sta.wpa_sm->eapol, &interface->u.sta.wpa_eapol_config, NULL);
+            eapol_sm_notify_config(interface->u.sta.wpa_sm->eapol, &interface->wpa_s.current_ssid->eap, NULL);
         }
     }
 }
