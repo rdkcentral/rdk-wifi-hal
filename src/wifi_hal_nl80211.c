@@ -14109,8 +14109,10 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
 
-    if(! ( radio->oper_param.channel >= dfs_start ) && ( radio->oper_param.channel <= dfs_end ) ) {
-        wifi_hal_info_print("%s:%d Radio is operating in a non-dfs Channel \n", __FUNCTION__, __LINE__);
+    if (((radio->oper_param.channel < dfs_start) || (radio->oper_param.channel > dfs_end)) &&
+        (bandwidth != WIFI_CHANNELBANDWIDTH_160MHZ)) {
+        wifi_hal_info_print("%s:%d Radio is operating in a non-dfs Channel \n", __FUNCTION__,
+            __LINE__);
         return 0;
     }
 
