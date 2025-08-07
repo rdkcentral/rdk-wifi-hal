@@ -64,9 +64,9 @@
 #include "wifi_hal_wnm_rrm.h"
 #include "collection.h"
 #include "driver.h"
+#include "wpa_supplicant_i.h"
 
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
-#include "wpa_supplicant_i.h"
 #include "bss.h"
 #include "sme.h"
 #endif
