@@ -3021,7 +3021,7 @@ static int get_radio_diag_handler(struct nl_msg *msg, void *arg)
     radioTrafficStats->radio_StatisticsStartTime = nla_get_u64(
         tb_radio_info[RDK_VENDOR_ATTR_RADIO_INFO_STATS_START_TIME]);
 
-    wifi_hal_stats_dbg_print(
+    wifi_hal_dbg_print(
         "%s:%d radio_BytesSent %lu radio_BytesReceived %lu radio_PacketsSent %lu "
         "radio_PacketsReceived %lu radio_ErrorsSent %lu radio_ErrorsReceived %lu "
         "radio_DiscardPacketsSent %lu radio_DiscardPacketsReceived %lu radio_PLCPErrorCount %lu "
