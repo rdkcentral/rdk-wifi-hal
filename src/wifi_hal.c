@@ -829,6 +829,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                     interface->vap_initialized, interface->bss_started,
                     interface->vap_info.u.bss_info.enabled, radio->configured,
                     radio->oper_param.enable);
+                nl80211_set_amsdu_tid(interface, radio->oper_param.amsduTid);
                 if (radio->oper_param.enable && interface->vap_info.u.bss_info.enabled) {
                     if (nl80211_interface_enable(interface->name, true) != 0) {
                         ret = nl80211_retry_interface_enable(interface, true);
