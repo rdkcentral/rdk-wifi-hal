@@ -3860,6 +3860,8 @@ static struct hostapd_mld MLD_UNIT[] = {
 #endif /* CONFIG_NO_MLD_ONLY_PRIVATE */
 };
 
+static struct hostapd_mld g_slo_mld[MAX_VAP] = {0};
+
 extern void hostapd_bss_link_deinit(struct hostapd_data *hapd);
 
 /*
@@ -4092,28 +4094,24 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     struct hostapd_bss_config *conf;
     struct hostapd_data *hapd;
     wifi_vap_info_t *vap;
+    struct hostapd_mld *new_mld = NULL;
+    u8 mld_ap;
 
     conf = &interface->u.ap.conf;
     hapd = &interface->u.ap.hapd;
     vap = &interface->vap_info;
 
-    hostapd_bss_link_deinit(hapd);
-
-    if (get_mld_unit(conf) == (unsigned char)-1) {
-        free(hapd->mld);
-    }
-
     set_mld_unit(conf, -1);
     conf->okc = 0;
-    hapd->mld = NULL;
 
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
-    conf->mld_ap = (!conf->disable_11be && (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
+    mld_ap = (!conf->disable_11be && (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
 
-    if (conf->mld_ap) {
+    if (mld_ap) {
         unsigned char is_mlo_ap;
         unsigned char is_first_bss;
 
+        conf->mld_ap = mld_ap;
         is_mlo_ap = platform_iface_is_mlo_ap(conf->iface);
 
         /*
@@ -4122,7 +4120,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
          */
         if (is_mlo_ap) {
             set_mld_unit(conf, platform_get_mld_unit_for_ap(vap->vap_index));
-            hapd->mld = &MLD_UNIT[get_mld_unit(conf)];
+            new_mld = &MLD_UNIT[get_mld_unit(conf)];
 
             /*
              * NOTE: For MLO, we need to enable okc=1, or disable_pmksa_caching=1, otherwise there
@@ -4130,13 +4128,20 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
              */
             conf->okc = 1;
         } else {
-            hapd->mld = malloc(sizeof(*hapd->mld));
-            os_memset(hapd->mld, 0, sizeof(*hapd->mld));
-            dl_list_init(&hapd->mld->links);
-            snprintf(hapd->mld->name, sizeof(hapd->mld->name), "slo_mld_id_%u", vap->vap_index);
+            if (g_slo_mld[vap->vap_index].name[0] == '\0') {
+                /* Not initialized yet - Initializing it during the first usage */
+                dl_list_init(&g_slo_mld[vap->vap_index].links);
+                snprintf(g_slo_mld[vap->vap_index].name, sizeof(g_slo_mld[vap->vap_index].name),
+                    "slo_mld_id_%u", vap->vap_index);
+            }
+            new_mld = &g_slo_mld[vap->vap_index];
         }
-
-        hostapd_mld_add_link(hapd);
+        if (hapd->mld != new_mld) {
+            if (hapd->mld)
+                hostapd_bss_link_deinit(hapd);
+            hapd->mld = new_mld;
+            hostapd_mld_add_link(hapd);
+        }
 
         is_first_bss = hostapd_mld_is_first_bss(hapd);
 
@@ -4147,6 +4152,12 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         wifi_hal_dbg_print("%s:%d: Setup of first (%d) link (%u) BSS of %s %s for VAP %s\n",
             __func__, __LINE__, is_first_bss, hapd->mld_link_id, (is_mlo_ap ? "MLO" : "SLO"),
             hapd->mld->name, vap->vap_name);
+    } else {
+        if (hapd->mld) {
+            hostapd_bss_link_deinit(hapd);
+            hapd->mld = NULL;
+        }
+        conf->mld_ap = mld_ap;
     }
 
     wifi_hal_info_print("%s:%d: iface:%s - mld_ap:%d mld_unit:%u mld_link_id:%u\n", __func__,
