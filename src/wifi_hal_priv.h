@@ -1131,6 +1131,7 @@ bool get_ifname_from_mac(const mac_address_t *mac, char *ifname);
 int wifi_hal_configure_sta_4addr_to_bridge(wifi_interface_info_t *interface, int add);
 int wifi_convert_freq_band_to_radio_index(int band, int *radio_index);
 struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface);
+int get_rdk_radio_index_from_vap_index(unsigned int vap_index);
 
 #ifdef CONFIG_IEEE80211BE
 int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,

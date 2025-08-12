@@ -1753,6 +1753,18 @@ wifi_radio_info_t *get_radio_by_rdk_index(wifi_radio_index_t index)
     return NULL;
 }
 
+int get_rdk_radio_index_from_vap_index(unsigned int vap_index)
+{
+    const wifi_interface_name_idex_map_t *map;
+    unsigned int i;
+    for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
+        map = &interface_index_map[i];
+        if (interface_index_map[i].index == vap_index) {
+            return map->rdk_radio_index;
+        }
+    }
+    return RETURN_ERR;
+}
 
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index)
 {
