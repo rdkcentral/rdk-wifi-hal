@@ -109,7 +109,7 @@ int notify_assoc_data(wifi_interface_info_t *interface, struct nlattr **tb,
     (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
         defined(TCHCBRV2_PORT) || defined(SCXER10_PORT))
         if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
-            phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]);
+            phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]) *10;
         }
         callbacks->mgmt_frame_rx_callback(vap->vap_index, sta_mac, (unsigned char *)mgmt, frame_len,
             mgmt_type, dir, sig_dbm, phy_rate);
