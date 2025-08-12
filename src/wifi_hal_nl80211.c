@@ -14486,11 +14486,6 @@ int wifi_drv_set_supp_port(void *priv, int authorized)
     if (authorized)
         upd.set = BIT(NL80211_STA_FLAG_AUTHORIZED);
 
-    wifi_hal_dbg_print("%s:%d: Setting supp port for backhaul BSSID: %02x:%02x:%02x:%02x:%02x:%02x Authorized is %d\n",
-        __func__, __LINE__,
-        backhaul->bssid[0], backhaul->bssid[1], backhaul->bssid[2],
-        backhaul->bssid[3], backhaul->bssid[4], backhaul->bssid[5], authorized);
-
     if (!(msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_STATION)) ||
         nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, backhaul->bssid) || nla_put(msg, NL80211_ATTR_STA_FLAGS2, sizeof(upd), &upd))
     {

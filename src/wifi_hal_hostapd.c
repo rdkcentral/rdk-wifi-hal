@@ -3038,7 +3038,6 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             interface->wpa_s.current_ssid->eap.fragment_size = 400;
             interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
             interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
-	    wifi_hal_error_print("%s:%d: Radius identity is %s, sec->u.radius.identity is %s\n", __func__, __LINE__, (char *)interface->u.sta.wpa_eapol_config.identity, (char *)sec->u.radius.identity);
 
 	    interface->wpa_s.current_ssid->eap.identity = (unsigned char *)&sec->u.radius.identity;
             interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
