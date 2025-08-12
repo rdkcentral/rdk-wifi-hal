@@ -4206,6 +4206,51 @@ static struct hostapd_mld *get_slo_mld(wifi_vap_index_t vap_index, char *mac)
     return &g_slo_mld[vap_index];
 }
 
+/**
+ * @brief Add MLO link and reorganize links to be main link (link_id 0) first_bss
+ *
+ * @param hapd - pointer to hostapd per-BSS data structure
+ * @return int - RETURN_OK upon successful, RETURN_ERR upon error
+ */
+static void mlo_add_link(struct hostapd_data *hapd)
+{
+    unsigned char is_first_bss;
+
+    hostapd_mld_add_link(hapd);
+
+    is_first_bss = hostapd_mld_is_first_bss(hapd);
+    wifi_hal_info_print("%s:%d: Adding mld link: %s link_id:%d, is_first_bss %d\n",
+        __func__, __LINE__, hapd->mld->name, hapd->mld_link_id, is_first_bss);
+    if (hapd->mld_link_id == 0 && !is_first_bss) {
+        int i;
+        int cache_size = 0;
+        struct hostapd_data *hapd_cache[MAX_NUM_RADIOS] = { 0 };
+
+        wifi_hal_info_print("%s:%d: hapd->mld_link_id(0) is not first, Going to reorganize links\n",
+            __func__, __LINE__);
+
+        for (i = 0; i < MAX_NUM_RADIOS; i++) {
+            /* loop until current hapd will be first bss */
+            if (!hostapd_mld_is_first_bss(hapd)) {
+                hapd_cache[i] = hostapd_mld_get_first_bss(hapd);
+                hostapd_mld_remove_link(hapd_cache[i]);
+                cache_size++;
+                wifi_hal_dbg_print("Removed link mld_link_id %d - i: %d\n",
+                    hapd_cache[i]->mld_link_id, i);
+            } else {
+                break;
+            }
+        }
+        if (cache_size > 0) {
+            for (int i = 0; i < cache_size; i++) {
+                hostapd_mld_add_link(hapd_cache[i]);
+                wifi_hal_dbg_print("Link added back: mld_link_id %d idx i:%d \n",
+                    hapd_cache[i]->mld_link_id, i);
+            }
+        }
+    }
+}
+
 int update_hostap_mlo(wifi_interface_info_t *interface)
 {
     struct hostapd_bss_config *conf;
@@ -4255,7 +4300,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
             if (hapd->mld)
                 hostapd_bss_link_deinit(hapd);
             hapd->mld = new_mld;
-            hostapd_mld_add_link(hapd);
+            mlo_add_link(hapd);
         }
 
         wifi_hal_dbg_print("%s:%d: Setup of first (%d) link (%u) BSS of %s %s for VAP %s\n",
