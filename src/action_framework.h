@@ -96,7 +96,7 @@ typedef struct {
     struct rtnl_kvr_handle  rtnl_kvr;
     wifi_newApAssociatedDevice_callback assoc_cb[MAX_REGISTERED_CB_NUM];
     unsigned int    num_assoc_cbs;
-    wifi_apDisassociatedDevice_callback disassoc_cb[MAX_REGISTERED_CB_NUM];
+    wifi_device_disassociated_callback disassoc_cb[MAX_REGISTERED_CB_NUM];
     unsigned int    num_disassoc_cbs;
     queue_t             *queue;
     wifi_RMBeaconReport_callback          bcnrpt_callback[MAX_AP_INDEX];
@@ -113,7 +113,7 @@ typedef struct {
     pthread_mutex_t     lock;
     pthread_t notification_thread_id;
     bool            notification_framework_initialized;
-    wifi_apDeAuthEvent_callback               apDeAuthEvent_cb[MAX_REGISTERED_CB_NUM];
+    wifi_device_deauthenticated_callback      apDeAuthEvent_cb[MAX_REGISTERED_CB_NUM];
     unsigned int    num_apDeAuthEvent_cbs;
     wifi_receivedMgmtFrame_callback     mgmt_frame_rx_callback;
        wifi_received8021xFrame_callback        eapol_frame_rx_callback;
