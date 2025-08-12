@@ -3039,7 +3039,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
             interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
 
-	    interface->wpa_s.current_ssid->eap.identity = (unsigned char *)&sec->u.radius.identity;
+            interface->wpa_s.current_ssid->eap.identity = (unsigned char *)&sec->u.radius.identity;
             interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
             interface->wpa_s.current_ssid->eap.identity_len = strlen(sec->u.radius.identity);
             interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
