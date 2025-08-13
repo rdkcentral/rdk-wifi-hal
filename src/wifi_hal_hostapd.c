@@ -1112,9 +1112,6 @@ int update_hostap_bss(wifi_interface_info_t *interface)
 
 #ifdef CONFIG_IEEE80211BE
     conf->disable_11be = !radio->iconf.ieee80211be;
-#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
-    conf->mld_ap = vap->u.bss_info.mld_info.common_info.mld_enable;
-#endif
 #endif /* CONFIG_IEEE80211BE */
 
     strcpy(conf->iface, interface->name);
@@ -3011,13 +3008,47 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             interface->u.sta.wpa_eapol_config.fragment_size = 400;
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
 #endif // CONFIG_WIFI_EMULATOR
+            if (interface->wpa_s.current_ssid->eap.openssl_ciphers == NULL) {
+                interface->wpa_s.current_ssid->eap.openssl_ciphers = (char *)malloc(MAX_STR_LEN);
+                if (interface->wpa_s.current_ssid->eap.openssl_ciphers == NULL) {
+                    wifi_hal_error_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
+                    return;
+                }
+            }
+            memset(interface->wpa_s.current_ssid->eap.openssl_ciphers, 0, MAX_STR_LEN);
+            strncpy(interface->wpa_s.current_ssid->eap.openssl_ciphers, SUPPORTED_CIPHERS,
+                MAX_STR_LEN - 1);
+            if (interface->wpa_s.current_ssid->eap.phase2 == NULL) {
+                interface->wpa_s.current_ssid->eap.phase2 = (char *)malloc(MAX_STR_LEN);
+                if (interface->wpa_s.current_ssid->eap.phase2 == NULL) {
+                    wifi_hal_error_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
+                    return;
+                }
+            }
+            memset(interface->wpa_s.current_ssid->eap.phase2, 0, MAX_STR_LEN);
+            switch (sec->u.radius.phase2) {
+            case WIFI_EAP_PHASE2_PAP:
+                strncpy(interface->wpa_s.current_ssid->eap.phase2, "auth=PAP", MAX_STR_LEN - 1);
+                break;
+            default:
+                // using PAP as default value.
+                strncpy(interface->wpa_s.current_ssid->eap.phase2, "auth=PAP", MAX_STR_LEN - 1);
+                break;
+            }
+            interface->wpa_s.current_ssid->eap.fragment_size = 400;
             interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
             interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
+
+            interface->wpa_s.current_ssid->eap.identity = (unsigned char *)&sec->u.radius.identity;
             interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
+            interface->wpa_s.current_ssid->eap.identity_len = strlen(sec->u.radius.identity);
             interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
+            interface->wpa_s.current_ssid->eap.password = (unsigned char *)&sec->u.radius.key;
             interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.radius.key);
+            interface->wpa_s.current_ssid->eap.password_len = strlen(sec->u.radius.key);
 
             interface->u.sta.wpa_eapol_config.eap_methods = &interface->u.sta.wpa_eapol_method;
+            interface->wpa_s.current_ssid->eap.eap_methods = &interface->u.sta.wpa_eapol_method;
             eapol_sm_notify_config(interface->u.sta.wpa_sm->eapol, &interface->u.sta.wpa_eapol_config, NULL);
         }
     }
