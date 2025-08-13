@@ -342,6 +342,12 @@ int update_hostap_data(wifi_interface_info_t *interface)
 
     vap = &interface->vap_info;
 
+    if (vap->vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(vap->vap_index)) {
+        wifi_hal_error_print("%s:%d: Not an AP based VAP. Returning error\n", __func__,
+            __LINE__);
+        return RETURN_ERR;
+    }
+
     radio = get_radio_by_rdk_index(vap->radio_index);
     iconf = &radio->iconf;
 
@@ -1587,7 +1593,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         interface->u.ap.iface_initialized = true;
     }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     iface->drv_flags = radio->driver_data.capa.flags;
 #if HOSTAPD_VERSION >= 210
     iface->drv_flags2 = radio->driver_data.capa.flags2;
@@ -1607,7 +1613,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     hostapd_get_mld_capa(iface);
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
 
 #if HOSTAPD_VERSION >= 210
     iface->mbssid_max_interfaces = radio->driver_data.capa.mbssid_max_interfaces;
@@ -2189,9 +2195,11 @@ static void wpa_sm_sta_set_state(void *ctx, enum wpa_states state)
 
     if (state == WPA_COMPLETED) {
         nl80211_get_channel_bw_conn(interface);
+        wifi_hal_configure_sta_4addr_to_bridge(interface, 1);
     } else if (state == WPA_DISCONNECTED) {
         callbacks = get_hal_device_callbacks();
         
+        wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
         if (callbacks->sta_conn_status_callback) {
             memcpy(&bss, &interface->u.sta.backhaul, sizeof(wifi_bss_info_t));
 
@@ -2605,8 +2613,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, key_mgmt);
         }
 
-        wifi_hal_dbg_print("update_wpa_sm_params%x %x %x\n", data.group_cipher, data.pairwise_cipher,
-            key_mgmt);
+        wifi_hal_dbg_print("%s:%d:%x %x %x\n", __func__, __LINE__, data.group_cipher,
+            data.pairwise_cipher, key_mgmt);
     } else {
         if (sec->mode == wifi_security_mode_none) {
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, WPA_KEY_MGMT_NONE);
@@ -2889,7 +2897,7 @@ int start_bss(wifi_interface_info_t *interface)
     //my_print_hex_dump(conf->ssid.ssid_len, conf->ssid.ssid);
 #if HOSTAPD_VERSION >= 211 //2.11
     ret = hostapd_setup_bss(hapd, 1, true);
-#elif defined(VNTXER5_PORT) && (HOSTAPD_VERSION == 210) //2.10
+#elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
     ret = hostapd_setup_bss(hapd, 1, true);
 #else
     ret = hostapd_setup_bss(hapd, 1);
