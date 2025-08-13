@@ -64,9 +64,9 @@
 #include "wifi_hal_wnm_rrm.h"
 #include "collection.h"
 #include "driver.h"
-#include "wpa_supplicant_i.h"
 
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+#include "wpa_supplicant_i.h"
 #include "bss.h"
 #include "sme.h"
 #endif
@@ -495,10 +495,10 @@ typedef struct wifi_interface_info_t {
 #endif
     /* Wi-Fi band steering sta_list_map */
     hash_map_t  *bm_sta_map;
-    struct wpa_supplicant wpa_s;
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wifi_ie_info_t bss_elem_ie[MAX_NUM_RADIOS];
     wifi_ie_info_t beacon_elem_ie[MAX_NUM_RADIOS];
+    struct wpa_supplicant wpa_s;
     struct wpa_ssid current_ssid_info;
 #endif
 } wifi_interface_info_t;
