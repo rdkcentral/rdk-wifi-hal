@@ -682,7 +682,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 
         case wifi_security_mode_wpa_wpa2_personal:
         case wifi_security_mode_wpa_wpa2_enterprise:
-            conf->wpa = 1;
+            conf->wpa = 3;
             break;
 
         case wifi_security_mode_none:
