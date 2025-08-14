@@ -2079,12 +2079,8 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         station = ap_get_sta(&interface->u.ap.hapd, sta);
         if (station) {
-            wifi_hal_dbg_print("station disassocreason in disassoc frame is %d\n", station->disconnect_reason_code);
-#if !defined(PLATFORM_LINUX)
-            if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
-                reason = station->disconnect_reason_code;
-            }
-#endif
+            wifi_hal_dbg_print("station disassocreason in disassoc frame is %d\n",
+                station->disconnect_reason_code);
             ap_free_sta(&interface->u.ap.hapd, station);
         } else {
             wifi_hal_dbg_print("%s:%d: interface:%s sta %s not found\n", __func__, __LINE__,
@@ -2093,15 +2089,23 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
         for (int i = 0; i < callbacks->num_disassoc_cbs; i++) {
+            bool frame_too_short = (len < IEEE80211_HDRLEN + sizeof(mgmt->u.disassoc));
+            if (frame_too_short) {
+                wifi_hal_dbg_print("handle_disassoc - too short payload (len=%lu)\n",
+                    (unsigned long)len);
+                reasoncode = reason;
+            }
+#if !defined(PLATFORM_LINUX)
+            else if (station && station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
+                reasoncode = station->disconnect_reason_code;
+            }
+#endif
+            else {
+                reasoncode = le_to_host16(mgmt->u.disassoc.reason_code);
+            }
             if (callbacks->disassoc_cb[i] != NULL) {
-                if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.disassoc)) {
-                    wifi_hal_dbg_print("handle_disassoc - too short payload (len=%lu)",(unsigned long) len);
-                    reasoncode = reason;
-                }
-                else {
-                    reasoncode = le_to_host16(mgmt->u.disassoc.reason_code);
-                }
-                callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(mgmt->sa, sta_mac_str), to_mac_str(mgmt->da, frame_da_str), mgmt_type, reasoncode);
+                callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(mgmt->sa, sta_mac_str),
+                    to_mac_str(mgmt->da, frame_da_str), mgmt_type, reasoncode);
             }
         }
         if (callbacks->steering_event_callback != 0) {
@@ -2147,27 +2151,32 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         station = ap_get_sta(&interface->u.ap.hapd, sta);
         if (station) {
-#if !defined(PLATFORM_LINUX)
-            if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
-                reason = station->disconnect_reason_code;
-            }
-#endif
+            wifi_hal_dbg_print("station deauthreason in deauth frame is %d\n",
+                station->disconnect_reason_code);
             ap_free_sta(&interface->u.ap.hapd, station);
         }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
         if (station) {
             for (int i = 0; i < callbacks->num_disassoc_cbs; i++) {
+                bool frame_too_short = (len < IEEE80211_HDRLEN + sizeof(mgmt->u.disassoc));
+                if (frame_too_short) {
+                    wifi_hal_dbg_print("handle_disassoc - too short payload (len=%lu)\n",
+                        (unsigned long)len);
+                    reasoncode = reason;
+                }
+#if !defined(PLATFORM_LINUX)
+                else if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
+                    reasoncode = station->disconnect_reason_code;
+                }
+#endif
+                else {
+                    reasoncode = le_to_host16(mgmt->u.disassoc.reason_code);
+                }
                 if (callbacks->disassoc_cb[i] != NULL) {
-                    if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.disassoc)) {
-                        wifi_hal_dbg_print("handle_disassoc - too short payload (len=%lu)",(unsigned long) len);
-                        reasoncode = reason;
-                    }
-                    else {
-                        reasoncode = le_to_host16(mgmt->u.disassoc.reason_code);
-                    }
-		    mgmt_type = WIFI_MGMT_FRAME_TYPE_DISASSOC;
-                    callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(mgmt->sa, sta_mac_str), to_mac_str(mgmt->da, frame_da_str), mgmt_type, reasoncode);
+                    mgmt_type = WIFI_MGMT_FRAME_TYPE_DISASSOC;
+                    callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(mgmt->sa, sta_mac_str),
+                        to_mac_str(mgmt->da, frame_da_str), mgmt_type, reasoncode);
                 }
             }
         } else {
