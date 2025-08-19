@@ -32,6 +32,7 @@
 #define CONFIG_FILE        "getConfigFile.sh"
 #define STATICCPGCFG_1     "/tmp/.staticCpgCfg_1"
 #define STA_PWD_LEN         STATICCPGCFG_LEN
+#define QCA_MAX_CMD_SZ 128
 
 extern INT wifi_setMLDaddr(INT apIndex, CHAR *mldMacAddress);
 
@@ -498,7 +499,27 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     return 0;
 }
+/*
+int platform_create_interface_attributes(struct nl_msg **msg_ptr, wifi_radio_info_t *radio, wifi_vap_info_t *vap)
+{
+    char mld_mac_addr[ETH_ALEN];
+    (void)radio;
 
+    if (msg_ptr == NULL || *msg_ptr == NULL || vap == NULL) {
+        wifi_hal_dbg_print("%s:%d Invalid arguments\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    if (qca_get_vap_mld_addr(vap, mld_mac_addr) == RETURN_ERR) {
+        return RETURN_ERR;
+    }
+    wifi_hal_info_print("%s:%d:Adding MLD addr " MACSTR " for vap index:%d\n", __func__, __LINE__,
+        MAC2STR(mld_mac_addr), vap->vap_index);
+    if (nla_put(*msg_ptr, NL80211_ATTR_MLD_MAC, ETH_ALEN, mld_mac_addr) < 0) {
+        return RETURN_ERR;
+    }
+    return RETURN_OK;
+}
+*/
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
     wifi_vap_info_t *vap;
@@ -769,6 +790,26 @@ static int qca_get_vap_mld_addr(wifi_vap_info_t* vap_info, char* mld_mac_buf)
     return RETURN_OK;
 }
 
+int platform_create_interface_attributes(struct nl_msg **msg_ptr, wifi_radio_info_t *radio, wifi_vap_info_t *vap)
+{
+    char mld_mac_addr[ETH_ALEN];
+    (void)radio;
+
+    if (msg_ptr == NULL || *msg_ptr == NULL || vap == NULL) {
+        wifi_hal_dbg_print("%s:%d Invalid arguments\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    if (qca_get_vap_mld_addr(vap, mld_mac_addr) == RETURN_ERR) {
+        return RETURN_ERR;
+    }
+    wifi_hal_info_print("%s:%d:Adding MLD addr " MACSTR " for vap index:%d\n", __func__, __LINE__,
+        MAC2STR(mld_mac_addr), vap->vap_index);
+    if (nla_put(*msg_ptr, NL80211_ATTR_MLD_MAC, ETH_ALEN, mld_mac_addr) < 0) {
+        return RETURN_ERR;
+    }
+    return RETURN_OK;
+}
+
 static int qca_create_mld_interfaces(wifi_vap_info_map_t *map)
 {
     char cmd[DEFAULT_CMD_SIZE];
@@ -785,8 +826,8 @@ static int qca_create_mld_interfaces(wifi_vap_info_map_t *map)
             wifi_hal_info_print("%s:%d: mld%d already present\n", __func__, __LINE__, vap->vap_index);
         } else {
             qca_get_vap_mld_addr(vap, mld_mac_addr);
-            snprintf(cmd, sizeof(cmd), "iw phy mld-phy0 interface add mld%d type __ap mld_addr " MACSTR,
-                                            vap->vap_index, MAC2STR(mld_mac_addr));
+            snprintf(cmd, sizeof(cmd), "iw phy mld-phy0 interface add mld%d type __ap ",
+                                            vap->vap_index);
             wifi_hal_info_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
             system(cmd);
         }
@@ -858,8 +899,7 @@ int platform_get_channel_bandwidth(wifi_radio_index_t index,  wifi_channelBandwi
     if (*channelWidth == 0) {
         wifi_hal_error_print("%s:%d Channel Bandwidth not supported\n", __func__, __LINE__);
         return -1; 
-    }
-    
+    } 
     return 0;
 }
 
@@ -1159,6 +1199,89 @@ static int qca_add_intf_to_bridge(wifi_interface_info_t *interface, bool is_mld)
             }
             wifi_hal_info_print("%s:%d: interface:%s set bridge %s up\n", __func__, __LINE__,
                 interface->name, vap->bridge_name);
+        }
+    }
+    return RETURN_OK;
+}
+
+static bool is_bonding_slave(const char* mld_name, const char* ifname)
+{
+    char linebuf[512];
+    char slave_list[128];
+    char *slave;
+    char *rest;
+    FILE *fp;
+    bool ret = false;
+
+    snprintf(slave_list, sizeof(slave_list), "/sys/class/net/%s/bonding/slaves", mld_name);
+    fp = fopen(slave_list,"r");
+    if (NULL==fp) {
+        wifi_hal_error_print("%s:%d Failed to open file %s\n", __func__, __LINE__, slave_list);
+        return ret;
+    }
+
+    if (access(slave_list, F_OK ) == 0) {
+        linebuf[0] = '\0';
+        fgets(linebuf,sizeof(linebuf), fp);
+        if (strlen(linebuf) && linebuf[strlen(linebuf)-1] == '\n') {
+            linebuf[strlen(linebuf)-1] = '\0'; // remove trailing newline character (\n)
+        }
+        wifi_hal_dbg_print("%s:%d  slaves=%s\n", __func__, __LINE__, linebuf);
+        rest = linebuf;
+        while ((slave = strtok_r(rest, " ", &rest))) {
+            printf("%s ", slave);
+            if (strcmp(slave, ifname)==0) {
+                wifi_hal_dbg_print("%s:%d %s is bonding slave of %s\n", __func__, __LINE__, ifname, mld_name);
+                ret = true;
+                break;
+            }
+        }
+    }
+    fclose(fp);
+    if (!ret) {
+        wifi_hal_dbg_print("%s:%d %s is not a bonding slave of %s\n", __func__, __LINE__, ifname, mld_name);
+    }
+    return ret;
+}
+
+INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
+{
+    char cmd[QCA_MAX_CMD_SZ];
+    char mld_ifname[32];
+    char ifname[32];
+    char mld_mac_addr[ETH_ALEN];
+    char mld_mac_str[18];
+
+    if (interface == NULL || radio == NULL) {
+        wifi_hal_error_print("%s:%d: Invalid arguments\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    if ((int)interface->vap_info.vap_index >= 0) {
+        if (get_interface_name_from_vap_index(interface->vap_info.vap_index, ifname) != RETURN_OK ) {
+            wifi_hal_error_print("%s:%d: vap index:%d failed to get interface name from vap index\n",
+                __func__, __LINE__, interface->vap_info.vap_index);
+            return RETURN_ERR;
+        }
+        if (qca_get_vap_mld_addr(&interface->vap_info, mld_mac_addr) == RETURN_ERR) {
+            wifi_hal_error_print("%s:%d: vap index:%d failed to get mld address\n",
+                __func__, __LINE__, interface->vap_info.vap_index);
+            return RETURN_ERR;
+        }
+
+        snprintf(mld_mac_str, sizeof(mld_mac_str), MACSTR, MAC2STR(mld_mac_addr));
+        snprintf(mld_ifname, sizeof(mld_ifname), "mld%d", interface->vap_info.vap_index);
+
+        if ((!(radio->oper_param.variant & WIFI_80211_VARIANT_BE)) && is_bonding_slave(mld_ifname, ifname)) {
+            snprintf(cmd, sizeof(cmd), "cfg80211tool ath%d mode %s", interface->vap_info.vap_index,
+                (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND)? "11GHE20" : "11AHE80");
+            wifi_hal_info_print("%s:%d Executing: %s\n",__func__, __LINE__, cmd);
+            system(cmd);
+            wifi_hal_info_print("%s:%d Delete bonding between ifname:%s and mld:%s\n"
+                ,__func__, __LINE__, ifname, mld_ifname);
+            wifi_setMLDaddr(interface->vap_info.vap_index, "00:00:00:00:00:00");
+            wifi_setMLDaddr(interface->vap_info.vap_index, mld_mac_str);
+        } else {
+            wifi_hal_dbg_print("%s:%d No need to changing bonding state for %s\n", __func__, __LINE__, ifname);
         }
     }
     return RETURN_OK;
