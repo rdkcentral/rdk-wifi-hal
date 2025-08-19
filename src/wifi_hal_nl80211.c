@@ -7301,8 +7301,7 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
                 reconfigure = true;
                 nl80211_enable_ap(interface, false);
                 pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-                hostapd_bss_deinit_no_free(&interface->u.ap.hapd);
-                hostapd_free_hapd_data(&interface->u.ap.hapd);
+                deinit_bss(&interface->u.ap.hapd);
                 if (interface->u.ap.hapd.conf != NULL && interface->u.ap.hapd.conf->ssid.wpa_psk != NULL && !interface->u.ap.hapd.conf->ssid.wpa_psk->next)
                     hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
 
@@ -15762,8 +15761,7 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
         if ( dfs_interface->bss_started && dfs_interface->vap_initialized) {
             nl80211_enable_ap(interface, false);
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-            hostapd_bss_deinit_no_free(&interface->u.ap.hapd);
-            hostapd_free_hapd_data(&interface->u.ap.hapd);
+            deinit_bss(&interface->u.ap.hapd);
             if (interface->u.ap.hapd.conf != NULL && interface->u.ap.hapd.conf->ssid.wpa_psk != NULL && !interface->u.ap.hapd.conf->ssid.wpa_psk->next)
                 hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
             pthread_mutex_unlock(&g_wifi_hal.hapd_lock);

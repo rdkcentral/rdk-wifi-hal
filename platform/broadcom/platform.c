@@ -4223,6 +4223,13 @@ static void mlo_add_link(struct hostapd_data *hapd)
 {
     unsigned char is_first_bss;
 
+    if (hapd->mld_link_id == 0 && hapd->mld->num_links > 0) {
+        struct hostapd_data *old_first;
+
+        old_first = hostapd_mld_get_first_bss(hapd);
+        deinit_bss(old_first);
+    }
+
     hostapd_mld_add_link(hapd);
 
     is_first_bss = hostapd_mld_is_first_bss(hapd);
@@ -4256,6 +4263,24 @@ static void mlo_add_link(struct hostapd_data *hapd)
             }
         }
     }
+}
+
+static void mlo_remove_link(struct hostapd_data *hapd)
+{
+    wifi_hal_info_print("%s:%d - iface:%s removing VAP from MLD group - mld links num: %d\n",
+        __func__, __LINE__, hapd->conf->iface, hapd->mld->num_links);
+    if (hapd->mld && hapd->mld->num_links > 1) {
+        if (hostapd_mld_is_first_bss(hapd)) {
+            /* Leave the shared recources for rest of the links staying in the MLO group */
+            hostapd_mld_remove_link(hapd);
+            hostapd_mld_add_link(hapd);
+        }
+    }
+    /* We need to detatch/release shared rources before changing mld configuration of BSS.
+     * For non first bss are shared resources just set to NULL for first BSS free + set NULL*/
+    deinit_bss(hapd);
+
+    hostapd_bss_link_deinit(hapd);
 }
 
 int update_hostap_mlo(wifi_interface_info_t *interface)
@@ -4313,7 +4338,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         }
         if (hapd->mld != new_mld || old_mld_link_id != hapd->mld_link_id) {
             if (hapd->mld)
-                hostapd_bss_link_deinit(hapd);
+                mlo_remove_link(hapd);
             hapd->mld = new_mld;
             mlo_add_link(hapd);
         }
@@ -4323,7 +4348,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
             (is_mlo_ap ? "MLO" : "SLO"), hapd->mld->name, vap->vap_name);
     } else {
         if (hapd->mld) {
-            hostapd_bss_link_deinit(hapd);
+            mlo_remove_link(hapd);
             hapd->mld = NULL;
         }
         conf->mld_ap = mld_ap;
