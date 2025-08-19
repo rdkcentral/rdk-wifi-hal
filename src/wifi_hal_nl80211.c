@@ -2171,8 +2171,6 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                     wifi_hal_dbg_print("handle_disassoc - too short payload (len=%lu)\n",
                         (unsigned long)len);
                     reasoncode = reason;
-                } else if (is_greylist_reject) {
-                    reasoncode = WLAN_RADIUS_GREYLIST_REJECT;
                 } else {
                     reasoncode = le_to_host16(mgmt->u.disassoc.reason_code);
                 }
