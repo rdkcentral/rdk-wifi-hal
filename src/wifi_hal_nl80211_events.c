@@ -307,7 +307,9 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     wifi_steering_event_t steering_evt;
     wifi_frame_t mgmt_frame;
     int sig_dbm = -100;
-#if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined (TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined (TARGET_GEMINI7_2))
+#if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
+    defined (TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || \
+    defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT)
     int phy_rate = 60;
 #endif
 
@@ -337,7 +339,9 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     if (tb[NL80211_ATTR_RX_SIGNAL_DBM]) {
         sig_dbm = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
     }
-#if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || defined (TARGET_GEMINI7_2))
+#if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
+    defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
+    defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT)
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]) *10;
     }
@@ -551,7 +555,9 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
 #ifdef WIFI_HAL_VERSION_3_PHASE2
             callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame);
 #else
-#if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || defined (TARGET_GEMINI7_2))
+#if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || \
+    defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
+    defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT))
             callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)event.tx_status.data,
                 event.tx_status.data_len, mgmt_type, dir, sig_dbm, phy_rate);
 #else
@@ -805,19 +811,20 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     }
 }
 
-bool is_channel_supported_on_radio(wifi_freq_bands_t l_band, unsigned int channel)
+bool is_channel_supported_on_radio(wifi_freq_bands_t l_band, int freq)
 {
-    if ((l_band == WIFI_FREQUENCY_2_4_BAND) && (channel >= 1) && (channel <= 14)) {
+    if (l_band == WIFI_FREQUENCY_2_4_BAND && (freq >= MIN_FREQ_MHZ_2G && freq <= MAX_FREQ_MHZ_2G)) {
         return true;
-    } else if (((l_band == WIFI_FREQUENCY_5L_BAND) || (l_band == WIFI_FREQUENCY_5H_BAND) || (l_band == WIFI_FREQUENCY_5_BAND))
-                    && (channel >= 36) && (channel <= 169)) {
+    } else if ((l_band == WIFI_FREQUENCY_5L_BAND || l_band == WIFI_FREQUENCY_5H_BAND ||
+                   l_band == WIFI_FREQUENCY_5_BAND) &&
+        (freq >= MIN_FREQ_MHZ_5G && freq <= MAX_FREQ_MHZ_5G)) {
         return true;
-    } else if ((l_band == WIFI_FREQUENCY_6_BAND) && (channel >= 1) && (channel <= 233)) {
+#if HOSTAPD_VERSION >= 210
+    } else if (l_band == WIFI_FREQUENCY_6_BAND &&
+        (freq >= MIN_FREQ_MHZ_6G && freq <= MAX_FREQ_MHZ_6G)) {
         return true;
-    } else if (l_band == WIFI_FREQUENCY_60_BAND) {
-        return true;
+#endif
     }
-
     return false;
 }
 
@@ -948,7 +955,7 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     wifi_radio_operationParam_t tmp_radio_param;
     radio_param = &radio->oper_param;
 
-    if (is_channel_supported_on_radio(radio_param->band, channel) != true) {
+    if (is_channel_supported_on_radio(radio_param->band, freq) != true) {
         wifi_hal_error_print("%s:%d: channel:%d and radio index:%d radio_band:%d not Compatible\n", __func__, __LINE__,
                                     channel, interface->vap_info.radio_index, radio_param->band);
         return;
