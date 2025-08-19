@@ -1863,6 +1863,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     struct sta_info *station = NULL;
     wifi_frame_t mgmt_frame;
     bool forward_frame = true;
+    bool is_greylist_reject = false;
 #ifdef WIFI_EMULATOR_CHANGE
     static int fd_c = -1;
     unsigned int msg_type = wlan_emu_msg_type_frm80211;
@@ -2079,9 +2080,11 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         station = ap_get_sta(&interface->u.ap.hapd, sta);
         if (station) {
-            wifi_hal_dbg_print("station disassocreason in disassoc frame is %d\n", station->disconnect_reason_code);
+            wifi_hal_dbg_print("station disassocreason in disassoc frame is %d\n",
+                station->disconnect_reason_code);
 #if !defined(PLATFORM_LINUX)
             if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
+                is_greylist_reject = true;
                 reason = station->disconnect_reason_code;
             }
 #endif
@@ -2093,15 +2096,17 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
         for (int i = 0; i < callbacks->num_disassoc_cbs; i++) {
+            bool frame_too_short = (len < IEEE80211_HDRLEN + sizeof(mgmt->u.disassoc));
+            if (frame_too_short || is_greylist_reject) {
+                wifi_hal_dbg_print("handle_disassoc - too short payload (len=%lu)\n",
+                    (unsigned long)len);
+                reasoncode = reason;
+            } else {
+                reasoncode = le_to_host16(mgmt->u.disassoc.reason_code);
+            }
             if (callbacks->disassoc_cb[i] != NULL) {
-                if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.disassoc)) {
-                    wifi_hal_dbg_print("handle_disassoc - too short payload (len=%lu)",(unsigned long) len);
-                    reasoncode = reason;
-                }
-                else {
-                    reasoncode = le_to_host16(mgmt->u.disassoc.reason_code);
-                }
-                callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(mgmt->sa, sta_mac_str), to_mac_str(mgmt->da, frame_da_str), mgmt_type, reasoncode);
+                callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(mgmt->sa, sta_mac_str),
+                    to_mac_str(mgmt->da, frame_da_str), mgmt_type, reasoncode);
             }
         }
         if (callbacks->steering_event_callback != 0) {
@@ -2147,10 +2152,13 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         station = ap_get_sta(&interface->u.ap.hapd, sta);
         if (station) {
+            wifi_hal_dbg_print("station deauthreason in deauth frame is %d\n",
+                station->disconnect_reason_code);
 #if !defined(PLATFORM_LINUX)
-            if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
-                reason = station->disconnect_reason_code;
-            }
+                if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
+                    is_greylist_reject = true;
+                    reason = station->disconnect_reason_code;
+                }
 #endif
             ap_free_sta(&interface->u.ap.hapd, station);
         }
@@ -2158,16 +2166,18 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
         if (station) {
             for (int i = 0; i < callbacks->num_disassoc_cbs; i++) {
+                bool frame_too_short = (len < IEEE80211_HDRLEN + sizeof(mgmt->u.disassoc));
+                if (frame_too_short || is_greylist_reject) {
+                    wifi_hal_dbg_print("handle_disassoc - too short payload (len=%lu)\n",
+                        (unsigned long)len);
+                    reasoncode = reason;
+                } else {
+                    reasoncode = le_to_host16(mgmt->u.disassoc.reason_code);
+                }
                 if (callbacks->disassoc_cb[i] != NULL) {
-                    if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.disassoc)) {
-                        wifi_hal_dbg_print("handle_disassoc - too short payload (len=%lu)",(unsigned long) len);
-                        reasoncode = reason;
-                    }
-                    else {
-                        reasoncode = le_to_host16(mgmt->u.disassoc.reason_code);
-                    }
-		    mgmt_type = WIFI_MGMT_FRAME_TYPE_DISASSOC;
-                    callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(mgmt->sa, sta_mac_str), to_mac_str(mgmt->da, frame_da_str), mgmt_type, reasoncode);
+                    mgmt_type = WIFI_MGMT_FRAME_TYPE_DISASSOC;
+                    callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(mgmt->sa, sta_mac_str),
+                        to_mac_str(mgmt->da, frame_da_str), mgmt_type, reasoncode);
                 }
             }
         } else {
@@ -2267,7 +2277,9 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #ifdef WIFI_HAL_VERSION_3_PHASE2
         callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame);
 #else
-#if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined (TARGET_GEMINI7_2) || defined(RDKB_ONE_WIFI_PROD))
+#if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || \
+    defined(XB10_PORT) || defined(TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || \
+    defined(TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD))
         callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)mgmt, len, mgmt_type, dir, sig_dbm, phy_rate);
 #else
         callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)mgmt, len, mgmt_type, dir);
@@ -2432,7 +2444,9 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
     if (tb[NL80211_ATTR_RX_SIGNAL_DBM]) {
         sig_dbm = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
     }
-#if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(TCHCBRV2_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(RDKB_ONE_WIFI_PROD))
+#if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(TCHCBRV2_PORT) || \
+    defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || \
+    defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
 	unsigned short fc, stype;
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]) *10;
@@ -3923,7 +3937,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
 #endif
 #if defined (RDKB_ONE_WIFI_PROD)
     const char *suffix = "xl";
-    char if_name_new[IFNAMSIZ];
+    char if_name_new[IFNAMSIZ] = "";
 #endif /* RDKB_ONE_WIFI_PROD */
     is_hotspot_interface = is_wifi_hal_vap_hotspot_from_interfacename(if_name);
     vap_cfg = get_wifi_vap_info_from_interfacename(if_name);
@@ -4010,11 +4024,15 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
         return -1;
     }
 #if defined (RDKB_ONE_WIFI_PROD)
-    strncpy(if_name_new, if_name, sizeof(if_name_new));
-    strcat(if_name_new, suffix);
-    if (!(device = rtnl_link_get_by_name(link_cache, if_name_new))) {
+    if ((strlen(if_name) + strlen(suffix)) < IFNAMSIZ) {
+        strncpy(if_name_new, if_name, sizeof(if_name_new));
+        strcat(if_name_new, suffix);
+        if (!(device = rtnl_link_get_by_name(link_cache, if_name_new))) {
+            device = rtnl_link_get_by_name(link_cache, if_name);
+            if_name_new[0] = '\0';
+        }
+    } else {
         device = rtnl_link_get_by_name(link_cache, if_name);
-        if_name_new[0] = '\0';
     }
 #else
     device = rtnl_link_get_by_name(link_cache, if_name);
@@ -5451,7 +5469,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 #endif //FEATURE_SINGLE_PHY
 
 #if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined(SCXER10_PORT)
+    defined(SCXER10_PORT) || defined(SCXF10_PORT)
     int existing_radio_found = 0;
 #endif
 #ifdef CONFIG_WIFI_EMULATOR
@@ -5473,7 +5491,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
 #if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
-    !defined(XB10_PORT) && !defined(SCXER10_PORT)
+    !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
     for (unsigned int j = 0; j < g_wifi_hal.num_radios; j++)
     {
         if (strcmp(g_wifi_hal.radio_info[j].name, nla_get_string(tb[NL80211_ATTR_WIPHY_NAME])) == 0) {
@@ -5525,7 +5543,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     for (unsigned int j=0; (j < num_radios_mapped && g_wifi_hal.num_radios < MAX_NUM_RADIOS); j++) {
 #endif //FEATURE_SINGLE_PHY
 #if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
-    !defined(XB10_PORT) && !defined(SCXER10_PORT)
+    !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
     radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
     memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
 #else
@@ -5839,7 +5857,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     }
 
 #if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
-    !defined(XB10_PORT) && !defined(SCXER10_PORT)
+    !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
     g_wifi_hal.num_radios++;
 #endif
 #ifdef FEATURE_SINGLE_PHY
@@ -6480,7 +6498,7 @@ int update_channel_flags()
 }
 
 #if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined(SCXER10_PORT)
+    defined(SCXER10_PORT) || defined(SCXF10_PORT)
 static int protocol_feature_handler(struct nl_msg *msg, void *arg)
 {
     u32 *feat = arg;
@@ -6515,13 +6533,13 @@ static u32 get_nl80211_protocol_features(int nl_id)
 
     return 0;
 }
-#endif // VNTXER5_PORT || TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TARGET_GEMINI7_2
+#endif // VNTXER5_PORT || TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TARGET_GEMINI7_2 || SCXF10_PORT
 
 int init_nl80211()
 {
     int ret;
 #if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined(SCXER10_PORT)
+    defined(SCXER10_PORT) || defined(SCXF10_PORT)
     u32 feat;
     int flags = 0;
 #endif
@@ -6624,7 +6642,7 @@ int init_nl80211()
     }
     init_interface_map();
 #if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
-    !defined(XB10_PORT) && !defined(SCXER10_PORT)
+    !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
     if (msg == NULL) {
 #else
@@ -8022,7 +8040,18 @@ int nl80211_disconnect_sta(wifi_interface_info_t *interface)
     if ((msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_DISCONNECT)) == NULL) {
         return -1;
     }
-    ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
+#ifdef EAPOL_OVER_NL
+    if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_CONTROL_PORT_FRAME &&
+        interface->bss_nl_connect_event_fd >= 0) {
+        wifi_hal_error_print("%s:%d: disconnect command send via control port \n", __func__,
+            __LINE__);
+        ret = nl80211_set_rx_control_port_owner(msg, interface);
+    } else {
+#endif
+        ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
+#ifdef EAPOL_OVER_NL
+    }
+#endif
     if (ret == 0) {
         return 0;
     }
