@@ -597,7 +597,8 @@ void create_connect_steering_event(wifi_interface_info_t *interface, wifi_steeri
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
 
-    if (radio->oper_param.band == WIFI_FREQUENCY_5_BAND) {
+    if (radio->oper_param.band == WIFI_FREQUENCY_5_BAND || radio->oper_param.band == WIFI_FREQUENCY_5L_BAND ||
+        radio->oper_param.band == WIFI_FREQUENCY_5H_BAND) {
         steering_event->bandCap5G = 1;
     } else if (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND) {
         steering_event->bandCap2G = 1;
