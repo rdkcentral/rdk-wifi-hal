@@ -12328,7 +12328,7 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
                 goto fail;
             }
         }
-#if defined(CMXB7_PORT) || defined(VNTXER5_PORT)
+#ifdef CONFIG_IEEE80211AX
         if (params->he_capab) {
             wpa_hexdump(MSG_DEBUG, "  * he_capab",
                         params->he_capab, params->he_capab_len);
