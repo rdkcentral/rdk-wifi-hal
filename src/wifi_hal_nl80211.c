@@ -11651,7 +11651,7 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
                 goto fail;
             }
         }
-#if defined(CMXB7_PORT) || defined(VNTXER5_PORT)
+#ifdef CONFIG_IEEE80211AX
         if (params->he_capab) {
             wpa_hexdump(MSG_DEBUG, "  * he_capab",
                         params->he_capab, params->he_capab_len);
@@ -13941,6 +13941,15 @@ int nl80211_register_bss_frames(wifi_interface_info_t *interface)
     if (interface->bss_frames_registered == 1) {
         wifi_hal_info_print("%s:%d: bss frames handler already registered for %s\n", __func__,
                 __LINE__, wifi_hal_get_interface_name(interface));
+        return 0;
+    }
+
+    //XXX
+    if (interface->vap_info.vap_index != 0) {
+        wifi_interface_info_t *main_interface = get_interface_by_vap_index(0);
+        interface->bss_nl_cb = main_interface->bss_nl_cb;
+        interface->bss_nl_connect_event = main_interface->bss_nl_connect_event;
+        interface->bss_nl_connect_event_fd = main_interface->bss_nl_connect_event_fd;
         return 0;
     }
 

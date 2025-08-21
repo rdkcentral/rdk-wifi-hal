@@ -2401,7 +2401,7 @@ void wifi_hal_print(wifi_hal_log_level_t level, const char *format, ...)
     va_end(list);
 #else
 #ifndef CONFIG_WIFI_EMULATOR
-    if ((access("/nvram/wifiHalDbg", R_OK)) == 0) {
+    if (true) { //(access("/nvram/wifiHalDbg", R_OK)) == 0) {
 
         fpg = fopen("/tmp/wifiHal", "a+");
         if (fpg == NULL) {

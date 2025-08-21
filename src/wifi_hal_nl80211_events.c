@@ -161,6 +161,9 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     mac_addr_str_t mac_str;
     char br_buff[128] = {0};
 
+    //XXX crash
+    return;
+
     if ((attr = tb[NL80211_ATTR_MAC]) == NULL) {
         wifi_hal_error_print("%s:%d: mac attribute not present ... dropping\n", __func__, __LINE__);
         return;

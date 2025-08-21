@@ -1367,6 +1367,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         wifi_hal_info_print("%s:%d: vap index:%d create vap\n", __func__, __LINE__,
             vap->vap_index);
 
+        //XXX
+        if (vap->vap_index != 0 && vap->vap_index != 1 &&
+            vap->vap_index != 16) {
+            continue;
+        }
+
         if (vap->vap_mode == wifi_vap_mode_ap) {
             if (validate_wifi_interface_vap_info_params(vap, msg, sizeof(msg)) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d:Failed to validate interface vap_info params for vap_index: %d on radio index: %d. %s\n", __func__, __LINE__, vap->vap_index, index, msg);
