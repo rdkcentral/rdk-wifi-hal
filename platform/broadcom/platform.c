@@ -4263,6 +4263,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     struct hostapd_mld *new_mld = NULL;
     wifi_mld_common_info_t *mld_conf;
     u8 mld_ap;
+    u8 old_mld_link_id;
 
     conf = &interface->u.ap.conf;
     hapd = &interface->u.ap.hapd;
@@ -4280,6 +4281,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     mld_conf = &vap->u.bss_info.mld_info.common_info;
     nvram_update_wl_mlo_apply(conf->iface, mld_conf->mld_apply);
     nvram_update_wl_mlo_config(vap->radio_index, !conf->disable_11be ? mld_conf->mld_link_id : -1);
+    old_mld_link_id = hapd->mld_link_id;
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
     mld_ap = (!conf->disable_11be && (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
     nvram_update_wl_bss_mlo_mode(conf->iface, mld_ap ? mld_conf->mld_enable : 0);
@@ -4300,7 +4302,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         } else {
             new_mld = get_slo_mld(vap->vap_index, hapd->own_addr);
         }
-        if (hapd->mld != new_mld) {
+        if (hapd->mld != new_mld || old_mld_link_id != hapd->mld_link_id) {
             if (hapd->mld)
                 hostapd_bss_link_deinit(hapd);
             hapd->mld = new_mld;
