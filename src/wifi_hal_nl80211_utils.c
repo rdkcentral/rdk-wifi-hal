@@ -260,6 +260,13 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {2, 2,  "wl2",     "",         0,     23,     "mesh_sta_6g"},
 #endif
 
+// ifdef EXPERIMENTAL_BPI // FIXME(ldk): Hacky way to embed info about multiple links (_[256]g suffix)
+    {0, 0, "mld-ap0_2g", "brlan0", 100, 0, "private_ssid_2g"},
+    // {0, 0, "mld-ap0_5g", "brlan0", 100, 1, "private_ssid_5g"},
+    // {0, 1, "radio2g", "brlan0", 101, 2, "iot_ssid_2g"},
+    // {0, 0, "mld-ap0_6g", "brlan0", 100, 16, "private_ssid_6g"},
+// endif EXPERIMENTAL_BPI
+
 #ifdef XB10_PORT
     {2, 0,  "wl0.1",   "brlan0",   100,   0,      "private_ssid_2g"},
     {1, 1,  "wl1.1",   "brlan0",   100,   1,      "private_ssid_5g"},
@@ -394,6 +401,11 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 1, 1, "radio2", "wl1"},
     { 0, 2, "radio3", "wl2"},
 #endif
+
+// ifdef EXPERIMENTAL_BPI // FIXME(ldk): Introduce concept of link?
+    { 0, 0, "radio0", "mld-ap0" },
+    // { 0, 1, "radio2g", "wifi2g" },
+// endif EXPERIMENTAL_BPI
 
 #if defined(SCXER10_PORT) 
     { 1, 0, "radio1", "wl0"},
@@ -1524,10 +1536,22 @@ wifi_radio_info_t *get_radio_by_phy_index(wifi_radio_index_t index)
 int get_rdk_radio_index_from_interface_name(char *interface_name)
 {
     uint8_t i = 0;
+    char tmp[30];
     const wifi_interface_name_idex_map_t *map = NULL;
     for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
         map = &interface_index_map[i];
-        if ((strcmp(interface_name, map->interface_name) == 0)) {
+	wifi_hal_dbg_print("%s:%d: map interface name: %s\n", __func__, __LINE__, map->interface_name);
+	// strip _suffix
+	strncpy(tmp, map->interface_name, sizeof(tmp));
+	tmp[sizeof(tmp) - 1] = 0x0;
+	if (!memcmp(tmp, "mld", 3)) {
+	    char *x = strchr(tmp, '_');
+	    if (x) {
+	        *x = 0x0;
+	    }
+	}
+        //if ((strcmp(interface_name, map->interface_name) == 0)) {
+        if ((strcmp(interface_name, tmp) == 0)) {
             wifi_hal_dbg_print("%s:%d rdk_radio_index:%d for interface:%s\n", __func__, __LINE__,
                 map->rdk_radio_index, interface_name);
             return map->rdk_radio_index;
@@ -1749,7 +1773,19 @@ int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *inte
     /* Set interface properties for VAP interfaces */
     for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
         map = &interface_index_map[i];
-        if ((strcmp(interface->name, map->interface_name) == 0) &&
+	wifi_hal_dbg_print("%s:%d: compare \"%s\" with \"%s\"\n",
+	    __func__, __LINE__, interface->name, map->interface_name);
+	char tmp[30];
+	strncpy(tmp, map->interface_name, sizeof(tmp));
+	tmp[sizeof(tmp) - 1] = 0x0;
+	if (!strncmp(tmp, "mld", 3)) {
+	    char *x = strchr(tmp, '_');
+	    if (x) {
+		*x = 0x0;
+	    }
+	}
+        //if ((strcmp(interface->name, map->interface_name) == 0) &&
+        if ((strcmp(interface->name, tmp) == 0) &&
             (phy_index == map->phy_index)) {
             vap->radio_index = map->rdk_radio_index;
             vap->vap_index = map->index;
@@ -1868,6 +1904,93 @@ wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index)
     return NULL;
 }
 
+// ifdef EXPERIMENTAL_GENERIC_MLO
+/* Parse interface name from interface map.
+ * Check if is it MLD interface and return netdev (interface) name and MLD link id
+ */
+int get_mld_interface_name_from_vap_index(unsigned int vap_index, char *interface_name,
+		                          const size_t interface_name_len,
+					  unsigned int *link_type)
+{
+    char tmp[50];
+    int rc;
+    /* mld bitmap:
+     * 0x8 - mld prefix exists
+     * 0x4 - 6g suffix exists
+     * 0x2 - 5g suffix exists
+     * 0x1 - 2g suffix exists
+     */
+    unsigned char mld = 0x0;
+    char *suffix;
+    unsigned int tmp_link_type;
+
+    memset(tmp, 0x0, sizeof(tmp));
+    rc = get_interface_name_from_vap_index(vap_index, tmp);
+    if (rc != RETURN_OK) {
+	wifi_hal_error_print("%s:%d: MLD: VAP index not found: %d\n",
+	    __func__, __LINE__, vap_index);
+    }
+    tmp[sizeof(tmp) - 1] = 0x0;
+
+    wifi_hal_dbg_print("%s:%d: MLD: VAP interface full name: \"%s\"\n",
+	__func__, __LINE__, tmp);
+
+    /* Check prefix, it has to be "mld" */
+    if (!strncmp(tmp, "mld", 3)) {
+	mld |= 0x8;
+    }
+
+    /* Check suffix, either _2g, _5g, _6g */
+    suffix = strrchr(tmp, '_');
+    if (suffix != NULL) {
+        /* wifi_hal_dbg_print("%s:%d: MLD: VAP full interface name suffix: \"%s\"\n",
+               __func__, __LINE__, suffix); */
+	if (!strcmp(suffix, "_2g")) {
+	    mld |= 0x1;
+	} else if (!strcmp(suffix, "_5g")) {
+	    mld |= 0x2;
+	} else if (!strcmp(suffix, "_6g")) {
+            mld |= 0x4;
+	}
+
+	*suffix = 0x0;
+    }
+
+    switch (mld) {
+    case 0x9:  /* MLD, 2G link - 0 */
+	tmp_link_type = 0;
+	break;
+
+    case 0xa:  /* MLD, 5G link - 1 */
+	tmp_link_type = 1;
+        break;
+
+    case 0xc:  /* MLD, 6G link - 2 */
+	tmp_link_type = 2;
+	break;
+
+    default:
+	wifi_hal_dbg_print("%s:%d: MLD: VAP interface (%d) is not an MLD interface\n",
+	    __func__, __LINE__, vap_index);
+	return RETURN_ERR;
+    }
+
+    if (link_type != NULL) {
+	*link_type = tmp_link_type;
+    }
+
+    if ((interface_name != NULL) && (interface_name_len > 0)) {
+	/* tmp is null-terminated, it was ensured before */
+	strncpy(interface_name, tmp, interface_name_len);
+    }
+
+    wifi_hal_dbg_print("%s:%d: MLD: VAP index: %d, interface name: \"%s\", link type: %s\n",
+	__func__, __LINE__, vap_index, tmp,
+	(tmp_link_type == 0)?"2G":((tmp_link_type == 1)?"5G":"6G"));
+
+    return RETURN_OK;
+}
+// endif EXPERIMENTAL_GENERIC_MLO
 
 BOOL get_ie_ext_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len)
 {

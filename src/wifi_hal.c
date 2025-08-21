@@ -1329,6 +1329,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     char mld_ifname[32];
 #endif
 
+    wifi_hal_dbg_print("%s:%d: ------------------------ createVAP ----------------------------\n", __func__, __LINE__);
+
     RADIO_INDEX_ASSERT(index);
     NULL_PTR_ASSERT(map);
 
@@ -1353,6 +1355,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
     // now create vaps on the interfaces
     for (i = 0; i < map->num_vaps; i++) {
+	wifi_hal_dbg_print("%s:%d: ------------------------------- loop %d --------------------------\n", __func__, __LINE__, i);
         vap = &map->vap_array[i];
 
         wifi_hal_info_print("%s:%d: vap index:%d vap_name = %s create vap\n", __func__, __LINE__,
@@ -1490,6 +1493,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 }
             }
 
+	    wifi_hal_dbg_print("%s:%d: ----------------------------------------------------\n", __func__, __LINE__);
             wifi_hal_info_print("%s:%d: interface:%s update hostapd params\n", __func__, __LINE__,
                 interface->name);
             if (update_hostap_interface_params(interface) != RETURN_OK) {
@@ -1498,6 +1502,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 return RETURN_ERR;
             }
 
+	    wifi_hal_dbg_print("%s:%d: ----------------------------------------------------\n", __func__, __LINE__);
             wifi_hal_info_print("%s:%d: interface:%s vap_initialized:%d\n", __func__, __LINE__,
                 interface->name, interface->vap_initialized);
             if (interface->vap_initialized == true) {
@@ -1559,6 +1564,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 }
             } else {
                 interface->vap_initialized = true;
+		wifi_hal_dbg_print("%s:%d: -------------------------------------------------------------\n", __func__, __LINE__);
                 wifi_hal_info_print("%s:%d: radio index:%d update hostapd interfaces\n", __func__,
                     __LINE__, radio->index);
                 if (update_hostap_interfaces(radio)!= RETURN_OK) {
@@ -1686,6 +1692,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
 #endif
     }
+    wifi_hal_dbg_print("%s:%d: ------------------------------ end loop ------------------------------------\n", __func__, __LINE__);
 
     if ((set_vap_params_fn = get_platform_create_vap_fn()) != NULL) {
         wifi_hal_info_print("%s:%d: radio index:%d post-create vap\n", __func__, __LINE__,
