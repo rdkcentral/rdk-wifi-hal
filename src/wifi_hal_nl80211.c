@@ -8311,7 +8311,7 @@ static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, boo
         wifi_hal_stats_error_print("%s:%d: Stats is NULL\n", __func__, __LINE__);
         return -1;
     }
-    char mld_zero_mac[ETH_ALEN] = 00:00:00:00:00:00;
+    char mld_zero_mac[ETH_ALEN] = {0};
     for (int i = 0; i < count; i++) {
         u8 bw;
         uint32_t standard = 0;
