@@ -1253,13 +1253,14 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
 
 static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, int enable)
 {
-    int assoc_ctrl;
-    char buf[128] = {0};
-    char interface_name[8] = {0};
+    int assoc_ctrl, curr_assoc_ctrl;
+    char buf[128] = { 0 };
+    char interface_name[8] = { 0 };
     struct maclist *maclist = (struct maclist *)buf;
 #if defined(XB10_PORT) || defined(SCXER10_PORT)
-    int mbssid_num_frames = 1;
+    int mbssid_num_frames = 1, curr_mbssid_num_frames;
 #endif // defined(XB10_PORT) || defined(SCXER10_PORT)
+    bool is_vap_down_needed = false;
 
     if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
         wifi_hal_error_print("%s:%d failed to get interface name for vap index: %d, err: %d (%s)\n",
@@ -1311,10 +1312,36 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
         assoc_ctrl = ASSOC_DRIVER_CTRL;
     }
 
+    if (wl_iovar_getint(interface_name, "split_assoc_req", &curr_assoc_ctrl) < 0) {
+        wifi_hal_error_print("%s:%d failed to get split_assoc_req for %s, err: %d (%s)\n", __func__,
+            __LINE__, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+    if (assoc_ctrl != curr_assoc_ctrl) {
+        is_vap_down_needed = true;
+    }
+
+#if defined(XB10_PORT) || defined(SCXER10_PORT)
+    if (wl_iovar_getint(interface_name, "mbssid_num_frames", &curr_mbssid_num_frames) < 0) {
+        wifi_hal_error_print("%s:%d failed to get mbssid_num_frames for %s, err: %d (%s)\n",
+            __func__, __LINE__, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+    if (mbssid_num_frames != curr_mbssid_num_frames) {
+        is_vap_down_needed = true;
+    }
+#endif // defined(XB10_PORT) || defined(SCXER10_PORT)
+
+    if (!is_vap_down_needed) {
+        return RETURN_OK;
+    }
+
+    wifi_hal_info_print("%s:%d Set interface %s down-up to change split assoc\n", __func__,
+        __LINE__, interface_name);
     if (wl_ioctl(interface_name, WLC_DOWN, NULL, 0) < 0) {
-         wifi_hal_error_print("%s:%d failed to set interface down for %s, err: %d (%s)\n", __func__,
-             __LINE__, interface_name, errno, strerror(errno));
-         return RETURN_ERR;
+        wifi_hal_error_print("%s:%d failed to set interface down for %s, err: %d (%s)\n", __func__,
+            __LINE__, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
     }
 
     if (wl_iovar_set(interface_name, "split_assoc_req", &assoc_ctrl, sizeof(assoc_ctrl)) < 0) {
@@ -1327,16 +1354,16 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
     // supported by driver version 23.2.1
     if (wl_iovar_set(interface_name, "mbssid_num_frames", &mbssid_num_frames,
             sizeof(mbssid_num_frames)) < 0) {
-       wifi_hal_error_print("%s:%d failed to set mbssid_num_frames %d for %s, err: %d (%s)\n",
+        wifi_hal_error_print("%s:%d failed to set mbssid_num_frames %d for %s, err: %d (%s)\n",
             __func__, __LINE__, mbssid_num_frames, interface_name, errno, strerror(errno));
         return RETURN_ERR;
     }
 #endif // defined(XB10_PORT) || defined(SCXER10_PORT)
 
     if (wl_ioctl(interface_name, WLC_UP, NULL, 0) < 0) {
-         wifi_hal_error_print("%s:%d failed to set interface up for %s, err: %d (%s)\n", __func__,
-             __LINE__, interface_name, errno, strerror(errno));
-         return RETURN_ERR;
+        wifi_hal_error_print("%s:%d failed to set interface up for %s, err: %d (%s)\n", __func__,
+            __LINE__, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
     }
 
     return RETURN_OK;

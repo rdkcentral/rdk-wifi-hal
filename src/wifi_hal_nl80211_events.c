@@ -184,6 +184,8 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     os_memset(&event, 0, sizeof(event));
     event.disassoc_info.addr = mac;
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
+    //Remove the station from the bridge, if present
+    wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
 }
 #endif
 
@@ -299,7 +301,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     wifi_steering_event_t steering_evt;
     wifi_frame_t mgmt_frame;
     int sig_dbm = -100;
-#if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined (TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT))
+#if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined (TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT)|| defined(TARGET_GEMINI7_2))
     int phy_rate = 60;
 #endif
 
@@ -329,7 +331,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     if (tb[NL80211_ATTR_RX_SIGNAL_DBM]) {
         sig_dbm = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
     }
-#if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT))
+#if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT)|| defined(TARGET_GEMINI7_2))
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]);
     }
@@ -349,6 +351,28 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         dir = wifi_direction_uplink;
     } else {
         wifi_hal_dbg_print("%s:%d: unknown interface... dropping\n", __func__, __LINE__);
+        return;
+    }
+
+    if (vap->vap_mode != wifi_vap_mode_ap) {
+        // If a station just sent a TX frame (and therefore here received a TX status as an ACK), 
+        // it doesn't need to do anything with that information. Action frames are not sent to the
+        // RX handler. Additionally, following commands depend on `hapd` which is not present for 
+        // non-AP modes.
+        // We'll debug out the info though, for programmer convenience.
+        
+        char tmp[256] = "";
+        sprintf(tmp, "%s:%d:", __func__, __LINE__);
+        if (addr) sprintf(tmp + strlen(tmp), " MAC: "MACSTR",", MAC2STR((u8*)nla_data(addr)));
+        if (cookie) sprintf(tmp + strlen(tmp), " cookie: %llu,", (unsigned long long)nla_get_u64(cookie));
+        if (ack) sprintf(tmp + strlen(tmp), " ack: %d,", nla_get_flag(ack));
+        
+        sprintf(tmp + strlen(tmp), " type: %d, stype: %d",
+                WLAN_FC_GET_TYPE(fc), WLAN_FC_GET_STYPE(fc));
+        
+        wifi_hal_dbg_print("%s\n", tmp);
+
+        wifi_hal_dbg_print("%s:%d: vap mode is not AP, dropping\n", __func__, __LINE__);
         return;
     }
 
@@ -521,7 +545,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
 #ifdef WIFI_HAL_VERSION_3_PHASE2
             callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame);
 #else
-#if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT))
+#if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2))
             callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)event.tx_status.data,
                 event.tx_status.data_len, mgmt_type, dir, sig_dbm, phy_rate);
 #else
@@ -618,7 +642,7 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     }
 
     if (status != WLAN_STATUS_SUCCESS) {
-        wifi_hal_error_print("%s:%d: status code unsuccessful, returning\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: status code %d unsuccessful, returning\n", __func__, __LINE__, status);
         send_sta_connection_status_to_cb(backhaul->bssid, interface->vap_info.vap_index, wifi_connection_status_ap_not_found);
         return;    
     }
