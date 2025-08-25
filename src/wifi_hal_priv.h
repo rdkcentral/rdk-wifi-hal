@@ -959,6 +959,7 @@ void    update_wpa_sm_params(wifi_interface_info_t *interface);
 void    update_eapol_sm_params(wifi_interface_info_t *interface);
 void    *nl_recv_func(void *arg);
 int     start_bss(wifi_interface_info_t *interface);
+void    deinit_bss(struct hostapd_data *hapd);
 int     process_global_nl80211_event(struct nl_msg *msg, void *arg);
 int     no_seq_check(struct nl_msg *msg, void *arg);
 void    *eloop_run_thread(void *data);
