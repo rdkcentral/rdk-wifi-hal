@@ -8750,6 +8750,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     memset(interface->wpa_s.current_bss, 0, sizeof(struct wpa_bss) + bss_ie->buff_len);
     strcpy(interface->wpa_s.current_bss->ssid, backhaul->ssid);
     interface->wpa_s.current_bss->ssid_len = strlen(backhaul->ssid);
+    wifi_hal_dbg_print("%s:%d: ssid is %s and len is %d\n", __func__, __LINE__, interface->wpa_s.current_bss->ssid, interface->wpa_s.current_bss->ssid_len);
     memcpy(interface->wpa_s.current_bss->bssid, backhaul->bssid, ETH_ALEN);
     memcpy(interface->wpa_s.current_ssid->bssid, backhaul->bssid, ETH_ALEN);
     if (security->encr == wifi_encryption_aes) {
@@ -8811,7 +8812,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     }
 
     if ( (security->mode == wifi_security_mode_wpa3_personal) ||
-        (security->mode == wifi_security_mode_wpa3_compatibility)) {
+        (security->mode == wifi_security_mode_wpa3_compatibility) ||
+	(security->mode == wifi_security_mode_wpa3_transition)) {
         if (interface->wpa_s.current_ssid->sae_password == NULL) {
             interface->wpa_s.current_ssid->sae_password = malloc(MAX_PWD_LEN);
         }
@@ -8896,6 +8898,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
         interface->wpa_s.conf->sae_pwe = 1;
 
+	wifi_hal_error_print("%s:%d: ssid %s len %d sae passsword %s len %d\n", __func__, __LINE__, interface->wpa_s.current_ssid->ssid, interface->wpa_s.current_ssid->ssid_len, interface->wpa_s.current_ssid->sae_password, os_strlen(interface->wpa_s.current_ssid->sae_password));
         interface->wpa_s.current_ssid->pt = sae_derive_pt(interface->wpa_s.conf->sae_groups,
             interface->wpa_s.current_ssid->ssid,
             interface->wpa_s.current_ssid->ssid_len,
