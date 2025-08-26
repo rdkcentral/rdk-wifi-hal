@@ -8417,10 +8417,7 @@ static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, boo
             nlmsg_free(msg);
             return -1;
         }
-        //print the MLD MAC address from the stats structure
-        wifi_hal_stats_dbg_print("SJY %s:%d: MLD MAC address is %02x:%02x:%02x:%02x:%02x:%02x\n", __func__, __LINE__,
-            stats[i].cli_MLDAddr[0], stats[i].cli_MLDAddr[1], stats[i].cli_MLDAddr[2],
-            stats[i].cli_MLDAddr[3], stats[i].cli_MLDAddr[4], stats[i].cli_MLDAddr[5]);
+
         nlattr_sta_info = nla_nest_start(msg, RDK_VENDOR_ATTR_STA_INFO);
         if (!nlattr_sta_info) {
             wifi_hal_stats_error_print("%s:%d: Failed to add station list attribute for vap index %d\n", __func__, __LINE__, vap_index);
