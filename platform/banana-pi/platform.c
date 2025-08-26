@@ -801,12 +801,12 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
 
     /* If it is current link configuration it will be enabled later by start_bss */
     if (first_link != hapd) {
-        first_link->reenable_beacon = 1;
-        if (ieee802_11_set_beacon(first_link) != 0) {
-            wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
-                __func__, __LINE__, first_link->conf->iface, first_link->mld_link_id);
-            return -1;
-        }
+//        first_link->reenable_beacon = 1;
+//        if (ieee802_11_set_beacon(first_link) != 0) {
+//            wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
+//                __func__, __LINE__, first_link->conf->iface, first_link->mld_link_id);
+//            return -1;
+//        }
         // TODO: driver ignores first attempt to start beacon
         if (ieee802_11_set_beacon(first_link) != 0) {
             wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
@@ -832,12 +832,12 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
             continue;
         }
 
-        link_bss->reenable_beacon = 1;
-        if (ieee802_11_set_beacon(link_bss) != 0) {
-            wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
-                __func__, __LINE__, link_bss->conf->iface, link_bss->mld_link_id);
-            return -1;
-        }
+//        link_bss->reenable_beacon = 1;
+//        if (ieee802_11_set_beacon(link_bss) != 0) {
+//            wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
+//                __func__, __LINE__, link_bss->conf->iface, link_bss->mld_link_id);
+//            return -1;
+//        }
         // TODO: driver ignores first attempt to start beacon
         if (ieee802_11_set_beacon(link_bss) != 0) {
             wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",

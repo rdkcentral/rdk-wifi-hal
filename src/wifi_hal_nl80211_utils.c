@@ -3383,11 +3383,11 @@ int create_ecomode_interfaces(void)
 }
 
 //TODO: pre-create links test
-int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx);
+
 void create_interfaces(wifi_radio_info_t *radio)
 {
     int vapIndex;
-    wifi_vap_info_t *vap = NULL;
+    // wifi_vap_info_t *vap = NULL;
 
     for (vapIndex = 0; vapIndex < get_sizeof_interfaces_index_map(); vapIndex++) {
         wifi_interface_info_t *interface = NULL;
@@ -3416,13 +3416,13 @@ void create_interfaces(wifi_radio_info_t *radio)
             wifi_hal_info_print("%s:%d: Could not map interface name to index:%d\n", __func__,
                 __LINE__, interface->phy_index);
         }
-        vap = &interface->vap_info;
-        wifi_hal_dbg_print(
-            "%s:%d: phy index: %d\tradio index: %d\tinterface index: %d name: %s  type:%d, "
-            "mac:%02x:%02x:%02x:%02x:%02x:%02x vap index: %d vap name: %s\n",
-            __func__, __LINE__, radio->index, vap->radio_index, interface->index, interface->name,
-            interface->type, interface->mac[0], interface->mac[1], interface->mac[2],
-            interface->mac[3], interface->mac[4], interface->mac[5], vap->vap_index, vap->vap_name);
+        // vap = &interface->vap_info;
+        // wifi_hal_dbg_print(
+        //     "%s:%d: phy index: %d\tradio index: %d\tinterface index: %d name: %s  type:%d, "
+        //     "mac:%02x:%02x:%02x:%02x:%02x:%02x vap index: %d vap name: %s\n",
+        //     __func__, __LINE__, radio->index, vap->radio_index, interface->index, interface->name,
+        //     interface->type, interface->mac[0], interface->mac[1], interface->mac[2],
+        //     interface->mac[3], interface->mac[4], interface->mac[5], vap->vap_index, vap->vap_name);
         hash_map_put(radio->interface_map, strdup(interface->name), interface);
 
         char *mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
@@ -3443,24 +3443,23 @@ void create_interfaces(wifi_radio_info_t *radio)
                 
                 static int link_id = 0;
                 interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id = link_id++;
-                wifi_drv_link_add(interface, interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id, interface->mac, NULL);
 
-                system("ip link set dev mld0 down");
-                system("ip link set dev mld0 address 00:11:22:33:44:55");
-                system("ip link set dev mld0 up");
+                interface->mac[0] = 0x00;
+                interface->mac[1] = 0x11;
+                interface->mac[2] = 0x22;
+                interface->mac[3] = 0x33;
+                interface->mac[4] = 0x44;
+                interface->mac[5] = interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
+
+                // system("ip link set dev mld0 down");
+                // system("ip link set dev mld0 address 00:11:22:33:44:55");
+                // system("ip link set dev mld0 up");
             }
         }
 
         interface->index = interface->mld_ifindex;
         interface->type = NL80211_IFTYPE_AP;
         //strcpy(interface->name, interface->mld_name);
-        interface->mac[0] = 0x00;
-        interface->mac[1] = 0x11;
-        interface->mac[2] = 0x22;
-        interface->mac[3] = 0x33;
-        interface->mac[4] = 0x44;
-        interface->mac[5] = interface->vap_info.vap_index & 0x0F;
-        // Set the MAC address for the interface
 
         wifi_hal_dbg_print("%s:%d: Fetch next interface after the radio interface hash map [%s]\n",
             __func__, __LINE__, interface->name);

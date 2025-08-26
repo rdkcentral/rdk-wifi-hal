@@ -421,7 +421,7 @@ INT wifi_hal_init()
     }
 
     if (nl80211_init_primary_interfaces() != 0) {
-        return RETURN_ERR;
+       return RETURN_ERR;
     }
 
     if (nl80211_init_radio_info() != 0) {
@@ -1225,7 +1225,7 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
 }
 #endif
 
-static int wifi_hal_create_mld(wifi_radio_info_t *radio, wifi_interface_info_t *interface,
+int wifi_hal_create_mld(wifi_radio_info_t *radio, wifi_interface_info_t *interface,
     wifi_vap_info_t *vap)
 {
     if (vap->vap_mode != wifi_vap_mode_ap) {
@@ -1266,25 +1266,25 @@ static int wifi_hal_create_mld(wifi_radio_info_t *radio, wifi_interface_info_t *
     wifi_hal_info_print("%s:%d: vap index:%d interface:%s MLD enable: %d\n", __func__, __LINE__,
         vap->vap_index, interface->name, vap->u.bss_info.mld_info.common_info.mld_enable);
 
-    if (!interface->vap_info.u.bss_info.mld_info.common_info.mld_enable &&
-        vap->u.bss_info.mld_info.common_info.mld_enable) {
-        // TODO: disable interface and enable MLD
-        if (interface->vap_info.vap_index == 0) {
-            system("ip link set dev wifi0 down");
-            system("ip link set dev wifi0 address 00:11:11:11:11:11");
-            system("ip link set dev wifi1 down");
-            system("ip link set dev wifi1 address 00:22:22:22:22:22");
-            system("ip link set dev wifi2 down");
-            system("ip link set dev wifi2 address 00:33:33:33:33:33");
+    // if (!interface->vap_info.u.bss_info.mld_info.common_info.mld_enable &&
+    //     vap->u.bss_info.mld_info.common_info.mld_enable) {
+    //     // TODO: disable interface and enable MLD
+    //     if (interface->vap_info.vap_index == 0) {
+    //         system("ip link set dev wifi0 down");
+    //         system("ip link set dev wifi0 address 00:11:11:11:11:11");
+    //         system("ip link set dev wifi1 down");
+    //         system("ip link set dev wifi1 address 00:22:22:22:22:22");
+    //         system("ip link set dev wifi2 down");
+    //         system("ip link set dev wifi2 address 00:33:33:33:33:33");
 
-            system("ip link set dev mld0 down");
-            system("ip link set dev mld0 address 00:11:22:33:44:55");
-            system("ip link set dev mld0 up");
-        }
-    } else if (interface->vap_info.u.bss_info.mld_info.common_info.mld_enable &&
-        !vap->u.bss_info.mld_info.common_info.mld_enable) {
-        // TODO: disable MLD and enable interface
-    }
+    //         system("ip link set dev mld0 down");
+    //         system("ip link set dev mld0 address 00:11:22:33:44:55");
+    //         system("ip link set dev mld0 up");
+    //     }
+    // } else if (interface->vap_info.u.bss_info.mld_info.common_info.mld_enable &&
+    //     !vap->u.bss_info.mld_info.common_info.mld_enable) {
+    //     // TODO: disable MLD and enable interface
+    // }
 
     return RETURN_OK;
 }
@@ -1434,7 +1434,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         interface_name = wifi_hal_get_interface_name(interface);
 
         wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface_name);
-        nl80211_interface_enable(interface_name, false);
+        //XXX
+        //nl80211_interface_enable(interface_name, false);
 #ifndef CONFIG_WIFI_EMULATOR
         if (vap->vap_mode == wifi_vap_mode_sta) {
             wifi_hal_info_print("%s:%d: interface:%s remove from bridge\n", __func__, __LINE__,
@@ -1444,11 +1445,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif
         wifi_hal_info_print("%s:%d: interface:%s set mode:%d\n", __func__, __LINE__,
             interface_name, vap->vap_mode);
-        if (nl80211_update_interface(interface) != 0) {
-            wifi_hal_error_print("%s:%d: interface:%s failed to set mode %d\n",__func__, __LINE__,
-                interface_name, vap->vap_mode);
-            return RETURN_ERR;
-        }
+        //XXX
+        // if (nl80211_update_interface(interface) != 0) {
+        //     wifi_hal_error_print("%s:%d: interface:%s failed to set mode %d\n",__func__, __LINE__,
+        //         interface_name, vap->vap_mode);
+        //     return RETURN_ERR;
+        // }
 
         wifi_hal_info_print("%s:%d: interface:%s radio configured:%d radio enabled:%d\n",
             __func__, __LINE__, interface_name, radio->configured, radio->oper_param.enable);
