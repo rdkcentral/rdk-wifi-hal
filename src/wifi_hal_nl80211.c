@@ -14235,6 +14235,83 @@ static int nl80211_mbssid(struct nl_msg *msg, struct wpa_driver_ap_params *param
 }
 #endif
 
+int nl_set_beacon_rate_ioctl(wifi_interface_info_t *interface, wifi_vap_info_t *vap)
+{
+    struct nl_msg *msg;
+    struct nlattr *nlattr_vendor = NULL;
+    int vapIndex = vap->vap_index;
+    int beacon_rate = 0;
+
+    switch (vap->u.bss_info.beaconRate) {
+        case WIFI_BITRATE_1MBPS:
+        case WIFI_BITRATE_2MBPS:
+        case WIFI_BITRATE_5_5MBPS:
+            wifi_hal_error_print("%s:%d: Invalid beacon rate %d for vap index %d. 802.11b rates are not supported\n", __func__, __LINE__, vap->u.bss_info.beaconRate, vapIndex);
+        case WIFI_BITRATE_6MBPS:
+            beacon_rate = 6;
+            break;
+        case WIFI_BITRATE_9MBPS:
+            beacon_rate = 9;
+            break;
+        case WIFI_BITRATE_11MBPS:
+            beacon_rate = 11;
+            break;
+        case WIFI_BITRATE_12MBPS:
+            beacon_rate = 12;
+            break;
+        case WIFI_BITRATE_18MBPS:
+            beacon_rate = 18;
+            break;
+        case WIFI_BITRATE_24MBPS:
+            beacon_rate = 24;
+            break;
+        case WIFI_BITRATE_36MBPS:
+            beacon_rate = 36;
+            break;
+        case WIFI_BITRATE_48MBPS:
+            beacon_rate = 48;
+            break;
+        case WIFI_BITRATE_54MBPS:
+            beacon_rate = 54;
+            break;
+        default:
+            wifi_hal_error_print("%s:%d: Invalid beacon rate %d for vap index %d\n", __func__, __LINE__, vap->u.bss_info.beaconRate, vapIndex);
+        }
+
+    }
+
+    msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST, RDK_VENDOR_NL80211_SUBCMD_SET_BEACON_RATE);
+
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
+        free(interface);
+        return -1;
+    }
+
+    if (nla_put_u32(msg, RDK_VENDOR_ATTR_VAP_INDEX, vapIndex) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set vap index\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        free(interface);
+        return -1;
+    }
+
+    if (nla_put_s32(msg, RDK_VENDOR_ATTR_BEACON_RATE, beacon_rate) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set beacon rate\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        free(interface);
+        return -1;
+    }
+
+    nla_nest_end(msg, nlattr_vendor);
+
+    if (nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL) != 0) {
+            wifi_hal_stats_error_print("%s:%d: Failed to send NL command for vap index %d\n", __func__, __LINE__, vapIndex);
+            return -1;
+    }
+
+    return 0;   
+}
+
 int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
 {
 #ifdef CONFIG_IEEE80211BE
@@ -14288,11 +14365,25 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     if (params->beacon_int > 0) {
         nla_put_u32(msg, NL80211_ATTR_BEACON_INTERVAL, params->beacon_int);
     }
+
+    /*RDKB-58575,BCOMB-3071 If driver does not advertise below flags then
+    use nl_set_beacon_rate_ioctl() if beacon frame rate change is needed */
+    if (drv->capa.flags &
+            (WPA_DRIVER_FLAGS_BEACON_RATE_LEGACY | WPA_DRIVER_FLAGS_BEACON_RATE_HT |
+                WPA_DRIVER_FLAGS_BEACON_RATE_VHT) ||
+        drv->capa.flags2 & WPA_DRIVER_FLAGS2_BEACON_RATE_HE) {
 #if HOSTAPD_VERSION < 210
-    nl80211_put_beacon_rate(msg, drv->capa.flags, params);
+        nl80211_put_beacon_rate(msg, drv->capa.flags, params);
 #else
-    nl80211_put_beacon_rate(msg, drv->capa.flags, drv->capa.flags2, params);
+        nl80211_put_beacon_rate(msg, drv->capa.flags, drv->capa.flags2, params);
 #endif
+    } else {
+        ret = nl_set_beacon_rate_ioctl(interface, vap);
+        if (ret) {
+            wifi_hal_error_print("%s:%d: Failed to set beacon rate\n", __func__, __LINE__);
+        }
+    }
+
     if (params->dtim_period > 0) {
         nla_put_u32(msg, NL80211_ATTR_DTIM_PERIOD, params->dtim_period);
     }
