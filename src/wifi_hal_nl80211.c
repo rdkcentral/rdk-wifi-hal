@@ -7301,8 +7301,7 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
                 reconfigure = true;
                 nl80211_enable_ap(interface, false);
                 pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-                hostapd_bss_deinit_no_free(&interface->u.ap.hapd);
-                hostapd_free_hapd_data(&interface->u.ap.hapd);
+                deinit_bss(&interface->u.ap.hapd);
                 if (interface->u.ap.hapd.conf != NULL && interface->u.ap.hapd.conf->ssid.wpa_psk != NULL && !interface->u.ap.hapd.conf->ssid.wpa_psk->next)
                     hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
 
@@ -7442,6 +7441,55 @@ Exit:
 
     return 0;
 }
+
+#if defined(TCXB8_PORT) || defined(XB10_PORT)
+int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
+{
+    wifi_hal_dbg_print("%s:%d: Setting AMSDU for interface->name=%s\n", __func__, __LINE__,
+        interface->name);
+
+    struct nl_msg *msg;
+    struct nlattr *nlattr_vendor = NULL;
+
+    // Create the vendor-specific command message
+    msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
+        RDK_VENDOR_NL80211_SUBCMD_SET_AMSDU_CONFIG);
+    if (msg == NULL) {
+        wifi_hal_dbg_print("%s:%d: Failed to create AMSDU NL SET command\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    /*
+     * message format for WMM TID setting
+     *
+     *  NL80211_ATTR_VENDOR_DATA
+     *  RDK_VENDOR_ATTR_AMSDU_TIDS
+     * */
+
+    nlattr_vendor = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+
+    if (nla_put_u32(msg, RDK_VENDOR_ATTR_VAP_INDEX, 0) < 0) {
+        wifi_hal_stats_error_print("%s:%d: Failed to set vap index\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return RETURN_ERR;
+    }
+
+    if (nla_put(msg, RDK_VENDOR_ATTR_AMSDU_TIDS, RDK_VENDOR_NL80211_AMSDU_TID_MAX, amsdu_tid) < 0) {
+        wifi_hal_dbg_print("%s:%d: Failed to add AMSDU TIDs config\n", __func__, __LINE__);
+        nla_nest_cancel(msg, nlattr_vendor);
+        nlmsg_free(msg);
+        return RETURN_ERR;
+    }
+
+    nla_nest_end(msg, nlattr_vendor);
+
+    if (nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL) != 0) {
+        wifi_hal_dbg_print("%s:%d: Failed to send NL command for AMSDU TIDs config setup\n",
+            __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    return RETURN_OK;
+}
+#endif
 
 int nl80211_set_regulatory_domain(wifi_countrycode_type_t country_code)
 {
@@ -12332,7 +12380,7 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
                 goto fail;
             }
         }
-#if defined(CMXB7_PORT) || defined(VNTXER5_PORT)
+#ifdef CONFIG_IEEE80211AX
         if (params->he_capab) {
             wpa_hexdump(MSG_DEBUG, "  * he_capab",
                         params->he_capab, params->he_capab_len);
@@ -15766,8 +15814,7 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
         if ( dfs_interface->bss_started && dfs_interface->vap_initialized) {
             nl80211_enable_ap(interface, false);
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-            hostapd_bss_deinit_no_free(&interface->u.ap.hapd);
-            hostapd_free_hapd_data(&interface->u.ap.hapd);
+            deinit_bss(&interface->u.ap.hapd);
             if (interface->u.ap.hapd.conf != NULL && interface->u.ap.hapd.conf->ssid.wpa_psk != NULL && !interface->u.ap.hapd.conf->ssid.wpa_psk->next)
                 hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
             pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
