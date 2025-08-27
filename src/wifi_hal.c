@@ -774,17 +774,18 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         }
 
         while (interface != NULL) {
+            char *interface_name = wifi_hal_get_interface_name(interface);
+
             if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
                 wifi_hal_info_print(
                     "%s:%d: vap_index: %d interface name: %s vap_initialized: %d "
                     "bss started: %d vap enabled: %d radio configured: %d radio enabled: %d\n",
-                    __func__, __LINE__, interface->vap_info.vap_index,
-                    wifi_hal_get_interface_name(interface), interface->vap_initialized,
-                    interface->bss_started, interface->vap_info.u.bss_info.enabled,
-                    radio->configured, radio->oper_param.enable);
+                    __func__, __LINE__, interface->vap_info.vap_index, interface_name,
+                    interface->vap_initialized, interface->bss_started,
+                    interface->vap_info.u.bss_info.enabled, radio->configured,
+                    radio->oper_param.enable);
                 if (radio->oper_param.enable && interface->vap_info.u.bss_info.enabled) {
-                    if (nl80211_interface_enable(wifi_hal_get_interface_name(interface), true) !=
-                        0) {
+                    if (nl80211_interface_enable(interface_name, true) != 0) {
                         ret = nl80211_retry_interface_enable(interface, true);
                         if (ret != 0) {
                             wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n",
@@ -801,8 +802,8 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
 
                 if (radio->oper_param.enable == false && interface->bss_started) {
                     /* Clear beacon interval in wdev by stoping AP */
-                    nl80211_interface_enable(wifi_hal_get_interface_name(interface), false);
-                    nl80211_interface_enable(wifi_hal_get_interface_name(interface), true);
+                    nl80211_interface_enable(interface_name, false);
+                    nl80211_interface_enable(interface_name, true);
                     interface->beacon_set = 0;
                     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                     hostapd_reload_config(interface->u.ap.hapd.iface);
@@ -824,7 +825,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                         return RETURN_ERR;
                     }
                     interface->bss_started = false;
-                    nl80211_interface_enable(wifi_hal_get_interface_name(interface), false);
+                    nl80211_interface_enable(interface_name, false);
                 }
             }
 
@@ -833,11 +834,11 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                     if (interface->u.sta.state == WPA_COMPLETED) {
                         nl80211_disconnect_sta(interface);
                     }
-                    nl80211_interface_enable(wifi_hal_get_interface_name(interface), false);
+                    nl80211_interface_enable(interface_name, false);
                 }
 
                 if (radio->oper_param.enable) {
-                    nl80211_interface_enable(wifi_hal_get_interface_name(interface), true);
+                    nl80211_interface_enable(interface_name, true);
                     wifi_drv_set_operstate(interface, 1);
                 }
             }
@@ -1320,15 +1321,6 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 continue;
             }
         }
-
-        wifi_hal_dbg_print("%s:%d: vap index:%d interface:%s basic_transmit_rates:%s, "
-            "oper_transmit_rates:%s, supp_transmit_rates:%s min_adv_mcs:%s "
-            "6GOpInfoMinRate:%s\n", __func__, __LINE__, vap->vap_index, interface->name,
-            vap->u.bss_info.preassoc.basic_data_transmit_rates,
-            vap->u.bss_info.preassoc.operational_data_transmit_rates,
-            vap->u.bss_info.preassoc.supported_data_transmit_rates,
-            vap->u.bss_info.preassoc.minimum_advertised_mcs,
-            vap->u.bss_info.preassoc.sixGOpInfoMinRate);
 
 #ifdef NL80211_ACL
         if ((vap->u.bss_info.enabled == 1) &&
