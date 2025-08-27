@@ -240,7 +240,33 @@ int nvram_get_current_ssid(char *l_ssid, int vap_index)
 
 int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    wifi_vap_info_t *vap;
+    wifi_interface_info_t *interface;
+
+    for (unsigned int i = 0; i < map->num_vaps; i++) {
+        vap = &map->vap_array[i];
+        if (vap->vap_mode != wifi_vap_mode_ap) {
+            continue;
+        }
+        interface = get_interface_by_vap_index(vap->vap_index);
+        if (interface == NULL) {
+            wifi_hal_error_print("%s:%d: failed to get interface for vap_index %d\n", __func__,
+                __LINE__, vap->vap_index);
+            return -1;
+        }
+        // Override MLO configuration because links added and enabled on the boot.
+        // TODO: dynamic configuration
+        vap->u.bss_info.mld_info.common_info.mld_enable =
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_enable;
+        memcpy(vap->u.bss_info.mld_info.common_info.mld_addr,
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_addr,
+            sizeof(vap->u.bss_info.mld_info.common_info.mld_addr));
+        vap->u.bss_info.mld_info.common_info.mld_link_id =
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
+        vap->u.bss_info.mld_info.common_info.mld_id =
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_id;
+    }
+
     return 0;
 }
 
@@ -835,3 +861,4 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     return 0;
 }
 #endif /* CONFIG_IEEE80211BE */
+

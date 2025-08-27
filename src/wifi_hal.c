@@ -421,7 +421,7 @@ INT wifi_hal_init()
     }
 
     if (nl80211_init_primary_interfaces() != 0) {
-       return RETURN_ERR;
+        return RETURN_ERR;
     }
 
     if (nl80211_init_radio_info() != 0) {
@@ -1225,70 +1225,6 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
 }
 #endif
 
-int wifi_hal_create_mld(wifi_radio_info_t *radio, wifi_interface_info_t *interface,
-    wifi_vap_info_t *vap)
-{
-    if (vap->vap_mode != wifi_vap_mode_ap) {
-        return RETURN_OK;
-    }
-
-    // TODO: enabled for test, remove
-    if (interface->vap_info.vap_index == 0) {
-        vap->u.bss_info.mld_info.common_info.mld_enable = true;
-        uint8_t mld_addr[ETH_ALEN] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55 };
-        memcpy(vap->u.bss_info.mld_info.common_info.mld_addr, mld_addr,
-            sizeof(vap->u.bss_info.mld_info.common_info.mld_addr));
-        vap->u.bss_info.mld_info.common_info.mld_id = 0;
-        vap->u.bss_info.mld_info.common_info.mld_link_id = 0;
-    }
-    if (interface->vap_info.vap_index == 1) {
-        vap->u.bss_info.mld_info.common_info.mld_enable = true;
-        uint8_t mld_addr[ETH_ALEN] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55 };
-        memcpy(vap->u.bss_info.mld_info.common_info.mld_addr, mld_addr,
-            sizeof(vap->u.bss_info.mld_info.common_info.mld_addr));
-        vap->u.bss_info.mld_info.common_info.mld_id = 0;
-        vap->u.bss_info.mld_info.common_info.mld_link_id = 1;
-    }
-    if (interface->vap_info.vap_index == 16) {
-        vap->u.bss_info.mld_info.common_info.mld_enable = true;
-        uint8_t mld_addr[ETH_ALEN] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55 };
-        memcpy(vap->u.bss_info.mld_info.common_info.mld_addr, mld_addr,
-            sizeof(vap->u.bss_info.mld_info.common_info.mld_addr));
-        vap->u.bss_info.mld_info.common_info.mld_id = 0;
-        vap->u.bss_info.mld_info.common_info.mld_link_id = 2;
-    }
-
-    if (interface->vap_info.u.bss_info.mld_info.common_info.mld_enable ==
-        vap->u.bss_info.mld_info.common_info.mld_enable) {
-        return RETURN_OK;
-    }
-
-    wifi_hal_info_print("%s:%d: vap index:%d interface:%s MLD enable: %d\n", __func__, __LINE__,
-        vap->vap_index, interface->name, vap->u.bss_info.mld_info.common_info.mld_enable);
-
-    // if (!interface->vap_info.u.bss_info.mld_info.common_info.mld_enable &&
-    //     vap->u.bss_info.mld_info.common_info.mld_enable) {
-    //     // TODO: disable interface and enable MLD
-    //     if (interface->vap_info.vap_index == 0) {
-    //         system("ip link set dev wifi0 down");
-    //         system("ip link set dev wifi0 address 00:11:11:11:11:11");
-    //         system("ip link set dev wifi1 down");
-    //         system("ip link set dev wifi1 address 00:22:22:22:22:22");
-    //         system("ip link set dev wifi2 down");
-    //         system("ip link set dev wifi2 address 00:33:33:33:33:33");
-
-    //         system("ip link set dev mld0 down");
-    //         system("ip link set dev mld0 address 00:11:22:33:44:55");
-    //         system("ip link set dev mld0 up");
-    //     }
-    // } else if (interface->vap_info.u.bss_info.mld_info.common_info.mld_enable &&
-    //     !vap->u.bss_info.mld_info.common_info.mld_enable) {
-    //     // TODO: disable MLD and enable interface
-    // }
-
-    return RETURN_OK;
-}
-
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
 INT _wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map);
 
@@ -1367,12 +1303,6 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         wifi_hal_info_print("%s:%d: vap index:%d create vap\n", __func__, __LINE__,
             vap->vap_index);
 
-        //XXX
-        if (vap->vap_index != 0 && vap->vap_index != 1 &&
-            vap->vap_index != 16) {
-            continue;
-        }
-
         if (vap->vap_mode == wifi_vap_mode_ap) {
             if (validate_wifi_interface_vap_info_params(vap, msg, sizeof(msg)) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d:Failed to validate interface vap_info params for vap_index: %d on radio index: %d. %s\n", __func__, __LINE__, vap->vap_index, index, msg);
@@ -1391,11 +1321,14 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
         }
 
-        if (wifi_hal_create_mld(radio, interface, vap) != RETURN_OK) {
-            wifi_hal_error_print("%s:%d: vap index:%d failed to create mld\n", __func__, __LINE__,
-                vap->vap_index);
-            return RETURN_ERR;
-        }
+        wifi_hal_dbg_print("%s:%d: vap index:%d interface:%s basic_transmit_rates:%s, "
+            "oper_transmit_rates:%s, supp_transmit_rates:%s min_adv_mcs:%s "
+            "6GOpInfoMinRate:%s\n", __func__, __LINE__, vap->vap_index, interface->name,
+            vap->u.bss_info.preassoc.basic_data_transmit_rates,
+            vap->u.bss_info.preassoc.operational_data_transmit_rates,
+            vap->u.bss_info.preassoc.supported_data_transmit_rates,
+            vap->u.bss_info.preassoc.minimum_advertised_mcs,
+            vap->u.bss_info.preassoc.sixGOpInfoMinRate);
 
 #ifdef NL80211_ACL
         if ((vap->u.bss_info.enabled == 1) &&
