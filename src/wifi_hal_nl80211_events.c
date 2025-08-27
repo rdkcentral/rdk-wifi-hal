@@ -1613,9 +1613,7 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
         radio = &priv->radio_info[i];
         interface = hash_map_get_first(radio->interface_map);
         while (interface != NULL) {
-            if ((wiphy_idx_rx != -1) ||
-                ((ifidx == wifi_hal_get_interface_ifindex(interface)) &&
-                    (interface->vap_configured == true))) {
+            if ((wiphy_idx_rx != -1) || ((ifidx == interface->index) && (interface->vap_configured == true)) ) {
                 do_process_drv_event(interface, gnlh->cmd, tb);
             } else {
                 //wifi_hal_dbg_print("%s:%d: Skipping event %d for foreign interface (ifindex %d wdev 0x%llx)\n", 

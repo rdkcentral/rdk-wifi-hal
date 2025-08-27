@@ -4506,15 +4506,19 @@ bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface)
     return false;
 }
 
+#ifndef NL80211_DRV_LINK_ID_NA
+#define NL80211_DRV_LINK_ID_NA (-1)
+#endif
+
 unsigned int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface)
 {
     if (interface == NULL) {
         wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
-        return 0;
+        return NL80211_DRV_LINK_ID_NA;
     }
 
     if (!wifi_hal_is_mld_enabled(interface)) {
-        return -1;
+        return NL80211_DRV_LINK_ID_NA;
     }
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
@@ -4525,13 +4529,17 @@ unsigned int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface)
         return interface->vap_info.u.sta_info.mld_info.common_info.mld_link_id;
     }
 
-    return -1;
+    return NL80211_DRV_LINK_ID_NA;
 }
 
 mac_address_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
 {
     if (interface == NULL) {
         wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return NULL;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
         return NULL;
     }
 
@@ -4573,7 +4581,7 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info
         }
     }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-#endif /* HOSTAPD_VERSION >= 211 */
+#endif // HOSTAPD_VERSION >= 211
 
     return interface;
 }
@@ -4605,7 +4613,7 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t 
         }
     }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-#endif /* HOSTAPD_VERSION >= 211 */
+#endif // HOSTAPD_VERSION >= 211
 
     return interface;
 }
@@ -4635,7 +4643,7 @@ wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_inf
         }
     }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-#endif /* HOSTAPD_VERSION >= 211 */
+#endif // HOSTAPD_VERSION >= 211
 
     return link_interface;
 }
