@@ -3450,10 +3450,6 @@ void create_interfaces(wifi_radio_info_t *radio)
                 interface->mac[3] = 0x33;
                 interface->mac[4] = 0x44;
                 interface->mac[5] = interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
-
-                // system("ip link set dev mld0 down");
-                // system("ip link set dev mld0 address 00:11:22:33:44:55");
-                // system("ip link set dev mld0 up");
             }
         }
 

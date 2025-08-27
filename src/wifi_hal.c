@@ -1433,9 +1433,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         memcpy((unsigned char *)&interface->vap_info, (unsigned char *)vap, sizeof(wifi_vap_info_t));
         interface_name = wifi_hal_get_interface_name(interface);
 
+#ifndef CONFIG_GENERIC_MLO
+        // Interface down removes MLO links
         wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface_name);
-        //XXX
-        //nl80211_interface_enable(interface_name, false);
+        nl80211_interface_enable(interface_name, false);
+#endif /* CONFIG_GENERIC_MLO */
 #ifndef CONFIG_WIFI_EMULATOR
         if (vap->vap_mode == wifi_vap_mode_sta) {
             wifi_hal_info_print("%s:%d: interface:%s remove from bridge\n", __func__, __LINE__,
@@ -1445,12 +1447,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif
         wifi_hal_info_print("%s:%d: interface:%s set mode:%d\n", __func__, __LINE__,
             interface_name, vap->vap_mode);
-        //XXX
-        // if (nl80211_update_interface(interface) != 0) {
-        //     wifi_hal_error_print("%s:%d: interface:%s failed to set mode %d\n",__func__, __LINE__,
-        //         interface_name, vap->vap_mode);
-        //     return RETURN_ERR;
-        // }
+        if (nl80211_update_interface(interface) != 0) {
+            wifi_hal_error_print("%s:%d: interface:%s failed to set mode %d\n",__func__, __LINE__,
+                interface_name, vap->vap_mode);
+            return RETURN_ERR;
+        }
 
         wifi_hal_info_print("%s:%d: interface:%s radio configured:%d radio enabled:%d\n",
             __func__, __LINE__, interface_name, radio->configured, radio->oper_param.enable);

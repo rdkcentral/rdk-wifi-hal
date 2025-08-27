@@ -6723,6 +6723,9 @@ int nl80211_init_primary_interfaces()
         if (!one_shot) {
             one_shot = true;
 
+        system("ip link set dev mld0 down");
+        system("ip link set dev mld0 address 00:11:22:33:44:55");
+
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_INTERFACE);
         if (msg == NULL) {
             return -1;
