@@ -4513,6 +4513,10 @@ unsigned int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface)
         return 0;
     }
 
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return -1;
+    }
+
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         return interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
     }
@@ -4521,7 +4525,7 @@ unsigned int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface)
         return interface->vap_info.u.sta_info.mld_info.common_info.mld_link_id;
     }
 
-    return 0;
+    return -1;
 }
 
 mac_address_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
