@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -9471,6 +9471,10 @@ static void parse_supprates(const uint8_t type, uint8_t len,
             case 54*2:
                 rates = WIFI_BITRATE_54MBPS;
                 break;
+            case 123:
+                //membership selector for SAE-H2E
+                //Ignoring to update the rates
+                continue;
             default:
                 wifi_hal_error_print("%s:%d: [SCAN] Unsupported bitrate value: 0x%02X (%u.%u Mbps)\n",
                     __func__, __LINE__, r, r/2, 5*(r & 1)); 
