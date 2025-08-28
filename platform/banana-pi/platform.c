@@ -265,6 +265,14 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
         vap->u.bss_info.mld_info.common_info.mld_id =
             interface->vap_info.u.bss_info.mld_info.common_info.mld_id;
+
+        // Disable non-MLD interface so it's MAC can be reused for MLD link
+        if (vap->u.bss_info.mld_info.common_info.mld_enable &&
+            nl80211_interface_enable(interface->name, false) < 0) {
+            wifi_hal_error_print("%s:%d: failed to disable interface %s\n", __func__, __LINE__,
+                interface->name);
+            return -1;
+        }
     }
 
     return 0;
