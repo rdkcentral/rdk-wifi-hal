@@ -5822,6 +5822,29 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                     wifi_hal_error_print("%s:%d: Failed to get ifindex for MLD interface %s: %s\n",
                         __func__, __LINE__, mld_name, strerror(errno));
                 }
+                interface->index = interface->mld_ifindex;
+
+                if ((interface->vap_info.vap_mode == wifi_vap_mode_ap)) {
+                    interface->vap_info.u.bss_info.mld_info.common_info.mld_enable = true;
+                    //random_mac_addr(interface->vap_info.u.bss_info.mld_info.common_info.mld_addr);
+                    interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[0] = 0x00;
+                    interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[1] = 0x11;
+                    interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[2] = 0x22;
+                    interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[3] = 0x33;
+                    interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[4] = 0x44;
+                    interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[5] = 0x55;
+
+                    static int link_id = 0;
+                    interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id = link_id++;
+
+                    interface->mac[0] = 0x00;
+                    interface->mac[1] = 0x11;
+                    interface->mac[2] = 0x22;
+                    interface->mac[3] = 0x33;
+                    interface->mac[4] = 0x44;
+                    interface->mac[5] =
+                        interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
+                }
             }
 
             wifi_hal_dbg_print("%s:%d: phy index: %d radio index: %d interface index: %d name: %s "
@@ -6232,8 +6255,6 @@ static u32 get_nl80211_protocol_features(int nl_id)
 }
 #endif // VNTXER5_PORT || TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT
 
-void create_interfaces(wifi_radio_info_t *radio);
-
 int init_nl80211()
 {
     int ret;
@@ -6443,17 +6464,14 @@ int init_nl80211()
         radio->interface_map = hash_map_create();
 
         // get the interface information
-        // msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_INTERFACE);
-        // if (msg == NULL) {
-        //     return -1;
-        // }
-        // nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index);
-        // if (nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL)) {
-        //     return -1;
-        // }
-
-
-        create_interfaces(radio);
+        msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_INTERFACE);
+        if (msg == NULL) {
+            return -1;
+        }
+        nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index);
+        if (nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL)) {
+            return -1;
+        }
 
         wifi_hal_dbg_print("%s:%d: Found %d interfaces on radio index:%d\n", __func__, __LINE__,
             hash_map_count(radio->interface_map), radio->index);
@@ -6637,9 +6655,6 @@ int nl80211_delete_interfaces(wifi_radio_info_t *radio)
     return 0;
 }
 
-int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx);
-
-
 int nl80211_init_primary_interfaces()
 {
     unsigned int i, ret;
@@ -6707,10 +6722,8 @@ int nl80211_init_primary_interfaces()
             }
         }
         nl80211_interface_enable(primary_interface->name, true);
+	}
 
-        }
-
-        wifi_drv_link_add(interface, interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id, interface->mac, NULL);
     }
 
     return 0;
