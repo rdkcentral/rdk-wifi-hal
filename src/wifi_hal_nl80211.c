@@ -5834,16 +5834,8 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                     interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[4] = 0x44;
                     interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[5] = 0x55;
 
-                    static int link_id = 0;
-                    interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id = link_id++;
-
-                    interface->mac[0] = 0x00;
-                    interface->mac[1] = 0x11;
-                    interface->mac[2] = 0x22;
-                    interface->mac[3] = 0x33;
-                    interface->mac[4] = 0x44;
-                    interface->mac[5] =
-                        interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
+                    interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id =
+                        radio->rdk_radio_index;
                 }
             }
 
