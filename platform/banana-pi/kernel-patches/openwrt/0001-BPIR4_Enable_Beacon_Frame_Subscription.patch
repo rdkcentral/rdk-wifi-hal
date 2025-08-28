@@ -1,0 +1,46 @@
+From: Rakhil P E <rakhilpe001@gmail.com>
+Date: Mon, 21 Jul 2025 09:09:00 +0000
+Subject: [PATCH] Enable beacon reception in station mode
+
+This patch enables reception of beacon frames in station mode
+by modifying default management frame subtypes.
+
+---
+ package/kernel/mac80211/src/net/mac80211/main.c       | 2 ++
+ .../mediatek/mt76/mt7996/init.c                       | 13 +++++++++++++
+ 2 files changed, 15 insertions(+)
+
+
+--- /package/kernel/mac80211/src/net/mac80211/main.c.orig	2025-07-24 06:52:36.481632003 +0000
++++ /package/kernel/mac80211/src/net/mac80211/main.c	2025-07-24 06:58:27.666659013 +0000
+@@ -678,7 +678,8 @@
+		 */
+		.rx = BIT(IEEE80211_STYPE_ACTION >> 4) |
+			BIT(IEEE80211_STYPE_AUTH >> 4) |
+-			BIT(IEEE80211_STYPE_PROBE_REQ >> 4),
++			BIT(IEEE80211_STYPE_PROBE_REQ >> 4) |
++			BIT(IEEE80211_STYPE_BEACON >> 4),
+	},
+	[NL80211_IFTYPE_AP] = {
+		.tx = 0xffff,
+--- /package/kernel/mac80211/src/drivers/net/wireless/mediatek/mt76/mt7996/init.c.orig	2025-07-24 06:53:02.959147002 +0000
++++ /package/kernel/mac80211/src/drivers/net/wireless/mediatek/mt76/mt7996/init.c	2025-07-24 06:56:37.967777004 +0000
+@@ -441,6 +441,18 @@
+ 
+	wiphy->available_antennas_rx = phy->mt76->antenna_mask;
+	wiphy->available_antennas_tx = phy->mt76->antenna_mask;
++
++	static const struct ieee80211_txrx_stypes mt7996_mgmt_stypes[NUM_NL80211_IFTYPES] = {
++		[NL80211_IFTYPE_STATION] = {
++			.rx = BIT(IEEE80211_STYPE_ACTION >> 4) |
++				BIT(IEEE80211_STYPE_AUTH >> 4) |
++				BIT(IEEE80211_STYPE_PROBE_REQ >> 4) |
++				BIT(IEEE80211_STYPE_BEACON >> 4),
++			.tx = BIT(IEEE80211_STYPE_ACTION >> 4),
++		},
++	};
++
++	wiphy->mgmt_stypes = mt7996_mgmt_stypes;
+ }
+ 
+ static void

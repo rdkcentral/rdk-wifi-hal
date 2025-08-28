@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -360,10 +360,6 @@ int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg
     if (bss_info->showSsid > 1) {
         ret = RETURN_ERR;
         snprintf(msg + strlen(msg), len - strlen(msg), " showSsid: %d", bss_info->showSsid);
-    }
-    if (strncmp(vap_info->bridge_name, "", strlen(vap_info->bridge_name)) == 0) {
-        ret = RETURN_ERR;
-        snprintf(msg + strlen(msg), len - strlen(msg), " Bridge name is null for vap index %u", vap_info->vap_index);
     }
 
     // security parameter values

@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -27,6 +27,7 @@
 #include <stdarg.h>
 #include <pthread.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <net/if.h>
 #include <linux/rtnetlink.h>
 #include <netpacket/packet.h>
@@ -159,7 +160,32 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
 
 #ifdef XLE_PORT // for Broadcom XLE
 
-#ifdef XLE_3_RADIO_SUPPORT
+#if defined (XLE_3_RADIO_SUPPORT) && defined(XLE_BCM_SDK_504L04P3)
+    {1, 0,  "wl0.1",   "brlan0",  100,    0,      "private_ssid_2g"},
+    {2, 1,  "wl1.1",   "brlan0",  100,    1,      "private_ssid_5gl"},
+    {1, 0,  "wl0.2",   "brlan1",  101,    2,      "iot_ssid_2g"},
+    {2, 1,  "wl1.2",   "brlan1",  101,    3,      "iot_ssid_5gl"},
+    {1, 0,  "wl0.3",   "brlan2",  102,    4,      "hotspot_open_2g"},
+    {2, 1,  "wl1.3",   "brlan3",  103,    5,      "hotspot_open_5gl"},
+    {1, 0,  "wl0.4",   "br106",   106,    6,      "lnf_psk_2g"},
+    {2, 1,  "wl1.4",   "br106",   106,    7,      "lnf_psk_5gl"},
+    {1, 0,  "wl0.5",   "brlan4",  104,    8,      "hotspot_secure_2g"},
+    {2, 1,  "wl1.5",   "brlan5",  105,    9,      "hotspot_secure_5gl"},
+    {1, 0,  "wl0.6",   "br106",   106,    10,     "lnf_radius_2g"},
+    {2, 1,  "wl1.6",   "br106",   106,    11,     "lnf_radius_5gl"},
+    {1, 0,  "wl0.7",   "brlan112",112,    12,     "mesh_backhaul_2g"},
+    {2, 1,  "wl1.7",   "brlan113",113,    13,     "mesh_backhaul_5gl"},
+    {1, 0,  "wl0",     "",          0,    14,     "mesh_sta_2g"},
+    {2, 1,  "wl1",     "",          0,    15,     "mesh_sta_5gl"},
+    {0, 2,  "wl2.1",   "brlan0",  100,    16,     "private_ssid_5gh"},
+    {0, 2,  "wl2.2",   "brlan1",  101,    17,     "iot_ssid_5gh"},
+    {0, 2,  "wl2.3",   "brlan3",  103,    18,     "hotspot_open_5gh"},
+    {0, 2,  "wl2.4",   "br106",   106,    19,     "lnf_psk_5gh"},
+    {0, 2,  "wl2.5",   "brlan5",  105,    20,     "hotspot_secure_5gh"},
+    {0, 2,  "wl2.6",   "br106",   106,    21,     "lnf_radius_5gh"},
+    {0, 2,  "wl2.7",   "brlan113",114,    22,     "mesh_backhaul_5gh"},
+    {0, 2,  "wl2",     "",          0,    23,     "mesh_sta_5gh"},
+#elif defined (XLE_3_RADIO_SUPPORT)
     {0, 0,  "wl0.1",   "brlan0",  100,    0,      "private_ssid_2g"},
     {1, 1,  "wl1.1",   "brlan0",  100,    1,      "private_ssid_5gl"},
     {0, 0,  "wl0.2",   "brlan1",  101,    2,      "iot_ssid_2g"},
@@ -302,6 +328,62 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {0, 0,  "wl0",     "",    0,    14,     "mesh_sta_2g"},
     {1, 1,  "wl1",     "",    0,    15,     "mesh_sta_5g"},
 #endif
+
+#ifdef RDKB_ONE_WIFI_PROD
+{0, 0,  "wl0.1",   "brlan0",   100,   0,      "private_ssid_2g"},
+{2, 1,  "wl1.1",   "brlan0",   100,   1,      "private_ssid_5g"},
+{0, 0,  "wl0.2",   "brlan1",   101,   2,      "iot_ssid_2g"},
+{2, 1,  "wl1.2",   "brlan1",   101,   3,      "iot_ssid_5g"},
+{0, 0,  "wl0.3",   "brlan2",   102,   4,      "hotspot_open_2g"},
+{2, 1,  "wl1.3",   "brlan3",   103,   5,      "hotspot_open_5g"},
+{0, 0,  "wl0.4",   "br106",    106,   6,      "lnf_psk_2g"},
+{2, 1,  "wl1.4",   "br106",    106,   7,      "lnf_psk_5g"},
+{0, 0,  "wl0.5",   "brlan4",   104,   8,      "hotspot_secure_2g"},
+{2, 1,  "wl1.5",   "brlan5",   105,   9,      "hotspot_secure_5g"},
+{0, 0,  "wl0.6",   "br106",    106,   10,     "lnf_radius_2g"},
+{2, 1,  "wl1.6",   "br106",    106,   11,     "lnf_radius_5g"},
+{0, 0,  "wl0.7",   "brlan112", 112,   12,     "mesh_backhaul_2g"},
+{2, 1,  "wl1.7",   "brlan113", 113,   13,     "mesh_backhaul_5g"},
+{0, 0,  "wl0",     "",         0,     14,     "mesh_sta_2g"},
+{2, 1,  "wl1",     "",         0,     15,     "mesh_sta_5g"},
+#ifdef RDKB_ONE_WIFI_3_RADIO_SUPPORT
+{1, 2,  "wl2.1",   "brlan0",   100,   16,     "private_ssid_6g"},
+{1, 2,  "wl2.2",   "brlan1",   101,   17,     "iot_ssid_6g"},
+{1, 2,  "wl2.3",   "bropen6g", 2253,  18,     "hotspot_open_6g"},
+{1, 2,  "wl2.5",   "brsecure6g",2256, 20,     "hotspot_secure_6g"},
+{1, 2,  "wl2.7",   "brlan114", 114,   22,     "mesh_backhaul_6g"},
+{1, 2,  "wl2",     "",         0,     23,     "mesh_sta_6g"},
+#endif /* RDKB_ONE_WIFI_3_RADIO_SUPPORT */
+#endif /* RDKB_ONE_WIFI_PROD */
+  
+#ifdef SCXF10_PORT
+    {1, 0,  "wl0.1",   "brlan0",   100,   0,      "private_ssid_2g"},
+    {2, 1,  "wl1.1",   "brlan0",   100,   1,      "private_ssid_5g"},
+    {1, 0,  "wl0.2",   "brlan1",   101,   2,      "iot_ssid_2g"},
+    {2, 1,  "wl1.2",   "brlan1",   101,   3,      "iot_ssid_5g"},
+    {1, 0,  "wl0.3",   "brlan2",   102,   4,      "hotspot_open_2g"},
+    {2, 1,  "wl1.3",   "brlan3",   103,   5,      "hotspot_open_5g"},
+    {1, 0,  "wl0.4",   "br106",    106,   6,      "lnf_psk_2g"},
+    {2, 1,  "wl1.4",   "br106",    106,   7,      "lnf_psk_5g"},
+    {1, 0,  "wl0.5",   "brlan4",   104,   8,      "hotspot_secure_2g"},
+    {2, 1,  "wl1.5",   "brlan5",   105,   9,      "hotspot_secure_5g"},
+    {1, 0,  "wl0.6",   "br106",    106,   10,     "lnf_radius_2g"},
+    {2, 1,  "wl1.6",   "br106",    106,   11,     "lnf_radius_5g"},
+    {1, 0,  "wl0.7",   "brlan112", 112,   12,     "mesh_backhaul_2g"},
+    {2, 1,  "wl1.7",   "brlan113", 113,   13,     "mesh_backhaul_5g"},
+    {1, 0,  "wl0",     "",         0,     14,     "mesh_sta_2g"},
+    {2, 1,  "wl1",     "",         0,     15,     "mesh_sta_5g"},
+    {0, 2,  "wl2.1",   "brlan0",   100,   16,     "private_ssid_6g"},
+    {0, 2,  "wl2.2",   "brlan1",   101,   17,     "iot_ssid_6g"},
+    {0, 2,  "wl2.3",   "bropen6g", 2253,  18,     "hotspot_open_6g"},
+    {0, 2,  "wl2.4",   "br106",    106,   19,     "lnf_psk_6g"},
+    {0, 2,  "wl2.5",   "brsecure6g",2256, 20,     "hotspot_secure_6g"},
+#if 0
+    {0, 2,  "wl2.6",   "br106",    106,   21,     "lnf_radius_6g"},
+#endif
+    {0, 2,  "wl2.7",   "brlan114", 114,   22,     "mesh_backhaul_6g"},
+    {0, 2,  "wl2",     "",         0,     23,     "mesh_sta_6g"},
+#endif
     // for Intel based platforms
 };
 #endif
@@ -345,7 +427,15 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 2, 1, "radio2", "wl1"},
     { 0, 2, "radio3", "wl2"},
 #endif
-  
+
+/* PHY radio mapping needs to be verified against the hardware */
+/* TBD */
+#if defined(SCXF10_PORT) 
+    { 1, 0, "radio1", "wl0"},
+    { 2, 1, "radio2", "wl1"},
+    { 0, 2, "radio3", "wl2"},
+#endif
+ 
 #ifdef CMXB7_PORT // for Intel based platforms
     { 1, 0, "radio1", "wlan0"},
     { 0, 1, "radio2", "wlan2"},
@@ -357,6 +447,14 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 1, 1, "radio2", "wlan1"},
 #else
     { 0, 0, "radio1", "wlan0"},
+#endif
+#endif
+
+#if defined(RDKB_ONE_WIFI_PROD)
+    { 2, 0, "radio1", "wl0"},
+    { 1, 1, "radio2", "wl1"},
+#ifdef RDKB_ONE_WIFI_3_RADIO_SUPPORT
+    { 0, 2, "radio3", "wl2"},
 #endif
 #endif
 };
@@ -663,7 +761,40 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
 #endif
-  
+
+#ifdef SCXF10_PORT // for Broadcom based platforms
+    "xf10",
+    "dhd",
+    {"Xfinity Wireless Gateway","Sercomm","XF10","SCXF11BFL","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    platform_pre_init,
+    platform_post_init,
+    platform_set_radio,
+    platform_set_radio_pre_init,
+    platform_pre_create_vap,
+    platform_create_vap,
+    platform_get_ssid_default,
+    platform_get_keypassphrase_default,
+    platform_get_radius_key_default,
+    platform_get_wps_pin_default,
+    platform_get_country_code_default,
+    platform_wps_event,
+    platform_flags_init,
+    platform_get_aid,
+    platform_free_aid,
+    platform_sync_done,
+    platform_update_radio_presence,
+    platform_set_txpower,
+    platform_set_offload_mode,
+    platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
+    platform_get_vendor_oui,
+    platform_set_neighbor_report,
+    platform_get_radio_phytemperature,
+    platform_set_dfs,
+    platform_get_radio_caps,
+#endif
+ 
 #ifdef CMXB7_PORT
     "cmxb7",
     "mtlk",
@@ -756,6 +887,36 @@ const wifi_driver_info_t  driver_info = {
     platform_get_acl_num,
     platform_get_chanspec_list,
     platform_set_acs_exclusion_list,
+    platform_get_vendor_oui,
+    platform_set_neighbor_report,
+    platform_get_radio_phytemperature,
+    platform_set_dfs,
+    platform_get_radio_caps,
+#endif
+#ifdef RDKB_ONE_WIFI_PROD // for Broadcom based platforms
+    "rdkb",
+    "dhd",
+    {"rdkb","rdkb","cm","cm","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    platform_pre_init,
+    platform_post_init,
+    platform_set_radio,
+    platform_set_radio_pre_init,
+    platform_pre_create_vap,
+    platform_create_vap,
+    platform_get_ssid_default,
+    platform_get_keypassphrase_default,
+    platform_get_radius_key_default,
+    platform_get_wps_pin_default,
+    platform_get_country_code_default,
+    platform_wps_event,
+    platform_flags_init,
+    platform_get_aid,
+    platform_free_aid,
+    platform_sync_done,
+    platform_update_radio_presence,
+    platform_set_txpower,
+    platform_set_offload_mode,
+    platform_get_acl_num,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -1188,6 +1349,34 @@ BOOL is_wifi_hal_vap_hotspot_from_interfacename(char *interface_name)
     return false;
 }
 
+wifi_vap_info_t* get_wifi_vap_info_from_interfacename(char *interface_name)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface;
+    unsigned int i;
+
+    if (!interface_name) {
+        return NULL;
+    }
+
+    for (i = 0; i < g_wifi_hal.num_radios; i++) {
+#ifndef FEATURE_SINGLE_PHY
+        radio = get_radio_by_rdk_index(i);
+#else //FEATURE_SINGLE_PHY
+        radio = &g_wifi_hal.radio_info[i];
+#endif //FEATURE_SINGLE_PHY
+        interface = hash_map_get_first(radio->interface_map);
+
+        while (interface != NULL) {
+            if (strncmp(interface->name, interface_name, strlen(interface_name)) == 0) {
+                return &interface->vap_info;
+            }
+            interface = hash_map_get_next(radio->interface_map, interface);
+        }
+    }
+    return NULL;
+}
+
 BOOL is_wifi_hal_6g_radio_from_interfacename(char *interface_name)
 {
     unsigned int index = 0;
@@ -1459,6 +1648,17 @@ int is_backhaul_interface(wifi_interface_info_t *interface)
     return (strncmp(vap->vap_name, "mesh_backhaul", strlen("mesh_backhaul")) == 0) ? true : false;
 }
 
+void update_vap_mode(wifi_interface_info_t *interface)
+{
+    wifi_vap_info_t *vap = &interface->vap_info;
+
+    if (strncmp(vap->vap_name, "mesh_sta", strlen("mesh_sta")) == 0) {
+        vap->vap_mode = wifi_vap_mode_sta;
+    } else {
+        vap->vap_mode = wifi_vap_mode_ap;
+    }
+}
+
 void get_wifi_interface_info_map(wifi_interface_name_idex_map_t *interface_map)
 {
     memcpy(interface_map, interface_index_map, get_sizeof_interfaces_index_map()*sizeof(wifi_interface_name_idex_map_t));
@@ -1577,6 +1777,28 @@ int getIpStringFromAdrress (char * ipString, ip_addr_t * ip)
     return 1;
 }
 #endif
+
+int get_mac_address (char *intf_name,  mac_address_t mac)
+{
+    int sock;
+    struct ifreq ifr;
+
+    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        return RETURN_ERR;
+    }
+
+    ifr.ifr_addr.sa_family = AF_INET;
+    strcpy(ifr.ifr_name, intf_name);
+    if (ioctl(sock, SIOCGIFHWADDR, &ifr) != 0) {
+        close(sock);
+        return RETURN_ERR;
+    }
+
+    memcpy(mac, (unsigned char *)ifr.ifr_hwaddr.sa_data, sizeof(mac_address_t));
+    close(sock);
+
+    return RETURN_OK;
+}
 
 int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *interface)
 {
@@ -1736,7 +1958,7 @@ BOOL get_ie_ext_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_
     return false;
 }
 
-BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len)
+BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, size_t *ie_out_len)
 {
     ieee80211_tlv_t *ie = NULL;
     signed int len;
@@ -2112,6 +2334,93 @@ static int find_country_code_match(const char *const cc[], const char *const cou
 
     return RETURN_ERR;
 }
+#ifdef RDKB_ONE_WIFI_PROD
+#define NUM_RADIOS 3
+
+static bool parse_wiphy_band_mapping(FILE *fp, int *pcie_index) {
+    char line[LINE_MAX];
+    int curr_phy_idx;
+    bool in_wiphy = false;
+
+    while (fgets(line, sizeof(line), fp)) {
+        // Detect start of Wiphy
+        char *wiphy_ptr = strstr(line, "Wiphy ");
+        if (wiphy_ptr == line) {
+            // Example: "Wiphy phy2"
+            if (sscanf(line, "Wiphy phy%d", &curr_phy_idx) == 1) {
+                in_wiphy = true;
+            }
+            continue;
+        }
+        // If in a Wiphy stanza, look for "Band N:"
+        if (in_wiphy) {
+            // Skip leading spaces
+            char *trimmed = line;
+            while (*trimmed == ' ' || *trimmed == '\t') ++trimmed;
+
+            // Look for "Band N:"
+            if (strncmp(trimmed, "Band ", 5) == 0) {
+                int band_num;
+                if (sscanf(trimmed, "Band %d:", &band_num) == 1) {
+                    --band_num; /* The iw tool prints nl_band->nla_type + 1 */
+                    if (curr_phy_idx < NUM_RADIOS &&
+                        ((band_num < NUM_NL80211_BANDS) && (band_num >= 0)))
+                        pcie_index[curr_phy_idx] = ((band_num == NL80211_BAND_6GHZ) ? 2 : band_num);
+                    else {
+                        wifi_hal_error_print("%s:%d: Recieved phy_index:%d Num Radios:%d \
+                            band_num:%d NUM_NL80211_BANDS:%d\n", __func__, __LINE__, \
+                            curr_phy_idx, NUM_RADIOS, band_num, NUM_NL80211_BANDS);
+                        return false;
+                    }
+                } else {
+                    wifi_hal_error_print("%s:%d: Unable to read the band num %s\n", __func__, __LINE__, trimmed);
+                    return false;
+                }
+                in_wiphy = false;
+            }
+        }
+    }
+    return true;
+}
+static void remap_phy_index(wifi_interface_name_idex_map_t *map, int map_size, const int *pcie_index, int pcie_size)
+{
+    for (int i = 0; i < map_size; ++i) {
+        if (!map[i].interface_name)
+            continue;
+
+        // Find the digit after "wl" (e.g., wl0.1, wl1, etc)
+        char *p = map[i].interface_name;
+        if (strncmp(p, "wl", 2) != 0)
+            continue;
+
+        p += 2;
+        if (!isdigit((unsigned char)*p))
+            continue;
+
+        int idx = *p - '0';  // Get the integer
+        if (idx < 0 || idx >= pcie_size)
+            continue;
+        if (pcie_index[idx] != -1) {
+            map[i].phy_index = pcie_index[idx];
+        } else {
+            wifi_hal_error_print("%s:%d: idx:%d doesnt exist \n", __func__, __LINE__, idx);
+        }
+    }
+}
+
+void remap_wifi_interface_name_index_map() {
+    FILE *fp;
+    int pcie_index[NUM_RADIOS] = {-1, -1, -1};
+
+    fp = popen("iw list", "r");
+    if (parse_wiphy_band_mapping(fp, pcie_index)) {
+        remap_phy_index(interface_index_map, sizeof(interface_index_map)/sizeof(interface_index_map[0]),
+            pcie_index, NUM_RADIOS);
+    }
+    pclose(fp);
+}
+
+#endif /* RDKB_ONE_WIFI_PROD */
 
 int get_wifi_op_class_info(wifi_countrycode_type_t country_code, wifi_country_radio_op_class_t *op_classes)
 {
@@ -3452,20 +3761,44 @@ enum nl80211_band wifi_freq_band_to_nl80211_band(wifi_freq_bands_t band)
 
 enum nl80211_band get_nl80211_band_from_rdk_radio_index(unsigned int rdk_radio_index)
 {
-    switch(rdk_radio_index) {
-        case 0:
-            return NL80211_BAND_2GHZ;
-        case 1:
-            return NL80211_BAND_5GHZ;
-        case 2:
-    #if HOSTAPD_VERSION >= 210
-            return NL80211_BAND_6GHZ;
-    #endif
-        default:
-            //not supported case
-            return NUM_NL80211_BANDS;
+    unsigned int i;
+    const char *vap_name = NULL;
+    const char *suffix = NULL;
+    const char *band_str = NULL;
 
+    for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
+        if (interface_index_map[i].rdk_radio_index == rdk_radio_index) {
+            vap_name = interface_index_map[i].vap_name;
+            if (!vap_name) {
+                break;
+            }
+
+            suffix = strrchr(vap_name, '_');
+            if (suffix && strlen(suffix + 1) > 0) {
+                band_str = suffix + 1;
+
+                if (strncmp(band_str, "2g", 2) == 0) {
+                    return NL80211_BAND_2GHZ;
+                } else if (strncmp(band_str, "5g", 2) == 0 ||
+                           strncmp(band_str, "5gl", 3) == 0 ||
+                           strncmp(band_str, "5gh", 3) == 0) {
+                    return NL80211_BAND_5GHZ;
+#if HOSTAPD_VERSION >= 210 && !defined(XLE_PORT)
+                } else if (strncmp(band_str, "6g", 2) == 0) {
+                    return NL80211_BAND_6GHZ;
+#endif
+                }
+            }
+
+            wifi_hal_error_print("%s:%d: Unable to parse band from vap_name: %s\n",
+                                 __func__, __LINE__, vap_name);
+            break;
+        }
     }
+
+    wifi_hal_error_print("%s:%d: Failed to resolve band for rdk_radio_index: %u\n",
+                         __func__, __LINE__, rdk_radio_index);
+    return NUM_NL80211_BANDS;
 }
 
 const char* get_chan_dfs_state(struct hostapd_channel_data *chan)
