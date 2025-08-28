@@ -25,6 +25,12 @@ Copyright (c) 2005-2006, Devicescape Software, Inc.
 Copyright (c) 2007, Johannes Berg johannes@sipsolutions.net
 Copyright (c) 2009-2010, Atheros Communications
 Licensed under the BSD-3 License
+Also credit:
+Copyright (c) 2007, 2008    Johannes Berg
+Copyright (c) 2007        Andy Lutomirski
+Copyright (c) 2007        Mike Kershaw
+Copyright (c) 2008-2009        Luis R. Rodriguez
+Licensed under the ISC license
 */
 
 #include <stddef.h>
@@ -728,12 +734,12 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
 
     if (stats[NL80211_STA_INFO_TX_DURATION]) {
         wifi_hal_dbg_print("%s:%d tx duration: %d\n", __func__, __LINE__, nla_get_u32(stats[NL80211_STA_INFO_TX_DURATION]));
-        dev->cli_tx_duration = nla_get_u32(stats[NL80211_STA_INFO_TX_DURATION]);
+        //dev->cli_tx_duration = nla_get_u32(stats[NL80211_STA_INFO_TX_DURATION]);
     }
 
     if (stats[NL80211_STA_INFO_RX_DURATION]) {
         wifi_hal_dbg_print("%s:%d rx duration: %d\n", __func__, __LINE__, nla_get_u32(stats[NL80211_STA_INFO_RX_DURATION]));
-        dev->cli_rx_duration = nla_get_u32(stats[NL80211_STA_INFO_RX_DURATION]);
+        //dev->cli_rx_duration = nla_get_u32(stats[NL80211_STA_INFO_RX_DURATION]);
     }
 
     if (stats[NL80211_STA_INFO_STA_FLAGS]) {
