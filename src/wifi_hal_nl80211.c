@@ -8478,7 +8478,8 @@ static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, boo
             nla_put_u64(msg, RDK_VENDOR_ATTR_STA_INFO_TX_FAILED_RETRIES, cli_FailedRetransCount) < 0 ||
             nla_put_u32(msg, RDK_VENDOR_ATTR_STA_INFO_ASSOC_NUM, stats[i].cli_Associations) < 0 ||
             nla_put_u64(msg, RDK_VENDOR_ATTR_STA_INFO_TX_RETRIES, cli_RetryCount) < 0 ||
-            nla_put_u64(msg, RDK_VENDOR_ATTR_STA_INFO_RX_ERRORS, stats[i].cli_RxErrors) < 0 ) {
+            nla_put_u64(msg, RDK_VENDOR_ATTR_STA_INFO_RX_ERRORS, stats[i].cli_RxErrors) < 0 ||
+            nla_put(msg, RDK_VENDOR_ATTR_STA_INFO_MLD_MAC, ETH_ALEN, stats[i].cli_MLDAddr) < 0 ) {
 
             nla_nest_cancel(msg, nlattr_sta_info);
             nlmsg_free(msg);
@@ -9470,6 +9471,10 @@ static void parse_supprates(const uint8_t type, uint8_t len,
             case 54*2:
                 rates = WIFI_BITRATE_54MBPS;
                 break;
+            case 123:
+                //membership selector for SAE-H2E
+                //Ignoring to update the rates
+                continue;
             default:
                 wifi_hal_error_print("%s:%d: [SCAN] Unsupported bitrate value: 0x%02X (%u.%u Mbps)\n",
                     __func__, __LINE__, r, r/2, 5*(r & 1)); 
