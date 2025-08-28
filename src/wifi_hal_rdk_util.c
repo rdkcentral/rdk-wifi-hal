@@ -180,7 +180,6 @@ int adjust_radio_capability_band(wifi_radio_capabilities_t *cap, unsigned int ra
 
         // Find band that is actually used and move its capabilities to 0 index.
         if (cap->band[i] == radio_band) {
-            wifi_hal_error_print("%s:%d: inside move_radio_capability ", __func__,__LINE__);
             move_radio_capability(&tmp_cap, cap, i);
             break;
         }

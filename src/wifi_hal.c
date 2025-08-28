@@ -375,6 +375,10 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
             interface = hash_map_get_next(radio->interface_map, interface);
         }
 
+        if (is_band_found == false) {
+            is_band_found = true;
+            radio_band = get_band_info_from_radio_name(i);
+        }
         cap = &hal->wifi_prop.radiocap[i];
         memcpy((unsigned char *)cap, (unsigned char *)&radio->capab, sizeof(wifi_radio_capabilities_t));
         adjust_radio_capability_band(cap, radio_band);

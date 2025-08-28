@@ -499,27 +499,7 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     return 0;
 }
-/*
-int platform_create_interface_attributes(struct nl_msg **msg_ptr, wifi_radio_info_t *radio, wifi_vap_info_t *vap)
-{
-    char mld_mac_addr[ETH_ALEN];
-    (void)radio;
 
-    if (msg_ptr == NULL || *msg_ptr == NULL || vap == NULL) {
-        wifi_hal_dbg_print("%s:%d Invalid arguments\n", __func__, __LINE__);
-        return RETURN_ERR;
-    }
-    if (qca_get_vap_mld_addr(vap, mld_mac_addr) == RETURN_ERR) {
-        return RETURN_ERR;
-    }
-    wifi_hal_info_print("%s:%d:Adding MLD addr " MACSTR " for vap index:%d\n", __func__, __LINE__,
-        MAC2STR(mld_mac_addr), vap->vap_index);
-    if (nla_put(*msg_ptr, NL80211_ATTR_MLD_MAC, ETH_ALEN, mld_mac_addr) < 0) {
-        return RETURN_ERR;
-    }
-    return RETURN_OK;
-}
-*/
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
     wifi_vap_info_t *vap;
