@@ -6663,6 +6663,10 @@ int nl80211_init_primary_interfaces()
     wifi_interface_info_t *primary_interface;
     wifi_interface_info_t *interface;
 
+    //XXX
+    system("ip link set dev mld0 down");
+    system("ip link set dev mld0 address 00:11:22:33:44:55");
+
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = get_radio_by_rdk_index(i);
         if (radio->radio_presence == false) {
@@ -6682,14 +6686,6 @@ int nl80211_init_primary_interfaces()
             interface = primary_interface;
         }
 
-        //XXX
-        static bool one_shot = false;
-        if (!one_shot) {
-            one_shot = true;
-
-        system("ip link set dev mld0 down");
-        system("ip link set dev mld0 address 00:11:22:33:44:55");
-
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_INTERFACE);
         if (msg == NULL) {
             return -1;
@@ -6698,14 +6694,16 @@ int nl80211_init_primary_interfaces()
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
 
         if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
+            char *interface_name = wifi_hal_get_interface_name(interface);
+
             wifi_hal_error_print("%s:%d: Error updating %s interface on dev:%d error: %d (%s) \n",
-                __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
+                __func__, __LINE__, interface_name, radio->index, ret, strerror(-ret));
             if (ret != ENODEV) {
                 // Try updating the mode again after bringing the interface down
-                nl80211_interface_enable(interface->name, false);
+                nl80211_interface_enable(interface_name, false);
                 wifi_hal_dbg_print(
                     "%s:%d: Updating %s interface after bringing the interface down.\n", __func__,
-                    __LINE__, interface->name);
+                    __LINE__, interface_name);
                 msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0,
                     NL80211_CMD_SET_INTERFACE);
                 nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
@@ -6713,7 +6711,7 @@ int nl80211_init_primary_interfaces()
                 if (ret) {
                     wifi_hal_error_print("%s:%d: Error updating %s interface even after interface "
                                          "is down on dev:%d error: %d (%s) \n",
-                        __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
+                        __func__, __LINE__, interface_name, radio->index, ret, strerror(-ret));
                     return -1;
                 }
             } else {
@@ -6721,9 +6719,7 @@ int nl80211_init_primary_interfaces()
                 return -1;
             }
         }
-        nl80211_interface_enable(primary_interface->name, true);
-	}
-
+        nl80211_interface_enable(wifi_hal_get_interface_name(primary_interface), true);
     }
 
     return 0;
