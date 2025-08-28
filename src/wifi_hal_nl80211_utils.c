@@ -35,6 +35,7 @@
 #include <netlink/handlers.h>
 #include <netlink/attr.h>
 #include <netlink/genl/genl.h>
+#include <sys/ioctl.h>
 #include "wifi_hal.h"
 #include "wifi_hal_priv.h"
 #include <cjson/cJSON.h>
@@ -4506,11 +4507,31 @@ bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface)
     return false;
 }
 
+int wifi_hal_set_mld_enabled(wifi_interface_info_t *interface, bool enabled)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        interface->vap_info.u.bss_info.mld_info.common_info.mld_enable = enabled;
+        return 0;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        interface->vap_info.u.sta_info.mld_info.common_info.mld_enable = enabled;
+        return 0;
+    }
+
+    return -1;
+}
+
 #ifndef NL80211_DRV_LINK_ID_NA
 #define NL80211_DRV_LINK_ID_NA (-1)
 #endif
 
-unsigned int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface)
+int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface)
 {
     if (interface == NULL) {
         wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
@@ -4530,6 +4551,26 @@ unsigned int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface)
     }
 
     return NL80211_DRV_LINK_ID_NA;
+}
+
+int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id = link_id;
+        return 0;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        interface->vap_info.u.sta_info.mld_info.common_info.mld_link_id = link_id;
+        return 0;
+    }
+
+    return -1;
 }
 
 mac_address_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
@@ -4552,6 +4593,28 @@ mac_address_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
     }
 
     return NULL;
+}
+
+int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t mac)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        memcpy(interface->vap_info.u.bss_info.mld_info.common_info.mld_addr, mac,
+            sizeof(mac_address_t));
+        return 0;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        memcpy(interface->vap_info.u.sta_info.mld_info.common_info.mld_addr, mac,
+            sizeof(mac_address_t));
+        return 0;
+    }
+
+    return -1;
 }
 
 wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info_t *interface,
@@ -4646,4 +4709,33 @@ wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_inf
 #endif // HOSTAPD_VERSION >= 211
 
     return link_interface;
+}
+
+int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac)
+{
+    int fd;
+    struct ifreq ifr;
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) {
+        wifi_hal_error_print("%s:%d Failed to create socket, error: %s", __func__, __LINE__,
+            strerror(errno));
+        return -1;
+    }
+
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+
+    if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
+        wifi_hal_error_print("%s:%d Failed to get MAC address, error: %s", __func__, __LINE__,
+            strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+
+    memcpy(mac, ifr.ifr_hwaddr.sa_data, sizeof(mac_address_t));
+
+    return 0;
 }

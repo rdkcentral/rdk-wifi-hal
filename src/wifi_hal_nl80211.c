@@ -5815,29 +5815,28 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                 return NL_SKIP;
             }
 
+#ifdef CONFIG_GENERIC_MLO
             mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
             if (mld_name != NULL) {
+                mac_address_t mld_mac = {};
+
                 strncpy(interface->mld_name, mld_name, sizeof(interface->mld_name) - 1);
                 if ((interface->mld_ifindex = if_nametoindex(mld_name)) == 0) {
                     wifi_hal_error_print("%s:%d: Failed to get ifindex for MLD interface %s: %s\n",
                         __func__, __LINE__, mld_name, strerror(errno));
+                    return NL_SKIP;
                 }
                 interface->index = interface->mld_ifindex;
-
-                if ((interface->vap_info.vap_mode == wifi_vap_mode_ap)) {
-                    interface->vap_info.u.bss_info.mld_info.common_info.mld_enable = true;
-                    //random_mac_addr(interface->vap_info.u.bss_info.mld_info.common_info.mld_addr);
-                    interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[0] = 0x00;
-                    interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[1] = 0x11;
-                    interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[2] = 0x22;
-                    interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[3] = 0x33;
-                    interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[4] = 0x44;
-                    interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[5] = 0x55;
-
-                    interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id =
-                        radio->rdk_radio_index;
+                if (wifi_hal_get_mac_address(mld_name, mld_mac) < 0) {
+                    wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n",
+                        __func__, __LINE__, mld_name);
+                    return NL_SKIP;
                 }
+                wifi_hal_set_mld_enabled(interface, true);
+                wifi_hal_set_mld_mac_address(interface, mld_mac);
+                wifi_hal_set_mld_link_id(interface, radio->rdk_radio_index);
             }
+#endif // CONFIG_GENERIC_MLO
 
             wifi_hal_dbg_print("%s:%d: phy index: %d radio index: %d interface index: %d name: %s "
                                "type: %d mac:" MACSTR
@@ -6654,10 +6653,6 @@ int nl80211_init_primary_interfaces()
     wifi_radio_info_t *radio;
     wifi_interface_info_t *primary_interface;
     wifi_interface_info_t *interface;
-
-    //XXX
-    system("ip link set dev mld0 down");
-    system("ip link set dev mld0 address 00:11:22:33:44:55");
 
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = get_radio_by_rdk_index(i);

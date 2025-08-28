@@ -1327,13 +1327,17 @@ char *wifi_hal_get_mld_name_by_interface_name(char *ifname);
 char *wifi_hal_get_interface_name(wifi_interface_info_t *interface);
 unsigned int wifi_hal_get_interface_ifindex(wifi_interface_info_t *interface);
 bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface);
-unsigned int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface);
+int wifi_hal_set_mld_enabled(wifi_interface_info_t *interface, bool enabled);
+int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface);
+int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id);
 mac_address_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface);
+int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t mac);
 wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info_t *interface,
     int link_id);
 wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t *interface,
     uint32_t freq);
 wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_info_t *interface,
     mac_address_t mac);
+int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 
 #endif // WIFI_HAL_PRIV_H
