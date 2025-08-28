@@ -905,6 +905,10 @@ int     nl80211_interface_enable(const char *ifname, bool enable);
 int     nl80211_retry_interface_enable(wifi_interface_info_t *interface, bool enable);
 void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *event);
 int     nl80211_connect_sta(wifi_interface_info_t *interface);
+
+#if defined(TCXB8_PORT) || defined(XB10_PORT)
+int     nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
+#endif
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
 
 // emu_neighbor_stats_t is used by both CCI and Onewifi
@@ -955,6 +959,7 @@ void    update_wpa_sm_params(wifi_interface_info_t *interface);
 void    update_eapol_sm_params(wifi_interface_info_t *interface);
 void    *nl_recv_func(void *arg);
 int     start_bss(wifi_interface_info_t *interface);
+void    deinit_bss(struct hostapd_data *hapd);
 int     process_global_nl80211_event(struct nl_msg *msg, void *arg);
 int     no_seq_check(struct nl_msg *msg, void *arg);
 void    *eloop_run_thread(void *data);
@@ -1354,4 +1359,7 @@ static inline enum nl80211_iftype wpa_driver_nl80211_if_type(enum wpa_driver_if_
     }
 }
 int wifi_drv_set_supp_port(void *priv, int authorized);
+#ifdef RDKB_ONE_WIFI_PROD
+void remap_wifi_interface_name_index_map();
+#endif /* RDKB_ONE_WIFI_PROD */
 #endif // WIFI_HAL_PRIV_H

@@ -18,7 +18,7 @@
 #include <string.h>
 #endif // defined (ENABLED_EDPD)
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
 #include <rdk_nl80211_hal.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -26,10 +26,10 @@
 #include <semaphore.h>
 #include <stdint.h>
 #include <unistd.h>
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || RDKB_ONE_WIFI_PROD
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
-    defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT) || defined(SCXF10_PORT)
+    defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
 #undef ENABLE
 #undef BW_20MHZ
 #undef BW_40MHZ
@@ -47,7 +47,7 @@
 #else
 #include <wifi/wlioctl.h>
 #endif
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
 
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
 static bool l_eht_set = false;
@@ -1794,7 +1794,7 @@ int nvram_get_mgmt_frame_power_control(int vap_index, int* output_dbm)
     return RETURN_OK;
 }
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) 
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD)
 
 static int get_radio_phy_temp_handler(struct nl_msg *msg, void *arg)
 {
@@ -1919,7 +1919,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
     return RETURN_OK;
 }
 
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT 
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || RDKB_ONE_WIFI_PROD
 
 #if defined (ENABLED_EDPD)
 /* EDPD - WLAN Power down control support APIs. */
@@ -2260,7 +2260,7 @@ int platform_get_vendor_oui(char *vendor_oui, int vendor_oui_len)
 }
 #endif /*_SR213_PRODUCT_REQ_ */
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
 
 typedef struct sta_list {
     mac_address_t *macs;
@@ -3168,7 +3168,7 @@ INT wifi_getRadioTransmitPower(INT radioIndex, ULONG *tx_power)
     return wifi_hal_getRadioTransmitPower(radioIndex, tx_power);
 }
 
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || SCXF10_PORT
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
 
 int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
@@ -3186,7 +3186,7 @@ int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *oper
 }
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
-    defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT) || defined(SCXF10_PORT)
+    defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
 
 static int get_rates(char *ifname, int *rates, size_t rates_size, unsigned int *num_rates)
 {
@@ -3554,7 +3554,7 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 {
     return RETURN_OK;
 }
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
 
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
 static bool platform_radio_state(wifi_radio_index_t index)
@@ -4092,7 +4092,7 @@ static unsigned char platform_iface_is_mlo_ap(const char *iface)
     return res;
 }
 
-static void nvram_update_wl_mlo_apply(const char *iface, unsigned char mlo_apply)
+static void nvram_update_wl_mlo_apply(const char *iface, unsigned char mlo_apply, int *nvram_changed)
 {
     char name[32 + sizeof("_mlo_apply")];
     const char *last_mld_vap = "wl2.4";
@@ -4112,11 +4112,12 @@ static void nvram_update_wl_mlo_apply(const char *iface, unsigned char mlo_apply
     }
 
     set_decimal_nvram_param(name, mlo_apply);
+    *nvram_changed |=1;
     wifi_hal_info_print("%s:%d Updating wl_mlo_apply nvram %s=%u for the iface:%s\n", __func__,
         __LINE__, name, mlo_apply, iface);
 }
 
-static void nvram_update_wl_bss_mlo_mode(const char *iface, unsigned char bss_mlo_mode)
+static void nvram_update_wl_bss_mlo_mode(const char *iface, unsigned char bss_mlo_mode, int *nvram_changed)
 {
     char name[32 + sizeof("_bss_mlo_mode")];
     const char *wl_bss_mlo_mode;
@@ -4130,11 +4131,12 @@ static void nvram_update_wl_bss_mlo_mode(const char *iface, unsigned char bss_ml
     }
 
     set_decimal_nvram_param(name, bss_mlo_mode);
+    *nvram_changed |=1;
     wifi_hal_info_print("%s:%d Updating wl_bss_mlo_mode nvram %s=%u for the iface:%s\n", __func__,
         __LINE__, name, bss_mlo_mode, iface);
 }
 
-static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id)
+static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id, int *nvram_changed)
 {
     int mlo_config[4] = { -1, -1, -1, -1 };
     char *wl_mlo_config = NULL;
@@ -4170,6 +4172,7 @@ static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id
     snprintf(new_nvram_val, sizeof(new_nvram_val), "%d %d %d %d", mlo_config[0], mlo_config[1],
         mlo_config[2], mlo_config[3]);
     set_string_nvram_param("wl_mlo_config", new_nvram_val);
+    *nvram_changed |=1;
     wifi_hal_info_print("%s:%d Updating nvram wl_mlo_config with new value: %s\n", __func__,
         __LINE__, new_nvram_val);
 }
@@ -4220,6 +4223,13 @@ static void mlo_add_link(struct hostapd_data *hapd)
 {
     unsigned char is_first_bss;
 
+    if (hapd->mld_link_id == 0 && hapd->mld->num_links > 0) {
+        struct hostapd_data *old_first;
+
+        old_first = hostapd_mld_get_first_bss(hapd);
+        deinit_bss(old_first);
+    }
+
     hostapd_mld_add_link(hapd);
 
     is_first_bss = hostapd_mld_is_first_bss(hapd);
@@ -4255,6 +4265,24 @@ static void mlo_add_link(struct hostapd_data *hapd)
     }
 }
 
+static void mlo_remove_link(struct hostapd_data *hapd)
+{
+    wifi_hal_info_print("%s:%d - iface:%s removing VAP from MLD group - mld links num: %d\n",
+        __func__, __LINE__, hapd->conf->iface, hapd->mld->num_links);
+    if (hapd->mld && hapd->mld->num_links > 1) {
+        if (hostapd_mld_is_first_bss(hapd)) {
+            /* Leave the shared recources for rest of the links staying in the MLO group */
+            hostapd_mld_remove_link(hapd);
+            hostapd_mld_add_link(hapd);
+        }
+    }
+    /* We need to detatch/release shared rources before changing mld configuration of BSS.
+     * For non first bss are shared resources just set to NULL for first BSS free + set NULL*/
+    deinit_bss(hapd);
+
+    hostapd_bss_link_deinit(hapd);
+}
+
 int update_hostap_mlo(wifi_interface_info_t *interface)
 {
     struct hostapd_bss_config *conf;
@@ -4263,6 +4291,8 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     struct hostapd_mld *new_mld = NULL;
     wifi_mld_common_info_t *mld_conf;
     u8 mld_ap;
+    u8 old_mld_link_id;
+    int nvram_changed = 0;
 
     conf = &interface->u.ap.conf;
     hapd = &interface->u.ap.hapd;
@@ -4278,11 +4308,17 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     }
 #endif
     mld_conf = &vap->u.bss_info.mld_info.common_info;
-    nvram_update_wl_mlo_apply(conf->iface, mld_conf->mld_apply);
-    nvram_update_wl_mlo_config(vap->radio_index, !conf->disable_11be ? mld_conf->mld_link_id : -1);
+    nvram_update_wl_mlo_apply(conf->iface, mld_conf->mld_apply, &nvram_changed);
+    nvram_update_wl_mlo_config(vap->radio_index, !conf->disable_11be ? mld_conf->mld_link_id : -1,
+        &nvram_changed);
+    old_mld_link_id = hapd->mld_link_id;
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
     mld_ap = (!conf->disable_11be && (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
-    nvram_update_wl_bss_mlo_mode(conf->iface, mld_ap ? mld_conf->mld_enable : 0);
+    nvram_update_wl_bss_mlo_mode(conf->iface, mld_ap ? mld_conf->mld_enable : 0, &nvram_changed);
+    if (nvram_changed) {
+        wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
+        nvram_commit();
+    }
 
     if (mld_ap) {
         unsigned char is_mlo_ap;
@@ -4300,9 +4336,9 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         } else {
             new_mld = get_slo_mld(vap->vap_index, hapd->own_addr);
         }
-        if (hapd->mld != new_mld) {
+        if (hapd->mld != new_mld || old_mld_link_id != hapd->mld_link_id) {
             if (hapd->mld)
-                hostapd_bss_link_deinit(hapd);
+                mlo_remove_link(hapd);
             hapd->mld = new_mld;
             mlo_add_link(hapd);
         }
@@ -4312,7 +4348,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
             (is_mlo_ap ? "MLO" : "SLO"), hapd->mld->name, vap->vap_name);
     } else {
         if (hapd->mld) {
-            hostapd_bss_link_deinit(hapd);
+            mlo_remove_link(hapd);
             hapd->mld = NULL;
         }
         conf->mld_ap = mld_ap;
