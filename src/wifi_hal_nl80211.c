@@ -10051,10 +10051,11 @@ static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
         }
     }
 
+#ifdef CONFIG_GENERIC_MLO
     //TODO: remove hardcoded values
     *eml_capa = 0x01;
     *mld_capa_and_ops = 0x23;
-
+#endif // CONFIG_GENERIC_MLO
 
     wifi_hal_dbg_print("%s:%d: eml_capa: 0x%x, mld_capa_and_ops: 0x%x\n", __func__, __LINE__,
         *eml_capa, *mld_capa_and_ops);
