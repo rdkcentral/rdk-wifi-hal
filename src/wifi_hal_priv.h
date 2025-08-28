@@ -492,6 +492,7 @@ typedef struct wifi_interface_info_t {
     size_t beacon_ie_len;
     struct wpa_supplicant wpa_s;
 #endif
+    char mld_name[32];
 } wifi_interface_info_t;
 
 #define MAX_RATES   16
@@ -905,7 +906,7 @@ int     nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         unsigned int num_ssid,  ssid_t *ssid_list);
 int     nl80211_get_scan_results(wifi_interface_info_t *interface);
 int     nl80211_switch_channel(wifi_radio_info_t *radio);
-int     nl80211_tx_control_port(wifi_interface_info_t *interface, const u8 *dest, u16 proto, const u8 *buf, size_t len, int no_encrypt);
+int     nl80211_tx_control_port(wifi_interface_info_t *interface, const u8 *dest, u16 proto, const u8 *buf, size_t len, int no_encrypt, int link_id);
 int     nl80211_set_acl(wifi_interface_info_t *interface);
 int     nl80211_set_acl_mode(wifi_interface_info_t *interface, uint32_t mac_filter_mode);
 int     nl80211_set_mac(wifi_interface_info_t *interface);
@@ -1320,5 +1321,22 @@ static inline enum nl80211_iftype wpa_driver_nl80211_if_type(enum wpa_driver_if_
         return -1;
     }
 }
+
+char *wifi_hal_get_mld_name_by_interface_name(char *ifname);
+char *wifi_hal_get_interface_name(wifi_interface_info_t *interface);
+unsigned int wifi_hal_get_interface_ifindex(wifi_interface_info_t *interface);
+bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface);
+int wifi_hal_set_mld_enabled(wifi_interface_info_t *interface, bool enabled);
+int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface);
+int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id);
+mac_address_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface);
+int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t mac);
+wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info_t *interface,
+    int link_id);
+wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t *interface,
+    uint32_t freq);
+wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_info_t *interface,
+    mac_address_t mac);
+int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 
 #endif // WIFI_HAL_PRIV_H

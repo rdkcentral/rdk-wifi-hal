@@ -2368,10 +2368,13 @@ static int wpa_sm_sta_ether_send(void *ctx, const u8 *dest, u16 proto, const u8 
 #if HOSTAPD_VERSION >= 210 //2.10
         int encrypt;
         mac_addr_str_t mac_str;
+        int link_id = wifi_hal_get_mld_link_id(interface);
+
         encrypt = interface->u.sta.wpa_sm && wpa_sm_has_ptk_installed(interface->u.sta.wpa_sm);
         wifi_hal_info_print("%s:%d: Sending eapol via control port to sta:%s on interface:%s encrypt:%d\n", __func__, __LINE__,
             to_mac_str(dest, mac_str), interface->name, encrypt);
-        if ((ret = nl80211_tx_control_port(interface, dest, ETH_P_EAPOL, buf, len, !encrypt))) {
+        if ((ret = nl80211_tx_control_port(interface, dest, ETH_P_EAPOL, buf, len, !encrypt,
+                 link_id))) {
             wifi_hal_error_print("%s:%d: eapol send failed\n", __func__, __LINE__);
             return -1;
         }

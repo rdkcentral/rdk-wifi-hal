@@ -290,6 +290,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
 #if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined (TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT)|| defined(TARGET_GEMINI7_2))
     int phy_rate = 60;
 #endif
+    wifi_interface_info_t *link_interface = NULL;
 
     wifi_mgmtFrameType_t mgmt_type = WIFI_MGMT_FRAME_TYPE_INVALID;
     wifi_vap_info_t *vap;
@@ -327,10 +328,11 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     hdr = (const struct ieee80211_hdr *)nla_data(frame);
     fc = le_to_host16(hdr->frame_control);
 
-    if (memcmp(hdr->addr1, interface->mac, sizeof(mac_address_t)) == 0) {
+    if ((link_interface = wifi_hal_get_mld_link_interface_by_mac(interface, hdr->addr1)) != NULL) {
         memcpy(sta, hdr->addr2, sizeof(mac_address_t));
         dir = wifi_direction_uplink;
-    } else if (memcmp(hdr->addr2, interface->mac, sizeof(mac_address_t)) == 0) {
+    } else if ((link_interface = wifi_hal_get_mld_link_interface_by_mac(interface, hdr->addr2)) !=
+        NULL) {
         memcpy(sta, hdr->addr1, sizeof(mac_address_t));
         dir = wifi_direction_downlink;
     } else if (memcmp(hdr->addr1, bmac, sizeof(mac_address_t)) == 0) {
@@ -371,7 +373,8 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     event.tx_status.data_len = nla_len(frame);
     event.tx_status.ack = ack != NULL;
 #if HOSTAPD_VERSION >= 211
-    event.tx_status.link_id = NL80211_DRV_LINK_ID_NA;
+    event.tx_status.link_id = link_interface ? wifi_hal_get_mld_link_id(link_interface) :
+                                               NL80211_DRV_LINK_ID_NA;
 #endif /* HOSTAPD_VERSION >= 211 */
 
    if (event.tx_status.type  == WLAN_FC_TYPE_MGMT &&
