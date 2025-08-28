@@ -493,7 +493,6 @@ typedef struct wifi_interface_info_t {
     struct wpa_supplicant wpa_s;
 #endif
     char mld_name[32];
-    unsigned int mld_ifindex;
 } wifi_interface_info_t;
 
 #define MAX_RATES   16

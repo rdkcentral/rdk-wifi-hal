@@ -254,7 +254,7 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 __LINE__, vap->vap_index);
             return -1;
         }
-        // Override MLO configuration because links added and enabled on the boot.
+        // Override MLO configuration because MLD enabled on the boot.
         // TODO: dynamic configuration
         vap->u.bss_info.mld_info.common_info.mld_enable =
             interface->vap_info.u.bss_info.mld_info.common_info.mld_enable;

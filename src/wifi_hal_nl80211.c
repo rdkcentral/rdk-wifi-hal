@@ -5821,12 +5821,11 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                 mac_address_t mld_mac = {};
 
                 strncpy(interface->mld_name, mld_name, sizeof(interface->mld_name) - 1);
-                if ((interface->mld_ifindex = if_nametoindex(mld_name)) == 0) {
+                if ((interface->index = if_nametoindex(mld_name)) == 0) {
                     wifi_hal_error_print("%s:%d: Failed to get ifindex for MLD interface %s: %s\n",
                         __func__, __LINE__, mld_name, strerror(errno));
                     return NL_SKIP;
                 }
-                interface->index = interface->mld_ifindex;
                 if (wifi_hal_get_mac_address(mld_name, mld_mac) < 0) {
                     wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n",
                         __func__, __LINE__, mld_name);
@@ -5839,11 +5838,10 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
 #endif // CONFIG_GENERIC_MLO
 
             wifi_hal_dbg_print("%s:%d: phy index: %d radio index: %d interface index: %d name: %s "
-                               "type: %d mac:" MACSTR
-                               " vap index: %d vap name: %s mld name: %s mld ifindex: %d\n",
+                               "type: %d mac:" MACSTR " vap index: %d vap name: %s mld name: %s\n",
                 __func__, __LINE__, radio->index, vap->radio_index, interface->index,
                 interface->name, interface->type, MAC2STR(interface->mac), vap->vap_index,
-                vap->vap_name, interface->mld_name, interface->mld_ifindex);
+                vap->vap_name, interface->mld_name);
 
             if (interface->scan_info_map == NULL) {
                 interface->scan_info_map = hash_map_create();
@@ -7081,25 +7079,17 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
         return -1;
     }
 
-    wifi_hal_error_print("%s:%d: interface: %s %s mld: %d link id: %d\n", __func__, __LINE__,
-        interface->name, wifi_hal_get_interface_name(interface),
-        wifi_hal_is_mld_enabled(interface), wifi_hal_get_mld_link_id(interface));
-
     if (!radio->configured) {
-        wifi_hal_dbg_print("%s:%d: Radio is not configured, set beacon to 0 for %s\n", __func__,
-            __LINE__, wifi_hal_get_interface_name(interface));
         nl80211_enable_ap(interface, false);
+        wifi_hal_dbg_print("%s:%d: Radio is not configured, set beacon to 0 for %s\n", __func__, __LINE__, interface->name);
     }
-
+    
     wifi_hal_dbg_print("%s:%d: update transmitPower:%d\n", __func__, __LINE__, radio->oper_param.transmitPower);
     wifi_drv_set_txpower(interface, radio->oper_param.transmitPower);
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_SET_WIPHY);
 
-    wifi_hal_info_print("%s:%d: update wiphy for %s ifindex: %d\n",
-        __func__, __LINE__, wifi_hal_get_interface_name(interface), wifi_hal_get_interface_ifindex(interface));
-
-    nla_put_u32(msg, NL80211_ATTR_IFINDEX, wifi_hal_get_interface_ifindex(interface));
+    nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
     if (nl80211_fill_chandef(msg, radio, interface) == -1) {
         return -1;
     }
@@ -7147,7 +7137,7 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
 
            msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_SET_WIPHY);
 
-           nla_put_u32(msg, NL80211_ATTR_IFINDEX, wifi_hal_get_interface_ifindex(interface));
+           nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
            if (nl80211_fill_chandef(msg, radio, interface) == -1) {
                 return -1;
             }
@@ -7293,8 +7283,7 @@ static int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
 
     interface->nl_event_fd = nl_socket_get_fd((struct nl_sock *)interface->nl_event);
     wifi_hal_info_print("%s:%d: interface:%s ifindex:%d nl sock:%d\n", __func__, __LINE__,
-        wifi_hal_get_interface_name(interface), wifi_hal_get_interface_ifindex(interface),
-        interface->nl_event_fd);
+        wifi_hal_get_interface_name(interface), interface->index, interface->nl_event_fd);
 
     for (i = 0; i < sizeof(stypes)/sizeof(int); i++) {
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_REGISTER_FRAME);
@@ -13984,15 +13973,6 @@ int nl80211_register_bss_frames(wifi_interface_info_t *interface)
         return 0;
     }
 
-    //XXX
-    if (interface->vap_info.vap_index != 0) {
-        wifi_interface_info_t *main_interface = get_interface_by_vap_index(0);
-        interface->bss_nl_cb = main_interface->bss_nl_cb;
-        interface->bss_nl_connect_event = main_interface->bss_nl_connect_event;
-        interface->bss_nl_connect_event_fd = main_interface->bss_nl_connect_event_fd;
-        return 0;
-    }
-
     wifi_hal_info_print("%s:%d: register bss frames handler for %s\n", __func__, __LINE__,
         wifi_hal_get_interface_name(interface));
 
@@ -16562,7 +16542,7 @@ int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx)
         return -1;
     }
 
-    if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->mld_ifindex) < 0 ||
+    if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index) < 0 ||
         nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0 ||
         nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr) < 0) {
         nlmsg_free(msg);

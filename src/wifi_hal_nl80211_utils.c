@@ -3383,86 +3383,6 @@ int create_ecomode_interfaces(void)
     return 0;
 }
 
-//TODO: pre-create links test
-
-void create_interfaces(wifi_radio_info_t *radio)
-{
-    int vapIndex;
-    // wifi_vap_info_t *vap = NULL;
-
-    for (vapIndex = 0; vapIndex < get_sizeof_interfaces_index_map(); vapIndex++) {
-        wifi_interface_info_t *interface = NULL;
-        wifi_hal_dbg_print("%s:%d: Process %s  vap interface to add to the radio\n", __func__,
-            __LINE__, interface_index_map[vapIndex].interface_name);
-        if (interface_index_map[vapIndex].rdk_radio_index != radio->rdk_radio_index) {
-            continue;
-        }
-
-        if (strstr(interface_index_map[vapIndex].vap_name, "private") == NULL) {
-            wifi_hal_dbg_print("%s:%d: Skip interface %s as it is not a private interface\n", __func__, __LINE__,
-                interface_index_map[vapIndex].vap_name);
-            continue;
-        }
-
-        interface = (wifi_interface_info_t *)malloc(sizeof(wifi_interface_info_t));
-        if (interface == NULL) {
-            wifi_hal_dbg_print("%s:%d: malloc failed! Continue\n", __func__, __LINE__);
-            continue;
-        }
-        memset(interface, 0, sizeof(wifi_interface_info_t));
-        interface->phy_index = radio->index;
-        interface->index = interface_index_map[vapIndex].index;
-        sprintf(interface->name, "%s", interface_index_map[vapIndex].interface_name);
-        if (set_interface_properties(interface->phy_index, interface) != 0) {
-            wifi_hal_info_print("%s:%d: Could not map interface name to index:%d\n", __func__,
-                __LINE__, interface->phy_index);
-        }
-        // vap = &interface->vap_info;
-        // wifi_hal_dbg_print(
-        //     "%s:%d: phy index: %d\tradio index: %d\tinterface index: %d name: %s  type:%d, "
-        //     "mac:%02x:%02x:%02x:%02x:%02x:%02x vap index: %d vap name: %s\n",
-        //     __func__, __LINE__, radio->index, vap->radio_index, interface->index, interface->name,
-        //     interface->type, interface->mac[0], interface->mac[1], interface->mac[2],
-        //     interface->mac[3], interface->mac[4], interface->mac[5], vap->vap_index, vap->vap_name);
-        hash_map_put(radio->interface_map, strdup(interface->name), interface);
-
-        char *mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
-        if (mld_name != NULL) {
-            strncpy(interface->mld_name, mld_name, sizeof(interface->mld_name) - 1);
-            if ((interface->mld_ifindex = if_nametoindex(mld_name)) == 0) {
-                wifi_hal_error_print("%s:%d: Failed to get ifindex for MLD interface %s: %s\n",
-                    __func__, __LINE__, mld_name, strerror(errno));
-            }
-            if ((interface->vap_info.vap_mode == wifi_vap_mode_ap)) {
-                interface->vap_info.u.bss_info.mld_info.common_info.mld_enable = true;
-                interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[0] = 0x00;
-                interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[1] = 0x11;
-                interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[2] = 0x22;
-                interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[3] = 0x33;
-                interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[4] = 0x44;
-                interface->vap_info.u.bss_info.mld_info.common_info.mld_addr[5] = 0x55;
-                
-                static int link_id = 0;
-                interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id = link_id++;
-
-                interface->mac[0] = 0x00;
-                interface->mac[1] = 0x11;
-                interface->mac[2] = 0x22;
-                interface->mac[3] = 0x33;
-                interface->mac[4] = 0x44;
-                interface->mac[5] = interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
-            }
-        }
-
-        interface->index = interface->mld_ifindex;
-        interface->type = NL80211_IFTYPE_AP;
-        //strcpy(interface->name, interface->mld_name);
-
-        wifi_hal_dbg_print("%s:%d: Fetch next interface after the radio interface hash map [%s]\n",
-            __func__, __LINE__, interface->name);
-    }
-}
-
 int uint_array_set(uint_array_t *array, uint num, const uint values[])
 {
     int ret = 0;
@@ -4466,27 +4386,6 @@ char *wifi_hal_get_interface_name(wifi_interface_info_t *interface)
     }
 
     return interface->name;
-}
-
-unsigned int wifi_hal_get_interface_ifindex(wifi_interface_info_t *interface)
-{
-    if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
-        return 0;
-    }
-
-    if (interface->mld_name[0] == '\0') {
-        return interface->index;
-    }
-
-    if ((interface->vap_info.vap_mode == wifi_vap_mode_ap &&
-            interface->vap_info.u.bss_info.mld_info.common_info.mld_enable) ||
-        (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
-            interface->vap_info.u.sta_info.mld_info.common_info.mld_enable)) {
-        return interface->mld_ifindex;
-    }
-
-    return interface->index;
 }
 
 bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface)
