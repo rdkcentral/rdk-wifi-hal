@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -1359,4 +1359,7 @@ static inline enum nl80211_iftype wpa_driver_nl80211_if_type(enum wpa_driver_if_
     }
 }
 int wifi_drv_set_supp_port(void *priv, int authorized);
+#ifdef RDKB_ONE_WIFI_PROD
+void remap_wifi_interface_name_index_map();
+#endif /* RDKB_ONE_WIFI_PROD */
 #endif // WIFI_HAL_PRIV_H

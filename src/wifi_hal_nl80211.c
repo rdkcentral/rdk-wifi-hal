@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -72,7 +72,7 @@
 #include "wpa_supplicant/config.h"
 #endif
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD)
 #include <rdk_nl80211_hal.h>
 #endif
 
@@ -2279,7 +2279,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #else
 #if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || \
     defined(XB10_PORT) || defined(TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || \
-    defined(TARGET_GEMINI7_2) || defined(SCXF10_PORT))
+    defined(TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD))
         callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)mgmt, len, mgmt_type, dir, sig_dbm, phy_rate);
 #else
         callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)mgmt, len, mgmt_type, dir);
@@ -2446,7 +2446,7 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
     }
 #if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(TCHCBRV2_PORT) || \
     defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || \
-    defined(SCXF10_PORT)
+    defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
 	unsigned short fc, stype;
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]) *10;
@@ -3935,6 +3935,10 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
 #if defined(VNTXER5_PORT)
     int ap_index;
 #endif
+#if defined (RDKB_ONE_WIFI_PROD)
+    const char *suffix = "xl";
+    char if_name_new[IFNAMSIZ] = "";
+#endif /* RDKB_ONE_WIFI_PROD */
     is_hotspot_interface = is_wifi_hal_vap_hotspot_from_interfacename(if_name);
     vap_cfg = get_wifi_vap_info_from_interfacename(if_name);
     if (vap_cfg) {
@@ -4013,24 +4017,49 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
 
     wifi_hal_info_print("%s:%d: bridge:%s get link\n", __func__, __LINE__, br_name);
     bridge = rtnl_link_get_by_name(link_cache, br_name);
-    device = rtnl_link_get_by_name(link_cache, if_name);
-
     if(bridge == NULL) {
-	wifi_hal_error_print("%s:%d: bridge:%s failed to get link\n", __func__, __LINE__, br_name);
+        wifi_hal_error_print("%s:%d: bridge:%s failed to get link\n", __func__, __LINE__, br_name);
+        nl_cache_free(link_cache);
+        nl_socket_free(sk);
         return -1;
     }
+#if defined (RDKB_ONE_WIFI_PROD)
+    if ((strlen(if_name) + strlen(suffix)) < IFNAMSIZ) {
+        strncpy(if_name_new, if_name, sizeof(if_name_new));
+        strcat(if_name_new, suffix);
+        if (!(device = rtnl_link_get_by_name(link_cache, if_name_new))) {
+            device = rtnl_link_get_by_name(link_cache, if_name);
+            if_name_new[0] = '\0';
+        }
+    } else {
+        device = rtnl_link_get_by_name(link_cache, if_name);
+    }
+#else
+    device = rtnl_link_get_by_name(link_cache, if_name);
+#endif /* RDKB_ONE_WIFI_PROD */
 
     if(device == NULL) {
 	wifi_hal_error_print("%s:%d: bridge:%s failed to get link for device:%s\n", __func__,
             __LINE__, br_name, if_name);
+        nl_cache_free(link_cache);
+        nl_socket_free(sk);
         return -1;
     }
-
+#if defined (RDKB_ONE_WIFI_PROD)
+    wifi_hal_info_print("%s:%d: bridge:%s enslave device %s\n", __func__, __LINE__, br_name,
+        (if_name_new[0] !='\0') ? if_name_new : if_name);
+#else
     wifi_hal_info_print("%s:%d: bridge:%s enslave device %s\n", __func__, __LINE__, br_name,
         if_name);
+#endif /* RDKB_ONE_WIFI_PROD */
     if (rtnl_link_enslave(sk, bridge, device)) {
+#if defined (RDKB_ONE_WIFI_PROD)
+        wifi_hal_info_print("%s:%d: bridge:%s failed to enslave device %s\n", __func__, __LINE__,
+            br_name, (if_name_new[0] !='\0') ? if_name_new : if_name);
+#else
         wifi_hal_info_print("%s:%d: bridge:%s failed to enslave device %s\n", __func__, __LINE__,
             br_name, if_name);
+#endif /* RDKB_ONE_WIFI_PROD */
         nl_cache_free(link_cache);
         nl_socket_free(sk);
         return -1;
@@ -8081,7 +8110,7 @@ int nl80211_disconnect_sta(wifi_interface_info_t *interface)
     return -1;
 }
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD)
 #if defined(CONFIG_WIFI_EMULATOR)
 #define SEM_NAME "/semlock"
 
@@ -8449,7 +8478,8 @@ static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, boo
             nla_put_u64(msg, RDK_VENDOR_ATTR_STA_INFO_TX_FAILED_RETRIES, cli_FailedRetransCount) < 0 ||
             nla_put_u32(msg, RDK_VENDOR_ATTR_STA_INFO_ASSOC_NUM, stats[i].cli_Associations) < 0 ||
             nla_put_u64(msg, RDK_VENDOR_ATTR_STA_INFO_TX_RETRIES, cli_RetryCount) < 0 ||
-            nla_put_u64(msg, RDK_VENDOR_ATTR_STA_INFO_RX_ERRORS, stats[i].cli_RxErrors) < 0 ) {
+            nla_put_u64(msg, RDK_VENDOR_ATTR_STA_INFO_RX_ERRORS, stats[i].cli_RxErrors) < 0 ||
+            nla_put(msg, RDK_VENDOR_ATTR_STA_INFO_MLD_MAC, ETH_ALEN, stats[i].cli_MLDAddr) < 0 ) {
 
             nla_nest_cancel(msg, nlattr_sta_info);
             nlmsg_free(msg);
@@ -9441,6 +9471,10 @@ static void parse_supprates(const uint8_t type, uint8_t len,
             case 54*2:
                 rates = WIFI_BITRATE_54MBPS;
                 break;
+            case 123:
+                //membership selector for SAE-H2E
+                //Ignoring to update the rates
+                continue;
             default:
                 wifi_hal_error_print("%s:%d: [SCAN] Unsupported bitrate value: 0x%02X (%u.%u Mbps)\n",
                     __func__, __LINE__, r, r/2, 5*(r & 1)); 
@@ -15406,7 +15440,7 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_KEY);
 
     nla_put_u8(msg, NL80211_ATTR_KEY_IDX, params->key_idx);
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_) || defined(RDKB_ONE_WIFI_PROD)
     // NL80211_KEY_DEFAULT_BEACON enum is not defined in broadcom nl80211.h header
     nla_put_flag(msg, wpa_alg_bip(params->alg) ? NL80211_ATTR_KEY_DEFAULT_MGMT : NL80211_ATTR_KEY_DEFAULT);
 #else
