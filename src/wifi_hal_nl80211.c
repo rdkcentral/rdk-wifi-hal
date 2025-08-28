@@ -8889,7 +8889,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     }
 
     if ( (security->mode == wifi_security_mode_wpa3_personal) ||
-        (security->mode == wifi_security_mode_wpa3_compatibility)) {
+        (security->mode == wifi_security_mode_wpa3_compatibility) ||
+        (security->mode == wifi_security_mode_wpa3_transition)) {
         if (interface->wpa_s.current_ssid->sae_password == NULL) {
             interface->wpa_s.current_ssid->sae_password = malloc(MAX_PWD_LEN);
         }
@@ -8929,7 +8930,6 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     memset(interface->wpa_s.current_ssid->ssid, 0, (strlen(backhaul->ssid) + 1));
     strcpy(interface->wpa_s.current_ssid->ssid, backhaul->ssid);
     if ((security->mode != wifi_security_mode_wpa2_personal) &&
-            (security->mode != wifi_security_mode_wpa3_transition) &&
             (security->mode != wifi_security_mode_wpa3_compatibility)) {
         interface->wpa_s.current_ssid->ssid_len = strlen(backhaul->ssid);
     }
