@@ -458,9 +458,9 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
 #if !defined(PLATFORM_LINUX)
                 if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
                     reason = station->disconnect_reason_code;
+                    wifi_hal_info_print("reason from disconnect reason code is %d\n",reason);
                 }
 #endif
-                ap_free_sta(&interface->u.ap.hapd, station);
             }
             pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
@@ -505,7 +505,6 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
                     wifi_hal_info_print("reason from disconnect reason code is %d\n",reason);
                 }
 #endif
-                ap_free_sta(&interface->u.ap.hapd, station);
             }
             pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 

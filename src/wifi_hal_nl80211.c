@@ -2088,7 +2088,6 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                 reason = station->disconnect_reason_code;
             }
 #endif
-            ap_free_sta(&interface->u.ap.hapd, station);
         } else {
             wifi_hal_dbg_print("%s:%d: interface:%s sta %s not found\n", __func__, __LINE__,
                 interface->name, to_mac_str(sta, sta_mac_str));
@@ -2160,7 +2159,6 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                     reason = station->disconnect_reason_code;
                 }
 #endif
-            ap_free_sta(&interface->u.ap.hapd, station);
         }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
