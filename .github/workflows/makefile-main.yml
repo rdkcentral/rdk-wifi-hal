@@ -95,7 +95,7 @@ jobs:
           exit 1
         fi
 
-    - name: Sanity check: halinterface exposes op_class
+    - name: Sanity check (halinterface exposes op_class)
       run: |
         set -e
         header="easymesh_project/halinterface/include/wifi_hal.h"
