@@ -3035,10 +3035,13 @@ static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
     int ret;
 
 #if HOSTAPD_VERSION >= 211 //2.11
+    wifi_hal_dbg_print("SJY %s:%d:Calling hostapd_setup_bss of version 2.11\n", __func__, __LINE__);
     ret = hostapd_setup_bss(hapd, 1, true);
 #elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
+    wifi_hal_dbg_print("SJY %s:%d:Calling hostapd_setup_bss of version 2.10 with XER5 port\n", __func__, __LINE__);
     ret = hostapd_setup_bss(hapd, 1, true);
 #else
+    wifi_hal_dbg_print("SJY %s:%d:Calling hostapd_setup_bss of version with version 2.10\n", __func__, __LINE__);
     ret = hostapd_setup_bss(hapd, 1);
 #endif
     return ret;
@@ -3113,23 +3116,19 @@ int start_bss(wifi_interface_info_t *interface)
             __LINE__, interface->u.ap.hapd.csa_in_progress, vap->vap_name, vap->vap_index);
     }
     //my_print_hex_dump(conf->ssid.ssid_len, conf->ssid.ssid);
-#if HOSTAPD_VERSION >= 211 //2.11
-    wifi_hal_dbg_print("SJY %s:%d:Calling hostapd_setup_bss of version 2.11\n", __func__, __LINE__);
-    ret = hostapd_setup_bss(hapd, 1, true);
-#elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
-    wifi_hal_dbg_print("SJY %s:%d:Calling hostapd_setup_bss of version 2.10 with XER5 port\n", __func__, __LINE__);
-    ret = hostapd_setup_bss(hapd, 1, true);
-#else
-    wifi_hal_dbg_print("SJY %s:%d:Calling hostapd_setup_bss of version with version 2.10\n", __func__, __LINE__);
-    ret = hostapd_setup_bss(hapd, 1);
-#endif
-
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-
+    ret = hostapd_setup_bss_internal(hapd);
     if (ret != RETURN_OK) {
         wifi_hal_error_print("%s:%d: vap:%s:%d create is failed:%d csa status:%d\n", __func__,
             __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
     }
+#ifdef CONFIG_IEEE80211BE
+    ret = set_mld_shared_resources(hapd);
+    if (ret != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: vap:%s:%d mld set shared resources failed:%d csa status:%d\n", __func__,
+            __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
+    }
+#endif
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     return ret;
 }
