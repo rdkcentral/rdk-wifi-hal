@@ -3116,6 +3116,7 @@ int start_bss(wifi_interface_info_t *interface)
             __LINE__, interface->u.ap.hapd.csa_in_progress, vap->vap_name, vap->vap_index);
     }
     //my_print_hex_dump(conf->ssid.ssid_len, conf->ssid.ssid);
+    wifi_hal_info_print("SJY Calling hostapd_setup_bss_internal for vap_index:%d\n", vap->vap_index);
     ret = hostapd_setup_bss_internal(hapd);
     if (ret != RETURN_OK) {
         wifi_hal_error_print("%s:%d: vap:%s:%d create is failed:%d csa status:%d\n", __func__,
