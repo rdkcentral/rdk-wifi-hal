@@ -6076,7 +6076,9 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
     wifi_vap_info_t *vap;
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh;
+#ifdef CONFIG_GENERIC_MLO
     char *mld_name;
+#endif // CONFIG_GENERIC_MLO
 #ifdef FEATURE_SINGLE_PHY
     int rdk_radio_index_of_intf = -1;
 
@@ -10795,8 +10797,12 @@ int wifi_drv_add_ts(void *priv, u8 tsid, const u8 *addr, u8 user_priority, u16 a
     return 0;
 }
 
+#ifdef BANANA_PI_PORT
 int wifi_drv_br_set_net_param(void *priv, enum drv_br_net_param param, const char *ifname,
     unsigned int val)
+#else
+int wifi_drv_br_set_net_param(void *priv, enum drv_br_net_param param, unsigned int val)
+#endif // BANANA_PI_PORT
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return 0;
@@ -11144,7 +11150,11 @@ int wifi_drv_status(void *priv, char *buf, size_t buflen)
     return 0;
 }
 
+#ifdef BANANA_PI_PORT
 int wifi_drv_get_survey(void *priv, unsigned int freq, int link_id)
+#else
+int wifi_drv_get_survey(void *priv, unsigned int freq)
+#endif // BANANA_PI_PORT
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return 0;
@@ -11321,13 +11331,13 @@ void wifi_drv_send_action_cancel_wait(void *priv)
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 }
 
-int wifi_drv_send_action(void *priv,
-                      unsigned int freq,
-                      unsigned int wait_time,
-                      const u8 *dst, const u8 *src,
-                      const u8 *bssid,
-                      const u8 *data, size_t data_len,
-                      int no_cck, int link_id)
+#ifdef BANANA_PI_PORT
+int wifi_drv_send_action(void *priv, unsigned int freq, unsigned int wait_time, const u8 *dst,
+    const u8 *src, const u8 *bssid, const u8 *data, size_t data_len, int no_cck, int link_id)
+#else
+int wifi_drv_send_action(void *priv, unsigned int freq, unsigned int wait_time, const u8 *dst,
+    const u8 *src, const u8 *bssid, const u8 *data, size_t data_len, int no_cck)
+#endif // BANANA_PI_PORT
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
@@ -11339,6 +11349,10 @@ int wifi_drv_send_action(void *priv,
     unsigned char *buf;
     struct ieee80211_hdr *hdr;
     int offchanok = 1;
+#ifndef BANANA_PI_PORT
+    int link_id = -1;
+#endif // BANANA_PI_PORT
+
 
     if (freq == 0 || ((int)freq == interface->u.ap.iface.freq && interface->beacon_set) ||
         ieee80211_is_dfs(freq, interface->u.ap.iface.current_mode, 1)) {
@@ -12157,8 +12171,13 @@ fail:
     return -ENOBUFS;
 }
 
-int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val,
-                const char *bridge_ifname, const char *ifname_wds)
+#ifdef BANANA_PI_PORT
+int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
+    const char *ifname_wds)
+#else
+int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
+    char *ifname_wds)
+#endif // BANANA_PI_PORT
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
@@ -12795,6 +12814,7 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
         nla_nest_end(msg, wme);
     }
 
+#ifdef BANANA_PI_PORT
 #if HOSTAPD_VERSION >= 211 // 2.11
     if (params->eml_capa != 0) {
         wifi_hal_dbg_print("%s:%d: eml_capa=%u\n", __func__, __LINE__, params->eml_capa);
@@ -12803,6 +12823,7 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
         }
     }
 #endif // HOSTAPD_VERSION >= 211
+#endif // BANANA_PI_PORT
 
     ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
     msg = NULL;
@@ -13779,12 +13800,15 @@ int wifi_drv_if_remove(void *priv, enum wpa_driver_if_type type, const char *ifn
     return 0;
 }
 
-int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type,
-                     const char *ifname, const u8 *addr,
-                     void *bss_ctx, void **drv_priv,
-                     char *force_ifname, u8 *if_addr,
-                     const char *bridge, int use_existing,
-                     int setup_ap, int freq, u32 radio_mask)
+#ifdef BANANA_PI_PORT
+static int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type, const char *ifname,
+    const u8 *addr, void *bss_ctx, void **drv_priv, char *force_ifname, u8 *if_addr,
+    const char *bridge, int use_existing, int setup_ap, int freq, u32 radio_mask)
+#else
+static int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type, const char *ifname,
+    const u8 *addr, void *bss_ctx, void **drv_priv, char *force_ifname, u8 *if_addr,
+    const char *bridge, int use_existing, int setup_ap)
+#endif // BANANA_PI_PORT
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return 0;
