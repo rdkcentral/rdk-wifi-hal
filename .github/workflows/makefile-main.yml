@@ -22,16 +22,17 @@ jobs:
     name: Build for ${{ matrix.platform.name }}
 
     steps:
-    - name: Checkout current repository
+    - name: Checkout current repository (rdk-wifi-hal)
       uses: actions/checkout@v4
       with:
         path: 'rdk-wifi-hal'
 
-    - name: Clone unified-wifi-mesh repository
+    - name: Clone OneWifi (main) and unified-wifi-mesh
       run: |
         mkdir -p easymesh_project
-        git clone https://github.com/rdkcentral/OneWifi.git easymesh_project/OneWifi
-        git clone https://github.com/rdkcentral/unified-wifi-mesh.git easymesh_project/unified-wifi-mesh
+        git clone --depth 1 --branch main https://github.com/rdkcentral/OneWifi.git easymesh_project/OneWifi
+        # unified-wifi-mesh is referenced by include paths; clone it as a sibling
+        git clone --depth 1 https://github.com/rdkcentral/unified-wifi-mesh.git easymesh_project/unified-wifi-mesh
 
     - name: Cache dependencies
       uses: actions/cache@v4
@@ -70,15 +71,46 @@ jobs:
 
     - name: Setup OneWiFi for ${{ matrix.platform.name }}
       working-directory: easymesh_project/OneWifi
+      env:
+        GITHUB_ACTOR: ${{ github.actor }}
       run: |
         git config --global user.email "${{ github.actor }}@users.noreply.github.com"
         git config --global user.name "${{ github.actor }}"
         make -f ${{ matrix.platform.makefile_path }} setup
         cd ..
+        # Place our HAL next to OneWifi (as expected by include paths)
         rm -rf rdk-wifi-hal
         mv ../rdk-wifi-hal .
-      env:
-        GITHUB_ACTOR: ${{ github.actor }}
+
+    - name: Align halinterface with HAL (use main) + print refs
+      run: |
+        if [ -d "easymesh_project/halinterface/.git" ]; then
+          echo "halinterface BEFORE: $(git -C easymesh_project/halinterface rev-parse --abbrev-ref HEAD) @ $(git -C easymesh_project/halinterface rev-parse --short HEAD)"
+          git -C easymesh_project/halinterface fetch --all --depth=1 || true
+          git -C easymesh_project/halinterface checkout -q main || true
+          echo "halinterface AFTER:  $(git -C easymesh_project/halinterface rev-parse --abbrev-ref HEAD) @ $(git -C easymesh_project/halinterface rev-parse --short HEAD)"
+        else
+          echo "ERROR: halinterface repo not found at easymesh_project/halinterface"
+          ls -la easymesh_project || true
+          exit 1
+        fi
+
+    - name: Sanity check: halinterface exposes op_class
+      run: |
+        set -e
+        header="easymesh_project/halinterface/include/wifi_hal.h"
+        if [ ! -f "$header" ]; then
+          echo "ERROR: $header not found."
+          exit 1
+        fi
+        if ! grep -q "op_class" "$header"; then
+          echo "ERROR: halinterface header lacks 'op_class'."
+          echo "Try checking out a matching ref/tag for halinterface that aligns with rdk-wifi-hal/main."
+          echo "Available remote branches:"
+          git -C easymesh_project/halinterface branch -r || true
+          exit 1
+        fi
+        echo "OK: 'op_class' found in halinterface header."
 
     - name: Build OneWiFi for ${{ matrix.platform.name }}
       working-directory: easymesh_project/OneWifi
