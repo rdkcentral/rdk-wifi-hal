@@ -127,7 +127,43 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    wifi_vap_info_t *vap;
+    wifi_interface_info_t *interface;
+    struct hostapd_data *hapd, *link_bss;
+
+    for (unsigned int i = 0; i < map->num_vaps; i++) {
+        vap = &map->vap_array[i];
+        if (vap->vap_mode != wifi_vap_mode_ap) {
+            continue;
+        }
+
+        interface = get_interface_by_vap_index(vap->vap_index);
+        if (interface == NULL) {
+            wifi_hal_error_print("%s:%d: failed to get interface for vap_index %d\n", __func__,
+                __LINE__, vap->vap_index);
+            continue;
+        }
+
+        if (interface->u.ap.conf.disable_11be) {
+            continue;
+        }
+
+        if (!wifi_hal_is_mld_enabled(interface)) {
+            continue;
+        }
+
+        /* beacon has to be set twice to make it broadcast */
+        hapd = &interface->u.ap.hapd;
+        for_each_mld_link(link_bss, hapd) {
+            if (ieee802_11_set_beacon(link_bss) != 0) {
+                wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
+                    __func__, __LINE__, wifi_hal_get_interface_name(interface),
+                    link_bss->mld_link_id);
+                return -1;
+            }
+        }
+    }
+
     return 0;
 }
 
