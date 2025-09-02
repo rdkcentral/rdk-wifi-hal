@@ -4866,7 +4866,9 @@ int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t
 wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info_t *interface,
     int link_id)
 {
+#if HOSTAPD_VERSION >= 211 // 2.11
     struct hostapd_data *link_bss, *curr_link_bss;
+#endif // HOSTAPD_VERSION >= 211
 
     if (link_id < 0) {
         return interface;
@@ -4898,7 +4900,9 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info
 wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t *interface,
     uint32_t freq)
 {
+#if HOSTAPD_VERSION >= 211 // 2.11
     struct hostapd_data *link_bss, *curr_link_bss;
+#endif // HOSTAPD_VERSION >= 211
 
     if (freq == 0) {
         return interface;
@@ -4930,7 +4934,9 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t 
 wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_info_t *interface,
     mac_address_t mac)
 {
+#if HOSTAPD_VERSION >= 211 // 2.11
     struct hostapd_data *link_bss, *curr_link_bss;
+#endif // HOSTAPD_VERSION >= 211
     wifi_interface_info_t *link_interface = NULL;
 
     if (!wifi_hal_is_mld_enabled(interface)) {
