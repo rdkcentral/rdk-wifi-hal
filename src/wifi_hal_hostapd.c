@@ -3040,7 +3040,7 @@ static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
     return ret;
 }
 
-#if defined  CONFIG_IEEE80211BE
+#ifdef  CONFIG_IEEE80211BE
 static int set_mld_shared_resources(struct hostapd_data *hapd)
 {
     int ret;
@@ -3078,7 +3078,7 @@ static void clear_mld_shared_resources(struct hostapd_data *hapd)
 
 void deinit_bss(struct hostapd_data *hapd)
 {
-#if defined  CONFIG_IEEE80211BE
+#ifdef CONFIG_IEEE80211BE
     clear_mld_shared_resources(hapd);
 #endif
     hostapd_bss_deinit_no_free(hapd);
@@ -3113,7 +3113,7 @@ int start_bss(wifi_interface_info_t *interface)
         wifi_hal_error_print("%s:%d: vap:%s:%d create is failed:%d csa status:%d\n", __func__,
             __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
     }
-#if defined  CONFIG_IEEE80211BE
+#ifdef CONFIG_IEEE80211BE
     ret = set_mld_shared_resources(hapd);
     if (ret != RETURN_OK) {
         wifi_hal_error_print("%s:%d: vap:%s:%d mld set shared resources failed:%d csa status:%d\n", __func__,
