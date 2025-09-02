@@ -226,8 +226,11 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
                     len - 24 - sizeof(mgmt->u.assoc_resp);
             }
             event.assoc_reject.status_code = status;
-
+#if defined(BANANA_PI_PORT)
             wpa_supplicant_event(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
+#else
+            wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
+#endif // BANANA_PI_PORT
             return;
         }
         memset(&event, 0, sizeof(event));
@@ -259,8 +262,11 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
 	event.assoc_info.beacon_ies_len = 0;
     }
 
+#if defined(BANANA_PI_PORT)
     wpa_supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
-    return;
+#else
+    wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC, &event);
+#endif // BANANA_PI_PORT
 }
 
 static void nl80211_authenticate_event(wifi_interface_info_t *interface, struct nlattr **tb)
@@ -286,9 +292,11 @@ static void nl80211_authenticate_event(wifi_interface_info_t *interface, struct 
         wifi_hal_dbg_print("%s:%d: NO FRAME \n", __func__, __LINE__);
     }
 
+#if defined(BANANA_PI_PORT)
     wpa_supplicant_event(&interface->wpa_s, EVENT_AUTH, &event);
-
-    return;
+#else
+    wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_AUTH, &event);
+#endif // BANANA_PI_PORT
 }
 #endif //CONFIG_WIFI_EMULATOR || BANANA_PI_PORT
 
