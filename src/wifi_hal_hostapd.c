@@ -3040,7 +3040,7 @@ static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
     return ret;
 }
 
-#ifdef  CONFIG_IEEE80211BE
+#ifdef CONFIG_IEEE80211BE
 static int set_mld_shared_resources(struct hostapd_data *hapd)
 {
     int ret;
