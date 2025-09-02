@@ -1443,6 +1443,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         interface_name = wifi_hal_get_interface_name(interface);
 
 #ifndef CONFIG_GENERIC_MLO
+        // VAP down removes MLO links
         wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface->name);
         nl80211_interface_enable(interface->name, false);
 #endif // CONFIG_GENERIC_MLO
