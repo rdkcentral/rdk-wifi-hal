@@ -791,7 +791,11 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
     interface->wpa_s.disconnected = 1;
+#if defined(BANANA_PI_PORT)
     wpa_supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
+#else
+    wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
+#endif // BANANA_PI_PORT
 #endif
     if (interface->u.sta.wpa_sm != NULL) {
         eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);

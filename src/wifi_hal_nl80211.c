@@ -12659,12 +12659,12 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
             }
 
             if (params->mld_link_addr != NULL) {
-                if (nla_put(msg, NL80211_ATTR_MLD_ADDR, ETH_ALEN, params->addr) ||
-                    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->mld_link_addr)) {
+                if (nla_put(msg, NL80211_ATTR_MLD_ADDR, ETH_ALEN, params->addr) < 0 ||
+                    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->mld_link_addr) < 0) {
                     goto fail;
                 }
             } else {
-                if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->addr)) {
+                if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->addr) < 0) {
                     goto fail;
                 }
             }
