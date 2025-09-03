@@ -12652,33 +12652,6 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
         }
 #endif /* CONFIG_IEEE80211BE */
 
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-        if (params->mld_link_id >= 0) {
-            if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, params->mld_link_id) < 0) {
-                goto fail;
-            }
-
-            if (params->mld_link_addr != NULL) {
-                if (nla_put(msg, NL80211_ATTR_MLD_ADDR, ETH_ALEN, params->addr) < 0 ||
-                    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->mld_link_addr) < 0) {
-                    goto fail;
-                }
-            } else {
-                if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->addr) < 0) {
-                    goto fail;
-                }
-            }
-        } else {
-            if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->addr) < 0) {
-                goto fail;
-            }
-        }
-#else
-        if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->addr) < 0) {
-            goto fail;
-        }
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
-
         if (params->ext_capab) {
             wpa_hexdump(MSG_DEBUG, "  * ext_capab",
                         params->ext_capab, params->ext_capab_len);
@@ -12818,6 +12791,33 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
         }
         nla_nest_end(msg, wme);
     }
+
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+    if (params->mld_link_id >= 0) {
+        if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, params->mld_link_id) < 0) {
+            goto fail;
+        }
+
+        if (params->mld_link_addr != NULL) {
+            if (nla_put(msg, NL80211_ATTR_MLD_ADDR, ETH_ALEN, params->addr) < 0 ||
+                nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->mld_link_addr) < 0) {
+                goto fail;
+            }
+        } else {
+            if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->addr) < 0) {
+                goto fail;
+            }
+        }
+    } else {
+        if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->addr) < 0) {
+            goto fail;
+        }
+    }
+#else
+    if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->addr) < 0) {
+        goto fail;
+    }
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
     if (params->eml_capa != 0) {
