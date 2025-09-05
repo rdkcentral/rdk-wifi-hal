@@ -4819,7 +4819,7 @@ int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id)
     return -1;
 }
 
-mac_address_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
+uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
 {
     if (interface == NULL) {
         wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
@@ -4831,11 +4831,11 @@ mac_address_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
     }
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
-        return &interface->vap_info.u.bss_info.mld_info.common_info.mld_addr;
+        return interface->vap_info.u.bss_info.mld_info.common_info.mld_addr;
     }
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-        return &interface->vap_info.u.sta_info.mld_info.common_info.mld_addr;
+        return interface->vap_info.u.sta_info.mld_info.common_info.mld_addr;
     }
 
     return NULL;

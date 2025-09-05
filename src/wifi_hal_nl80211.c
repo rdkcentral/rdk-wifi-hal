@@ -1874,7 +1874,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     unsigned int total_len=0;
     bool send_mgmt_to_char_dev = false;
 #endif
-    mac_address_t *mld_mac = NULL;
+    uint8_t *mld_mac = NULL;
 
 #if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
     static uint8_t last_csa_channel = 0;
@@ -1898,11 +1898,11 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
     mld_mac = wifi_hal_get_mld_mac_address(interface);
     if (memcmp(mgmt->da, interface->mac, sizeof(mac_address_t)) == 0 ||
-        (mld_mac != NULL && memcmp(mgmt->da, *mld_mac, sizeof(mac_address_t)) == 0)) {
+        (mld_mac != NULL && memcmp(mgmt->da, mld_mac, sizeof(mac_address_t)) == 0)) {
         memcpy(sta, mgmt->sa, sizeof(mac_address_t));
         dir = wifi_direction_uplink;
     } else if (memcmp(mgmt->sa, interface->mac, sizeof(mac_address_t)) == 0 ||
-        (mld_mac != NULL && memcmp(mgmt->sa, *mld_mac, sizeof(mac_address_t)) == 0)) {
+        (mld_mac != NULL && memcmp(mgmt->sa, mld_mac, sizeof(mac_address_t)) == 0)) {
         memcpy(sta, mgmt->da, sizeof(mac_address_t));
         dir = wifi_direction_downlink;
     } else if (memcmp(mgmt->da, bmac, sizeof(mac_address_t)) == 0) {
@@ -2644,7 +2644,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
     union wpa_event_data event;
     struct ieee802_1x_hdr *hdr;
     mac_addr_str_t src_mac_str, dst_mac_str;
-    mac_address_t *interface_mac = NULL;
+    uint8_t *interface_mac = NULL;
 
     vap = &interface->vap_info;
     saddr_len = sizeof(saddr);
@@ -2826,7 +2826,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
     }
 
     interface_mac = wifi_hal_is_mld_enabled(interface) ? wifi_hal_get_mld_mac_address(interface) :
-                                                         &interface->mac;
+                                                         interface->mac;
 
     if (memcmp(eth_hdr->dest, interface_mac, sizeof(mac_address_t)) == 0) {
         // received frame
