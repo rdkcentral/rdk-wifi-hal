@@ -4725,10 +4725,8 @@ char *wifi_hal_get_interface_name(wifi_interface_info_t *interface)
         return interface->name;
     }
 
-    if ((interface->vap_info.vap_mode == wifi_vap_mode_ap &&
-            interface->vap_info.u.bss_info.mld_info.common_info.mld_enable) ||
-        (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
-            interface->vap_info.u.sta_info.mld_info.common_info.mld_enable)) {
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap &&
+        interface->vap_info.u.bss_info.mld_info.common_info.mld_enable) {
         return interface->mld_name;
     }
 
@@ -4746,10 +4744,6 @@ bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface)
         return interface->vap_info.u.bss_info.mld_info.common_info.mld_enable;
     }
 
-    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-        return interface->vap_info.u.sta_info.mld_info.common_info.mld_enable;
-    }
-
     return false;
 }
 
@@ -4762,11 +4756,6 @@ int wifi_hal_set_mld_enabled(wifi_interface_info_t *interface, bool enabled)
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         interface->vap_info.u.bss_info.mld_info.common_info.mld_enable = enabled;
-        return 0;
-    }
-
-    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-        interface->vap_info.u.sta_info.mld_info.common_info.mld_enable = enabled;
         return 0;
     }
 
@@ -4792,10 +4781,6 @@ int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface)
         return interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
     }
 
-    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-        return interface->vap_info.u.sta_info.mld_info.common_info.mld_link_id;
-    }
-
     return NL80211_DRV_LINK_ID_NA;
 }
 
@@ -4808,11 +4793,6 @@ int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id)
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id = link_id;
-        return 0;
-    }
-
-    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-        interface->vap_info.u.sta_info.mld_info.common_info.mld_link_id = link_id;
         return 0;
     }
 
@@ -4834,10 +4814,6 @@ uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
         return interface->vap_info.u.bss_info.mld_info.common_info.mld_addr;
     }
 
-    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-        return interface->vap_info.u.sta_info.mld_info.common_info.mld_addr;
-    }
-
     return NULL;
 }
 
@@ -4850,12 +4826,6 @@ int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         memcpy(interface->vap_info.u.bss_info.mld_info.common_info.mld_addr, mac,
-            sizeof(mac_address_t));
-        return 0;
-    }
-
-    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-        memcpy(interface->vap_info.u.sta_info.mld_info.common_info.mld_addr, mac,
             sizeof(mac_address_t));
         return 0;
     }

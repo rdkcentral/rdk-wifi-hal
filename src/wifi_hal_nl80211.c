@@ -1874,7 +1874,9 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     unsigned int total_len=0;
     bool send_mgmt_to_char_dev = false;
 #endif
+#ifdef CONFIG_GENERIC_MLO
     uint8_t *mld_mac = NULL;
+#endif // CONFIG_GENERIC_MLO
 
 #if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
     static uint8_t last_csa_channel = 0;
@@ -1896,6 +1898,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     hooks = get_device_frame_hooks();
     vap = &interface->vap_info;
 
+#ifdef CONFIG_GENERIC_MLO
     mld_mac = wifi_hal_get_mld_mac_address(interface);
     if (memcmp(mgmt->da, interface->mac, sizeof(mac_address_t)) == 0 ||
         (mld_mac != NULL && memcmp(mgmt->da, mld_mac, sizeof(mac_address_t)) == 0)) {
@@ -1905,6 +1908,14 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         (mld_mac != NULL && memcmp(mgmt->sa, mld_mac, sizeof(mac_address_t)) == 0)) {
         memcpy(sta, mgmt->da, sizeof(mac_address_t));
         dir = wifi_direction_downlink;
+#else
+    if (memcmp(mgmt->da, interface->mac, sizeof(mac_address_t)) == 0) {
+        memcpy(sta, mgmt->sa, sizeof(mac_address_t));
+        dir = wifi_direction_uplink;
+    } else if (memcmp(mgmt->sa, interface->mac, sizeof(mac_address_t)) == 0) {
+        memcpy(sta, mgmt->da, sizeof(mac_address_t));
+        dir = wifi_direction_downlink;
+#endif // CONFIG_GENERIC_MLO
     } else if (memcmp(mgmt->da, bmac, sizeof(mac_address_t)) == 0) {
         memcpy(sta, mgmt->sa, sizeof(mac_address_t));
         dir = wifi_direction_uplink;
@@ -2309,7 +2320,11 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         event.rx_mgmt.snr_db = snr;
 #endif
 #if HOSTAPD_VERSION >= 211
+#ifdef CONFIG_GENERIC_MLO
         event.rx_mgmt.link_id = wifi_hal_get_mld_link_id(interface);
+#else
+        event.rx_mgmt.link_id = NL80211_DRV_LINK_ID_NA;
+#endif // CONFIG_GENERIC_MLO
 #endif /* HOSTAPD_VERSION >= 211 */
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
@@ -2644,7 +2659,9 @@ void recv_data_frame(wifi_interface_info_t *interface)
     union wpa_event_data event;
     struct ieee802_1x_hdr *hdr;
     mac_addr_str_t src_mac_str, dst_mac_str;
+#ifdef CONFIG_GENERIC_MLO
     uint8_t *interface_mac = NULL;
+#endif // CONFIG_GENERIC_MLO
 
     vap = &interface->vap_info;
     saddr_len = sizeof(saddr);
@@ -2825,14 +2842,27 @@ void recv_data_frame(wifi_interface_info_t *interface)
         return;
     }
 
+#ifdef CONFIG_GENERIC_MLO
     interface_mac = wifi_hal_is_mld_enabled(interface) ? wifi_hal_get_mld_mac_address(interface) :
                                                          interface->mac;
-
     if (memcmp(eth_hdr->dest, interface_mac, sizeof(mac_address_t)) == 0) {
+        // received frame
+        // dir = wifi_direction_uplink;
+        memcpy(sta, eth_hdr->src, sizeof(mac_address_t));
+    } else if (memcmp(eth_hdr->src, interface_mac, sizeof(mac_address_t)) == 0) {
+        // transmitted frame
+        // dir = wifi_direction_downlink;
+        memcpy(sta, eth_hdr->dest, sizeof(mac_address_t));
+    } else {
+        // drop
+        return;
+    }
+#else
+    if (memcmp(eth_hdr->dest, interface->mac, sizeof(mac_address_t)) == 0) {
         // received frame
       //  dir = wifi_direction_uplink;
         memcpy(sta, eth_hdr->src, sizeof(mac_address_t));
-    } else if (memcmp(eth_hdr->src, interface_mac, sizeof(mac_address_t)) == 0) {
+    } else if (memcmp(eth_hdr->src, interface->mac, sizeof(mac_address_t)) == 0) {
         // transmitted frame
       //  dir = wifi_direction_downlink;
         memcpy(sta, eth_hdr->dest, sizeof(mac_address_t));
@@ -2840,6 +2870,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
         // drop
         return;
     }
+#endif // CONFIG_GENERIC_MLO
 
 
     //data_frame_received_callback(vap->vap_index, sta, buff, buflen, WIFI_DATA_FRAME_TYPE_8021x, dir);
@@ -2858,7 +2889,11 @@ void recv_data_frame(wifi_interface_info_t *interface)
         event.eapol_rx.data = (unsigned char *)hdr;
         event.eapol_rx.data_len = buflen - sizeof(struct ieee8023_hdr);
 #if HOSTAPD_VERSION >= 211
+#ifdef CONFIG_GENERIC_MLO
         event.eapol_rx.link_id = wifi_hal_get_mld_link_id(interface);
+#else
+        event.eapol_rx.link_id = NL80211_DRV_LINK_ID_NA;
+#endif // CONFIG_GENERIC_MLO
 #endif /* HOSTAPD_VERSION >= 211 */
 
 #if defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
@@ -6174,6 +6209,8 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                         __func__, __LINE__, mld_name);
                     return NL_SKIP;
                 }
+
+                // TODO: get MLD configuration from DB
                 wifi_hal_set_mld_enabled(interface, true);
                 wifi_hal_set_mld_mac_address(interface, mld_mac);
                 wifi_hal_set_mld_link_id(interface, radio->rdk_radio_index);
@@ -10748,7 +10785,7 @@ static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
     }
 
 #ifdef CONFIG_GENERIC_MLO
-    //TODO: remove hardcoded values
+    // TODO: remove hardcoded values
     *eml_capa = 0x01;
     *mld_capa_and_ops = 0x23;
 #endif // CONFIG_GENERIC_MLO
@@ -11664,8 +11701,13 @@ void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len)
     event.rx_mgmt.frame = (unsigned char *)frame;
     event.rx_mgmt.frame_len = len;
 #if HOSTAPD_VERSION >= 211
+#ifdef CONFIG_GENERIC_MLO
     event.rx_mgmt.link_id = wifi_hal_is_mld_enabled(interface) ?
-        wifi_hal_get_mld_link_id(interface) : NL80211_DRV_LINK_ID_NA;
+        wifi_hal_get_mld_link_id(interface) :
+        NL80211_DRV_LINK_ID_NA;
+#else
+    event.rx_mgmt.link_id = NL80211_DRV_LINK_ID_NA;
+#endif // CONFIG_GENERIC_MLO
 #endif /* HOSTAPD_VERSION >= 211 */
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
@@ -12651,7 +12693,6 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
             }
         }
 #endif /* CONFIG_IEEE80211BE */
-
         if (params->ext_capab) {
             wpa_hexdump(MSG_DEBUG, "  * ext_capab",
                         params->ext_capab, params->ext_capab_len);
@@ -14588,9 +14629,11 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
         cmd = NL80211_CMD_SET_BEACON;
     }
 
+#ifdef CONFIG_GENERIC_MLO
     if (!beacon_set) {
         nl80211_set_channel(interface, params->freq, 1);
     }
+#endif // CONFIG_GENERIC_MLO
 
     if ((msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, cmd)) == NULL) {
         wifi_hal_error_print("%s:%d: Failed to create message\n", __func__, __LINE__);

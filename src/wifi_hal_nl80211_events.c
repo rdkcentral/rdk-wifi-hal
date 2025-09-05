@@ -320,7 +320,9 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
     int phy_rate = 60;
 #endif
+#ifdef CONFIG_GENERIC_MLO
     wifi_interface_info_t *link_interface = NULL;
+#endif // CONFIG_GENERIC_MLO
 
     wifi_mgmtFrameType_t mgmt_type = WIFI_MGMT_FRAME_TYPE_INVALID;
     wifi_vap_info_t *vap;
@@ -359,6 +361,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     hdr = (const struct ieee80211_hdr *)nla_data(frame);
     fc = le_to_host16(hdr->frame_control);
 
+#ifdef CONFIG_GENERIC_MLO
     if ((link_interface = wifi_hal_get_mld_link_interface_by_mac(interface, hdr->addr1)) != NULL) {
         memcpy(sta, hdr->addr2, sizeof(mac_address_t));
         dir = wifi_direction_uplink;
@@ -366,6 +369,14 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         NULL) {
         memcpy(sta, hdr->addr1, sizeof(mac_address_t));
         dir = wifi_direction_downlink;
+#else
+    if (memcmp(hdr->addr1, interface->mac, sizeof(mac_address_t)) == 0) {
+        memcpy(sta, hdr->addr2, sizeof(mac_address_t));
+        dir = wifi_direction_uplink;
+    } else if (memcmp(hdr->addr2, interface->mac, sizeof(mac_address_t)) == 0) {
+        memcpy(sta, hdr->addr1, sizeof(mac_address_t));
+        dir = wifi_direction_downlink;
+#endif // CONFIG_GENERIC_MLO
     } else if (memcmp(hdr->addr1, bmac, sizeof(mac_address_t)) == 0) {
         memcpy(sta, hdr->addr2, sizeof(mac_address_t));
         dir = wifi_direction_uplink;
@@ -404,8 +415,12 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     event.tx_status.data_len = nla_len(frame);
     event.tx_status.ack = ack != NULL;
 #if HOSTAPD_VERSION >= 211
+#ifdef CONFIG_GENERIC_MLO
     event.tx_status.link_id = link_interface ? wifi_hal_get_mld_link_id(link_interface) :
                                                NL80211_DRV_LINK_ID_NA;
+#else
+    event.tx_status.link_id = NL80211_DRV_LINK_ID_NA;
+#endif // CONFIG_GENERIC_MLO
 #endif /* HOSTAPD_VERSION >= 211 */
    const struct ieee80211_mgmt *mgmt = (const struct ieee80211_mgmt *)event.tx_status.data;
    if (event.tx_status.type  == WLAN_FC_TYPE_MGMT &&
