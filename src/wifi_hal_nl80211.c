@@ -5868,7 +5868,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 
     wifi_hal_info_print("SJY %s:%d: The value of radio->driver_data.num_iface_ext_capa is %d\n", __func__, __LINE__, radio->driver_data.num_iface_ext_capa);
     for(unsigned int i = 0; i < radio->driver_data.num_iface_ext_capa; i++) {
-        wifi_hal_info_print("SJY %s:%d: The value of radio->driver_data.iface_ext_capa[i].iftype is %d\n", __func__, __LINE__, i, radio->driver_data.iface_ext_capa[i].iftype);
+        wifi_hal_info_print("SJY %s:%d: The value of radio->driver_data.iface_ext_capa[i].iftype is %d\n", __func__, __LINE__, radio->driver_data.iface_ext_capa[i].iftype);
         if (radio->driver_data.iface_ext_capa[i].iftype == NL80211_IFTYPE_AP) {
             radio->driver_data.iface_ext_capa[i].ext_capa_mask[2] &= 0xF7;
             radio->driver_data.iface_ext_capa[i].ext_capa[2] &= 0xF7;
@@ -5881,7 +5881,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
             break;
         }
     }
-    
+
     wiphy_info_wowlan_triggers(capa,
                 tb[NL80211_ATTR_WOWLAN_TRIGGERS_SUPPORTED]);
 
