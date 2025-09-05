@@ -62,7 +62,7 @@
 #define mld_link_info _mld_link_info
 #if defined(SCXER10_PORT)
 #include <wifi-include/wlioctl.h>
-#elif defined(SKYSR213_PORT)
+#elif defined(SKYSR213_PORT) || defined(SCXF10_PORT)
 #include <wlioctl.h>
 #else
 #include <wifi/wlioctl.h>
