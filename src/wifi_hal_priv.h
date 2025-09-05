@@ -906,7 +906,7 @@ int     nl80211_retry_interface_enable(wifi_interface_info_t *interface, bool en
 void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *event);
 int     nl80211_connect_sta(wifi_interface_info_t *interface);
 
-#if defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 int     nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
 #endif
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
@@ -1236,6 +1236,7 @@ INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_
 
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
 extern void (*g_eht_oneshot_notify)(wifi_interface_info_t *interface);
+int platform_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
 #if defined(KERNEL_NO_320MHZ_SUPPORT)
 void platform_switch_channel(wifi_interface_info_t *interface, struct csa_settings *settings);
 void platform_config_eht_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
