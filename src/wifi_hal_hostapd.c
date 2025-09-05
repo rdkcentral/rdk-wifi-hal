@@ -1167,7 +1167,9 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     bss->ieee80211w = vap->u.bss_info.mfp;
 #endif
 #endif
+    wifi_hal_info_print("SJY %s:%d:The value of bss transition activated is %d\n", __func__, __LINE__,vap->u.bss_info.bssTransitionActivated);
     conf->bss_transition = vap->u.bss_info.bssTransitionActivated;
+    wifi_hal_info_print("SJY %s:%d:The value of bss transition activated after assigned to hapd is %d\n", __func__, __LINE__,conf->bss_transition);
     /*Enable Beacon passive , Beacon active and Beacon table support by default */
     conf->radio_measurements[0] |=  (WLAN_RRM_CAPS_BEACON_REPORT_PASSIVE | WLAN_RRM_CAPS_BEACON_REPORT_ACTIVE | WLAN_RRM_CAPS_BEACON_REPORT_TABLE);
     if(vap->u.bss_info.nbrReportActivated) {
@@ -1330,6 +1332,12 @@ int init_hostap_hw_features(wifi_interface_info_t *interface)
             iface->extended_capa = radio->driver_data.iface_ext_capa[i].ext_capa;
             iface->extended_capa_mask = radio->driver_data.iface_ext_capa[i].ext_capa_mask;
             iface->extended_capa_len = radio->driver_data.iface_ext_capa[i].ext_capa_len;
+            wifi_hal_info_print("SJY %s:%d: extended capabilities mask in init hostap hw: 0x%02X\n", __func__, __LINE__, radio->driver_data.iface_ext_capa[i].ext_capa_mask[2]);
+            wifi_hal_info_print("SJY %s:%d: extended capabilities in init hostap hw: 0x%02X\n", __func__, __LINE__, radio->driver_data.iface_ext_capa[i].ext_capa[2]);
+            for (unsigned int bit = 0; bit < 8; bit++) {
+                wifi_hal_info_print("SJY %s:%d: extended capabilities mask bit %d is %d\n", __func__, __LINE__, bit, (radio->driver_data.iface_ext_capa[i].ext_capa_mask[2] >> bit) & 1);
+                wifi_hal_info_print("SJY %s:%d: extended capabilities bit %d is %d\n", __func__, __LINE__, bit, (radio->driver_data.iface_ext_capa[i].ext_capa[2] >> bit) & 1);
+            }
             break;
         }
     }
@@ -1676,6 +1684,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     }
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+    wifi_hal_info_print("SJY %s:%d: Enters CONFIG_HW_CAPABILITIES \n", __func__, __LINE__);
     iface->drv_flags = radio->driver_data.capa.flags;
 #if HOSTAPD_VERSION >= 210
     iface->drv_flags2 = radio->driver_data.capa.flags2;
@@ -1688,6 +1697,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
      * Override extended capa with per-interface type (AP), if
      * available from the driver.
      */
+    wifi_hal_info_print("SJY %s:%d: Calling hostapd_get_ext_capa \n", __func__, __LINE__);
     hostapd_get_ext_capa(iface);
 
 #if HOSTAPD_VERSION >= 211
