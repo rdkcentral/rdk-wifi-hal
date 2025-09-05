@@ -144,6 +144,8 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     hal->version.major = WIFI_HAL_MAJOR;
     hal->version.minor = WIFI_HAL_MINOR;
 
+    hal->wifi_prop.mu_info.mu_modes = 0x4;
+
     hal->wifi_prop.numRadios = g_wifi_hal.num_radios;
 
     /*
@@ -1797,6 +1799,61 @@ INT wifi_hal_getRadioVapInfoMap(wifi_radio_index_t index, wifi_vap_info_map_t *m
 
     return RETURN_OK;
 }
+
+INT wifi_hal_getApMld(wifi_apmld_info_t **wifi_apmld_ret, UINT *apmld_count)
+{
+    mac_address_t sampleMac={0x11,0x22,0x33,0x44,0x55,0x66};
+    mac_address_t sampleMac_1={0x13,0x25,0x36,0x48,0x53,0x60};
+
+    *apmld_count = 5;
+
+    wifi_apmld_info_t *wifi_apmld = calloc(*apmld_count, sizeof(wifi_apmld_info_t));
+    for (int j=0; j< *apmld_count; j++)
+    {
+        wifi_apmld[j].common_info.mld_id= j;
+        if(j == 0)
+            memcpy(wifi_apmld[j].common_info.mld_addr,sampleMac,6);
+        else
+            memcpy(wifi_apmld[j].common_info.mld_addr,sampleMac_1,6);
+
+        wifi_apmld[j].affiliated_ap_number_of_entries = 2;
+        wifi_apmld[j].sta_mld_num_entries=3*(j+1);
+        if(j == 0)
+        {
+           wifi_apmld[j].ap_mld_cfg.emlmr_enabled = 1;
+           wifi_apmld[j].ap_mld_cfg.emlsr_enabled = 0;
+           wifi_apmld[j].ap_mld_cfg.str_enabled = 1;
+           wifi_apmld[j].ap_mld_cfg.nstr_enabled = 0;
+        }
+        else
+        {
+           wifi_apmld[j].ap_mld_cfg.emlmr_enabled = 0;
+           wifi_apmld[j].ap_mld_cfg.emlsr_enabled = 1;
+           wifi_apmld[j].ap_mld_cfg.str_enabled = 0;
+           wifi_apmld[j].ap_mld_cfg.nstr_enabled = 1;
+        }
+        for(int i=0 ; i < wifi_apmld[j].affiliated_ap_number_of_entries ; i++)
+        {
+            if(i == 0)
+                strncpy(wifi_apmld[j].affiliated_ap[i].bssid,"00:00:00:00:00:00",18);
+            else if(i == 1)
+                strncpy(wifi_apmld[j].affiliated_ap[i].bssid,"01:30:ff:04:dd:01",18);
+            else if(i ==2)
+                strncpy(wifi_apmld[j].affiliated_ap[i].bssid,"02:31:fe:08:de:f1",18);
+            else if(i ==3)
+                strncpy(wifi_apmld[j].affiliated_ap[i].bssid,"03:32:ff:10:ef:f1",18);
+            else
+                strncpy(wifi_apmld[j].affiliated_ap[i].bssid,"04:9f:aa:08:fd:22",18);
+
+            wifi_apmld[j].affiliated_ap[i].link_id = (2+i+j)*3;
+            wifi_apmld[j].affiliated_ap[i].ru_id = 1+i+j;
+            wifi_apmld[j].affiliated_ap[i].disabled_sub_channels= 100*(1+i+j);
+        }
+    }
+    *wifi_apmld_ret = wifi_apmld;
+    return RETURN_OK;
+}
+
 
 INT wifi_hal_set_acs_keep_out_chans(wifi_radio_operationParam_t *wifi_radio_oper_param,
     int radioIndex)
