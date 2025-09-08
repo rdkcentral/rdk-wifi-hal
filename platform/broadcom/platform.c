@@ -3237,6 +3237,7 @@ static int get_rates(char *ifname, int *rates, size_t rates_size, unsigned int *
 static void platform_get_radio_caps_common(wifi_radio_info_t *radio,
     wifi_interface_info_t *interface)
 {
+    wifi_hal_info_print("SJYP %s:%d: Entering\n", __func__, __LINE__);
     unsigned int num_rates;
     int rates[WL_MAXRATES_IN_SET];
     struct hostapd_iface *iface = &interface->u.ap.iface;
@@ -3257,6 +3258,7 @@ static void platform_get_radio_caps_common(wifi_radio_info_t *radio,
 
 static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
+    wifi_hal_info_print("SJYP %s:%d: Entering\n", __func__, __LINE__);
     // Set values from driver beacon, NL values are not valid.
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     // SCS bit is not set in driver
@@ -3310,6 +3312,29 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
 #endif // XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT
 
+    if(radio->driver_data.extended_capa_len)
+    {
+         wifi_hal_info_print("SJYP %s:%d extended_capa_len for 2G is %d\n", __func__, __LINE__,
+              radio->driver_data.extended_capa_len);
+       radio->driver_data.extended_capa_mask[2] &= 0xF7;
+       radio->driver_data.extended_capa[2] &= 0xF7;
+       wifi_hal_info_print("SJYP %s:%d extended_capa[2] for 2G is 0x%02x\n", __func__, __LINE__,
+            radio->driver_data.extended_capa[2]);
+        wifi_hal_info_print("SJYP %s:%d extended_capa_mask[2] for 2G is 0x%02x\n", __func__,
+            __LINE__, radio->driver_data.extended_capa_mask[2]);
+
+       for (unsigned int bit = 0; bit < 8; bit++) {
+           wifi_hal_info_print("SJYP %s:%d: defs extended capabilities 2G mask bit %d is %d\n",
+               __func__, __LINE__, bit, (radio->driver_data.extended_capa_mask[2] >> bit) & 1);
+           wifi_hal_info_print("SJYP %s:%d: defs extended capabilities 2G bit %d is %d\n", __func__,
+               __LINE__, bit, (radio->driver_data.extended_capa[2] >> bit) & 1);
+       }
+    }
+    else
+    {
+       wifi_hal_info_print("SJYP %s:%d extended_capa_len is 0\n", __func__, __LINE__);
+    }
+
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
         iface->hw_features[i].ht_capab = 0x19ef;
@@ -3341,6 +3366,8 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
 
 static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
+    wifi_hal_info_print("SJYP %s:%d: Entering\n", __func__, __LINE__);
+    // Set values from driver beacon, NL values are not valid.
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     static const u8 ext_cap[] = { 0x84, 0x00, 0x08, 0x02, 0x01, 0x00, 0x40, 0x40, 0x00, 0x40,
         0x20 };
@@ -3392,6 +3419,29 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
 #endif // XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT
+
+    if(radio->driver_data.extended_capa_len)
+    {
+       wifi_hal_info_print("SJYP %s:%d extended_capa_len for 5G is %d\n", __func__, __LINE__,
+                radio->driver_data.extended_capa_len);
+       radio->driver_data.extended_capa_mask[2] &= 0xF7;
+       radio->driver_data.extended_capa[2] &= 0xF7;
+       wifi_hal_info_print("SJYP %s:%d extended_capa[2] for 5G is 0x%02x\n", __func__, __LINE__,
+            radio->driver_data.extended_capa[2]);
+        wifi_hal_info_print("SJYP %s:%d extended_capa_mask[2] for 5G is 0x%02x\n", __func__,
+            __LINE__, radio->driver_data.extended_capa_mask[2]);
+
+       for (unsigned int bit = 0; bit < 8; bit++) {
+           wifi_hal_info_print("SJYP %s:%d: defs extended capabilities 5G mask bit %d is %d\n",
+               __func__, __LINE__, bit, (radio->driver_data.extended_capa_mask[2] >> bit) & 1);
+           wifi_hal_info_print("SJYP %s:%d: defs extended capabilities 5G bit %d is %d\n", __func__,
+               __LINE__, bit, (radio->driver_data.extended_capa[2] >> bit) & 1);
+       }
+    }
+    else
+    {
+       wifi_hal_info_print("SJYP %s:%d extended_capa_len is 0\n", __func__, __LINE__);
+    }
 
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
@@ -3448,6 +3498,8 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
 
 static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
+    wifi_hal_info_print("SJYP %s:%d: Entering\n", __func__, __LINE__);
+    // Set values from driver beacon, NL values are not valid.
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     static const u8 ext_cap[] = { 0x84, 0x00, 0x48, 0x02, 0x01, 0x00, 0x40, 0x40, 0x00, 0x40,
         0x21 };
@@ -3480,6 +3532,26 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
 #endif // XB10_PORT || SCXER10_PORT || SCXF10_PORT
+
+    if (radio->driver_data.extended_capa_len) {
+        wifi_hal_info_print("SJYP %s:%d extended_capa_len for 6G is %d\n", __func__, __LINE__,
+            radio->driver_data.extended_capa_len);
+        radio->driver_data.extended_capa_mask[2] &= 0xF7;
+        radio->driver_data.extended_capa[2] &= 0xF7;
+        wifi_hal_info_print("SJYP %s:%d extended_capa[2] for 6G is 0x%02x\n", __func__, __LINE__,
+            radio->driver_data.extended_capa[2]);
+        wifi_hal_info_print("SJYP %s:%d extended_capa_mask[2] for 6G is 0x%02x\n", __func__,
+            __LINE__, radio->driver_data.extended_capa_mask[2]);
+
+        for (unsigned int bit = 0; bit < 8; bit++) {
+            wifi_hal_info_print("SJYP %s:%d: defs extended capabilities 6G mask bit %d is %d\n",
+                __func__, __LINE__, bit, (radio->driver_data.extended_capa_mask[2] >> bit) & 1);
+            wifi_hal_info_print("SJYP %s:%d: defs extended capabilities 6G bit %d is %d\n", __func__,
+                __LINE__, bit, (radio->driver_data.extended_capa[2] >> bit) & 1);
+        }
+    } else {
+        wifi_hal_info_print("SJYP %s:%d extended_capa_len is 0\n", __func__, __LINE__);
+    }
 
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \

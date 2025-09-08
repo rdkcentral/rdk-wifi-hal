@@ -1302,6 +1302,7 @@ int update_hostap_bss(wifi_interface_info_t *interface)
 
 int init_hostap_hw_features(wifi_interface_info_t *interface)
 {
+    wifi_hal_info_print("SJY %s:%d: Entering ...\n", __func__, __LINE__);
     struct hostapd_iface   *iface;
     wifi_vap_info_t        *vap;
     wifi_radio_info_t      *radio;
@@ -1335,8 +1336,8 @@ int init_hostap_hw_features(wifi_interface_info_t *interface)
             wifi_hal_info_print("SJY %s:%d: extended capabilities mask in init hostap hw: 0x%02X\n", __func__, __LINE__, radio->driver_data.iface_ext_capa[i].ext_capa_mask[2]);
             wifi_hal_info_print("SJY %s:%d: extended capabilities in init hostap hw: 0x%02X\n", __func__, __LINE__, radio->driver_data.iface_ext_capa[i].ext_capa[2]);
             for (unsigned int bit = 0; bit < 8; bit++) {
-                wifi_hal_info_print("SJY %s:%d: extended capabilities mask bit %d is %d\n", __func__, __LINE__, bit, (radio->driver_data.iface_ext_capa[i].ext_capa_mask[2] >> bit) & 1);
-                wifi_hal_info_print("SJY %s:%d: extended capabilities bit %d is %d\n", __func__, __LINE__, bit, (radio->driver_data.iface_ext_capa[i].ext_capa[2] >> bit) & 1);
+                wifi_hal_info_print("SJY %s:%d: extended capabilities mask bit in init hostap hw %d is %d\n", __func__, __LINE__, bit, (radio->driver_data.iface_ext_capa[i].ext_capa_mask[2] >> bit) & 1);
+                wifi_hal_info_print("SJY %s:%d: extended capabilities bit %d in init hostap hw is %d\n", __func__, __LINE__, bit, (radio->driver_data.iface_ext_capa[i].ext_capa[2] >> bit) & 1);
             }
             break;
         }
