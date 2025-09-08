@@ -177,7 +177,7 @@ typedef struct _wifi_EapStats_t{    // Passpoint stats defined rdkb-1317
 #endif
 #define DPP_CONFPROTO 0x01 // denoting the DPP Configuration protocol
 
-#define STATUS_OK 0
+#define WIFI_STATUS_OK 0
 #define STATUS_NOT_COMPATIBLE 1
 #define STATUS_AUTH_FAILURE 2
 #define STATUS_DECRYPT_FAILURE 3
