@@ -126,6 +126,10 @@ ForEachMacros:
   - nla_for_each_nested
   - hash_map_foreach
   - hash_map_foreach_safe
+  - for_each_mld_link
+  - dl_list_for_each
+  - dl_list_for_each_safe
+  - dl_list_for_each_reverse
 IfMacros:
   - KJ_IF_MAYBE
 IncludeBlocks:   Preserve
