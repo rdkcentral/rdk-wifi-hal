@@ -128,7 +128,6 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
-#if (HOSTAPD_VERSION >= 211)
     wifi_vap_info_t *vap;
     wifi_interface_info_t *interface;
     struct hostapd_data *hapd, *link_bss;
@@ -165,7 +164,6 @@ int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
         }
     }
-#endif
     return 0;
 }
 
@@ -220,30 +218,7 @@ int platform_get_ssid_default(char *ssid, int vap_index)
             return 0;
         }
     }
-    char serial[BPI_LEN_8] = {0};
-    FILE *fp = NULL;
-    size_t bytes_read = 0;
-
-    if((fp = fopen("/nvram/serial_number.txt", "rb")) != NULL)
-    {
-        if(fseek(fp, -7, SEEK_END))
-        {
-            wifi_hal_dbg_print("%s:%d, fseek() failed \n", __func__, __LINE__);
-	        fclose(fp);
-	        return -1;
-        }
-	    bytes_read = fread(serial, 1, sizeof(serial)-1, fp);
-	    fclose(fp);
-	    if(!bytes_read)
-	        return -1;
-	    serial[strcspn(serial, "\n")] = 0;
-	    wifi_hal_dbg_print("%s:%d, appending serial is :%s \n", __func__, __LINE__, serial);
-    }
-#ifdef CONFIG_GENERIC_MLO
-    snprintf(ssid, BPI_LEN_32, "BPI-RDKB-MLO-AP-%s", serial);
-#else    
-    snprintf(ssid, BPI_LEN_32, "BPI_RDKB-AP%d-%s", vap_index, serial);
-#endif    
+    snprintf(ssid, BPI_LEN_16, "BPI-RDKB-MLO-AP");
     return 0;
 }
 
@@ -278,11 +253,7 @@ int nvram_get_current_password(char *l_password, int vap_index)
 int nvram_get_current_ssid(char *l_ssid, int vap_index)
 {
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
-#ifdef CONFIG_GENERIC_MLO    
     snprintf(l_ssid, BPI_LEN_16, "BPI-RDKB-MLO-AP");
-#else    
-    snprintf(l_ssid,BPI_LEN_16,"BPI_RDKB-AP%d",vap_index);
-#endif    
     return 0;
 }
 
@@ -870,9 +841,79 @@ static bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 
 int update_hostap_mlo(wifi_interface_info_t *interface)
 {
-#if (HOSTAPD_VERSION >= 211)
     struct hostapd_bss_config *conf;
     struct hostapd_data *hapd, *first_link, *link_bss;
+
+    if (interface->u.ap.conf.disable_11be) {
+        return 0;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return 0;
+    }
+
+    hapd = &interface->u.ap.hapd;
+    conf = hapd->conf;
+
+    conf->mld_ap = 1;
+    conf->okc = 1;
+    hapd->mld_link_id = wifi_hal_get_mld_link_id(interface);
+
+    if (mld.num_links == 0) {
+        strncpy(mld.name, conf->iface, sizeof(mld.name) - 1);
+        dl_list_init(&mld.links);
+        memcpy(mld.mld_addr, wifi_hal_get_mld_mac_address(interface), ETH_ALEN);
+    }
+    hapd->mld = &mld;
+
+    if (!wifi_hal_is_mld_link_exists(hapd) && hostapd_mld_add_link(hapd) != 0) {
+        wifi_hal_error_print("Failed to add link %d in MLD %s\n", hapd->mld_link_id,
+            hapd->conf->iface);
+        return -1;
+    }
+
+    /* Links have been removed due to interface down-up. Re-add all links and enable them,
+     * but enable the first link BSS before doing that. */
+    first_link = hostapd_mld_is_first_bss(hapd) ? hapd : hostapd_mld_get_first_bss(hapd);
+
+    if (hostapd_drv_link_add(first_link, first_link->mld_link_id, first_link->own_addr)) {
+        wifi_hal_error_print("Failed to add link %d in MLD %s\n", first_link->mld_link_id,
+            first_link->conf->iface);
+        return -1;
+    }
+
+    /* If it is current link configuration it will be enabled later by start_bss */
+    if (first_link != hapd) {
+        if (ieee802_11_set_beacon(first_link) != 0) {
+            wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
+                __func__, __LINE__, first_link->conf->iface, first_link->mld_link_id);
+            return -1;
+        }
+    }
+
+    /* Add other affiliated links */
+    for_each_mld_link(link_bss, first_link) {
+        if (link_bss == first_link) {
+            continue;
+        }
+
+        if (hostapd_drv_link_add(link_bss, link_bss->mld_link_id, link_bss->own_addr)) {
+            wifi_hal_error_print("Failed to add link %d in MLD %s\n", link_bss->mld_link_id,
+                link_bss->conf->iface);
+            return -1;
+        }
+
+        /* If it is current link configuration it will be enabled later by start_bss */
+        if (link_bss == hapd) {
+            continue;
+        }
+
+        if (ieee802_11_set_beacon(link_bss) != 0) {
+            wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
+                __func__, __LINE__, link_bss->conf->iface, link_bss->mld_link_id);
+            return -1;
+        }
+    }
 
     if (interface->u.ap.conf.disable_11be) {
         return 0;

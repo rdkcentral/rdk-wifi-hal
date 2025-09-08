@@ -497,6 +497,7 @@ typedef struct wifi_interface_info_t {
     struct wpa_supplicant wpa_s;
     struct wpa_ssid current_ssid_info;
 #endif
+    char mld_name[32];
 } wifi_interface_info_t;
 
 #define MAX_RATES   16
@@ -848,6 +849,9 @@ int wifi_hal_get_vap_interface_type(wifi_vap_name_t vap_name, wifi_vap_type_t va
 wifi_interface_info_t *wifi_hal_get_vap_interface_by_type(wifi_radio_info_t *radio,
     wifi_vap_type_t vap_type);
 int nl80211_init_primary_interfaces();
+#ifdef CONFIG_GENERIC_MLO
+int nl80211_init_mld_links();
+#endif // CONFIG_GENERIC_MLO
 int nl80211_init_radio_info();
 int getIpStringFromAdrress(char * ipString,  ip_addr_t * ip);
 int get_mac_address (char *intf_name,  mac_address_t mac);
@@ -901,7 +905,7 @@ int     nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         unsigned int num_ssid,  ssid_t *ssid_list);
 int     nl80211_get_scan_results(wifi_interface_info_t *interface);
 int     nl80211_switch_channel(wifi_radio_info_t *radio);
-int     nl80211_tx_control_port(wifi_interface_info_t *interface, const u8 *dest, u16 proto, const u8 *buf, size_t len, int no_encrypt);
+int     nl80211_tx_control_port(wifi_interface_info_t *interface, const u8 *dest, u16 proto, const u8 *buf, size_t len, int no_encrypt, int link_id);
 int     nl80211_set_acl(wifi_interface_info_t *interface);
 int     nl80211_set_mac(wifi_interface_info_t *interface);
 int     nl80211_dfs_cac_started(wifi_interface_info_t *interface, int freq, int ht_enabled, int sec_channel_offset, int bandwidth, int bw, int cf1, int cf2);
@@ -1333,11 +1337,10 @@ static inline enum nl80211_iftype wpa_driver_nl80211_if_type(enum wpa_driver_if_
         return -1;
     }
 }
-
+int wifi_drv_set_supp_port(void *priv, int authorized);
 #ifdef RDKB_ONE_WIFI_PROD
 void remap_wifi_interface_name_index_map();
 #endif /* RDKB_ONE_WIFI_PROD */
-int wifi_drv_set_supp_port(void *priv, int authorized);
 
 char *wifi_hal_get_mld_name_by_interface_name(char *ifname);
 char *wifi_hal_get_interface_name(wifi_interface_info_t *interface);
