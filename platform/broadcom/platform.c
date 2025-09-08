@@ -3316,6 +3316,11 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     {
          wifi_hal_info_print("SJYP %s:%d extended_capa_len for 2G is %d\n", __func__, __LINE__,
               radio->driver_data.extended_capa_len);
+       wifi_hal_info_print("SJYP %s:%d extended_capa[0] before modification for 2G is 0x%02x\n", __func__, __LINE__,
+           radio->driver_data.extended_capa[0]);
+       wifi_hal_info_print("SJYP %s:%d extended_capa_mask[0] before modification for 2G is 0x%02x\n", __func__,
+           __LINE__, radio->driver_data.extended_capa_mask[0]);
+
        radio->driver_data.extended_capa_mask[2] &= 0xF7;
        radio->driver_data.extended_capa[2] &= 0xF7;
        wifi_hal_info_print("SJYP %s:%d extended_capa[2] for 2G is 0x%02x\n", __func__, __LINE__,
@@ -3424,6 +3429,10 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     {
        wifi_hal_info_print("SJYP %s:%d extended_capa_len for 5G is %d\n", __func__, __LINE__,
                 radio->driver_data.extended_capa_len);
+       wifi_hal_info_print("SJYP %s:%d extended_capa[2] before modification for 5G is 0x%02x\n",
+           __func__, __LINE__, radio->driver_data.extended_capa[2]);
+       wifi_hal_info_print("SJYP %s:%d extended_capa_mask[2] before modification for 5G is 0x%02x\n",
+           __func__, __LINE__, radio->driver_data.extended_capa_mask[2]);
        radio->driver_data.extended_capa_mask[2] &= 0xF7;
        radio->driver_data.extended_capa[2] &= 0xF7;
        wifi_hal_info_print("SJYP %s:%d extended_capa[2] for 5G is 0x%02x\n", __func__, __LINE__,
@@ -3536,6 +3545,10 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     if (radio->driver_data.extended_capa_len) {
         wifi_hal_info_print("SJYP %s:%d extended_capa_len for 6G is %d\n", __func__, __LINE__,
             radio->driver_data.extended_capa_len);
+        wifi_hal_info_print("SJYP %s:%d extended_capa[2] before modification for 6G is 0x%02x\n",
+            __func__, __LINE__, radio->driver_data.extended_capa[2]);
+        wifi_hal_info_print("SJYP %s:%d extended_capa_mask[2] before modification for 6G is 0x%02x\n",
+            __func__, __LINE__, radio->driver_data.extended_capa_mask[2]);
         radio->driver_data.extended_capa_mask[2] &= 0xF7;
         radio->driver_data.extended_capa[2] &= 0xF7;
         wifi_hal_info_print("SJYP %s:%d extended_capa[2] for 6G is 0x%02x\n", __func__, __LINE__,
