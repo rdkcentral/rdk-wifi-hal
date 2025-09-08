@@ -5863,24 +5863,22 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
             radio->driver_data.extended_capa_len = 0;
         }
     }
+
+     wifi_hal_info_print("SJY %s:%d: The value of radio->driver_data.extended_capa_len is %d\n", __func__, __LINE__, radio->driver_data.extended_capa_len);
+    radio->driver_data.extended_capa_mask[2] &= 0xF7;
+    radio->driver_data.extended_capa[2] &= 0xF7;
+    wifi_hal_info_print("SJY %s:%d:  def extended capabilities mask: 0x%02X\n", __func__, __LINE__, radio->driver_data.extended_capa_mask[2]);
+    wifi_hal_info_print("SJY %s:%d: def extended capabilities: 0x%02X\n", __func__, __LINE__, radio->driver_data.extended_capa[2]);
+
+    //print every bit of 2nd octet
+    for (unsigned int bit = 0; bit < 8; bit++) {
+        wifi_hal_info_print("SJY %s:%d: def extended capabilities mask bit %d is %d\n", __func__, __LINE__, bit, (radio->driver_data.extended_capa_mask[2] >> bit) & 1);
+        wifi_hal_info_print("SJY %s:%d: def extended capabilities bit %d is %d\n", __func__, __LINE__, bit, (radio->driver_data.extended_capa[2] >> bit) & 1);
+    }
+
     wifi_hal_info_print("SJY %s:%d: Calling wiphy_info_extended_capab\n", __func__, __LINE__);
     wiphy_info_extended_capab(&radio->driver_data, tb[NL80211_ATTR_IFTYPE_EXT_CAPA]);
 
-    wifi_hal_info_print("SJY %s:%d: The value of radio->driver_data.num_iface_ext_capa is %d\n", __func__, __LINE__, radio->driver_data.num_iface_ext_capa);
-    for(unsigned int i = 0; i < radio->driver_data.num_iface_ext_capa; i++) {
-        wifi_hal_info_print("SJY %s:%d: The value of radio->driver_data.iface_ext_capa[i].iftype is %d\n", __func__, __LINE__, radio->driver_data.iface_ext_capa[i].iftype);
-        if (radio->driver_data.iface_ext_capa[i].iftype == NL80211_IFTYPE_AP) {
-            radio->driver_data.iface_ext_capa[i].ext_capa_mask[2] &= 0xF7;
-            radio->driver_data.iface_ext_capa[i].ext_capa[2] &= 0xF7;
-            wifi_hal_info_print("SJY %s:%d: nl80211: AP extended capabilities mask: 0x%02X\n", __func__, __LINE__, radio->driver_data.iface_ext_capa[i].ext_capa_mask[2]);
-            wifi_hal_info_print("SJY %s:%d: nl80211: AP extended capabilities: 0x%02X\n", __func__, __LINE__, radio->driver_data.iface_ext_capa[i].ext_capa[2]);
-            for (unsigned int bit = 0; bit < 8; bit++) {
-                wifi_hal_info_print("SJY %s:%d: nl80211: AP extended capabilities mask bit %d is  %d\n", __func__, __LINE__, bit, (radio->driver_data.iface_ext_capa[i].ext_capa_mask[2] >> bit) & 1);
-                wifi_hal_info_print("SJY %s:%d: nl80211: AP extended capabilities bit %d is %d\n", __func__, __LINE__, bit, (radio->driver_data.iface_ext_capa[i].ext_capa[2] >> bit) & 1);
-            }
-            break;
-        }
-    }
 
     wiphy_info_wowlan_triggers(capa,
                 tb[NL80211_ATTR_WOWLAN_TRIGGERS_SUPPORTED]);
