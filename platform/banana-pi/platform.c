@@ -97,6 +97,28 @@ static int json_parse_backhaul_ssid(char *backhaul_ssid)
     return json_parse_string(EM_CFG_FILE, "Backhaul_SSID", backhaul_ssid, MAX_SSID_LEN);
 }
 
+static int json_parse_fronthaul_keypassphrase(char *fronthaul_keypassphrase)
+{
+    return json_parse_string(EM_CFG_FILE, "Fronthaul_KeyPassphrase", fronthaul_keypassphrase,
+        MAX_KEYPASSPHRASE_LEN);
+}
+
+static int json_parse_fronthaul_ssid(char *fronthaul_ssid)
+{
+    return json_parse_string(EM_CFG_FILE, "Fronthaul_SSID", fronthaul_ssid, MAX_SSID_LEN);
+}
+
+static int json_parse_iot_keypassphrase(char *iot_keypassphrase)
+{
+    return json_parse_string(EM_CFG_FILE, "Iot_KeyPassphrase", iot_keypassphrase,
+        MAX_KEYPASSPHRASE_LEN);
+}
+
+static int json_parse_iot_ssid(char *iot_ssid)
+{
+    return json_parse_string(EM_CFG_FILE, "Iot_SSID", iot_ssid, MAX_SSID_LEN);
+}
+
 int platform_pre_init()
 {
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
@@ -127,7 +149,44 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+#if (HOSTAPD_VERSION >= 211)
+    wifi_vap_info_t *vap;
+    wifi_interface_info_t *interface;
+    struct hostapd_data *hapd, *link_bss;
+
+    for (unsigned int i = 0; i < map->num_vaps; i++) {
+        vap = &map->vap_array[i];
+        if (vap->vap_mode != wifi_vap_mode_ap) {
+            continue;
+        }
+
+        interface = get_interface_by_vap_index(vap->vap_index);
+        if (interface == NULL) {
+            wifi_hal_error_print("%s:%d: failed to get interface for vap_index %d\n", __func__,
+                __LINE__, vap->vap_index);
+            continue;
+        }
+
+        if (interface->u.ap.conf.disable_11be) {
+            continue;
+        }
+
+        if (!wifi_hal_is_mld_enabled(interface)) {
+            continue;
+        }
+
+        /* beacon has to be set twice to make it broadcast */
+        hapd = &interface->u.ap.hapd;
+        for_each_mld_link(link_bss, hapd) {
+            if (ieee802_11_set_beacon(link_bss) != 0) {
+                wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
+                    __func__, __LINE__, wifi_hal_get_interface_name(interface),
+                    link_bss->mld_link_id);
+                return -1;
+            }
+        }
+    }
+#endif
     return 0;
 }
 
@@ -154,12 +213,23 @@ int platform_get_keypassphrase_default(char *password, int vap_index)
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);  
     /* if the vap_index is that of mesh STA then try to obtain the ssid from
        /nvram/EasymeshCfg.json file */
-    if (is_wifi_hal_vap_mesh_sta(vap_index)) {
+    if (is_wifi_hal_vap_mesh_sta(vap_index) || is_wifi_hal_vap_mesh_backhaul(vap_index)) {
         if (!json_parse_backhaul_keypassphrase(password)) {
             wifi_hal_dbg_print("%s:%d, read password from jSON file\n", __func__, __LINE__);
             return 0;
         }
+    } else if(is_wifi_hal_vap_xhs(vap_index)) {
+        if (!json_parse_iot_keypassphrase(password)) {
+            wifi_hal_dbg_print("%s:%d, read password from jSON file\n", __func__, __LINE__);
+            return 0;
+        }
+    } else {
+        if (!json_parse_fronthaul_keypassphrase(password)) {
+            wifi_hal_dbg_print("%s:%d, read password from jSON file\n", __func__, __LINE__);
+            return 0;
+        }
     }
+    wifi_hal_dbg_print("%s:%d default password not found from json - Reading from nvram defaults\n",__func__,__LINE__);
     /*password is not sensitive,won't grant access to real devices*/ 
     wifi_nvram_defaultRead("bpi_wifi_password",password);
     if (strlen(password) == 0) {
@@ -173,16 +243,32 @@ int platform_get_keypassphrase_default(char *password, int vap_index)
 
 int platform_get_ssid_default(char *ssid, int vap_index)
 {
+    int ret = 0;
+
     wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
     /* if the vap_index is that of mesh STA or mesh backhaul then try to obtain the ssid from
        /nvram/EasymeshCfg.json file */
-    if (is_wifi_hal_vap_mesh_sta(vap_index)) {
-        if (!json_parse_backhaul_ssid(ssid)) {
+    if (is_wifi_hal_vap_mesh_sta(vap_index) || is_wifi_hal_vap_mesh_backhaul(vap_index)) {
+        ret = json_parse_backhaul_ssid(ssid);
+        if(!ret) {
+            wifi_hal_dbg_print("%s:%d, read SSID:%s from jSON file\n", __func__, __LINE__, ssid);
+            return 0;
+        }
+    } else if(is_wifi_hal_vap_xhs(vap_index)) {
+        ret = json_parse_iot_ssid(ssid);
+        if (!ret) {
+            wifi_hal_dbg_print("%s:%d, read SSID:%s from jSON file\n", __func__, __LINE__, ssid);
+            return 0;
+        }
+    } else {
+        ret = json_parse_fronthaul_ssid(ssid);
+        if (!ret) {
             wifi_hal_dbg_print("%s:%d, read SSID:%s from jSON file\n", __func__, __LINE__, ssid);
             return 0;
         }
     }
-    snprintf(ssid,BPI_LEN_16,"BPI_RDKB-AP%d",vap_index);
+    wifi_hal_dbg_print("%s:%d, read SSID from jSON file failed:%d\n", __func__, __LINE__, ret);
+    snprintf(ssid, BPI_LEN_16, "BPI-RDKB-MLO-AP");
     return 0;
 }
 
@@ -216,8 +302,8 @@ int nvram_get_current_password(char *l_password, int vap_index)
 
 int nvram_get_current_ssid(char *l_ssid, int vap_index)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__); 
-    snprintf(l_ssid,BPI_LEN_16,"BPI_RDKB-AP%d",vap_index);
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    snprintf(l_ssid, BPI_LEN_16, "BPI-RDKB-MLO-AP");
     return 0;
 }
 
@@ -225,6 +311,9 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
     char output_val[BPI_LEN_32];
     int i;
+    wifi_vap_info_t *vap;
+    wifi_interface_info_t *interface;
+
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
 
     if (map == NULL)
@@ -247,13 +336,46 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 	    }
       }
     }
+
+    for (unsigned int i = 0; i < map->num_vaps; i++) {
+        vap = &map->vap_array[i];
+        if (vap->vap_mode != wifi_vap_mode_ap) {
+            continue;
+        }
+        interface = get_interface_by_vap_index(vap->vap_index);
+        if (interface == NULL) {
+            wifi_hal_error_print("%s:%d: failed to get interface for vap_index %d\n", __func__,
+                __LINE__, vap->vap_index);
+            return -1;
+        }
+        // Override MLO configuration because MLD enabled on the boot.
+        // TODO: dynamic configuration
+        vap->u.bss_info.mld_info.common_info.mld_enable =
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_enable;
+        memcpy(vap->u.bss_info.mld_info.common_info.mld_addr,
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_addr,
+            sizeof(vap->u.bss_info.mld_info.common_info.mld_addr));
+        vap->u.bss_info.mld_info.common_info.mld_link_id =
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
+        vap->u.bss_info.mld_info.common_info.mld_id =
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_id;
+
+        // Disable non-MLD interface so it's MAC can be reused for MLD link
+        if (vap->u.bss_info.mld_info.common_info.mld_enable &&
+            nl80211_interface_enable(interface->name, false) < 0) {
+            wifi_hal_error_print("%s:%d: failed to disable interface %s\n", __func__, __LINE__,
+                interface->name);
+            return -1;
+        }
+    }
+
     return 0;
 }
 
 int platform_flags_init(int *flags)
 {
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
-    *flags = PLATFORM_FLAGS_STA_INACTIVITY_TIMER;
+    *flags = PLATFORM_FLAGS_STA_INACTIVITY_TIMER | PLATFORM_FLAGS_CONTROL_PORT_FRAME;
     return 0;
 }
 
@@ -738,14 +860,107 @@ int nl80211_send_mlo_msg(struct nl_msg *msg)
 
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb)
 {
-    (void)eht_capab;
-    (void)tb;
+    if (tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC] &&
+        nla_len(tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC]) >= 2) {
+        const u8 *pos;
+
+        pos = nla_data(tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC]);
+        eht_capab->mac_cap = WPA_GET_LE16(pos);
+    }
+}
+
+// TODO: support multiple mld
+static struct hostapd_mld mld;
+
+static bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
+{
+    struct hostapd_data *link_bss;
+
+    dl_list_for_each(link_bss, &mld.links, struct hostapd_data, link) {
+        if (link_bss == hapd) {
+            return true;
+        }
+    }
+    return false;
 }
 
 int update_hostap_mlo(wifi_interface_info_t *interface)
 {
-    (void)interface;
+#if (HOSTAPD_VERSION >= 211)
+    struct hostapd_bss_config *conf;
+    struct hostapd_data *hapd, *first_link, *link_bss;
 
+    if (interface->u.ap.conf.disable_11be) {
+        return 0;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return 0;
+    }
+
+    hapd = &interface->u.ap.hapd;
+    conf = hapd->conf;
+
+    conf->mld_ap = 1;
+    conf->okc = 1;
+    hapd->mld_link_id = wifi_hal_get_mld_link_id(interface);
+
+    if (mld.num_links == 0) {
+        strncpy(mld.name, conf->iface, sizeof(mld.name) - 1);
+        dl_list_init(&mld.links);
+        memcpy(mld.mld_addr, wifi_hal_get_mld_mac_address(interface), ETH_ALEN);
+    }
+    hapd->mld = &mld;
+
+    if (!wifi_hal_is_mld_link_exists(hapd) && hostapd_mld_add_link(hapd) != 0) {
+        wifi_hal_error_print("Failed to add link %d in MLD %s\n", hapd->mld_link_id,
+            hapd->conf->iface);
+        return -1;
+    }
+
+    /* Links have been removed due to interface down-up. Re-add all links and enable them,
+     * but enable the first link BSS before doing that. */
+    first_link = hostapd_mld_is_first_bss(hapd) ? hapd : hostapd_mld_get_first_bss(hapd);
+
+    if (hostapd_drv_link_add(first_link, first_link->mld_link_id, first_link->own_addr)) {
+        wifi_hal_error_print("Failed to add link %d in MLD %s\n", first_link->mld_link_id,
+            first_link->conf->iface);
+        return -1;
+    }
+
+    /* If it is current link configuration it will be enabled later by start_bss */
+    if (first_link != hapd) {
+        if (ieee802_11_set_beacon(first_link) != 0) {
+            wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
+                __func__, __LINE__, first_link->conf->iface, first_link->mld_link_id);
+            return -1;
+        }
+    }
+
+    /* Add other affiliated links */
+    for_each_mld_link(link_bss, first_link) {
+        if (link_bss == first_link) {
+            continue;
+        }
+
+        if (hostapd_drv_link_add(link_bss, link_bss->mld_link_id, link_bss->own_addr)) {
+            wifi_hal_error_print("Failed to add link %d in MLD %s\n", link_bss->mld_link_id,
+                link_bss->conf->iface);
+            return -1;
+        }
+
+        /* If it is current link configuration it will be enabled later by start_bss */
+        if (link_bss == hapd) {
+            continue;
+        }
+
+        if (ieee802_11_set_beacon(link_bss) != 0) {
+            wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
+                __func__, __LINE__, link_bss->conf->iface, link_bss->mld_link_id);
+            return -1;
+        }
+    }
+#endif
     return 0;
 }
 #endif /* CONFIG_IEEE80211BE */
