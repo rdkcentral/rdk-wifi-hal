@@ -6161,6 +6161,55 @@ Exit:
     return 0;
 }
 
+#if defined(TCXB8_PORT) || defined(XB10_PORT)
+int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
+{
+    wifi_hal_dbg_print("%s:%d: Setting AMSDU for interface->name=%s\n", __func__, __LINE__,
+        interface->name);
+
+    struct nl_msg *msg;
+    struct nlattr *nlattr_vendor = NULL;
+
+    // Create the vendor-specific command message
+    msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
+        RDK_VENDOR_NL80211_SUBCMD_SET_AMSDU_CONFIG);
+    if (msg == NULL) {
+        wifi_hal_dbg_print("%s:%d: Failed to create AMSDU NL SET command\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    /*
+     * message format for WMM TID setting
+     *
+     *  NL80211_ATTR_VENDOR_DATA
+     *  RDK_VENDOR_ATTR_AMSDU_TIDS
+     * */
+
+    nlattr_vendor = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+
+    if (nla_put_u32(msg, RDK_VENDOR_ATTR_VAP_INDEX, 0) < 0) {
+        wifi_hal_stats_error_print("%s:%d: Failed to set vap index\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return RETURN_ERR;
+    }
+
+    if (nla_put(msg, RDK_VENDOR_ATTR_AMSDU_TIDS, RDK_VENDOR_NL80211_AMSDU_TID_MAX, amsdu_tid) < 0) {
+        wifi_hal_dbg_print("%s:%d: Failed to add AMSDU TIDs config\n", __func__, __LINE__);
+        nla_nest_cancel(msg, nlattr_vendor);
+        nlmsg_free(msg);
+        return RETURN_ERR;
+    }
+
+    nla_nest_end(msg, nlattr_vendor);
+
+    if (nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL) != 0) {
+        wifi_hal_dbg_print("%s:%d: Failed to send NL command for AMSDU TIDs config setup\n",
+            __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    return RETURN_OK;
+}
+#endif
+
 int nl80211_set_regulatory_domain(wifi_countrycode_type_t country_code)
 {
     struct nl_msg *msg;
