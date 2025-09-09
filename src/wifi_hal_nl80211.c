@@ -5273,7 +5273,6 @@ static void wiphy_info_extended_capab(wifi_driver_data_t *drv,
 
         capa->ext_capa_len = len;
 
-
         len = nla_len(tb1[NL80211_ATTR_EXT_CAPA_MASK]);
         capa->ext_capa_mask =
             os_memdup(nla_data(tb1[NL80211_ATTR_EXT_CAPA_MASK]),
