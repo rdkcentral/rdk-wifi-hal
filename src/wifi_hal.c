@@ -577,7 +577,7 @@ INT wifi_hal_pre_init()
         pre_init_fn();
     }
 
-#ifdef BANANA_PI_PORT
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
     void hostapd_wpa_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
 
     wpa_supplicant_event = hostapd_wpa_event;

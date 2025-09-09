@@ -226,7 +226,7 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
                     len - 24 - sizeof(mgmt->u.assoc_resp);
             }
             event.assoc_reject.status_code = status;
-#if defined(BANANA_PI_PORT)
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
             wpa_supplicant_event(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
 #else
             wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
@@ -262,7 +262,7 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
 	event.assoc_info.beacon_ies_len = 0;
     }
 
-#if defined(BANANA_PI_PORT)
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
     wpa_supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
 #else
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC, &event);
@@ -292,7 +292,7 @@ static void nl80211_authenticate_event(wifi_interface_info_t *interface, struct 
         wifi_hal_dbg_print("%s:%d: NO FRAME \n", __func__, __LINE__);
     }
 
-#if defined(BANANA_PI_PORT)
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
     wpa_supplicant_event(&interface->wpa_s, EVENT_AUTH, &event);
 #else
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_AUTH, &event);
@@ -806,7 +806,7 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
     interface->wpa_s.disconnected = 1;
-#if defined(BANANA_PI_PORT)
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
     wpa_supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
 #else
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
