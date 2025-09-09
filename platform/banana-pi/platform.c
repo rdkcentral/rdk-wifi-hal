@@ -128,6 +128,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
+#if (HOSTAPD_VERSION >= 211)
     wifi_vap_info_t *vap;
     wifi_interface_info_t *interface;
     struct hostapd_data *hapd, *link_bss;
@@ -164,6 +165,7 @@ int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
         }
     }
+#endif
     return 0;
 }
 
@@ -841,6 +843,7 @@ static bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 
 int update_hostap_mlo(wifi_interface_info_t *interface)
 {
+#if (HOSTAPD_VERSION >= 211)
     struct hostapd_bss_config *conf;
     struct hostapd_data *hapd, *first_link, *link_bss;
 
@@ -911,60 +914,6 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         if (ieee802_11_set_beacon(link_bss) != 0) {
             wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
                 __func__, __LINE__, link_bss->conf->iface, link_bss->mld_link_id);
-            return -1;
-        }
-    }
-
-    if (interface->u.ap.conf.disable_11be) {
-        return 0;
-    }
-
-    if (!wifi_hal_is_mld_enabled(interface)) {
-        return 0;
-    }
-
-    wifi_hal_info_print("%s:%d: interface:%s link id:%d update MLD links\n", __func__, __LINE__,
-        wifi_hal_get_interface_name(interface), wifi_hal_get_mld_link_id(interface));
-
-    hapd = &interface->u.ap.hapd;
-    conf = hapd->conf;
-
-    conf->mld_ap = 1;
-    conf->okc = 1;
-    hapd->mld_link_id = wifi_hal_get_mld_link_id(interface);
-
-    if (mld.num_links == 0) {
-        strncpy(mld.name, conf->iface, sizeof(mld.name) - 1);
-        dl_list_init(&mld.links);
-        memcpy(mld.mld_addr, wifi_hal_get_mld_mac_address(interface), ETH_ALEN);
-    }
-    hapd->mld = &mld;
-
-    if (!wifi_hal_is_mld_link_exists(hapd) && hostapd_mld_add_link(hapd) != 0) {
-        wifi_hal_error_print("%s:%d: Failed to add link %d in MLD %s\n", __func__, __LINE__,
-            hapd->mld_link_id, hapd->conf->iface);
-        return -1;
-    }
-
-    /* Links have been removed due to interface down-up. Re-add all links and enable them,
-     * but enable the first link BSS before doing that. */
-    first_link = hostapd_mld_is_first_bss(hapd) ? hapd : hostapd_mld_get_first_bss(hapd);
-
-    if (hostapd_drv_link_add(first_link, first_link->mld_link_id, first_link->own_addr)) {
-        wifi_hal_error_print("%s:%d: Failed to add link %d in MLD %s\n", __func__, __LINE__,
-            first_link->mld_link_id, first_link->conf->iface);
-        return -1;
-    }
-
-    /* Add other affiliated links */
-    for_each_mld_link(link_bss, first_link) {
-        if (link_bss == first_link) {
-            continue;
-        }
-
-        if (hostapd_drv_link_add(link_bss, link_bss->mld_link_id, link_bss->own_addr)) {
-            wifi_hal_error_print("%s:%d: Failed to add link %d in MLD %s\n", __func__, __LINE__,
-                link_bss->mld_link_id, link_bss->conf->iface);
             return -1;
         }
     }
