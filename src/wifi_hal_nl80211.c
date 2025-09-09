@@ -5279,7 +5279,9 @@ static void wiphy_info_extended_capab(wifi_driver_data_t *drv,
             os_memdup(nla_data(tb1[NL80211_ATTR_EXT_CAPA_MASK]),
                   len);
 
-
+        if (!capa->ext_capa_mask) {
+            goto err;
+        }
 
 #if HOSTAPD_VERSION >= 211
 #ifdef CONFIG_IEEE80211BE
@@ -5296,7 +5298,6 @@ static void wiphy_info_extended_capab(wifi_driver_data_t *drv,
 #endif /* HOSTAPD_VERSION >= 211 */
 
         drv->num_iface_ext_capa++;
-
         if (drv->num_iface_ext_capa == NL80211_IFTYPE_MAX) {
             break;
         }
@@ -5867,16 +5868,13 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
         radio->driver_data.extended_capa == NULL) {
         radio->driver_data.extended_capa =
             os_malloc(nla_len(tb[NL80211_ATTR_EXT_CAPA]));
-
         if (radio->driver_data.extended_capa) {
             os_memcpy(radio->driver_data.extended_capa,
                 nla_data(tb[NL80211_ATTR_EXT_CAPA]),
                 nla_len(tb[NL80211_ATTR_EXT_CAPA]));
-            
             radio->driver_data.extended_capa_len =
                 nla_len(tb[NL80211_ATTR_EXT_CAPA]);
         }
-
         radio->driver_data.extended_capa_mask =
             os_malloc(nla_len(tb[NL80211_ATTR_EXT_CAPA_MASK]));
         if (radio->driver_data.extended_capa_mask) {
@@ -5891,7 +5889,6 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     }
 
     wiphy_info_extended_capab(&radio->driver_data, tb[NL80211_ATTR_IFTYPE_EXT_CAPA]);
-
 
     wiphy_info_wowlan_triggers(capa,
                 tb[NL80211_ATTR_WOWLAN_TRIGGERS_SUPPORTED]);
