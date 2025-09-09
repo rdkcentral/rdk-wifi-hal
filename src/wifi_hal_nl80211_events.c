@@ -226,8 +226,11 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
                     len - 24 - sizeof(mgmt->u.assoc_resp);
             }
             event.assoc_reject.status_code = status;
-
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+            wpa_supplicant_event(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
+#else
             wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
+#endif // BANANA_PI_PORT
             return;
         }
         memset(&event, 0, sizeof(event));
@@ -259,8 +262,11 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
 	event.assoc_info.beacon_ies_len = 0;
     }
 
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+    wpa_supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
+#else
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC, &event);
-    return;
+#endif // BANANA_PI_PORT
 }
 
 static void nl80211_authenticate_event(wifi_interface_info_t *interface, struct nlattr **tb)
@@ -286,9 +292,11 @@ static void nl80211_authenticate_event(wifi_interface_info_t *interface, struct 
         wifi_hal_dbg_print("%s:%d: NO FRAME \n", __func__, __LINE__);
     }
 
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+    wpa_supplicant_event(&interface->wpa_s, EVENT_AUTH, &event);
+#else
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_AUTH, &event);
-
-    return;
+#endif // BANANA_PI_PORT
 }
 #endif //CONFIG_WIFI_EMULATOR || BANANA_PI_PORT
 
@@ -312,6 +320,9 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
     int phy_rate = 60;
 #endif
+#ifdef CONFIG_GENERIC_MLO
+    wifi_interface_info_t *link_interface = NULL;
+#endif // CONFIG_GENERIC_MLO
 
     wifi_mgmtFrameType_t mgmt_type = WIFI_MGMT_FRAME_TYPE_INVALID;
     wifi_vap_info_t *vap;
@@ -350,12 +361,22 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     hdr = (const struct ieee80211_hdr *)nla_data(frame);
     fc = le_to_host16(hdr->frame_control);
 
+#ifdef CONFIG_GENERIC_MLO
+    if ((link_interface = wifi_hal_get_mld_link_interface_by_mac(interface, hdr->addr1)) != NULL) {
+        memcpy(sta, hdr->addr2, sizeof(mac_address_t));
+        dir = wifi_direction_uplink;
+    } else if ((link_interface = wifi_hal_get_mld_link_interface_by_mac(interface, hdr->addr2)) !=
+        NULL) {
+        memcpy(sta, hdr->addr1, sizeof(mac_address_t));
+        dir = wifi_direction_downlink;
+#else
     if (memcmp(hdr->addr1, interface->mac, sizeof(mac_address_t)) == 0) {
         memcpy(sta, hdr->addr2, sizeof(mac_address_t));
         dir = wifi_direction_uplink;
     } else if (memcmp(hdr->addr2, interface->mac, sizeof(mac_address_t)) == 0) {
         memcpy(sta, hdr->addr1, sizeof(mac_address_t));
         dir = wifi_direction_downlink;
+#endif // CONFIG_GENERIC_MLO
     } else if (memcmp(hdr->addr1, bmac, sizeof(mac_address_t)) == 0) {
         memcpy(sta, hdr->addr2, sizeof(mac_address_t));
         dir = wifi_direction_uplink;
@@ -394,7 +415,12 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     event.tx_status.data_len = nla_len(frame);
     event.tx_status.ack = ack != NULL;
 #if HOSTAPD_VERSION >= 211
+#ifdef CONFIG_GENERIC_MLO
+    event.tx_status.link_id = link_interface ? wifi_hal_get_mld_link_id(link_interface) :
+                                               NL80211_DRV_LINK_ID_NA;
+#else
     event.tx_status.link_id = NL80211_DRV_LINK_ID_NA;
+#endif // CONFIG_GENERIC_MLO
 #endif /* HOSTAPD_VERSION >= 211 */
    const struct ieee80211_mgmt *mgmt = (const struct ieee80211_mgmt *)event.tx_status.data;
    if (event.tx_status.type  == WLAN_FC_TYPE_MGMT &&
@@ -780,7 +806,11 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
     interface->wpa_s.disconnected = 1;
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+    wpa_supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
+#else
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
+#endif // BANANA_PI_PORT
 #endif
     if (interface->u.sta.wpa_sm != NULL) {
         eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
