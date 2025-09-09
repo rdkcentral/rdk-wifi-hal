@@ -149,6 +149,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
+#if (HOSTAPD_VERSION >= 211)
     wifi_vap_info_t *vap;
     wifi_interface_info_t *interface;
     struct hostapd_data *hapd, *link_bss;
@@ -185,7 +186,7 @@ int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
         }
     }
-
+#endif
     return 0;
 }
 
@@ -885,6 +886,7 @@ static bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 
 int update_hostap_mlo(wifi_interface_info_t *interface)
 {
+#if (HOSTAPD_VERSION >= 211)
     struct hostapd_bss_config *conf;
     struct hostapd_data *hapd, *first_link, *link_bss;
 
@@ -958,7 +960,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
             return -1;
         }
     }
-
+#endif
     return 0;
 }
 #endif /* CONFIG_IEEE80211BE */
