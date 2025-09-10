@@ -3310,6 +3310,7 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
 #endif // XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT
 
+// To reset the bss transition bit under extended capabilities, since its based on 2GHz vap configuration from OneWiFi.
     if (radio->driver_data.extended_capa_len) {
         radio->driver_data.extended_capa_mask[2] &= 0xF7;
         radio->driver_data.extended_capa[2] &= 0xF7;
@@ -3397,6 +3398,7 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
 #endif // XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT
 
+// To reset the bss transition bit under extended capabilities, since its based on 5GHz vap configuration from OneWiFi.
     if (radio->driver_data.extended_capa_len) {
         radio->driver_data.extended_capa_mask[2] &= 0xF7;
         radio->driver_data.extended_capa[2] &= 0xF7;
@@ -3489,6 +3491,7 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
 #endif // XB10_PORT || SCXER10_PORT || SCXF10_PORT
 
+// To reset the bss transition bit under extended capabilities, since its based on 6GHz vap configuration from OneWiFi.
     if (radio->driver_data.extended_capa_len) {
         radio->driver_data.extended_capa_mask[2] &= 0xF7;
         radio->driver_data.extended_capa[2] &= 0xF7;
