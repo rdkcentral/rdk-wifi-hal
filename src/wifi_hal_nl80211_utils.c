@@ -47,6 +47,9 @@ static wifi_interface_name_idex_map_t *interface_index_map = NULL;
 #else
 #define INTERFACE_MAP_JSON "/nvram/InterfaceMap.json"
 
+#define MIN_CHANNEL_WEIGHT 1
+#define MAX_CHANNEL_WEIGHT 100
+
 static const wifi_interface_name_idex_map_t *interface_index_map;
 static unsigned int interface_index_map_size;
 
@@ -2425,6 +2428,240 @@ void remap_wifi_interface_name_index_map() {
 
 #endif /* RDKB_ONE_WIFI_PROD */
 
+static int is_2g_channel(int channel)
+{
+    return (channel >= 1 && channel <= 14);
+}
+
+static int is_5g_channel(int channel)
+{
+    return (channel >= 36 && channel <= 173);
+}
+
+static int extract_2g_channels_from_op_class(wifi_country_radio_op_class_t *country_op_class,
+    int *channels, int max_channels)
+{
+    int count = 0;
+
+    for (int i = 0; i < 6; i++) {
+        if (country_op_class->op_class[i].num == 0)
+            continue;
+
+        for (int j = 0; j < 16 && country_op_class->op_class[i].ch_list[j] != 0; j++) {
+            int channel = country_op_class->op_class[i].ch_list[j];
+            wifi_hal_info_print("%s:%d SREESH channel:%d\n", __func__, __LINE__, channel);
+            if (is_2g_channel(channel)) {
+                int duplicate = 0;
+                for (int k = 0; k < count; k++) {
+                    if (channels[k] == channel) {
+                        duplicate = 1;
+                        break;
+                    }
+                }
+                if (!duplicate && count < max_channels) {
+                    channels[count++] = channel;
+                }
+            }
+        }
+    }
+    return count;
+}
+
+static int extract_5g_channels_from_op_class(wifi_country_radio_op_class_t *country_op_class,
+    int *channels, int max_channels)
+{
+    int count = 0;
+
+    for (int i = 0; i < 6; i++) {
+        if (country_op_class->op_class[i].num == 0) {
+            wifi_hal_dbg_print("%s:%d: op_class[%d] num is 0\n", __func__, __LINE__, i);
+            continue;
+        }
+
+        for (int j = 0; j < 16 && country_op_class->op_class[i].ch_list[j] != 0; j++) {
+            int channel = country_op_class->op_class[i].ch_list[j];
+            wifi_hal_info_print("%s:%d:SREESH channel:%d\n", __func__, __LINE__, channel);
+            if (is_5g_channel(channel)) {
+                int duplicate = 0;
+                for (int k = 0; k < count; k++) {
+                    if (channels[k] == channel) {
+                        duplicate = 1;
+                        break;
+                    }
+                }
+                if (!duplicate && count < max_channels) {
+                    channels[count++] = channel;
+                    wifi_hal_info_print("%s:%d SREESH channel:%d and count:%d\n", __func__,
+                        __LINE__, channel, count);
+                }
+            }
+        }
+    }
+
+    if (count == 0) {
+        wifi_hal_dbg_print("%s:%d:SREESH unable to find any valid channels\n", __func__, __LINE__);
+    }
+
+    return count;
+}
+
+char *generate_channel_weight_string(int radio_index, int preferred_channel,
+    wifi_country_radio_op_class_t *country_op_class)
+{
+    if (!country_op_class) {
+        wifi_hal_dbg_print("%s:%d:SREESH country_op_class is NULL\n", __func__, __LINE__);
+        return NULL;
+    }
+
+    char *result, *ptr;
+    int first_entry = 1;
+
+    switch (radio_index) {
+    case 0: {
+        int channels[16];
+        int count = extract_2g_channels_from_op_class(country_op_class, channels, 16);
+
+        if (count == 0) {
+            wifi_hal_dbg_print("%s:%d: No 2G channels found\n", __func__, __LINE__);
+            return NULL;
+        }
+
+        result = malloc(count * 8 + 1);
+        if (!result) {
+            wifi_hal_dbg_print("%s:%d: malloc failed\n", __func__, __LINE__);
+            return NULL;
+        }
+
+        wifi_hal_dbg_print("%s:%d: 2G channels:", __func__, __LINE__);
+        for (int i = 0; i < count; i++) {
+            wifi_hal_dbg_print("%d,", channels[i]);
+        }
+        wifi_hal_dbg_print("\n");
+
+        ptr = result;
+        for (int i = 0; i < count; i++) {
+            int channel = channels[i];
+            int weight = (channel == preferred_channel) ? MAX_CHANNEL_WEIGHT : MIN_CHANNEL_WEIGHT;
+            if (!first_entry)
+                *ptr++ = ',';
+            ptr += sprintf(ptr, "%d,%d", channel, weight);
+            first_entry = 0;
+        }
+        break;
+    }
+
+    case 1: {
+        int channels[64];
+        int count = extract_5g_channels_from_op_class(country_op_class, channels, 64);
+
+        if (count == 0) {
+            wifi_hal_dbg_print("%s:%d: No 5G channels found\n", __func__, __LINE__);
+            return NULL;
+        }
+
+        result = malloc(count * 8 + 1);
+        if (!result) {
+            wifi_hal_dbg_print("%s:%d: malloc failed\n", __func__, __LINE__);
+            return NULL;
+        }
+
+        wifi_hal_dbg_print("%s:%d: 5G channels:", __func__, __LINE__);
+        for (int i = 0; i < count; i++) {
+            wifi_hal_dbg_print("%d,", channels[i]);
+        }
+        wifi_hal_dbg_print("\n");
+
+        ptr = result;
+        for (int i = 0; i < count; i++) {
+            int channel = channels[i];
+            int weight = (channel == preferred_channel) ? MAX_CHANNEL_WEIGHT : MIN_CHANNEL_WEIGHT;
+            if (!first_entry)
+                *ptr++ = ',';
+            ptr += sprintf(ptr, "%d,%d", channel, weight);
+            first_entry = 0;
+        }
+        break;
+    }
+
+    case 2: {
+        int estimated_channels = (MAX_CHANNEL_6G - MIN_CHANNEL_6G) / 4 + 1;
+        result = malloc(estimated_channels * 8 + 1);
+        if (!result) {
+            wifi_hal_dbg_print("%s:%d: malloc failed\n", __func__, __LINE__);
+            return NULL;
+        }
+
+        ptr = result;
+        for (int channel = MIN_CHANNEL_6G; channel <= MAX_CHANNEL_6G; channel += 4) {
+            int weight = (channel == preferred_channel) ? MAX_CHANNEL_WEIGHT : MIN_CHANNEL_WEIGHT;
+            if (!first_entry)
+                *ptr++ = ',';
+            ptr += sprintf(ptr, "%d,%d", channel, weight);
+            first_entry = 0;
+        }
+        wifi_hal_dbg_print("%s:%d: 6G channels:", __func__, __LINE__);
+        for (int i = MIN_CHANNEL_6G; i <= MAX_CHANNEL_6G; i += 4) {
+            wifi_hal_dbg_print("%d,", i);
+        }
+        wifi_hal_dbg_print("\n");
+        break;
+    }
+    default:
+        wifi_hal_dbg_print("%s:%d: Unknown radio index:%d\n", __func__, __LINE__, radio_index);
+        return NULL;
+    }
+    *ptr = '\0';
+    wifi_hal_dbg_print("%s:%d: channel weight string:%s\n", __func__, __LINE__, result);
+    return result;
+}
+
+wifi_country_radio_op_class_t *get_op_class_by_country(wifi_countrycode_type_t country)
+{
+    wifi_hal_dbg_print("%s:%d: Getting op class for country code:%d\n", __func__, __LINE__,
+        country);
+
+    switch (country) {
+    case wifi_countrycode_US:
+        wifi_hal_dbg_print("%s:%d: Returning US op class\n", __func__, __LINE__);
+        return &us_op_class;
+    case wifi_countrycode_AT:
+    case wifi_countrycode_DE:
+    case wifi_countrycode_GB:
+    case wifi_countrycode_FR:
+    case wifi_countrycode_IT:
+    case wifi_countrycode_ES:
+        wifi_hal_dbg_print("%s:%d: Returning EU op class\n", __func__, __LINE__);
+        return &eu_op_class;
+    case wifi_countrycode_JP:
+        wifi_hal_dbg_print("%s:%d: Returning JP op class\n", __func__, __LINE__);
+        return &jp_op_class;
+    case wifi_countrycode_CN:
+        wifi_hal_dbg_print("%s:%d: Returning CN op class\n", __func__, __LINE__);
+        return &cn_op_class;
+    case wifi_countrycode_IN:
+        wifi_hal_dbg_print("%s:%d: Returning IN op class\n", __func__, __LINE__);
+        return &in_op_class;
+    default:
+        wifi_hal_dbg_print("%s:%d: Defaulting to US op class for country code:%d\n", __func__,
+            __LINE__, country);
+        return &us_op_class;
+    }
+}
+
+char *generate_channel_weight_string_for_country(int radio_index, int preferred_channel,
+    wifi_countrycode_type_t country)
+{
+    wifi_hal_dbg_print("%s:%d: Generating channel weight string for country code:%d, radio "
+                       "index:%d, preferred channel:%d\n",
+        __func__, __LINE__, country, radio_index, preferred_channel);
+    wifi_country_radio_op_class_t *op_class = get_op_class_by_country(country);
+    char *channel_weight_str = generate_channel_weight_string(radio_index, preferred_channel,
+        op_class);
+    wifi_hal_dbg_print("%s:%d: Generated channel weight string:%s\n", __func__, __LINE__,
+        channel_weight_str);
+    return channel_weight_str;
+}
+
 int get_wifi_op_class_info(wifi_countrycode_type_t country_code, wifi_country_radio_op_class_t *op_classes)
 {
     if (country_code > wifi_countrycode_ZW) {
@@ -2501,7 +2738,24 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
 
     get_wifi_op_class_info(param->countryCode, &cc_op_class);
 
+    char *channel_weight_string = generate_channel_weight_string_optimized(&cc_op_class,
+        param->channel);
 
+    if (channel_weight_string == NULL) {
+        wifi_hal_error_print("%s:%d:SREESH failed to generate channel weight string\n", __func__,
+            __LINE__);
+        return RETURN_ERR;
+    }
+
+    if (strlen(channel_weight_string) >= sizeof(param->channelWeightString)) {
+        wifi_hal_error_print("%s:%d:SREESH channel weight string too long (%zu bytes)\n", __func__,
+            __LINE__, strlen(channel_weight_string));
+        free(channel_weight_string);
+        return RETURN_ERR;
+    }
+
+    strcpy(param->channelWeightString, channel_weight_string);
+    free(channel_weight_string);
     // country code match
     if (cc_op_class.cc != param->countryCode) {
         wifi_hal_error_print("%s:%d:Could not find country code : %d\n", __func__, __LINE__, param->countryCode);

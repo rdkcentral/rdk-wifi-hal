@@ -676,6 +676,10 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
                 system(chanbuff);
             }
 
+            memset(cmd, 0 ,sizeof(cmd));
+            sprintf(cmd, "wl%d_acs_channel_weights", index);
+            set_string_nvram_param(cmd, param->channelWeightString);
+
             /* Run acsd2 autochannel */
             memset(cmd, 0 ,sizeof(cmd));
             sprintf(cmd, "acs_cli2 -i wl%d autochannel &", index);
