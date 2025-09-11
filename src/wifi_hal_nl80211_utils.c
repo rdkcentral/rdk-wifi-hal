@@ -2441,53 +2441,6 @@ void remap_wifi_interface_name_index_map() {
 
 #endif /* RDKB_ONE_WIFI_PROD */
 
-wifi_country_radio_op_class_t *get_op_class_by_country(wifi_countrycode_type_t country)
-{
-    wifi_hal_dbg_print("%s:%d: Getting op class for country code:%d\n", __func__, __LINE__,
-        country);
-
-    switch (country) {
-    case wifi_countrycode_US:
-        wifi_hal_dbg_print("%s:%d: Returning US op class\n", __func__, __LINE__);
-        return &us_op_class;
-    case wifi_countrycode_AT:
-    case wifi_countrycode_DE:
-    case wifi_countrycode_GB:
-    case wifi_countrycode_FR:
-    case wifi_countrycode_IT:
-    case wifi_countrycode_ES:
-        wifi_hal_dbg_print("%s:%d: Returning EU op class\n", __func__, __LINE__);
-        return &eu_op_class;
-    case wifi_countrycode_JP:
-        wifi_hal_dbg_print("%s:%d: Returning JP op class\n", __func__, __LINE__);
-        return &jp_op_class;
-    case wifi_countrycode_CN:
-        wifi_hal_dbg_print("%s:%d: Returning CN op class\n", __func__, __LINE__);
-        return &cn_op_class;
-    case wifi_countrycode_IN:
-        wifi_hal_dbg_print("%s:%d: Returning IN op class\n", __func__, __LINE__);
-        return &in_op_class;
-    default:
-        wifi_hal_dbg_print("%s:%d: Defaulting to US op class for country code:%d\n", __func__,
-            __LINE__, country);
-        return &us_op_class;
-    }
-}
-
-char *generate_channel_weight_string_for_country(int radio_index, int preferred_channel,
-    wifi_countrycode_type_t country)
-{
-    wifi_hal_dbg_print("%s:%d: Generating channel weight string for country code:%d, radio "
-                       "index:%d, preferred channel:%d\n",
-        __func__, __LINE__, country, radio_index, preferred_channel);
-    wifi_country_radio_op_class_t *op_class = get_op_class_by_country(country);
-    char *channel_weight_str = generate_channel_weight_string(radio_index, preferred_channel,
-        op_class);
-    wifi_hal_dbg_print("%s:%d: Generated channel weight string:%s\n", __func__, __LINE__,
-        channel_weight_str);
-    return channel_weight_str;
-}
-
 int get_wifi_op_class_info(wifi_countrycode_type_t country_code, wifi_country_radio_op_class_t *op_classes)
 {
     if (country_code > wifi_countrycode_ZW) {
@@ -2564,24 +2517,6 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
 
     get_wifi_op_class_info(param->countryCode, &cc_op_class);
 
-    char *channel_weight_string = generate_channel_weight_string_optimized(&cc_op_class,
-        param->channel);
-
-    if (channel_weight_string == NULL) {
-        wifi_hal_error_print("%s:%d:SREESH failed to generate channel weight string\n", __func__,
-            __LINE__);
-        return RETURN_ERR;
-    }
-
-    if (strlen(channel_weight_string) >= sizeof(param->channelWeightString)) {
-        wifi_hal_error_print("%s:%d:SREESH channel weight string too long (%zu bytes)\n", __func__,
-            __LINE__, strlen(channel_weight_string));
-        free(channel_weight_string);
-        return RETURN_ERR;
-    }
-
-    strcpy(param->channelWeightString, channel_weight_string);
-    free(channel_weight_string);
     // country code match
     if (cc_op_class.cc != param->countryCode) {
         wifi_hal_error_print("%s:%d:Could not find country code : %d\n", __func__, __LINE__, param->countryCode);
