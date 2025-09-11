@@ -1442,11 +1442,16 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         memcpy((unsigned char *)&interface->vap_info, (unsigned char *)vap, sizeof(wifi_vap_info_t));
         interface_name = wifi_hal_get_interface_name(interface);
 
-#ifndef CONFIG_GENERIC_MLO
-        // VAP down removes MLO links
-        wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface->name);
-        nl80211_interface_enable(interface->name, false);
-#endif // CONFIG_GENERIC_MLO
+#ifdef CONFIG_GENERIC_MLO
+        // VAP down removes MLO links, so restrict down of interface to sta mode only
+        if (vap->vap_mode == wifi_vap_mode_sta) {
+#endif
+            wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface->name);
+            nl80211_interface_enable(interface->name, false);
+#ifdef CONFIG_GENERIC_MLO
+        }
+#endif
+
 #if  !defined(CONFIG_WIFI_EMULATOR) && !defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
         if (vap->vap_mode == wifi_vap_mode_sta) {
             bool sta_4addr = 0;
