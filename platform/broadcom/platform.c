@@ -584,7 +584,7 @@ static int *get_valid_channels_for_radio(wifi_radio_index_t radio_index, int *ch
         break;
 
     case RADIO_INDEX_6G:
-        for (int ch = MIN_PSC_CHANNEL_6G; ch <= MAX_PSC_CHANNEL_6G; ch += 16) {
+        for (int ch = MIN_CHANNEL_6G; ch <= MAX_CHANNEL_6G; ch += 4) {
                 channels[count++] = ch;
         }
         break;
