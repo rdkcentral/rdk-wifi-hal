@@ -2049,14 +2049,13 @@ int is_valid_5g_channel(int channel)
 {
     // Valid 5GHz channels: 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128,
     // 132, 136, 140, 144, 149, 153, 157, 161, 165, 169, 173, 177
-    if (channel < MIN_5G_CHANNEL || channel > MAX_5G_CHANNEL)
+    if (channel < MIN_CHANNEL_5G || channel > MAX_CHANNEL_5G)
         return 0;
     if ((channel >= 36 && channel <= 64 && (channel - 36) % 4 == 0) ||
         (channel >= 100 && channel <= 144 && (channel - 100) % 4 == 0) ||
         (channel >= 149 && channel <= 173 && (channel - 149) % 4 == 0) ||
-        (channel >= 177 && channel <= 181 && (channel - 177) % 4 == 0)) {
+        (channel >= 177 && channel <= 181 && (channel - 177) % 4 == 0)) 
         return 1;
-    }
     return 0;
 }
 
