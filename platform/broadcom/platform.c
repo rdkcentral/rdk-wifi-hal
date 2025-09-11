@@ -753,18 +753,12 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
             memset(cmd, 0, sizeof(cmd));
             sprintf(cmd, "wl%d_acs_channel_weights", index);
-            wifi_hal_info_print("%s():%d SREESH Value of control channel = %d",__FUNCTION__,__LINE__, operationParam->channel);
             char *weight_string = generate_channel_weight_string(index, operationParam->channel);
             if (weight_string != NULL) {
                 set_string_nvram_param(cmd, weight_string);
                 sprintf(cmd, "acs_cli2 -i wl%d set acs_channel_weights %s &", index, weight_string);
                 system(cmd);
                 free(weight_string);
-            }
-            char *b = nvram_get(cmd);
-            if (b != NULL && (strcmp(b, "") != 0)) {
-                wifi_hal_info_print("%s():%d SREESH channel weights %s\n", __FUNCTION__, __LINE__,
-                    b);
             }
 
             /* Run acsd2 autochannel */

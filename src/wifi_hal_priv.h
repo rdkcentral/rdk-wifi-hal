@@ -213,8 +213,6 @@ extern "C" {
 #define MAX_FREQ_MHZ_6G             7115
 #define MIN_CHANNEL_6G              1
 #define MAX_CHANNEL_6G              229
-#define MIN_PSC_CHANNEL_6G          5
-#define MAX_PSC_CHANNEL_6G          229
 
 #define MAX_WPS_CONN_TIMEOUT        120
 
