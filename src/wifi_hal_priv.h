@@ -210,9 +210,9 @@ extern "C" {
 
 /* 6GHz radio */
 #define MIN_FREQ_MHZ_6G             5935
-#define MAX_FREQ_MHZ_6G             7115
+#define MAX_FREQ_MHZ_6G             7125
 #define MIN_CHANNEL_6G              1
-#define MAX_CHANNEL_6G              229
+#define MAX_CHANNEL_6G              233
 
 #define MAX_WPS_CONN_TIMEOUT        120
 
@@ -1048,6 +1048,7 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
 int get_security_mode_support_radius(int mode);
 void wps_enum_to_string(unsigned int methods, char *str, int len);
 int get_radio_variant_str_from_int(unsigned int variant, char *variant_str);
+int is_valid_5g_channel(int channel);
 #ifndef FEATURE_SINGLE_PHY
 wifi_radio_info_t *get_radio_by_phy_index(wifi_radio_index_t index);
 int get_rdk_radio_index(unsigned int phy_index);

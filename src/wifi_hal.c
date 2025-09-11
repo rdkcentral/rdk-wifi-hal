@@ -800,19 +800,6 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         return RETURN_ERR;
     }
 
-    char *result = generate_channel_weight_string_for_country(index, operationParam->channel,
-        operationParam->countryCode);
-
-    if (result == NULL) {
-        wifi_hal_error_print("%s:%d:Failed to generate channel weight string for country:%d\n",
-            __func__, __LINE__, operationParam->countryCode);
-        return RETURN_ERR;
-    }
-    wifi_hal_info_print("%s:%d SREESH result of channel weight string:%s\n", __func__, __LINE__, result);
-    snprintf(operationParam->channelWeightString, sizeof(operationParam->channelWeightString), "%s", result);
-    free(result);
-    wifi_hal_info_print("%s:%d SREESH operationParam->channelWeightString:%s\n", __func__, __LINE__, operationParam->channelWeightString);
-    
     if ((set_radio_pre_init_fn = get_platform_set_radio_pre_init_fn()) != NULL) {
         if (set_radio_pre_init_fn(index, operationParam) < 0){
             wifi_hal_error_print("%s:%d: Error in setting radio pre init\n", __func__, __LINE__);

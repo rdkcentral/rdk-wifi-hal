@@ -98,7 +98,10 @@ static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
 #define BUFFER_LENGTH_WIFIDB 256
 #define BUFLEN_128  128
 #define BUFLEN_256 256
+#define BUFLEN_2048 2048
 #define WIFI_BLASTER_DEFAULT_PKTSIZE 1470
+#define ACS_MAX_CHANNEL_WEIGHT 100
+#define ACS_MIN_CHANNEL_WEIGHT 1
 
 #ifdef CONFIG_IEEE80211BE
 #ifdef CONFIG_NO_MLD_ONLY_PRIVATE
@@ -119,6 +122,13 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
     {"protection_control", "0"},
     {"gmode_protection_control", "0"}
 };
+
+typedef enum {
+    RADIO_INDEX_2G,
+    RADIO_INDEX_5G,   
+    RADIO_INDEX_6G,
+    RADIO_INDEX_MAX
+} wifi_radio_index_t;
 
 static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map);
 static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char *chspec, wifi_radio_index_t index);
@@ -553,6 +563,75 @@ INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCH
     return wifi_sendActionFrameExt(apIndex, MacAddr, frequency, 0, frame, len);
 }
 
+static int *get_valid_channels_for_radio(wifi_radio_index_t radio_index, int *channel_count)
+{
+    static int channels[MAX_CHANNELS];
+    int count = 0;
+
+    switch (radio_index) {
+    case RADIO_INDEX_2G:
+        for (int ch = MIN_2G_CHANNEL; ch <= MAX_2G_CHANNEL; ch++) {
+                channels[count++] = ch;
+        }
+        break;
+
+    case RADIO_INDEX_5G:
+        for (int ch = MIN_5G_CHANNEL; ch <= MAX_5G_CHANNEL; ch++) {
+            if (is_valid_5g_channel(ch)) {
+                channels[count++] = ch;
+            }
+        }
+        break;
+
+    case RADIO_INDEX_6G:
+        for (int ch = MIN_6G_CHANNEL; ch <= MAX_6G_CHANNEL; ch += 4) {
+                channels[count++] = ch;
+        }
+        break;
+
+    default:
+        *channel_count = 0;
+        return NULL;
+    }
+
+    *channel_count = count;
+    return channels;
+}
+
+char *generate_channel_weight_string(wifi_radio_index_t radio_index, int preferred_channel)
+{
+    int channel_count;
+    int *valid_channels = get_valid_channels_for_radio(radio_index, &channel_count);
+
+    if (!valid_channels || channel_count == 0) {
+        return NULL;
+    }
+
+    char *result = (char *)malloc((channel_count * 7 + 1) * sizeof(char));
+    if (!result) {
+        return NULL;
+    }
+
+    char *ptr = result;
+    int first_entry = 1;
+
+    for (int i = 0; i < channel_count; i++) {
+        int channel = valid_channels[i];
+        int weight = (channel == preferred_channel) ? ACS_MAX_CHANNEL_WEIGHT :
+                                                      ACS_MIN_CHANNEL_WEIGHT;
+
+        if (!first_entry) {
+            *ptr++ = ',';
+        }
+
+        ptr += sprintf(ptr, "%d,%d", channel, weight);
+        first_entry = 0;
+    }
+
+    *ptr = '\0';
+    return result;
+}
+
 int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
 {
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
@@ -581,7 +660,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
     char temp_buff[BUF_SIZE];
     char param_name[NVRAM_NAME_SIZE];
-    char cmd[BUFLEN_128];
+    char cmd[BUFLEN_2048];
     wifi_radio_info_t *radio;
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
@@ -676,9 +755,21 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
                 system(chanbuff);
             }
 
-            memset(cmd, 0 ,sizeof(cmd));
+            memset(cmd, 0, sizeof(cmd));
             sprintf(cmd, "wl%d_acs_channel_weights", index);
-            set_string_nvram_param(cmd, param->channelWeightString);
+            wifi_hal_info_print("%s():%d SREESH Value of control channel = %d", operationParam->channel);
+            char *weight_string = generate_channel_weight_string(index, operationParam->channel);
+            if (weight_string != NULL) {
+                set_string_nvram_param(cmd, weight_string);
+                sprintf(cmd, "acs_cli2 -i wl%d set acs_channel_weights %s &", index, weight_string);
+                system(cmd);
+                free(weight_string);
+            }
+            char *b = nvram_get(cmd);
+            if (b != NULL && (strcmp(b, "") != 0)) {
+                wifi_hal_info_print("%s():%d SREESH channel weights %s\n", __FUNCTION__, __LINE__,
+                    b);
+            }
 
             /* Run acsd2 autochannel */
             memset(cmd, 0 ,sizeof(cmd));
