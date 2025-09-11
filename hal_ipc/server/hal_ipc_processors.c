@@ -55,6 +55,13 @@ int sync_hostapd_freq_param(unsigned int apIndex)
         wifi_hal_error_print("%s:%d: interface for ap index:%u not found\n", __func__, __LINE__, apIndex);
         return RETURN_ERR;
     }
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d:interface for ap index:%d not in AP mode\n", __func__, __LINE__,
+            apIndex);
+        return RETURN_ERR;
+    }
+
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
     radio_param = &radio->oper_param;

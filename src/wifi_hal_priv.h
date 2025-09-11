@@ -1252,6 +1252,10 @@ void platform_set_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t
 #endif
 #endif
 
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+extern void supplicant_event(void *ctx, enum wpa_event_type event,
+     union wpa_event_data *data);
+#endif
 
 platform_pre_init_t     	get_platform_pre_init_fn();
 platform_post_init_t    	get_platform_post_init_fn();

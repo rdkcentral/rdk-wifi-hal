@@ -218,6 +218,12 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
 #endif
     u8 *nei_rep_tmp = nei_rep;
 
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d vap interface:%s mode is not AP\n", __func__, __LINE__,
+            interface->vap_info.vap_name);
+        return 0;
+    }
+
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     mutex_locked = true;
 
@@ -417,6 +423,12 @@ static int handle_rx_bss_trans_mgmt_resp(wifi_interface_info_t *interface,
     if (NULL == callbacks->btm_callback[ap_index].response_callback)
         return WIFI_HAL_SUCCESS;
 
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d vap interface:%s mode is not AP\n", __func__, __LINE__,
+            interface->vap_info.vap_name);
+        return 0;
+    }
+
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     mutex_locked = true;
 
@@ -514,6 +526,12 @@ static int handle_wnm_beacon_protection_failure(wifi_interface_info_t *interface
     struct sta_info *sta;
     struct hostapd_data *hapd = &interface->u.ap.hapd;
 
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d vap interface:%s mode is not AP\n", __func__, __LINE__,
+            interface->vap_info.vap_name);
+        return 0;
+    }
+
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
 
 #if HOSTAPD_VERSION >= 210 //2.10
@@ -606,6 +624,12 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
     struct hostapd_data *hapd = &interface->u.ap.hapd;
 
     wifi_hal_dbg_print("%s:%d: Request beacon: dest addr: " MACSTR ", mode: %d\n", __func__, __LINE__, MAC2STR(addr), mode);
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d vap interface:%s mode is not AP\n", __func__, __LINE__,
+            interface->vap_info.vap_name);
+        return 0;
+    }
 
     for (i = 0; i < hapd->iface->num_bss; i++) {
         sta = ap_get_sta(hapd->iface->bss[i], addr);
@@ -799,6 +823,12 @@ int wifi_wnm_send_bss_tm_req(wifi_interface_info_t *interface, struct sta_info *
 #else
     wifi_interface_info_t *intf = interface;
 #endif
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d vap interface:%s mode is not AP\n", __func__, __LINE__,
+            interface->vap_info.vap_name);
+        return 0;
+    }
 
     wifi_hal_dbg_print("%s:%d: WNM: Send BSS Transition Management Request to "
         MACSTR " dialog_token=%u req_mode=0x%x disassoc_timer=%d valid_int=0x%x\n", __func__, __LINE__,
@@ -1008,6 +1038,12 @@ static int handle_radio_msmt_report(wifi_interface_info_t *interface, const mac_
     wifi_BeaconReport_t *rep;
     struct hostapd_data *hapd = &interface->u.ap.hapd;
     int ap_index = interface->vap_info.vap_index;
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d vap interface:%s mode is not AP\n", __func__, __LINE__,
+            interface->vap_info.vap_name);
+        return 0;
+    }
 
     darray_init(&reps, sizeof(wifi_BeaconReport_t));
 

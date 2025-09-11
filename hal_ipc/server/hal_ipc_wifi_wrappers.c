@@ -429,6 +429,12 @@ INT wifi_hal_steering_clientDisconnect( UINT steeringgroupIndex,
       return RETURN_ERR;
     }
 
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d:interface for ap index:%d not in AP mode\n", __func__, __LINE__,
+            apIndex);
+        return RETURN_ERR;
+    }
+
     if ((type == DISCONNECT_TYPE_DEAUTH) || (type == DISCONNECT_TYPE_DISASSOC)) {
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         ap_sta_disconnect(&interface->u.ap.hapd, NULL, client_mac, reason);
@@ -477,6 +483,13 @@ INT wifi_hal_getAssociationReqIEs(  UINT apIndex,
       wifi_hal_error_print("%s:%d:interface for ap index:%d not found\n", __func__, __LINE__, apIndex);
       return RETURN_ERR;
     }
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d:interface for ap index:%d not in AP mode\n", __func__, __LINE__,
+            apIndex);
+        return RETURN_ERR;
+    }
+
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     station = ap_get_sta(&interface->u.ap.hapd, (const u8 *) clientMacAddress);
     if (req_ies_size < station->assoc_req_len) {
@@ -636,6 +649,12 @@ INT wifi_hal_getApNumDevicesAssociated(INT apIndex, ULONG *output_ulong)
     {
         wifi_hal_error_print("%s:%d: ERROR Interface for vap index %d doesn't exist.\n", __func__, __LINE__, apIndex);
         return -1;
+    }
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d:interface for ap index:%d not in AP mode\n", __func__, __LINE__,
+            apIndex);
+        return RETURN_ERR;
     }
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);

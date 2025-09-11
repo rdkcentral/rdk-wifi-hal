@@ -703,6 +703,12 @@ void wifi_hal_deauth(int vap_index, int status, uint8_t *mac)
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
     struct hostapd_data *hapd = &interface->u.ap.hapd;
 
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d vap interface:%s mode is not AP\n", __func__, __LINE__,
+            interface->vap_info.vap_name);
+        return;
+    }
+
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -1734,6 +1740,13 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
         wifi_hal_error_print("%s:%d: NULL Interface pointer \n", __func__, __LINE__);
         return RETURN_ERR;
     }
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d vap interface:%s mode is not AP\n", __func__, __LINE__,
+            interface->vap_info.vap_name);
+        return 0;
+    }
+
     u8 own_addr[ETH_ALEN];
     mac_address_t bcastmac= {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
@@ -3313,6 +3326,12 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
             return WIFI_HAL_INVALID_ARGUMENTS;
         }
 
+        if (!is_ap_mode) {
+            wifi_hal_stats_error_print(
+                "%s:%d: [SCAN] Select channel mode is not supported for STA interface\n", __func__, __LINE__);
+            return WIFI_HAL_ERROR;
+        }
+
         // - allocate space for freq list
         if (RETURN_OK != set_freqs_filter(interface, chan_num, NULL)) {
             wifi_hal_error_print("%s:%d: [SCAN] set_freqs_filter failed\n", __func__, __LINE__);
@@ -4520,6 +4539,12 @@ void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac)
     u8 own_addr[ETH_ALEN];
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
     struct hostapd_data *hapd = &interface->u.ap.hapd;
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d: Interface with vap_index:%d not in AP mode\n", __func__,
+            __LINE__, vap_index);
+        return;
+    }
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);

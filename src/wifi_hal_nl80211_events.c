@@ -42,11 +42,6 @@
 #include "config_supplicant.h"
 #endif
 
-#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-extern void supplicant_event(void *ctx, enum wpa_event_type event,
-     union wpa_event_data *data);
-#endif
-
 int no_seq_check(struct nl_msg *msg, void *arg)
 {
     return NL_OK;
@@ -156,7 +151,13 @@ static void nl80211_new_station_event(wifi_interface_info_t *interface, struct n
     event.assoc_info.addr = mac;
     wifi_hal_dbg_print("%s:%d: New station ies_len:%ld, ies:%p\n", __func__, __LINE__, ies_len, ies);
     notify_assoc_data(interface, tb, event);
-    wpa_supplicant_event(&interface->u.ap.hapd, EVENT_ASSOC, &event);
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_ASSOC, &event);
+    } else {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+        supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
+#endif
+    }
 }
 
 static void nl80211_del_station_event(wifi_interface_info_t *interface, struct nlattr **tb)
@@ -180,7 +181,13 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     system(br_buff);
     os_memset(&event, 0, sizeof(event));
     event.disassoc_info.addr = mac;
-    wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
+    } else {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+#endif // BANANA_PI_PORT
+    }
     //Remove the station from the bridge, if present
     wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
 #endif
@@ -484,6 +491,11 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             mgmt_type = WIFI_MGMT_FRAME_TYPE_DISASSOC;
             wifi_hal_dbg_print("%s:%d: Received disassoc frame from: %s\n", __func__, __LINE__,
                            to_mac_str(sta, sta_mac_str));
+            if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+                wifi_hal_error_print("%s:%d: interface:%s vap mode is not AP, dropping WLAN_FC_STYPE_DISASSOC\n",
+                    __func__, __LINE__, interface->vap_info.vap_name);
+                break;
+            }
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             station = ap_get_sta(&interface->u.ap.hapd, sta);
             if (station) {
@@ -600,7 +612,13 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         }
     }
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    wpa_supplicant_event(&interface->u.ap.hapd, EVENT_TX_STATUS, &event);
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_TX_STATUS, &event);
+    } else {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+        supplicant_event(&interface->wpa_s, EVENT_TX_STATUS, &event);
+#endif // BANANA_PI_PORT
+    }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 

@@ -741,6 +741,12 @@ static bool is_probe_req_to_our_ssid(struct ieee80211_mgmt *mgmt, unsigned int l
     char *ssid;
     int ret;
 
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d: Vap Name:%s is not in AP mode\n",
+            __func__, __LINE__, interface->vap_info.vap_name);
+        return false;
+    }
+
     if (memcmp(mgmt->da, interface->mac, sizeof(mac_address_t)) == 0) {
         return true;
     }
@@ -2079,6 +2085,12 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
     case WLAN_FC_STYPE_DISASSOC:
         mgmt_type = WIFI_MGMT_FRAME_TYPE_DISASSOC;
+        if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+            wifi_hal_error_print(
+                "%s:%d: interface:%s vap mode is not AP, dropping WLAN_FC_STYPE_DISASSOC\n",
+                __func__, __LINE__, interface->vap_info.vap_name);
+            break;
+        }
 
         if (len >= IEEE80211_HDRLEN + sizeof(mgmt->u.disassoc)) {
             wifi_hal_info_print("%s:%d: interface:%s received disassoc frame from:%s to:%s sc:%d "
@@ -2135,6 +2147,12 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
     case WLAN_FC_STYPE_DEAUTH:
         mgmt_type = WIFI_MGMT_FRAME_TYPE_DEAUTH;
+        if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+            wifi_hal_error_print(
+                "%s:%d: interface:%s vap mode is not AP, dropping WLAN_FC_STYPE_DEAUTH\n",
+                __func__, __LINE__, interface->vap_info.vap_name);
+            break;
+        }
 
         if (len >= IEEE80211_HDRLEN + sizeof(mgmt->u.deauth)) {
             wifi_hal_info_print("%s:%d: interface:%s received deauth frame from:%s to:%s disassoc sc:%d deauth sc:%d "
@@ -2327,7 +2345,13 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #endif // CONFIG_GENERIC_MLO
 #endif /* HOSTAPD_VERSION >= 211 */
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
+        if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+            wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
+        } else {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+            supplicant_event(&interface->wpa_s, EVENT_RX_MGMT, &event);
+#endif // BANANA_PI_PORT
+        }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     }
 
@@ -2448,7 +2472,13 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
             " on interface %s from" MACSTR " sent to hostapd wds:%d.\n", __func__, __LINE__,
             gnlh->cmd, interface->name, MAC2STR(event.rx_from_unknown.addr), event.rx_from_unknown.wds);
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_FROM_UNKNOWN, &event);
+        if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+            wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_FROM_UNKNOWN, &event);
+        } else {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+            supplicant_event(&interface->wpa_s, EVENT_RX_FROM_UNKNOWN, &event);
+#endif // BANANA_PI_PORT
+        }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
         return NL_SKIP;
@@ -6428,6 +6458,12 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
 
     interface = (wifi_interface_info_t *)arg;
     vap = &interface->vap_info;
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print(
+            "%s:%d: interface:%s vap mode is not AP, returning\n", __func__,
+            __LINE__, interface->vap_info.vap_name);
+        return NL_SKIP;
+    }
 
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
         genlmsg_attrlen(gnlh, 0), NULL);
@@ -6871,7 +6907,13 @@ void wifi_hal_nl80211_wps_pbc(unsigned int ap_index)
 
     os_memset(&event, 0, sizeof(event));
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WPS_BUTTON_PUSHED, &event);
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WPS_BUTTON_PUSHED, &event);
+    } else {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+        supplicant_event(&interface->wpa_s, EVENT_WPS_BUTTON_PUSHED, &event);
+#endif // BANANA_PI_PORT
+    }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
@@ -6889,7 +6931,13 @@ void wifi_hal_nl80211_wps_cancel(unsigned int ap_index)
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
 #if !defined(PLATFORM_LINUX)
-    wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WPS_CANCEL, &event);
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WPS_CANCEL, &event);
+    } else {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+        supplicant_event(&interface->wpa_s, EVENT_WPS_CANCEL, &event);
+#endif // BANANA_PI_PORT
+    }
 #endif /* !defined(PLATFORM_LINUX) */
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
@@ -6902,6 +6950,11 @@ int wifi_hal_nl80211_wps_pin(unsigned int ap_index, char *wps_pin)
     interface = get_interface_by_vap_index(ap_index);
     if ((wps_pin == NULL) || (interface == NULL)) {
         wifi_hal_error_print("%s:%d: WPS Pin or interface is NULL for vap_index:%d\n", __func__, __LINE__, ap_index);
+        return RETURN_ERR;
+    }
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d: Interface %s is not in AP mode\n", __func__, __LINE__, interface->vap_info.vap_name);
         return RETURN_ERR;
     }
 
@@ -6929,6 +6982,11 @@ int nl80211_enable_ap(wifi_interface_info_t *interface, bool enable)
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
     int link_id = wifi_hal_get_mld_link_id(interface);
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d: Interface %s is not in AP mode\n", __func__, __LINE__, interface->vap_info.vap_name);
+        return RETURN_ERR;
+    }
 
     if (enable) {
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
@@ -7435,6 +7493,11 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
 
         wifi_hal_dbg_print("%s:%d interface: %s switch channel to %d\n", __func__, __LINE__,
             interface->name, param->channel);
+        
+        if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+            wifi_hal_info_print("%s:%d: Interface %s is not in AP mode\n", __func__, __LINE__, interface->vap_info.vap_name);
+            continue;
+        }
 
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         ret = hostapd_switch_channel(&interface->u.ap.hapd, &csa_settings);
@@ -7465,7 +7528,7 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
     interface = hash_map_get_first(radio->interface_map);
 
     while (interface != NULL) {
-        if (interface->bss_started) {
+        if (interface->bss_started && interface->vap_info.vap_mode == wifi_vap_mode_ap) {
                 reconfigure = true;
                 nl80211_enable_ap(interface, false);
                 pthread_mutex_lock(&g_wifi_hal.hapd_lock);
@@ -11657,6 +11720,10 @@ int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int 
 {
     int ret = 0;
     wifi_interface_info_t *interface = get_interface_by_vap_index(ap_index);
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d: vap:%s mode is not ap\n", __func__, __LINE__, interface->vap_info.vap_name);
+        return -1;
+    }
     struct hostapd_data *hapd = &interface->u.ap.hapd;
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
@@ -11715,7 +11782,13 @@ void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len)
 #endif // CONFIG_GENERIC_MLO
 #endif /* HOSTAPD_VERSION >= 211 */
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
+    } else {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+        supplicant_event(&interface->wpa_s, EVENT_RX_MGMT, &event);
+#endif // BANANA_PI_PORT
+    }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
@@ -12304,7 +12377,13 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
             event.wds_sta_interface.sta_addr = addr;
             event.wds_sta_interface.ifname = name;
             event.wds_sta_interface.istatus = INTERFACE_ADDED;
-            wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+            if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+                wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+            } else {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+                supplicant_event(&interface->wpa_s, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+#endif // BANANA_PI_PORT
+            }
         } else {
             wifi_hal_dbg_print("%s:%d:Re-Enabling interface:%s - wds:%d\n",
                 __func__, __LINE__, name, interface->u.ap.conf.wds_sta);
@@ -12324,7 +12403,13 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
         event.wds_sta_interface.sta_addr = addr;
         event.wds_sta_interface.ifname = name;
         event.wds_sta_interface.istatus = INTERFACE_REMOVED;
-        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+        if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+            wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+        } else {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+            supplicant_event(&interface->wpa_s, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+#endif // BANANA_PI_PORT
+        }
     }
 
     return 0;
@@ -16698,6 +16783,15 @@ static size_t wifi_drv_get_rnr_colocation_len(void *priv, size_t *current_len)
     size_t i, total_len = 0, len = *current_len;
     wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
 
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d interface is NULL\n", __func__, __LINE__);
+        return 0;
+    }
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d interface mode is not AP\n", __func__, __LINE__);
+        return 0;
+    }
+
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (radio == NULL) {
         wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
@@ -17410,6 +17504,11 @@ static struct hostapd_data *wifi_drv_get_mbssid_tx_bss(void *priv)
         return NULL;
     }
 
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d interface mode is not AP\n", __func__, __LINE__);
+        return 0;
+    }
+
     if (interface->u.ap.hapd.iconf == NULL ||
         interface->u.ap.hapd.iconf->mbssid == MBSSID_DISABLED) {
         return &interface->u.ap.hapd;
@@ -17440,6 +17539,11 @@ static int wifi_drv_mbssid_get_bss_index(void *priv)
         return 0;
     }
 
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d interface mode is not AP\n", __func__, __LINE__);
+        return 0;
+    }
+
     if (interface->u.ap.hapd.iconf == NULL ||
         interface->u.ap.hapd.iconf->mbssid == MBSSID_DISABLED) {
         return 0;
@@ -17463,6 +17567,11 @@ static size_t wifi_drv_get_mbssid_len(void *priv, u32 frame_type, u8 *elem_count
 
     if (tx_interface == NULL) {
         wifi_hal_error_print("%s:%d interface is null\n", __func__, __LINE__);
+        return 0;
+    }
+
+    if (tx_interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d interface mode is not AP\n", __func__, __LINE__);
         return 0;
     }
 
@@ -17529,6 +17638,11 @@ static u8 *wifi_drv_get_mbssid_config(void *priv, u8 *eid)
     if (interface == NULL) {
         wifi_hal_error_print("%s:%d mbssid config failed, interface null\n", __func__, __LINE__);
         return eid;
+    }
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d interface mode is not AP\n", __func__, __LINE__);
+        return 0;
     }
 
     if (interface->u.ap.hapd.iconf == NULL ||

@@ -898,6 +898,12 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     struct hostapd_bss_config *conf;
     struct hostapd_data *hapd, *first_link, *link_bss;
 
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d:interface for ap index:%d not in AP mode\n", __func__, __LINE__,
+            interface->vap_info.vap_index);
+        return RETURN_ERR;
+    }
+
     if (interface->u.ap.conf.disable_11be) {
         return 0;
     }
