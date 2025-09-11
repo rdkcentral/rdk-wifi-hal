@@ -3962,6 +3962,13 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
     unsigned char apply;
 
     interface = (wifi_interface_info_t *)priv;
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d:interface for ap index:%d not in AP mode\n", __func__, __LINE__,
+            interface->vap_info.vap_index);
+        return RETURN_ERR;
+    }
+
     conf = &interface->u.ap.conf;
     hapd = &interface->u.ap.hapd;
 
@@ -4349,6 +4356,12 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     u8 mld_ap;
     u8 old_mld_link_id;
     int nvram_changed = 0;
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d:interface for ap index:%d not in AP mode\n", __func__, __LINE__,
+            interface->vap_info.vap_index);
+        return RETURN_ERR;
+    }
 
     conf = &interface->u.ap.conf;
     hapd = &interface->u.ap.hapd;

@@ -1092,6 +1092,13 @@ int update_hostap_mlo(wifi_interface_info_t *interface) {
     char mld_mac_addr[ETH_ALEN];
 
     wifi_hal_dbg_print("%s:%d: ENTER\n", __func__, __LINE__);
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d:interface for ap index:%d not in AP mode\n", __func__, __LINE__,
+            interface->vap_info.vap_index);
+        return RETURN_ERR;
+    }
+
     if(hapd->iface->interfaces->mlds.next == NULL)
     {
         dl_list_init(&hapd->iface->interfaces->mlds);

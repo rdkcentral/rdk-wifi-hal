@@ -368,7 +368,15 @@ void driver_init(wifi_interface_info_t *interface)
 {
     struct hostapd_data *hapd;
     struct wpa_init_params params;
+    wifi_vap_info_t *vap;
 
+    vap = &interface->vap_info;
+
+    if (vap->vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(vap->vap_index)) {
+        wifi_hal_error_print("%s:%d: Not an AP based VAP, vapIndex:%d. Returning error\n", __func__,
+            __LINE__, vap->vap_index);
+        return;
+    }
 
     hapd = &interface->u.ap.hapd; 
 
@@ -1312,6 +1320,12 @@ int init_hostap_hw_features(wifi_interface_info_t *interface)
     }
 
     vap = &interface->vap_info;
+    if (vap->vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(vap->vap_index)) {
+        wifi_hal_error_print("%s:%d: Not an AP based VAP, vapIndex:%d. Returning error\n", __func__,
+            __LINE__, vap->vap_index);
+        return RETURN_ERR;
+    }
+
     radio = get_radio_by_rdk_index(vap->radio_index);
     iface = &interface->u.ap.iface;
     iface->num_bss = 1;
@@ -1467,6 +1481,12 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         return RETURN_ERR;
     }
     vap = &interface->vap_info;
+    if (vap->vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(vap->vap_index)) {
+        wifi_hal_error_print("%s:%d: Not an AP based VAP, vapIndex:%d. Returning error\n", __func__,
+            __LINE__, vap->vap_index);
+        return RETURN_ERR;
+    }
+
     radio = get_radio_by_rdk_index(vap->radio_index);
     param = &radio->oper_param;
     
