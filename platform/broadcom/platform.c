@@ -102,6 +102,9 @@ static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
 #define WIFI_BLASTER_DEFAULT_PKTSIZE 1470
 #define ACS_MAX_CHANNEL_WEIGHT 100
 #define ACS_MIN_CHANNEL_WEIGHT 1
+#define RADIO_INDEX_2G 0
+#define RADIO_INDEX_5G 1
+#define RADIO_INDEX_6G 2
 
 #ifdef CONFIG_IEEE80211BE
 #ifdef CONFIG_NO_MLD_ONLY_PRIVATE
@@ -122,13 +125,6 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
     {"protection_control", "0"},
     {"gmode_protection_control", "0"}
 };
-
-typedef enum {
-    RADIO_INDEX_2G,
-    RADIO_INDEX_5G,   
-    RADIO_INDEX_6G,
-    RADIO_INDEX_MAX
-} wifi_radio_index_t;
 
 static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map);
 static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char *chspec, wifi_radio_index_t index);
@@ -757,7 +753,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
             memset(cmd, 0, sizeof(cmd));
             sprintf(cmd, "wl%d_acs_channel_weights", index);
-            wifi_hal_info_print("%s():%d SREESH Value of control channel = %d", operationParam->channel);
+            wifi_hal_info_print("%s():%d SREESH Value of control channel = %d",__FUNCTION__, operationParam->channel);
             char *weight_string = generate_channel_weight_string(index, operationParam->channel);
             if (weight_string != NULL) {
                 set_string_nvram_param(cmd, weight_string);
