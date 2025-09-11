@@ -180,7 +180,11 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     system(br_buff);
     os_memset(&event, 0, sizeof(event));
     event.disassoc_info.addr = mac;
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211) 
+    supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+#else 
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
+#endif
     //Remove the station from the bridge, if present
     wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
 #endif
