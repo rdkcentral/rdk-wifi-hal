@@ -570,13 +570,13 @@ static int *get_valid_channels_for_radio(wifi_radio_index_t radio_index, int *ch
 
     switch (radio_index) {
     case RADIO_INDEX_2G:
-        for (int ch = MIN_2G_CHANNEL; ch <= MAX_2G_CHANNEL; ch++) {
+        for (int ch = MIN_CHANNEL_2G; ch <= MAX_CHANNEL_2G; ch++) {
                 channels[count++] = ch;
         }
         break;
 
     case RADIO_INDEX_5G:
-        for (int ch = MIN_5G_CHANNEL; ch <= MAX_5G_CHANNEL; ch++) {
+        for (int ch = MIN_CHANNEL_5G; ch <= MAX_CHANNEL_5G; ch++) {
             if (is_valid_5g_channel(ch)) {
                 channels[count++] = ch;
             }
@@ -584,7 +584,7 @@ static int *get_valid_channels_for_radio(wifi_radio_index_t radio_index, int *ch
         break;
 
     case RADIO_INDEX_6G:
-        for (int ch = MIN_6G_CHANNEL; ch <= MAX_6G_CHANNEL; ch += 4) {
+        for (int ch = MIN_CHANNEL_6G; ch <= MAX_CHANNEL_6G; ch += 4) {
                 channels[count++] = ch;
         }
         break;
