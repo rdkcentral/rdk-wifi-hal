@@ -41,6 +41,12 @@
 #ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
 #endif
+
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+extern void supplicant_event(void *ctx, enum wpa_event_type event,
+     union wpa_event_data *data);
+#endif
+
 int no_seq_check(struct nl_msg *msg, void *arg)
 {
     return NL_OK;
@@ -225,7 +231,7 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
             }
             event.assoc_reject.status_code = status;
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-            wpa_supplicant_event(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
+            supplicant_event(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
 #else
             wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
 #endif // BANANA_PI_PORT
@@ -261,7 +267,7 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
     }
 
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-    wpa_supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
+    supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
 #else
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC, &event);
 #endif // BANANA_PI_PORT
@@ -291,7 +297,7 @@ static void nl80211_authenticate_event(wifi_interface_info_t *interface, struct 
     }
 
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-    wpa_supplicant_event(&interface->wpa_s, EVENT_AUTH, &event);
+    supplicant_event(&interface->wpa_s, EVENT_AUTH, &event);
 #else
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_AUTH, &event);
 #endif // BANANA_PI_PORT
@@ -804,7 +810,7 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
     interface->wpa_s.disconnected = 1;
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-    wpa_supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
+    supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
 #else
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
 #endif // BANANA_PI_PORT
