@@ -2045,20 +2045,6 @@ int get_security_mode_support_radius(int mode)
     return sec_mode;
 }
 
-int is_valid_5g_channel(int channel)
-{
-    // Valid 5GHz channels: 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128,
-    // 132, 136, 140, 144, 149, 153, 157, 161, 165, 169, 173, 177
-    if (channel < MIN_CHANNEL_5G || channel > MAX_CHANNEL_5G)
-        return 0;
-    if ((channel >= 36 && channel <= 64 && (channel - 36) % 4 == 0) ||
-        (channel >= 100 && channel <= 144 && (channel - 100) % 4 == 0) ||
-        (channel >= 149 && channel <= 173 && (channel - 149) % 4 == 0) ||
-        (channel >= 177 && channel <= 181 && (channel - 177) % 4 == 0)) 
-        return 1;
-    return 0;
-}
-
 int get_security_mode_int_from_str(char *security_mode_str,char *mfp_str,wifi_security_modes_t *security_mode)
 {
 
