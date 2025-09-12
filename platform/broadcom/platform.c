@@ -98,7 +98,7 @@ static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
 #define BUFFER_LENGTH_WIFIDB 256
 #define BUFLEN_128  128
 #define BUFLEN_256 256
-#define BUFLEN_1024 1024
+#define BUFLEN_512 512
 #define WIFI_BLASTER_DEFAULT_PKTSIZE 1470
 #define ACS_MAX_CHANNEL_WEIGHT 100
 #define ACS_MIN_CHANNEL_WEIGHT 1
@@ -566,22 +566,22 @@ char *generate_channel_weight_string(wifi_radio_index_t radio_index, int preferr
 
     switch (radio_index) {
     case RADIO_INDEX_2G:
-        source_channels = valid_2g_channels;
-        source_count = valid_2g_count;
+        source_channels = wifi_2g_channels;
+        source_count = wifi_2g_channels_count;
         break;
     case RADIO_INDEX_5G:
-        source_channels = valid_5g_channels;
-        source_count = valid_5g_count;
+        source_channels = wifi_5g_channels;
+        source_count = wifi_5g_channels_count;
         break;
     case RADIO_INDEX_6G:
-        source_channels = valid_6g_channels;
-        source_count = valid_6g_count;
+        source_channels = wifi_6g_channels;
+        source_count = wifi_6g_channels_count;
         break;
     default:
         return NULL;
     }
 
-    char *result = (char *)calloc((BUFLEN_1024) * sizeof(char));
+    char *result = (char *)calloc(BUFLEN_512, sizeof(char));
     if (!result) {
         return NULL;
     }
@@ -628,7 +628,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
     char temp_buff[BUF_SIZE];
     char param_name[NVRAM_NAME_SIZE];
-    char cmd[BUFLEN_1024 + 1]; //1024 chars + 1 for '\0' (null termination)
+    char cmd[BUFLEN_512]; 
     wifi_radio_info_t *radio;
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
