@@ -559,11 +559,11 @@ INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCH
     return wifi_sendActionFrameExt(apIndex, MacAddr, frequency, 0, frame, len);
 }
 
-unsigned char *generate_channel_weight_string(wifi_radio_index_t radio_index, int preferred_channel)
+char *generate_channel_weight_string(wifi_radio_index_t radio_index, int preferred_channel)
 {
     const unsigned int *source_channels;
-    int source_count;
-    
+    unsigned int source_count;
+
     switch (radio_index) {
     case RADIO_INDEX_2G:
         source_channels = valid_2g_channels;
@@ -581,18 +581,20 @@ unsigned char *generate_channel_weight_string(wifi_radio_index_t radio_index, in
         return NULL;
     }
 
-    unsigned char *result = (unsigned char *)malloc((BUFLEN_1024) * sizeof(unsigned char));
+    char *result = (char *)calloc((BUFLEN_1024) * sizeof(char));
     if (!result) {
         return NULL;
     }
-    //Assign another pointer so that we don't lose context of the start of the string. Iterate with ptr.
-    unsigned char *ptr = result;
-    for (int i = 0; i < source_count; i++) {
+    // Assign another pointer so that we don't lose context of the start of the string. Iterate with
+    // ptr.
+    char *ptr = result;
+    for (unsigned int i = 0; i < source_count; i++) {
         unsigned int channel = source_channels[i];
-        int weight = (channel == (unsigned int)preferred_channel) ? ACS_MAX_CHANNEL_WEIGHT :
-                                                                   ACS_MIN_CHANNEL_WEIGHT;
+        unsigned int weight = (channel == (unsigned int)preferred_channel) ?
+            ACS_MAX_CHANNEL_WEIGHT :
+            ACS_MIN_CHANNEL_WEIGHT;
 
-        ptr += sprintf((char*)ptr, "%u,%d,", channel, weight);
+        ptr += sprintf((char *)ptr, "%u,%d,", channel, weight);
     }
     *--ptr = '\0';
     return result;
@@ -626,7 +628,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
     char temp_buff[BUF_SIZE];
     char param_name[NVRAM_NAME_SIZE];
-    char cmd[BUFLEN_1024];
+    char cmd[BUFLEN_1024 + 1]; //1024 chars + 1 for '\0' (null termination)
     wifi_radio_info_t *radio;
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
@@ -723,7 +725,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
             memset(cmd, 0, sizeof(cmd));
             sprintf(cmd, "wl%d_acs_channel_weights", index);
-            unsigned char *weight_string = generate_channel_weight_string(index, operationParam->channel);
+            char *weight_string = generate_channel_weight_string(index, operationParam->channel);
             if (weight_string != NULL) {
                 set_string_nvram_param(cmd, weight_string);
                 sprintf(cmd, "acs_cli2 -i wl%d set acs_channel_weights %s &", index, weight_string);
