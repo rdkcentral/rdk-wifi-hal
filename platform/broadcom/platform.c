@@ -596,7 +596,7 @@ static int *get_valid_channels_for_radio(wifi_radio_index_t radio_index, int *ch
 
 char *generate_channel_weight_string(wifi_radio_index_t radio_index, int preferred_channel)
 {
-    int channel_count;
+    int channel_count = 0;
     int *valid_channels = get_valid_channels_for_radio(radio_index, &channel_count);
 
     if (!valid_channels || channel_count == 0) {
