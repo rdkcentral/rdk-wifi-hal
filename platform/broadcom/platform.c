@@ -734,8 +734,8 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
             if (weight_string != NULL) {
                 set_string_nvram_param(cmd, weight_string);
                 sprintf(cmd, "acs_cli2 -i wl%d set acs_channel_weights %s &", index, weight_string);
-                system(cmd);
                 free(weight_string);
+                system(cmd);
             }
 
             /* Run acsd2 autochannel */
