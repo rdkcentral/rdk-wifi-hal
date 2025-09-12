@@ -249,6 +249,15 @@ extern const struct wpa_driver_ops g_wpa_driver_nl80211_ops;
 #ifdef CONFIG_WIFI_EMULATOR
 extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
 #endif
+
+extern const unsigned int wifi_2g_channels[];
+extern const unsigned int wifi_2g_channels_count;
+
+extern const unsigned int wifi_5g_channels[];
+extern const unsigned int wifi_5g_channels_count;
+
+extern const unsigned int wifi_6g_channels[];
+extern const unsigned int wifi_6g_channels_count;
 typedef struct wifi_enum_to_str_map
 {
     int enum_val;
