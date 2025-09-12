@@ -587,21 +587,14 @@ unsigned char *generate_channel_weight_string(wifi_radio_index_t radio_index, in
     }
     //Assign another pointer so that we don't lose context of the start of the string. Iterate with ptr.
     unsigned char *ptr = result;
-    int first_entry = 1;
-
     for (int i = 0; i < source_count; i++) {
         unsigned int channel = source_channels[i];
         int weight = (channel == (unsigned int)preferred_channel) ? ACS_MAX_CHANNEL_WEIGHT :
                                                                    ACS_MIN_CHANNEL_WEIGHT;
 
-        if (!first_entry) {
-            *ptr++ = ',';
-        }
-
-        ptr += sprintf((char*)ptr, "%u,%d", channel, weight);
-        first_entry = 0;
+        ptr += sprintf((char*)ptr, "%u,%d,", channel, weight);
     }
-    *ptr = '\0';
+    *--ptr = '\0';
     return result;
 }
 
