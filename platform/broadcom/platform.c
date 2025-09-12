@@ -98,7 +98,7 @@ static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
 #define BUFFER_LENGTH_WIFIDB 256
 #define BUFLEN_128  128
 #define BUFLEN_256 256
-#define BUFLEN_2048 2048
+#define BUFLEN_1024 1024
 #define WIFI_BLASTER_DEFAULT_PKTSIZE 1470
 #define ACS_MAX_CHANNEL_WEIGHT 100
 #define ACS_MIN_CHANNEL_WEIGHT 1
@@ -559,71 +559,48 @@ INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCH
     return wifi_sendActionFrameExt(apIndex, MacAddr, frequency, 0, frame, len);
 }
 
-static int *get_valid_channels_for_radio(wifi_radio_index_t radio_index, int *channel_count)
+unsigned char *generate_channel_weight_string(wifi_radio_index_t radio_index, int preferred_channel)
 {
-    static int channels[MAX_CHANNELS];
-    int count = 0;
-
+    const unsigned int *source_channels;
+    int source_count;
+    
     switch (radio_index) {
     case RADIO_INDEX_2G:
-        for (int ch = MIN_CHANNEL_2G; ch <= MAX_CHANNEL_2G; ch++) {
-                channels[count++] = ch;
-        }
+        source_channels = valid_2g_channels;
+        source_count = valid_2g_count;
         break;
-
     case RADIO_INDEX_5G:
-        for (int ch = MIN_CHANNEL_5G; ch <= MAX_CHANNEL_5G; ch++) {
-            if (is_valid_5g_channel(ch)) {
-                channels[count++] = ch;
-            }
-        }
+        source_channels = valid_5g_channels;
+        source_count = valid_5g_count;
         break;
-
     case RADIO_INDEX_6G:
-        for (int ch = MIN_CHANNEL_6G; ch <= MAX_CHANNEL_6G; ch += 4) {
-                channels[count++] = ch;
-        }
+        source_channels = valid_6g_channels;
+        source_count = valid_6g_count;
         break;
-
     default:
-        *channel_count = 0;
         return NULL;
     }
 
-    *channel_count = count;
-    return channels;
-}
-
-char *generate_channel_weight_string(wifi_radio_index_t radio_index, int preferred_channel)
-{
-    int channel_count;
-    int *valid_channels = get_valid_channels_for_radio(radio_index, &channel_count);
-
-    if (!valid_channels || channel_count == 0) {
-        return NULL;
-    }
-
-    char *result = (char *)malloc((channel_count * 7 + 1) * sizeof(char));
+    unsigned char *result = (unsigned char *)malloc((BUFLEN_1024) * sizeof(unsigned char));
     if (!result) {
         return NULL;
     }
-
-    char *ptr = result;
+    //Assign another pointer so that we don't lose context of the start of the string. Iterate with ptr.
+    unsigned char *ptr = result;
     int first_entry = 1;
 
-    for (int i = 0; i < channel_count; i++) {
-        int channel = valid_channels[i];
-        int weight = (channel == preferred_channel) ? ACS_MAX_CHANNEL_WEIGHT :
-                                                      ACS_MIN_CHANNEL_WEIGHT;
+    for (int i = 0; i < source_count; i++) {
+        unsigned int channel = source_channels[i];
+        int weight = (channel == (unsigned int)preferred_channel) ? ACS_MAX_CHANNEL_WEIGHT :
+                                                                   ACS_MIN_CHANNEL_WEIGHT;
 
         if (!first_entry) {
             *ptr++ = ',';
         }
 
-        ptr += sprintf(ptr, "%d,%d", channel, weight);
+        ptr += sprintf((char*)ptr, "%u,%d", channel, weight);
         first_entry = 0;
     }
-
     *ptr = '\0';
     return result;
 }
@@ -656,7 +633,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
     char temp_buff[BUF_SIZE];
     char param_name[NVRAM_NAME_SIZE];
-    char cmd[BUFLEN_2048];
+    char cmd[BUFLEN_1024];
     wifi_radio_info_t *radio;
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
@@ -753,7 +730,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
             memset(cmd, 0, sizeof(cmd));
             sprintf(cmd, "wl%d_acs_channel_weights", index);
-            char *weight_string = generate_channel_weight_string(index, operationParam->channel);
+            unsigned char *weight_string = generate_channel_weight_string(index, operationParam->channel);
             if (weight_string != NULL) {
                 set_string_nvram_param(cmd, weight_string);
                 sprintf(cmd, "acs_cli2 -i wl%d set acs_channel_weights %s &", index, weight_string);
