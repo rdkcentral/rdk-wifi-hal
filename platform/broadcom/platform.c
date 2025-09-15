@@ -105,6 +105,7 @@ static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
 #define RADIO_INDEX_2G 0
 #define RADIO_INDEX_5G 1
 #define RADIO_INDEX_6G 2
+#define BW_CAP_20MHZ_ONLY (1 << 0)
 
 #ifdef CONFIG_IEEE80211BE
 #ifdef CONFIG_NO_MLD_ONLY_PRIVATE
@@ -3372,6 +3373,20 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
         radio->driver_data.extended_capa_mask[2] &= 0xF7;
         radio->driver_data.extended_capa[2] &= 0xF7;
     }
+
+// Only Allow 20MHz in 2.4G and not 40MHz --> Mesh Requirement
+    char *interface_name = wifi_hal_get_interface_name(interface);
+    uint32_t bandwidth_capab = BW_CAP_20MHZ_ONLY;
+    wifi_hal_info_print("%s:%d The interface name is %s\n", __func__, __LINE__, interface_name);
+    if (wl_iovar_set(interface_name, "bw_cap", &bandwidth_capab, sizeof(bandwidth_capab)) < 0) {
+        wifi_hal_error_print("%s:%d Failed to set bw_cap to 0x%02x\n", __func__, __LINE__,
+            bandwidth_capab);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d Successfully set bw_cap to 0x%02x (20MHz only)\n", __func__,
+        __LINE__, bandwidth_capab);
+
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
         iface->hw_features[i].ht_capab = 0x19ef;
