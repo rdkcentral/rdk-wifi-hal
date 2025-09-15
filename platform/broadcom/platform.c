@@ -3376,9 +3376,7 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     }
 
 // Only Allow 20MHz in 2.4G and not 40MHz --> Mesh Requirement
-    char interface_name[4];
-    memset(interface_name, '\0', sizeof(interface_name));
-    strncpy(interface_name, "wl0", sizeof(interface_name) - 1);
+    char interface_name[] = "wl0";
     uint32_t bandwidth_capab = BW_CAP_20MHZ_ONLY;
     wifi_hal_info_print("%s:%d SREESH The interface name is %s\n", __func__, __LINE__, interface_name);
     if (wl_iovar_set(interface_name, "bw_cap", &bandwidth_capab, sizeof(bandwidth_capab)) < 0) {
