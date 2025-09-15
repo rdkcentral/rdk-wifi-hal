@@ -99,6 +99,7 @@ static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
 #define BUFLEN_128  128
 #define BUFLEN_256 256
 #define BUFLEN_512 512
+#define BUFLEN_1024 1024
 #define WIFI_BLASTER_DEFAULT_PKTSIZE 1470
 #define ACS_MAX_CHANNEL_WEIGHT 100
 #define ACS_MIN_CHANNEL_WEIGHT 1
@@ -629,7 +630,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
     char temp_buff[BUF_SIZE];
     char param_name[NVRAM_NAME_SIZE];
-    char cmd[BUFLEN_512]; 
+    char cmd[BUFLEN_1024]; 
     wifi_radio_info_t *radio;
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
