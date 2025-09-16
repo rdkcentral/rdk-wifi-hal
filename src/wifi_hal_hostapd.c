@@ -2010,6 +2010,9 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
 #endif /* CONFIG_ACS */
 
 #ifdef CONFIG_IEEE80211AX
+#if defined(BANANA_PI_PORT) && HOSTAPD_VERSION >= 211
+    iconf->he_phy_capab.he_ldpc = 1;
+#endif // BANANA_PI_PORT && HOSTAPD_VERSION >= 211
     iconf->he_op.he_rts_threshold = 0;
     iconf->he_op.he_default_pe_duration = 4;
 #if HOSTAPD_VERSION >= 210
