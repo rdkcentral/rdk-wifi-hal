@@ -98,7 +98,14 @@ static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
 #define BUFFER_LENGTH_WIFIDB 256
 #define BUFLEN_128  128
 #define BUFLEN_256 256
+#define BUFLEN_512 512
+#define BUFLEN_1024 1024
 #define WIFI_BLASTER_DEFAULT_PKTSIZE 1470
+#define ACS_MAX_CHANNEL_WEIGHT 100
+#define ACS_MIN_CHANNEL_WEIGHT 1
+#define RADIO_INDEX_2G 0
+#define RADIO_INDEX_5G 1
+#define RADIO_INDEX_6G 2
 
 #ifdef CONFIG_IEEE80211BE
 #ifdef CONFIG_NO_MLD_ONLY_PRIVATE
@@ -553,6 +560,47 @@ INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCH
     return wifi_sendActionFrameExt(apIndex, MacAddr, frequency, 0, frame, len);
 }
 
+char *generate_channel_weight_string(wifi_radio_index_t radio_index, int preferred_channel)
+{
+    const unsigned int *source_channels;
+    unsigned int source_count;
+
+    switch (radio_index) {
+    case RADIO_INDEX_2G:
+        source_channels = wifi_2g_channels;
+        source_count = wifi_2g_channels_count;
+        break;
+    case RADIO_INDEX_5G:
+        source_channels = wifi_5g_channels;
+        source_count = wifi_5g_channels_count;
+        break;
+    case RADIO_INDEX_6G:
+        source_channels = wifi_6g_channels;
+        source_count = wifi_6g_channels_count;
+        break;
+    default:
+        return NULL;
+    }
+
+    char *result = (char *)calloc(BUFLEN_512, sizeof(char));
+    if (!result) {
+        return NULL;
+    }
+    // Assign another pointer so that we don't lose context of the start of the string. Iterate with
+    // ptr.
+    char *ptr = result;
+    for (unsigned int i = 0; i < source_count; i++) {
+        unsigned int channel = source_channels[i];
+        unsigned int weight = (channel == (unsigned int)preferred_channel) ?
+            ACS_MAX_CHANNEL_WEIGHT :
+            ACS_MIN_CHANNEL_WEIGHT;
+
+        ptr += sprintf(ptr, "%u,%d,", channel, weight);
+    }
+    *--ptr = '\0';
+    return result;
+}
+
 int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
 {
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
@@ -581,7 +629,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
     char temp_buff[BUF_SIZE];
     char param_name[NVRAM_NAME_SIZE];
-    char cmd[BUFLEN_128];
+    char cmd[BUFLEN_1024]; 
     wifi_radio_info_t *radio;
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
@@ -674,6 +722,16 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
             {
                 sprintf(chanbuff, "acs_cli2 -i wl%d set acs_excl_chans %s &", index, buff);
                 system(chanbuff);
+            }
+
+            memset(cmd, 0, sizeof(cmd));
+            sprintf(cmd, "wl%d_acs_channel_weights", index);
+            char *weight_string = generate_channel_weight_string(index, operationParam->channel);
+            if (weight_string != NULL) {
+                set_string_nvram_param(cmd, weight_string);
+                sprintf(cmd, "acs_cli2 -i wl%d set acs_channel_weights %s &", index, weight_string);
+                free(weight_string);
+                system(cmd);
             }
 
             /* Run acsd2 autochannel */
@@ -3315,6 +3373,7 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
         radio->driver_data.extended_capa_mask[2] &= 0xF7;
         radio->driver_data.extended_capa[2] &= 0xF7;
     }
+
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
         iface->hw_features[i].ht_capab = 0x19ef;

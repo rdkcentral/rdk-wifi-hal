@@ -1178,6 +1178,19 @@ static struct wifiCountryEnumStrMap wifi_country_map[] =
     {wifi_countrycode_ZW,"ZW"} /**< ZIMBABWE */
 };
 
+const unsigned int wifi_2g_channels[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };
+const unsigned int wifi_2g_channels_count = sizeof(wifi_2g_channels) / sizeof(wifi_2g_channels[0]);
+
+const unsigned int wifi_5g_channels[] = { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116,
+    120, 124, 128, 132, 136, 140, 149, 153, 157, 161, 165, 169, 173, 177 };
+const unsigned int wifi_5g_channels_count = sizeof(wifi_5g_channels) / sizeof(wifi_5g_channels[0]);
+
+const unsigned int wifi_6g_channels[] = { 1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57,
+    61, 65, 69, 73, 77, 81, 85, 89, 93, 97, 101, 105, 109, 113, 117, 121, 125, 129, 133, 137, 141,
+    145, 149, 153, 157, 161, 165, 169, 173, 177, 181, 185, 189, 193, 197, 201, 205, 209, 213, 217,
+    221, 225, 229, 233 };
+const unsigned int wifi_6g_channels_count = sizeof(wifi_6g_channels) / sizeof(wifi_6g_channels[0]);
+
 struct wifiEnvironmentEnumStrMap wifi_environment_map[] =
 {
     {wifi_operating_env_all, " "},
@@ -2385,6 +2398,7 @@ static bool parse_wiphy_band_mapping(FILE *fp, int *pcie_index) {
     }
     return true;
 }
+
 static void remap_phy_index(wifi_interface_name_idex_map_t *map, int map_size, const int *pcie_index, int pcie_size)
 {
     for (int i = 0; i < map_size; ++i) {
@@ -2500,7 +2514,6 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
     memset(&cc_op_class, 0, sizeof(cc_op_class));
 
     get_wifi_op_class_info(param->countryCode, &cc_op_class);
-
 
     // country code match
     if (cc_op_class.cc != param->countryCode) {
