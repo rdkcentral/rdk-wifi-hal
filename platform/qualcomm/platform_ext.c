@@ -825,8 +825,8 @@ static int qca_create_mld_interfaces(wifi_vap_info_map_t *map)
             wifi_hal_info_print("%s:%d: mld%d already present\n", __func__, __LINE__, vap->vap_index);
         } else {
             qca_get_vap_mld_addr(vap, mld_mac_addr);
-            snprintf(cmd, sizeof(cmd), "iw phy mld-phy0 interface add mld%d type __ap ",
-                                            vap->vap_index);
+            snprintf(cmd, sizeof(cmd), "iw phy mld-phy0 interface add mld%d type __ap mld_addr " MACSTR,
+                                            vap->vap_index, MAC2STR(mld_mac_addr));
             wifi_hal_info_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
             system(cmd);
         }
