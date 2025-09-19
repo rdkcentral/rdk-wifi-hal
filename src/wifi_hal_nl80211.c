@@ -6214,7 +6214,7 @@ int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
     nlattr_vendor = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
 
     if (nla_put_u32(msg, RDK_VENDOR_ATTR_VAP_INDEX, 0) < 0) {
-        wifi_hal_stats_error_print("%s:%d: Failed to set vap index\n", __func__, __LINE__);
+        wifi_hal_error_print("%s:%d: Failed to set vap index\n", __func__, __LINE__);
         nlmsg_free(msg);
         return RETURN_ERR;
     }
