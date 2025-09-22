@@ -26,7 +26,9 @@
 #include <semaphore.h>
 #include <stdint.h>
 #include <unistd.h>
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT
+#elif defined(SCXER10_PORT)
+#include <rdk_nl80211_hal.h>
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXF10_PORT 
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
     defined(TCHCBRV2_PORT)
@@ -3589,6 +3591,26 @@ static void platform_set_eht(wifi_radio_index_t index, bool enable)
     g_eht_oneshot_notify = NULL;
 
     return;
+}
+
+int platform_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
+{
+    static uint8_t cur_amsdu_tid[MAX_NUM_RADIOS][RDK_VENDOR_NL80211_AMSDU_TID_MAX] = {
+        {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+        {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+        {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}};
+
+    int radio_index = interface->rdk_radio_index;
+
+    for (int index = 0; index < RDK_VENDOR_NL80211_AMSDU_TID_MAX; index++) {
+        /* minimize the calling of wl if same value */
+        if (cur_amsdu_tid[radio_index][index] != amsdu_tid[index]) {
+            v_secure_system("wl -i %s amsdu_tid %d %u", interface->name, index, amsdu_tid[index]);
+            cur_amsdu_tid[radio_index][index] = amsdu_tid[index];
+            wifi_hal_dbg_print("%s: %s amsdu_tid[%d] = %u\n", __func__, interface->name, index, amsdu_tid[index]);
+        }
+    }
+    return RETURN_OK;
 }
 
 #if defined(KERNEL_NO_320MHZ_SUPPORT)
