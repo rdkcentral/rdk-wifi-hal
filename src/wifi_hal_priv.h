@@ -249,6 +249,15 @@ extern const struct wpa_driver_ops g_wpa_driver_nl80211_ops;
 #ifdef CONFIG_WIFI_EMULATOR
 extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
 #endif
+
+extern const unsigned int wifi_2g_channels[];
+extern const unsigned int wifi_2g_channels_count;
+
+extern const unsigned int wifi_5g_channels[];
+extern const unsigned int wifi_5g_channels_count;
+
+extern const unsigned int wifi_6g_channels[];
+extern const unsigned int wifi_6g_channels_count;
 typedef struct wifi_enum_to_str_map
 {
     int enum_val;
@@ -1252,6 +1261,10 @@ void platform_set_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t
 #endif
 #endif
 
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+extern void supplicant_event(void *ctx, enum wpa_event_type event,
+     union wpa_event_data *data);
+#endif
 
 platform_pre_init_t     	get_platform_pre_init_fn();
 platform_post_init_t    	get_platform_post_init_fn();

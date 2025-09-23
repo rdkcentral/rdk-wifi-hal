@@ -2327,7 +2327,13 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #endif // CONFIG_GENERIC_MLO
 #endif /* HOSTAPD_VERSION >= 211 */
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
+        if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+            supplicant_event(&interface->wpa_s, EVENT_RX_MGMT, &event);
+#endif
+        } else {
+            wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
+        }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     }
 
@@ -2449,7 +2455,13 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
             " on interface %s from" MACSTR " sent to hostapd wds:%d.\n", __func__, __LINE__,
             gnlh->cmd, interface->name, MAC2STR(event.rx_from_unknown.addr), event.rx_from_unknown.wds);
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_FROM_UNKNOWN, &event);
+        if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+            supplicant_event(&interface->wpa_s, EVENT_RX_FROM_UNKNOWN, &event);
+#endif
+        } else {
+            wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_FROM_UNKNOWN, &event);
+        }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
         return NL_SKIP;
@@ -2914,7 +2926,13 @@ void recv_data_frame(wifi_interface_info_t *interface)
             get_eapol_reply_counter((uint8_t *)hdr, buflen));
 
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_EAPOL_RX, &event);
+        if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+            supplicant_event(&interface->wpa_s, EVENT_EAPOL_RX, &event);
+#endif
+        } else {
+            wpa_supplicant_event(&interface->u.ap.hapd, EVENT_EAPOL_RX, &event);
+        }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     } else if (vap->vap_mode == wifi_vap_mode_sta) {
 #if defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
@@ -6067,7 +6085,7 @@ static int interface_set_mtu(wifi_interface_info_t *interface, int mtu)
     req.nh.nlmsg_flags = NLM_F_REQUEST;
     req.nh.nlmsg_type  = RTM_NEWLINK;
     req.ifinfo.ifi_family = AF_UNSPEC;
-    req.ifinfo.ifi_index  = if_nametoindex(interface->name);
+    req.ifinfo.ifi_index = interface->index;
 
     if (!req.ifinfo.ifi_index) {
         wifi_hal_error_print("%s:%d Failed to get ifindex for %s\n", __func__, __LINE__, interface->name);
@@ -11720,7 +11738,13 @@ void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len)
 #endif // CONFIG_GENERIC_MLO
 #endif /* HOSTAPD_VERSION >= 211 */
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+        supplicant_event(&interface->wpa_s, EVENT_RX_MGMT, &event);
+#endif
+    } else {
+        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
+    }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
@@ -11732,6 +11756,9 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
     //wifi_radio_operationParam_t *radio_param;
     wifi_driver_data_t *drv;
     struct ieee80211_mgmt mgmt;
+#if HOSTAPD_VERSION >= 211
+    int link_id = -1;
+#endif // HOSTAPD_VERSION >= 211
 
     interface = (wifi_interface_info_t *)priv;
     vap = &interface->vap_info;
@@ -11741,6 +11768,10 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
     mac_addr_str_t mac_str;
 
     wifi_hal_dbg_print("%s:%d: Enter %s %d\n", __func__, __LINE__, to_mac_str(addr, mac_str), reason);
+
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+    link_id = wifi_hal_get_mld_link_id(interface);
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
 #if defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
     wifi_device_callbacks_t *callbacks;
@@ -11764,15 +11795,15 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
     memcpy(mgmt.sa, own_addr, ETH_ALEN);
     memcpy(mgmt.bssid, own_addr, ETH_ALEN);
     mgmt.u.disassoc.reason_code = host_to_le16(reason);
-#ifdef HOSTAPD_2_11 //2.11
-    return wifi_drv_send_mlme(priv, (u8 *) &mgmt,
-                                IEEE80211_HDRLEN + sizeof(mgmt.u.disassoc), 0, 0, NULL, 0, 0, 0, 0);
-#elif HOSTAPD_2_10 //2.10
-    return wifi_drv_send_mlme(priv, (u8 *) &mgmt,
-                                IEEE80211_HDRLEN + sizeof(mgmt.u.disassoc), 0, 0, NULL, 0, 0, 0);
+#ifdef HOSTAPD_2_11 // 2.11
+    return wifi_drv_send_mlme(priv, (u8 *)&mgmt, IEEE80211_HDRLEN + sizeof(mgmt.u.disassoc), 0, 0,
+        NULL, 0, 0, 0, link_id);
+#elif HOSTAPD_2_10 // 2.10
+    return wifi_drv_send_mlme(priv, (u8 *)&mgmt, IEEE80211_HDRLEN + sizeof(mgmt.u.disassoc), 0, 0,
+        NULL, 0, 0, 0);
 #else
-    return wifi_drv_send_mlme(priv, (u8 *) &mgmt,
-                                IEEE80211_HDRLEN + sizeof(mgmt.u.disassoc), 0, 0, NULL, 0);
+    return wifi_drv_send_mlme(priv, (u8 *)&mgmt, IEEE80211_HDRLEN + sizeof(mgmt.u.disassoc), 0, 0,
+        NULL, 0);
 #endif
 }
 
@@ -11874,15 +11905,15 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
     memcpy(mgmt.bssid, own_addr, ETH_ALEN);
     mgmt.u.deauth.reason_code = host_to_le16(reason);
     wifi_hal_info_print("%s:%d: Send drv mlme: client mac:%s reason_code:%d\n", __func__, __LINE__, to_mac_str(addr, mac_str), reason);
-#ifdef HOSTAPD_2_11 //2.11
-    return wifi_drv_send_mlme(priv, (u8 *) &mgmt,
-                                IEEE80211_HDRLEN + sizeof(mgmt.u.deauth), 0, 0, NULL, 0, 0, 0, 0);
-#elif HOSTAPD_2_10 //2.10
-    return wifi_drv_send_mlme(priv, (u8 *) &mgmt,
-                                IEEE80211_HDRLEN + sizeof(mgmt.u.deauth), 0, 0, NULL, 0, 0, 0);
+#ifdef HOSTAPD_2_11 // 2.11
+    return wifi_drv_send_mlme(priv, (u8 *)&mgmt, IEEE80211_HDRLEN + sizeof(mgmt.u.deauth), 0, 0,
+        NULL, 0, 0, 0, link_id);
+#elif HOSTAPD_2_10 // 2.10
+    return wifi_drv_send_mlme(priv, (u8 *)&mgmt, IEEE80211_HDRLEN + sizeof(mgmt.u.deauth), 0, 0,
+        NULL, 0, 0, 0);
 #else
-    return wifi_drv_send_mlme(priv, (u8 *) &mgmt,
-                              IEEE80211_HDRLEN + sizeof(mgmt.u.deauth), 0, 0, NULL, 0);
+    return wifi_drv_send_mlme(priv, (u8 *)&mgmt, IEEE80211_HDRLEN + sizeof(mgmt.u.deauth), 0, 0,
+        NULL, 0);
 #endif
     return 0;
 }
@@ -11928,11 +11959,19 @@ int wifi_drv_set_sta_vlan(void *priv, const u8 *addr,
     }
 #endif
 
-    if (nla_put_u32(msg, NL80211_ATTR_STA_VLAN, if_nametoindex(ifname)) < 0) {
+    if (nla_put_u32(msg, NL80211_ATTR_STA_VLAN, interface->index) < 0) {
         wifi_hal_error_print("%s:%d netlink:%s command set ifname_id:%d failed\r\n",
-                __func__, __LINE__, ifname, if_nametoindex(ifname));
+                __func__, __LINE__, ifname, interface->index);
         goto fail;
     }
+
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+    if (link_id != NL80211_DRV_LINK_ID_NA &&
+        nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to put MLO link ID\n", __func__, __LINE__);
+        goto fail;
+    }
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
     ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
     if (ret < 0) {
@@ -11940,9 +11979,9 @@ int wifi_drv_set_sta_vlan(void *priv, const u8 *addr,
             " vlan_id=%d) failed: %d (%s)\n", __func__, __LINE__, MAC2STR(addr), ifname,
             vlan_id, ret, strerror(-ret));
     }
-    wifi_hal_info_print("%s:%d nl80211: NL80211 cmd set station for vlan (addr="
-            MACSTR " ifname=%s, ifname_id:%d vlan_id=%d) success\n", __func__, __LINE__,
-            MAC2STR(addr), ifname, if_nametoindex(ifname), vlan_id);
+    wifi_hal_info_print("%s:%d nl80211: NL80211 cmd set station for vlan (addr=" MACSTR
+                        " ifname=%s, ifname_id:%d vlan_id=%d) success\n",
+        __func__, __LINE__, MAC2STR(addr), ifname, interface->index, vlan_id);
 
     return 0;
 fail:
@@ -12098,8 +12137,8 @@ int wifi_drv_get_seqnum(const char *iface, void *priv, const u8 *addr, int idx, 
 
     interface = (wifi_interface_info_t *)priv;
 
-    msg = nl80211_ifindex_msg(g_wifi_hal.nl80211_id, interface, 0,
-                                NL80211_CMD_GET_KEY, if_nametoindex(iface));
+    msg = nl80211_ifindex_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_GET_KEY,
+        interface->index);
     if (!msg ||
         (addr && nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr)) ||
         nla_put_u8(msg, NL80211_ATTR_KEY_IDX, idx)) {
@@ -12294,7 +12333,14 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
             event.wds_sta_interface.sta_addr = addr;
             event.wds_sta_interface.ifname = name;
             event.wds_sta_interface.istatus = INTERFACE_ADDED;
-            wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+            if (interface->vap_info.vap_mode != wifi_vap_mode_ap ||
+                is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+                supplicant_event(&interface->wpa_s, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+#endif
+            } else {
+                wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+            }
         } else {
             wifi_hal_dbg_print("%s:%d:Re-Enabling interface:%s - wds:%d\n",
                 __func__, __LINE__, name, interface->u.ap.conf.wds_sta);
@@ -12314,7 +12360,14 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
         event.wds_sta_interface.sta_addr = addr;
         event.wds_sta_interface.ifname = name;
         event.wds_sta_interface.istatus = INTERFACE_REMOVED;
-        wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+            if (interface->vap_info.vap_mode != wifi_vap_mode_ap ||
+                is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+                supplicant_event(&interface->wpa_s, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+#endif
+            } else {
+                wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WDS_STA_INTERFACE_STATUS, &event);
+            }
     }
 
     return 0;
@@ -14434,7 +14487,7 @@ int set_bss_param(void *priv, struct wpa_driver_ap_params *params)
     wifi_hal_info_print("Set AP isolate:%d \r\n", params->isolate);
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-    if (params->mld_link_id != NL80211_DRV_LINK_ID_NA &&
+    if (params->mld_ap && params->mld_link_id != NL80211_DRV_LINK_ID_NA &&
         nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, params->mld_link_id) < 0) {
         wifi_hal_error_print("%s:%d: Failed to put MLO link ID\n", __func__, __LINE__);
         nlmsg_free(msg);

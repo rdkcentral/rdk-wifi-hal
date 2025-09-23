@@ -1178,6 +1178,19 @@ static struct wifiCountryEnumStrMap wifi_country_map[] =
     {wifi_countrycode_ZW,"ZW"} /**< ZIMBABWE */
 };
 
+const unsigned int wifi_2g_channels[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };
+const unsigned int wifi_2g_channels_count = sizeof(wifi_2g_channels) / sizeof(wifi_2g_channels[0]);
+
+const unsigned int wifi_5g_channels[] = { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116,
+    120, 124, 128, 132, 136, 140, 149, 153, 157, 161, 165, 169, 173, 177 };
+const unsigned int wifi_5g_channels_count = sizeof(wifi_5g_channels) / sizeof(wifi_5g_channels[0]);
+
+const unsigned int wifi_6g_channels[] = { 1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57,
+    61, 65, 69, 73, 77, 81, 85, 89, 93, 97, 101, 105, 109, 113, 117, 121, 125, 129, 133, 137, 141,
+    145, 149, 153, 157, 161, 165, 169, 173, 177, 181, 185, 189, 193, 197, 201, 205, 209, 213, 217,
+    221, 225, 229, 233 };
+const unsigned int wifi_6g_channels_count = sizeof(wifi_6g_channels) / sizeof(wifi_6g_channels[0]);
+
 struct wifiEnvironmentEnumStrMap wifi_environment_map[] =
 {
     {wifi_operating_env_all, " "},
@@ -2385,6 +2398,7 @@ static bool parse_wiphy_band_mapping(FILE *fp, int *pcie_index) {
     }
     return true;
 }
+
 static void remap_phy_index(wifi_interface_name_idex_map_t *map, int map_size, const int *pcie_index, int pcie_size)
 {
     for (int i = 0; i < map_size; ++i) {
@@ -2500,7 +2514,6 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
     memset(&cc_op_class, 0, sizeof(cc_op_class));
 
     get_wifi_op_class_info(param->countryCode, &cc_op_class);
-
 
     // country code match
     if (cc_op_class.cc != param->countryCode) {
@@ -4836,9 +4849,8 @@ int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t
 wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info_t *interface,
     int link_id)
 {
-#if HOSTAPD_VERSION >= 211 // 2.11
-    struct hostapd_data *link_bss, *curr_link_bss;
-#endif // HOSTAPD_VERSION >= 211
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface_iter;
 
     if (link_id < 0) {
         return interface;
@@ -4848,21 +4860,25 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info
         return interface;
     }
 
-#if HOSTAPD_VERSION >= 211 // 2.11
-    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    curr_link_bss = &interface->u.ap.hapd;
-    if (curr_link_bss->mld == NULL) {
-        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-        return interface;
-    }
-    for_each_mld_link(link_bss, curr_link_bss) {
-        if (link_bss->mld_link_id == link_id) {
-            interface = link_bss->drv_priv;
-            break;
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+                i);
+            return interface;
+        }
+
+        hash_map_foreach(radio->interface_map, interface_iter) {
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            // TODO: multiple mld support
+            if (wifi_hal_get_mld_link_id(interface_iter) == link_id) {
+                return interface_iter;
+            }
         }
     }
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-#endif // HOSTAPD_VERSION >= 211
 
     return interface;
 }
@@ -4870,9 +4886,8 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info
 wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t *interface,
     uint32_t freq)
 {
-#if HOSTAPD_VERSION >= 211 // 2.11
-    struct hostapd_data *link_bss, *curr_link_bss;
-#endif // HOSTAPD_VERSION >= 211
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface_iter;
 
     if (freq == 0) {
         return interface;
@@ -4882,21 +4897,28 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t 
         return interface;
     }
 
-#if HOSTAPD_VERSION >= 211 // 2.11
-    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    curr_link_bss = &interface->u.ap.hapd;
-    if (curr_link_bss->mld == NULL) {
-        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-        return interface;
-    }
-    for_each_mld_link(link_bss, curr_link_bss) {
-        if (link_bss->iface != NULL && link_bss->iface->freq == freq) {
-            interface = link_bss->drv_priv;
-            break;
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+                i);
+            return interface;
+        }
+
+        hash_map_foreach(radio->interface_map, interface_iter) {
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            // TODO: multiple mld support
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            if (interface_iter->u.ap.iface.freq == freq) {
+                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+                return interface_iter;
+            }
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         }
     }
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-#endif // HOSTAPD_VERSION >= 211
 
     return interface;
 }
@@ -4904,33 +4926,33 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t 
 wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_info_t *interface,
     mac_address_t mac)
 {
-#if HOSTAPD_VERSION >= 211 // 2.11
-    struct hostapd_data *link_bss, *curr_link_bss;
-#endif // HOSTAPD_VERSION >= 211
-    wifi_interface_info_t *link_interface = NULL;
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface_iter;
 
     if (!wifi_hal_is_mld_enabled(interface)) {
         return memcmp(interface->mac, mac, sizeof(mac_address_t)) == 0 ? interface : NULL;
     }
 
-#if HOSTAPD_VERSION >= 211 // 2.11
-    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    curr_link_bss = &interface->u.ap.hapd;
-    if (curr_link_bss->mld == NULL) {
-        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-        return memcmp(interface->mac, mac, sizeof(mac_address_t)) == 0 ? interface : NULL;
-    }
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+                i);
+            return NULL;
+        }
 
-    for_each_mld_link(link_bss, curr_link_bss) {
-        if (memcmp(link_bss->own_addr, mac, sizeof(mac_address_t)) == 0) {
-            link_interface = link_bss->drv_priv;
-            break;
+        hash_map_foreach(radio->interface_map, interface_iter) {
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            if (memcmp(interface_iter->mac, mac, sizeof(mac_address_t)) == 0) {
+                return interface_iter;
+            }
         }
     }
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-#endif // HOSTAPD_VERSION >= 211
 
-    return link_interface;
+    return NULL;
 }
 
 int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac)
