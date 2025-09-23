@@ -3605,7 +3605,7 @@ int platform_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
         {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
         {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}};
 
-    int radio_index = interface->rdk_radio_index;
+    int radio_index = interface->vap_info.radio_index;
 
     for (int index = 0; index < RDK_VENDOR_NL80211_AMSDU_TID_MAX; index++) {
         /* minimize the calling of wl if same value */
