@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -185,7 +185,7 @@ extern "C" {
 #define MIN_FREQ_MHZ_2G             2412
 #define MAX_FREQ_MHZ_2G             2484
 #define MIN_CHANNEL_2G              1
-#define MAX_CHANNEL_2G              11
+#define MAX_CHANNEL_2G              14
 
 /* 5GHz radio */
 #define MIN_FREQ_MHZ_5G             5180
@@ -779,6 +779,10 @@ int     nl80211_interface_enable(const char *ifname, bool enable);
 int     nl80211_retry_interface_enable(wifi_interface_info_t *interface, bool enable);
 void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *event);
 int     nl80211_connect_sta(wifi_interface_info_t *interface);
+
+#if defined(TCXB8_PORT) || defined(XB10_PORT)
+int     nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
+#endif
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
 
 typedef struct {

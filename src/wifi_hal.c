@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -722,6 +722,15 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     memcpy((unsigned char *)&old_operationParam, (unsigned char *)&radio->oper_param, sizeof(wifi_radio_operationParam_t));
 
     nl80211_interface_enable(primary_interface->name, operationParam->enable);
+#if defined(TCXB8_PORT) || defined(XB10_PORT)
+    if (nl80211_set_amsdu_tid(primary_interface, operationParam->amsduTid) != RETURN_OK)
+    {
+        wifi_hal_error_print(
+            "%s:%d:Failed to update AMSDU TID params ! AMSDU possibly out of sync \n",
+            __func__, __LINE__);
+        // fall-through, don't return error
+    }
+#endif
 
     if (radio->configured && radio->oper_param.enable != operationParam->enable) {
         memcpy((unsigned char *)&radio->oper_param, (unsigned char *)operationParam, sizeof(wifi_radio_operationParam_t));
@@ -842,7 +851,10 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         radio->oper_param.op_class = operationParam->op_class;
         radio->oper_param.channelWidth = operationParam->channelWidth;
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
-        radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
+		radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
+		strncpy(radio->oper_param.radarDetected, operationParam->radarDetected,
+				sizeof(radio->oper_param.radarDetected)-1);
+		radio->oper_param.DFSTimer = operationParam->DFSTimer;
         memcpy(radio->oper_param.channel_map, operationParam->channel_map,
             sizeof(radio->oper_param.channel_map));
 
