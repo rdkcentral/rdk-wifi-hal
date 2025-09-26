@@ -6809,6 +6809,7 @@ int nl80211_disconnect_sta(wifi_interface_info_t *interface)
 }
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(CONFIG_WIFI_EMULATOR)
 #define SEM_NAME "/semlock"
 
 int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
@@ -7035,7 +7036,7 @@ int wifi_hal_emu_set_radio_diag_stats(unsigned int radio_index, bool emu_state,
     free(interface);
     return 0;
 }
-
+#endif /* CONFIG_WIFI_EMULATOR */
 typedef struct {
     const char *str;
     uint32_t standard;
