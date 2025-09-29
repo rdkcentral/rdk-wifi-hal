@@ -976,6 +976,7 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
 
 #if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
     platform_mlo_post_init();
+    platform_radio_up(-1, TRUE);		/* Bring all radios up */
     _platform_init_done = TRUE;
 #endif /* CONFIG_IEEE80211BE && XB10_PORT */
 
