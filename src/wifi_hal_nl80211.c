@@ -6382,6 +6382,11 @@ int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
     }
     return RETURN_OK;
 }
+#elif defined(SCXER10_PORT)
+int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
+{
+    return platform_set_amsdu_tid(interface, amsdu_tid);
+}
 #endif
 
 int nl80211_set_regulatory_domain(wifi_countrycode_type_t country_code)
