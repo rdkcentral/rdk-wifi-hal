@@ -4346,6 +4346,20 @@ void wifi_hal_scanResults_callback_register(wifi_scanResults_callback func)
     return;
 }
 
+INT wifi_wpsEvent_callback_register(wifi_wpsEvent_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+    if (callbacks == NULL) {
+        return RETURN_ERR;
+    }
+
+    callbacks->wps_event_callback = func;
+
+    return RETURN_OK;
+}
+
 INT wifi_hal_analytics_callback_register(wifi_analytics_callback l_callback_cb)
 {
     wifi_device_callbacks_t *callbacks;
