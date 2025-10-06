@@ -2759,7 +2759,11 @@ static int decode_bss_info_to_neighbor_ap_info(wifi_neighbor_ap2_t *ap, const wi
             str = "WPA3-Personal";
             break;
         case wifi_security_mode_wpa3_transition:
-            str = "WPA3-Transition";
+            if (bss->oper_freq_band == WIFI_FREQUENCY_6_BAND || bss->oper_freq_band == WIFI_FREQUENCY_60_BAND) {
+                str = "WPA3-Personal";
+            } else {
+                str = "WPA3-Personal-Transition";
+            }
             break;
         case wifi_security_mode_wpa3_enterprise:
             str = "WPA3-Enterprise";
