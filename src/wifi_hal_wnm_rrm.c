@@ -415,7 +415,7 @@ static int handle_rx_bss_trans_mgmt_resp(wifi_interface_info_t *interface,
     int ap_index = interface->vap_info.vap_index;
 
     if (NULL == callbacks->btm_callback[ap_index].response_callback)
-        return WIFI_HAL_SUCCESS;
+        return WIFI_HAL_UNSUPPORTED;
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     mutex_locked = true;
