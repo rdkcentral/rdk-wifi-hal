@@ -1402,7 +1402,7 @@ static void process_event_to_onewifi(const char *ifname, wifi_channel_change_eve
         if (strncmp(ifname, radio_map_t[i].interface_name, sizeof(radio_map_t[i].interface_name)) == 0) {
             radio_index = radio_map_t[i].radio_index;
             radio = get_radio_by_rdk_index(radio_index);
-	    radio_channel_param.radioIndex = radio_index;
+	        radio_channel_param.radioIndex = radio_index;
             radio_channel_param.channel = radio->oper_param.channel;
             radio_channel_param.channelWidth = radio->oper_param.channelWidth;
             radio_channel_param.op_class = radio->oper_param.operatingClass;
