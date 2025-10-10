@@ -1248,7 +1248,7 @@ INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_
 #endif
 
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
-extern void (*g_eht_oneshot_notify)(wifi_interface_info_t *interface);
+extern bool (*g_eht_event_notify)(wifi_interface_info_t *interface);
 int platform_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
 #if defined(KERNEL_NO_320MHZ_SUPPORT)
 void platform_switch_channel(wifi_interface_info_t *interface, struct csa_settings *settings);
