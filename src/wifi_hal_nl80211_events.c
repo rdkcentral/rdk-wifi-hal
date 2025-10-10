@@ -933,20 +933,6 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     wifi_hal_dbg_print("%s:%d: wifi_chan_event_type: %d interface: %s\n", __func__, __LINE__,
         wifi_chan_event_type, interface->name);
 
-/*  XER10-530
-    XER10 needs to go through 'wl' commands to enable/disable the EHT.
-    It will generate a notify event from driver and the platform EHT function 
-    need to know if the command is done before proceeding further.
-*/
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
-    bool b_bypass_callback = false;
-    if (g_eht_oneshot_notify) {
-        g_eht_oneshot_notify(interface);
-        g_eht_oneshot_notify = NULL;
-        b_bypass_callback = true;
-    }
-#endif
-
     memset(&radio_channel_param, 0, sizeof(radio_channel_param));
 
     if (tb[NL80211_ATTR_IFINDEX]) {
@@ -1108,10 +1094,21 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
 
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
 /*  XER10-530
-    No need to call the callback function when enabling or disabling EHT
+    XER10 needs to go through 'wl' commands to enable/disable the EHT.
+    It will generate a notify event from driver and the platform EHT function
+    need to know if the command is done before proceeding further.
 */
-    if (b_bypass_callback) return;
+    if (g_eht_event_notify) {
+        bool b_eht_completed;
+
+        b_eht_completed = g_eht_event_notify(interface);
+        if (b_eht_completed) {
+            g_eht_event_notify = NULL;
+        }
+        return;
+    }
 #endif
+
     if ((callbacks != NULL) && (callbacks->channel_change_event_callback) && !(radio_channel_param.sub_event == WIFI_EVENT_RADAR_NOP_FINISHED)) {
         radio_channel_param.radioIndex = interface->vap_info.radio_index;
         radio_channel_param.event = wifi_chan_event_type;
