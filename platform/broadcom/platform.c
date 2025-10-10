@@ -3279,6 +3279,11 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
 #endif // XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT
 
+// To reset the bss transition bit under extended capabilities, since its based on 2GHz vap configuration from OneWiFi.
+    if (radio->driver_data.extended_capa_len) {
+        radio->driver_data.extended_capa_mask[2] &= 0xF7;
+        radio->driver_data.extended_capa[2] &= 0xF7;
+    }
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(XB10_PORT) || defined(SCXER10_PORT)
         iface->hw_features[i].ht_capab = 0x19ef;
@@ -3357,6 +3362,11 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
 #endif // XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT
 
+// To reset the bss transition bit under extended capabilities, since its based on 5GHz vap configuration from OneWiFi.
+    if (radio->driver_data.extended_capa_len) {
+        radio->driver_data.extended_capa_mask[2] &= 0xF7;
+        radio->driver_data.extended_capa[2] &= 0xF7;
+    }
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(XB10_PORT) || defined(SCXER10_PORT)
         iface->hw_features[i].ht_capab = 0x09ef;
@@ -3444,6 +3454,11 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
 #endif // XB10_PORT || SCXER10_PORT
 
+// To reset the bss transition bit under extended capabilities, since its based on 6GHz vap configuration from OneWiFi.
+    if (radio->driver_data.extended_capa_len) {
+        radio->driver_data.extended_capa_mask[2] &= 0xF7;
+        radio->driver_data.extended_capa[2] &= 0xF7;
+    }
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
         memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mac_cap, he_mac_cap,
