@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -301,7 +301,9 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     wifi_steering_event_t steering_evt;
     wifi_frame_t mgmt_frame;
     int sig_dbm = -100;
-#if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined (TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT)|| defined(TARGET_GEMINI7_2))
+#if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
+    defined(TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || \
+    defined(TARGET_GEMINI7_2) || defined(RDKB_ONE_WIFI_PROD)
     int phy_rate = 60;
 #endif
 
@@ -331,7 +333,9 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     if (tb[NL80211_ATTR_RX_SIGNAL_DBM]) {
         sig_dbm = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
     }
-#if  (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT)|| defined(TARGET_GEMINI7_2))
+#if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
+    defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
+    defined(TARGET_GEMINI7_2) || defined(RDKB_ONE_WIFI_PROD)
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]);
     }
@@ -545,7 +549,9 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
 #ifdef WIFI_HAL_VERSION_3_PHASE2
             callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame);
 #else
-#if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2))
+#if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || \
+    defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
+    defined(TARGET_GEMINI7_2) || defined(RDKB_ONE_WIFI_PROD))
             callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)event.tx_status.data,
                 event.tx_status.data_len, mgmt_type, dir, sig_dbm, phy_rate);
 #else
@@ -624,12 +630,18 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     mac_addr_str_t bssid_str;
     wifi_bss_info_t *backhaul;
     wifi_vap_security_t *sec;
+    wifi_radio_info_t *radio;
+    wifi_radio_operationParam_t *radio_param;
+
     sec = &interface->vap_info.u.sta_info.security;
 
     backhaul = &interface->u.sta.backhaul;
 
     wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s\n", __func__, __LINE__,
         to_mac_str(backhaul->bssid, bssid_str), backhaul->freq, backhaul->ssid);
+    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    radio_param = &radio->oper_param;
+
 
     assoc_req = interface->u.sta.assoc_req;
     assoc_rsp = interface->u.sta.assoc_rsp;
@@ -656,6 +668,8 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
             to_mac_str(mac, mac_str));
 
     }
+
+    ieee80211_freq_to_channel_ext(backhaul->freq,0,0,(unsigned char*)&radio_param->operatingClass, (unsigned char*)&radio_param->channel);
 
     if (tb[NL80211_ATTR_REQ_IE] == NULL) { 
         wifi_hal_dbg_print("%s:%d: req ie attribute absent\n", __func__, __LINE__);
@@ -777,19 +791,20 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     }
 }
 
-bool is_channel_supported_on_radio(wifi_freq_bands_t l_band, unsigned int channel)
+bool is_channel_supported_on_radio(wifi_freq_bands_t l_band, int freq)
 {
-    if ((l_band == WIFI_FREQUENCY_2_4_BAND) && (channel >= 1) && (channel <= 14)) {
+    if (l_band == WIFI_FREQUENCY_2_4_BAND && (freq >= MIN_FREQ_MHZ_2G && freq <= MAX_FREQ_MHZ_2G)) {
         return true;
-    } else if (((l_band == WIFI_FREQUENCY_5L_BAND) || (l_band == WIFI_FREQUENCY_5H_BAND) || (l_band == WIFI_FREQUENCY_5_BAND))
-                    && (channel >= 36) && (channel <= 169)) {
+    } else if ((l_band == WIFI_FREQUENCY_5L_BAND || l_band == WIFI_FREQUENCY_5H_BAND ||
+                   l_band == WIFI_FREQUENCY_5_BAND) &&
+        (freq >= MIN_FREQ_MHZ_5G && freq <= MAX_FREQ_MHZ_5G)) {
         return true;
-    } else if ((l_band == WIFI_FREQUENCY_6_BAND) && (channel >= 1) && (channel <= 233)) {
+#if HOSTAPD_VERSION >= 210
+    } else if (l_band == WIFI_FREQUENCY_6_BAND &&
+        (freq >= MIN_FREQ_MHZ_6G && freq <= MAX_FREQ_MHZ_6G)) {
         return true;
-    } else if (l_band == WIFI_FREQUENCY_60_BAND) {
-        return true;
+#endif
     }
-
     return false;
 }
 
@@ -917,7 +932,7 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     wifi_radio_operationParam_t tmp_radio_param;
     radio_param = &radio->oper_param;
 
-    if (is_channel_supported_on_radio(radio_param->band, channel) != true) {
+    if (is_channel_supported_on_radio(radio_param->band, freq) != true) {
         wifi_hal_error_print("%s:%d: channel:%d and radio index:%d radio_band:%d not Compatible\n", __func__, __LINE__,
                                     channel, interface->vap_info.radio_index, radio_param->band);
         return;

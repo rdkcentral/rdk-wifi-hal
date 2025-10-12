@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -185,7 +185,7 @@ extern "C" {
 #define MIN_FREQ_MHZ_2G             2412
 #define MAX_FREQ_MHZ_2G             2484
 #define MIN_CHANNEL_2G              1
-#define MAX_CHANNEL_2G              11
+#define MAX_CHANNEL_2G              14
 
 /* 5GHz radio */
 #define MIN_FREQ_MHZ_5G             5180
@@ -779,8 +779,13 @@ int     nl80211_interface_enable(const char *ifname, bool enable);
 int     nl80211_retry_interface_enable(wifi_interface_info_t *interface, bool enable);
 void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *event);
 int     nl80211_connect_sta(wifi_interface_info_t *interface);
+
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
+int     nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
+#endif
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
 
+// emu_neighbor_stats_t is used by both CCI and Onewifi
 typedef struct {
     bool emu_enable;
     uint32_t radio_index;
@@ -788,11 +793,13 @@ typedef struct {
     wifi_neighbor_ap2_t data[];  // flexible array member
 } emu_neighbor_stats_t;
 
+#if defined(CONFIG_WIFI_EMULATOR)
 int     wifi_hal_emu_set_radio_channel_stats(unsigned int radio_index, bool emu_state, wifi_channelStats_t *chan_stat, unsigned int count, unsigned int phy_index, unsigned int interface_index);
 int     wifi_hal_emu_set_assoc_clients_stats(unsigned int vap_index, bool emu_state, wifi_associated_dev3_t *assoc_cli_stat, unsigned int count, unsigned int phy_index, unsigned int interface_index);
 int     wifi_hal_emu_set_radio_temp (unsigned int radio_index, bool emu_state, int temperature, unsigned int phy_index, unsigned int interface_index);
 int     wifi_hal_emu_set_radio_diag_stats(unsigned int radio_index, bool emu_state, wifi_radioTrafficStats2_t *radio_diag_stat, unsigned int count, unsigned int phy_index, unsigned int interface_index);
 int     wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state, wifi_neighbor_ap2_t *neighbor_stats, unsigned int count);
+#endif //CONFIG_WIFI_EMULATOR
 #endif
 int     nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         unsigned int num_freq, unsigned int  *freq_list, unsigned int dwell_time,
@@ -1085,6 +1092,7 @@ INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_
 
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
 extern void (*g_eht_oneshot_notify)(wifi_interface_info_t *interface);
+int platform_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
 #if defined(KERNEL_NO_320MHZ_SUPPORT)
 void platform_switch_channel(wifi_interface_info_t *interface, struct csa_settings *settings);
 void platform_config_eht_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
@@ -1207,4 +1215,7 @@ static inline enum nl80211_iftype wpa_driver_nl80211_if_type(enum wpa_driver_if_
     }
 }
 
+#ifdef RDKB_ONE_WIFI_PROD
+void remap_wifi_interface_name_index_map();
+#endif /* RDKB_ONE_WIFI_PROD */
 #endif // WIFI_HAL_PRIV_H

@@ -1,5 +1,5 @@
 ##########################################################################
-# If not stated otherwise in this file or this component's Licenses.txt
+# If not stated otherwise in this file or this component's LICENSE
 # file the following copyright and licenses apply:
 #
 # Copyright 2015 RDK Management
@@ -78,6 +78,11 @@ librdk_wifihal_la_SOURCES += ../platform/broadcom/platform.c
 endif
 
 if XB10_PORT
+librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/broadcom
+librdk_wifihal_la_SOURCES += ../platform/broadcom/platform.c
+endif
+
+if RDKB_ONE_WIFI_PROD
 librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/broadcom
 librdk_wifihal_la_SOURCES += ../platform/broadcom/platform.c
 endif

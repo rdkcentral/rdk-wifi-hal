@@ -1,3 +1,22 @@
+/***************************************************************************
+  If not stated otherwise in this file or this component's LICENSE file the
+  following copyright and licenses apply:
+
+  Copyright 2025 RDK Management
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+ **************************************************************************/
+
 #include <stddef.h>
 #include "wifi_hal.h"
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
@@ -18,7 +37,7 @@
 #include <string.h>
 #endif // defined (ENABLED_EDPD)
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) 
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD)
 #include <rdk_nl80211_hal.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -26,10 +45,12 @@
 #include <semaphore.h>
 #include <stdint.h>
 #include <unistd.h>
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT
+#elif defined(SCXER10_PORT)
+#include <rdk_nl80211_hal.h>
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
-    defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT)
+    defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT) || defined(RDKB_ONE_WIFI_PROD)
 #undef ENABLE
 #undef BW_20MHZ
 #undef BW_40MHZ
@@ -46,7 +67,7 @@
 #else
 #include <wifi/wlioctl.h>
 #endif
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || RDKB_ONE_WIFI_PROD
 
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
 static bool l_eht_set = false;
@@ -240,6 +261,7 @@ static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map)
 }
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined WIFI_EMULATOR_CHANGE
 #define SEM_NAME "/semlock"
 
 int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_array,
@@ -339,6 +361,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     sem_close(sem);
     return RETURN_OK;
 }
+#endif // WIFI_EMULATOR_CHANGE
 #endif
 
 INT wifi_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, INT dwell_time, UINT chan_num, UINT *chan_list)
@@ -362,7 +385,7 @@ INT wifi_getNeighboringWiFiStatus(INT radio_index, wifi_neighbor_ap2_t **neighbo
         wifi_hal_stats_error_print("%s:%d: get_emu_neighbor_stats failed\n", __func__, __LINE__);
         return RETURN_ERR;
     }
-#endif
+#endif // WIFI_EMULATOR_CHANGE
     return ret;
 }
 
@@ -1773,7 +1796,7 @@ int nvram_get_mgmt_frame_power_control(int vap_index, int* output_dbm)
     return RETURN_OK;
 }
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) 
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD)
 
 static int get_radio_phy_temp_handler(struct nl_msg *msg, void *arg)
 {
@@ -1894,7 +1917,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
     return RETURN_OK;
 }
 
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT 
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || RDKB_ONE_WIFI_PROD
 
 #if defined (ENABLED_EDPD)
 /* EDPD - WLAN Power down control support APIs. */
@@ -2235,7 +2258,7 @@ int platform_get_vendor_oui(char *vendor_oui, int vendor_oui_len)
 }
 #endif /*_SR213_PRODUCT_REQ_ */
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) 
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)  || defined(RDKB_ONE_WIFI_PROD)
 
 typedef struct sta_list {
     mac_address_t *macs;
@@ -3143,7 +3166,7 @@ INT wifi_getRadioTransmitPower(INT radioIndex, ULONG *tx_power)
     return wifi_hal_getRadioTransmitPower(radioIndex, tx_power);
 }
 
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || RDKB_ONE_WIFI_PROD
 
 int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
@@ -3161,7 +3184,7 @@ int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *oper
 }
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
-    defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT)
+    defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT) || defined(RDKB_ONE_WIFI_PROD)
 
 static int get_rates(char *ifname, int *rates, size_t rates_size, unsigned int *num_rates)
 {
@@ -3263,6 +3286,11 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
 #endif // XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT
 
+// To reset the bss transition bit under extended capabilities, since its based on 2GHz vap configuration from OneWiFi.
+    if (radio->driver_data.extended_capa_len) {
+        radio->driver_data.extended_capa_mask[2] &= 0xF7;
+        radio->driver_data.extended_capa[2] &= 0xF7;
+    }
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(XB10_PORT) || defined(SCXER10_PORT)
         iface->hw_features[i].ht_capab = 0x19ef;
@@ -3345,6 +3373,11 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
 #endif // XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT
 
+// To reset the bss transition bit under extended capabilities, since its based on 5GHz vap configuration from OneWiFi.
+    if (radio->driver_data.extended_capa_len) {
+        radio->driver_data.extended_capa_mask[2] &= 0xF7;
+        radio->driver_data.extended_capa[2] &= 0xF7;
+    }
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(XB10_PORT) || defined(SCXER10_PORT)
         iface->hw_features[i].ht_capab = 0x09ef;
@@ -3432,6 +3465,11 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
 #endif // XB10_PORT || SCXER10_PORT
 
+// To reset the bss transition bit under extended capabilities, since its based on 6GHz vap configuration from OneWiFi.
+    if (radio->driver_data.extended_capa_len) {
+        radio->driver_data.extended_capa_mask[2] &= 0xF7;
+        radio->driver_data.extended_capa[2] &= 0xF7;
+    }
     for (int i = 0; i < iface->num_hw_features; i++) {
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
         memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mac_cap, he_mac_cap,
@@ -3525,7 +3563,8 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 {
     return RETURN_OK;
 }
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT
+#endif /* TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT 
+          RDKB_ONE_WIFI_PROD */
 
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
 static bool platform_radio_state(wifi_radio_index_t index)
@@ -3605,6 +3644,26 @@ static void platform_set_eht(wifi_radio_index_t index, bool enable)
     g_eht_oneshot_notify = NULL;
 
     return;
+}
+
+int platform_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
+{
+    static uint8_t cur_amsdu_tid[MAX_NUM_RADIOS][RDK_VENDOR_NL80211_AMSDU_TID_MAX] = {
+        {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+        {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+        {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}};
+
+    int radio_index = interface->vap_info.radio_index;
+
+    for (int index = 0; index < RDK_VENDOR_NL80211_AMSDU_TID_MAX; index++) {
+        /* minimize the calling of wl if same value */
+        if (cur_amsdu_tid[radio_index][index] != amsdu_tid[index]) {
+            v_secure_system("wl -i %s amsdu_tid %d %u", interface->name, index, amsdu_tid[index]);
+            cur_amsdu_tid[radio_index][index] = amsdu_tid[index];
+            wifi_hal_dbg_print("%s: %s amsdu_tid[%d] = %u\n", __func__, interface->name, index, amsdu_tid[index]);
+        }
+    }
+    return RETURN_OK;
 }
 
 #if defined(KERNEL_NO_320MHZ_SUPPORT)
