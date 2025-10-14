@@ -1291,6 +1291,7 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
         }
         memset(interface->wpa_s.conf->ssid, 0, sizeof(struct wpa_ssid));
     }
+
 #ifdef CONFIG_WIFI_EMULATOR
     interface->wpa_s.driver = &g_wpa_supplicant_driver_nl80211_ops;
 #else
