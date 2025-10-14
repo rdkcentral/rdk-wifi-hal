@@ -5283,7 +5283,7 @@ static void wiphy_info_extended_capab(wifi_driver_data_t *drv,
         capa = &drv->iface_ext_capa[drv->num_iface_ext_capa];
         capa->iftype = nla_get_u32(tb1[NL80211_ATTR_IFTYPE]);
         wifi_hal_dbg_print(
-            "%s:%d: nl80211: Driver-advertised extended capabilities for interface type %s",
+            "%s:%d: nl80211: Driver-advertised extended capabilities for interface type %s\n",
             __func__, __LINE__, nl80211_iftype_str(capa->iftype));
 
         len = nla_len(tb1[NL80211_ATTR_EXT_CAPA]);
@@ -5314,7 +5314,7 @@ static void wiphy_info_extended_capab(wifi_driver_data_t *drv,
                 nla_get_u16(tb1[NL80211_ATTR_MLD_CAPA_AND_OPS]);
         }
 
-        wifi_hal_dbg_print("%s:%d: nl80211: EML Capability: 0x%x MLD Capability: 0x%x", __func__,
+        wifi_hal_dbg_print("%s:%d: nl80211: EML Capability: 0x%x MLD Capability: 0x%x\n", __func__,
             __LINE__, capa->eml_capa, capa->mld_capa_and_ops);
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
@@ -5547,125 +5547,78 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh;
-    //unsigned int *cmd;
-    unsigned int phy_index = 0;
-#ifndef FEATURE_SINGLE_PHY
-    int rdk_radio_index;
-#else //FEATURE_SINGLE_PHY
-    int rdk_radio_indices[MAX_NUM_RADIOS];
-    int num_radios_mapped = MAX_NUM_RADIOS;
-    int ret = 0;
-#endif //FEATURE_SINGLE_PHY
+    const u32 nl_split_wiphy = (*(u32 *)arg & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP);
+    u8 max_radio_count;
+    unsigned int phy_index;
 
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined(SCXER10_PORT) || defined(SCXF10_PORT)
-    int existing_radio_found = 0;
-#endif
 #ifdef CONFIG_WIFI_EMULATOR
-  if (g_wifi_hal.num_radios > MAX_NUM_SIMULATED_CLIENT) {
+    max_radio_count = MAX_NUM_SIMULATED_CLIENT;
 #else
-#ifndef FEATURE_SINGLE_PHY
-    if (g_wifi_hal.num_radios > MAX_NUM_RADIOS) {
-#else //FEATURE_SINGLE_PHY
-    if (g_wifi_hal.num_radios >= MAX_NUM_RADIOS) {
-#endif //FEATURE_SINGLE_PHY
-#endif //CONFIG_WIFI_EMULATOR
+    max_radio_count = MAX_NUM_RADIOS;
+#endif
+
+    if (g_wifi_hal.num_radios > max_radio_count) {
         wifi_hal_dbg_print("%s:%d: Returning num radios:%d exceeds MAX:%d\n",
             __func__, __LINE__, g_wifi_hal.num_radios, MAX_NUM_RADIOS);
         return NL_SKIP;
     }
 
     gnlh = nlmsg_data(nlmsg_hdr(msg));
-
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
-#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
-    !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
-    for (unsigned int j = 0; j < g_wifi_hal.num_radios; j++)
-    {
-        if (strcmp(g_wifi_hal.radio_info[j].name, nla_get_string(tb[NL80211_ATTR_WIPHY_NAME])) == 0) {
-            wifi_hal_dbg_print("%s:%d: Returning phy:%s already configured earlier\n",
-                __func__, __LINE__, g_wifi_hal.radio_info[j].name);
-            return NL_SKIP;
-        }
-    }
-#endif
-
+    phy_index = nla_get_u32(tb[NL80211_ATTR_WIPHY]);
 #ifdef CONFIG_WIFI_EMULATOR
     static unsigned int interface_radio_index = 0;
     static unsigned int prev_tidx = UINT_MAX;
     unsigned int tidx = 0, check = 0;
     sscanf(nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]), "wsim%d%n", &tidx, &check);
     if (check > 0 && prev_tidx != tidx) {
-        phy_index = nla_get_u32(tb[NL80211_ATTR_WIPHY]);
         update_interfaces_map(phy_index, interface_radio_index);
         interface_radio_index++;
         prev_tidx = tidx;
     }
     wifi_hal_info_print("%s:%d phy_index received is %d\n", __func__, __LINE__, phy_index);
-#else
-    phy_index = nla_get_u32(tb[NL80211_ATTR_WIPHY]);
 #endif //CONFIG_WIFI_EMULATOR
 
-#ifndef FEATURE_SINGLE_PHY
-    rdk_radio_index = get_rdk_radio_index(phy_index);
-
-    if ( rdk_radio_index == -1 ) {
-#else //FEATURE_SINGLE_PHY
-    // Get the array of rdk_radio_indexes associated with this phy
-    memset(rdk_radio_indices, 0, sizeof(rdk_radio_indices));
-    ret = get_rdk_radio_indices(phy_index, rdk_radio_indices, &num_radios_mapped);
-    wifi_hal_dbg_print("%s:%d: For phy_index:%u, num_radios_mapped:%d, g_wifi_hal.num_radios:%d\n",
-                __func__, __LINE__, phy_index, num_radios_mapped, g_wifi_hal.num_radios);
-    if (ret != 0) {
-#endif //FEATURE_SINGLE_PHY
-        wifi_hal_error_print("%s:%d: Skipping for phy_index = %u, "
-                   "since it is not present in the interface table\n",
-                   __func__,__LINE__, phy_index);
-        return NL_SKIP;
+    if (!nl_split_wiphy) {
+        for (unsigned int j = 0; j < g_wifi_hal.num_radios; j++) {
+            if (strcmp(g_wifi_hal.radio_info[j].name,
+                    nla_get_string(tb[NL80211_ATTR_WIPHY_NAME])) == 0) {
+                wifi_hal_dbg_print("%s:%d: Returning phy:%s already configured earlier\n", __func__,
+                    __LINE__, g_wifi_hal.radio_info[j].name);
+                return NL_SKIP;
+            }
+        }
     }
 
     //print_attributes(__func__, tb);
-#ifdef FEATURE_SINGLE_PHY
-    /* In case of BananaPi due to single phy architecture, multiple radios have to be
-       processed in a single wiphy_dump_handler, thus the loop */
-    for (unsigned int j=0; (j < num_radios_mapped && g_wifi_hal.num_radios < MAX_NUM_RADIOS); j++) {
-#endif //FEATURE_SINGLE_PHY
-#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
-    !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
-    radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
-    memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
-#else
-#ifdef CONFIG_WIFI_EMULATOR
-    for (int i = 0; i < MAX_NUM_SIMULATED_CLIENT; i++) {
-#else
-    for (int i = 0; i < MAX_NUM_RADIOS; i++) {
-#endif
+    bool existing_radio_found = 0;
+    for (int i = 0; i < max_radio_count; i++) {
         if (g_wifi_hal.radio_info[i].index == phy_index) {
+            wifi_hal_dbg_print("%s:%d: Existing radio found - phy idx: %d\n", __func__, __LINE__,
+                phy_index);
             radio = &g_wifi_hal.radio_info[i];
             existing_radio_found = 1;
             break;
         }
     }
+
     if (!existing_radio_found) {
+        wifi_hal_dbg_print("%s:%d: New radio detected\n", __func__, __LINE__);
         radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
+        memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
         g_wifi_hal.num_radios++;
     }
-#endif
 
     if (tb[NL80211_ATTR_WIPHY]) {
         radio->index = phy_index;
-#ifndef FEATURE_SINGLE_PHY
-        radio->rdk_radio_index = rdk_radio_index;
-#else //FEATURE_SINGLE_PHY
-        radio->rdk_radio_index = rdk_radio_indices[j];
-#endif //FEATURE_SINGLE_PHY
         radio->capab.index = radio->index;
     }
 
     if (tb[NL80211_ATTR_WIPHY_NAME]) {
         strcpy(radio->name, nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]));
     }
+
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     capa = &radio->driver_data.capa;
 
@@ -5945,15 +5898,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
         radio->dev_id = nla_get_u64(tb[NL80211_ATTR_WDEV]);
     }
 
-#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
-    !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
-    g_wifi_hal.num_radios++;
-#endif
-#ifdef FEATURE_SINGLE_PHY
-    }
-#endif //Braces corresponding to the for loop, for (j=0; (j < num_radios_mapped
     return NL_SKIP;
-
 }
 
 static int wiphy_get_info_handler(struct nl_msg *msg, void *arg)
@@ -6611,8 +6556,11 @@ int update_channel_flags()
     return 0;
 }
 
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined(SCXER10_PORT) || defined(SCXF10_PORT)
+#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) ||                  \
+    defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || \
+    defined(_PLATFORM_BANANAPI_R4_)
+// wiphy split dump support is not "selectable" - thus why we still need
+// to define platforms which support this.
 static int protocol_feature_handler(struct nl_msg *msg, void *arg)
 {
     u32 *feat = arg;
@@ -6647,16 +6595,91 @@ static u32 get_nl80211_protocol_features(int nl_id)
 
     return 0;
 }
+#else
+static int get_nl80211_protocol_features(int nl_id)
+{
+    (int)nl_id;
+    return 0;
+}
 #endif // VNTXER5_PORT || TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TARGET_GEMINI7_2 || SCXF10_PORT
+
+static void copy_radio_struct(wifi_radio_info_t *src, wifi_radio_info_t *dst)
+{
+    memcpy(dst, src, sizeof(wifi_radio_info_t));
+    strncpy(dst->name, src->name, sizeof(dst->name));
+
+    dst->driver_data.extended_capa = malloc(src->driver_data.extended_capa_len);
+    memcpy(dst->driver_data.extended_capa, src->driver_data.extended_capa,
+        src->driver_data.extended_capa_len);
+
+    dst->driver_data.extended_capa_mask = malloc(sizeof(*src->driver_data.extended_capa_mask));
+    memcpy(dst->driver_data.extended_capa_mask, src->driver_data.extended_capa_mask,
+        sizeof(*src->driver_data.extended_capa_mask));
+}
+
+static int assign_rdk_radio_indexes(void)
+{
+#ifdef FEATURE_SINGLE_PHY
+    int rdk_radio_indices[MAX_NUM_RADIOS];
+    int num_radios_mapped = MAX_NUM_RADIOS;
+    wifi_radio_info_t *radio;
+#endif // FEATURE_SINGLE_PHY
+    unsigned int max_radio_count;
+    int ret = 0;
+
+#ifdef CONFIG_WIFI_EMULATOR
+    max_radio_count = MAX_NUM_SIMULATED_CLIENT;
+#else
+    max_radio_count = MAX_NUM_RADIOS;
+#endif
+
+#ifdef FEATURE_SINGLE_PHY
+    // Get the array of rdk_radio_indexes associated with the phy
+    memset(rdk_radio_indices, 0, sizeof(rdk_radio_indices));
+    ret = get_rdk_radio_indices(g_wifi_hal.radio_info[0].index, rdk_radio_indices,
+        &num_radios_mapped);
+    if (ret != 0) {
+        wifi_hal_error_print("%s:%d: Failure to fetch radio map for the phy !\n", __func__,
+            __LINE__);
+        return ret;
+    }
+
+    wifi_hal_dbg_print("%s:%d: For phy_index:%u, num_radios_mapped:%d, g_wifi_hal.num_radios:%d\n",
+        __func__, __LINE__, g_wifi_hal.radio_info[0].index, num_radios_mapped,
+        g_wifi_hal.num_radios);
+
+    // We are going to copy the caps received to other radio structs
+    // since they all share a singly phy
+    for (int i = 1; i < max_radio_count; ++i) {
+        radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
+        memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
+        copy_radio_struct(&g_wifi_hal.radio_info[0], radio);
+        g_wifi_hal.num_radios++;
+    }
+#endif
+
+    for (unsigned int j = 0; (j < g_wifi_hal.num_radios); j++) {
+#ifdef FEATURE_SINGLE_PHY
+        radio = &g_wifi_hal.radio_info[j];
+        radio->rdk_radio_index = rdk_radio_indices[j];
+#else
+        int rdk_radio_index = get_rdk_radio_index(g_wifi_hal.radio_info[j].index);
+        if (rdk_radio_index == -1) {
+            wifi_hal_error_print("%s:%d: Skipping for phy_index = %u, "
+                                 "since it is not present in the interface table\n",
+                __func__, __LINE__, g_wifi_hal.radio_info[j].index);
+            continue;
+        }
+        radio->rdk_radio_index = rdk_radio_index;
+#endif
+    }
+    return RETURN_OK;
+}
 
 int init_nl80211()
 {
     int ret;
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined(SCXER10_PORT) || defined(SCXF10_PORT)
     u32 feat;
-    int flags = 0;
-#endif
     unsigned int i;
     struct nl_msg *msg;
     wifi_radio_info_t *radio;
@@ -6688,7 +6711,6 @@ int init_nl80211()
         nl_cb_put(g_wifi_hal.nl_cb);
         return -1;
     }
-
 
     ret = nl_get_multicast_id("nl80211", "scan");
     if (ret >= 0) {
@@ -6755,25 +6777,23 @@ int init_nl80211()
         g_wifi_hal.radio_info[i].index = -1;
     }
     init_interface_map();
-#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
-    !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
+
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
     if (msg == NULL) {
-#else
-    feat = get_nl80211_protocol_features(g_wifi_hal.nl80211_id);
-
-    if (feat & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP)
-        flags = NLM_F_DUMP;
-
-    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, flags, NL80211_CMD_GET_WIPHY);
-
-    if (!msg || nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP)) {
-#endif
         nlmsg_free(msg);
         return -1;
     }
 
-    if (nl80211_send_and_recv(msg, wiphy_dump_handler, &g_wifi_hal, NULL, NULL)) {
+    feat = get_nl80211_protocol_features(g_wifi_hal.nl80211_id);
+    if (feat & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP) {
+        nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
+    }
+
+    if (nl80211_send_and_recv(msg, wiphy_dump_handler, &feat, NULL, NULL)) {
+        return -1;
+    }
+
+    if (assign_rdk_radio_indexes() != RETURN_OK) {
         return -1;
     }
 
@@ -10811,12 +10831,6 @@ static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
             break;
         }
     }
-
-#ifdef CONFIG_GENERIC_MLO
-    // TODO: remove hardcoded values
-    *eml_capa = 0x01;
-    *mld_capa_and_ops = 0x23;
-#endif // CONFIG_GENERIC_MLO
 
     wifi_hal_dbg_print("%s:%d: eml_capa: 0x%x, mld_capa_and_ops: 0x%x\n", __func__, __LINE__,
         *eml_capa, *mld_capa_and_ops);
