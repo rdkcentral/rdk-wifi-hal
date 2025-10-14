@@ -2920,8 +2920,8 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
 
     if (interface->u.sta.wpa_sm->eapol == NULL) {
         ctx = os_zalloc(sizeof(struct eapol_ctx));
-        wifi_hal_info_print("%s:%d: wifi eapol context:%p created for vap_index:%d\n", __func__,
-            __LINE__, ctx, vap->vap_index);
+        wifi_hal_info_print("%s:%d: wifi eapol context:%p created for vap_index:%d\n",
+            __func__, __LINE__, ctx, vap->vap_index);
 
         ctx->ctx = interface;
         ctx->msg_ctx = interface;
@@ -3030,8 +3030,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
 
 #else
-            wifi_hal_dbg_print("%s:%d: Ignite-status : %d\n", __func__, __LINE__,
-                vap->u.sta_info.ignite_enabled);
+            wifi_hal_dbg_print("%s:%d: Ignite-status : %d\n", __func__, __LINE__, vap->u.sta_info.ignite_enabled);
             if (vap->u.sta_info.ignite_enabled == true) {
                 char *anonymous_identity;
                 anonymous_identity = "anonymous@xfignite.com";
@@ -3087,8 +3086,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.radius.key);
 
             interface->u.sta.wpa_eapol_config.eap_methods = &interface->u.sta.wpa_eapol_method;
-            eapol_sm_notify_config(interface->u.sta.wpa_sm->eapol,
-                &interface->u.sta.wpa_eapol_config, NULL);
+            eapol_sm_notify_config(interface->u.sta.wpa_sm->eapol, &interface->u.sta.wpa_eapol_config, NULL);
         }
     }
 }
