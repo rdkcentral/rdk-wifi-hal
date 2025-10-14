@@ -3036,8 +3036,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 anonymous_identity = "anonymous@xfignite.com";
                 if (vap->vap_mode == wifi_vap_mode_sta) {
                     if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
-                        interface->u.sta.wpa_eapol_config.openssl_ciphers = (char *)malloc(
-                            MAX_STR_LEN);
+                        interface->u.sta.wpa_eapol_config.openssl_ciphers = (char *)malloc(MAX_STR_LEN);
                         if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
                             wifi_hal_error_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
                             return;
