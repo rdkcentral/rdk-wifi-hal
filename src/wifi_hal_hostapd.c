@@ -498,10 +498,11 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
     conf->wpa_key_mgmt_rsno = 0;
 #endif /* HOSTAPD_VERSION >= 210 */
 
-#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && \
+    !defined(BANANA_PI_PORT)
     conf->wpa_key_mgmt_rsno_2 = 0;
     conf->rsn_pairwise_rsno_2 = 0;
-#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 && !BANANA_PI_PORT */
 
     conf->wpa = 0;
     memset(&test_ip, 0, sizeof(test_ip));
@@ -572,7 +573,8 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->wpa_key_mgmt = WPA_KEY_MGMT_PSK;
 #if HOSTAPD_VERSION >= 210
             conf->wpa_key_mgmt_rsno = WPA_KEY_MGMT_SAE;
-#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && \
+    !defined(BANANA_PI_PORT)
             if(is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
                 conf->wpa_key_mgmt = WPA_KEY_MGMT_SAE;
                 conf->wpa_key_mgmt_rsno = 0;
@@ -583,7 +585,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             }
             wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d wpa_key_mgmt:%d wpa_key_mgmt_rsno_2:%d \n",
                 __FUNCTION__, __LINE__, conf->iface, conf->disable_11be, conf->wpa_key_mgmt, conf->wpa_key_mgmt_rsno_2);
-#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 && !BANANA_PI_PORT */
             conf->sae_pwe = 2;
 #endif /* HOSTAPD_VERSION >= 210 */
             conf->auth_algs = WPA_AUTH_ALG_SAE | WPA_AUTH_ALG_SHARED | WPA_AUTH_ALG_OPEN;
@@ -2008,6 +2010,9 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
 #endif /* CONFIG_ACS */
 
 #ifdef CONFIG_IEEE80211AX
+#if defined(BANANA_PI_PORT) && HOSTAPD_VERSION >= 211
+    iconf->he_phy_capab.he_ldpc = 1;
+#endif // BANANA_PI_PORT && HOSTAPD_VERSION >= 211
     iconf->he_op.he_rts_threshold = 0;
     iconf->he_op.he_default_pe_duration = 4;
 #if HOSTAPD_VERSION >= 210
@@ -2423,10 +2428,17 @@ static int wpa_sm_sta_ether_send(void *ctx, const u8 *dest, u16 proto, const u8 
 #if HOSTAPD_VERSION >= 210 //2.10
         int encrypt;
         mac_addr_str_t mac_str;
+#ifdef CONFIG_GENERIC_MLO
+        int link_id = wifi_hal_get_mld_link_id(interface);
+#else
+        int link_id = -1;
+#endif // CONFIG_GENERIC_MLO
+
         encrypt = interface->u.sta.wpa_sm && wpa_sm_has_ptk_installed(interface->u.sta.wpa_sm);
         wifi_hal_info_print("%s:%d: Sending eapol via control port to sta:%s on interface:%s encrypt:%d\n", __func__, __LINE__,
             to_mac_str(dest, mac_str), interface->name, encrypt);
-        if ((ret = nl80211_tx_control_port(interface, dest, ETH_P_EAPOL, buf, len, !encrypt))) {
+        if ((ret = nl80211_tx_control_port(interface, dest, ETH_P_EAPOL, buf, len, !encrypt,
+                 link_id))) {
             wifi_hal_error_print("%s:%d: eapol send failed\n", __func__, __LINE__);
             return -1;
         }
@@ -3041,6 +3053,7 @@ static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
 }
 
 #ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
 static int set_mld_shared_resources(struct hostapd_data *hapd)
 {
     int ret;
@@ -3074,12 +3087,15 @@ static void clear_mld_shared_resources(struct hostapd_data *hapd)
         }
     }
 }
+#endif /* HOSTAPD_VERSION >= 211 */
 #endif /* CONFIG_IEEE80211BE */
 
 void deinit_bss(struct hostapd_data *hapd)
 {
 #ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
     clear_mld_shared_resources(hapd);
+#endif
 #endif
     hostapd_bss_deinit_no_free(hapd);
     hostapd_free_hapd_data(hapd);
@@ -3114,11 +3130,13 @@ int start_bss(wifi_interface_info_t *interface)
             __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
     }
 #ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
     ret = set_mld_shared_resources(hapd);
     if (ret != RETURN_OK) {
         wifi_hal_error_print("%s:%d: vap:%s:%d mld set shared resources failed:%d csa status:%d\n", __func__,
             __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
     }
+#endif
 #endif
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 

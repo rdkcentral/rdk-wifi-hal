@@ -249,6 +249,15 @@ extern const struct wpa_driver_ops g_wpa_driver_nl80211_ops;
 #ifdef CONFIG_WIFI_EMULATOR
 extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
 #endif
+
+extern const unsigned int wifi_2g_channels[];
+extern const unsigned int wifi_2g_channels_count;
+
+extern const unsigned int wifi_5g_channels[];
+extern const unsigned int wifi_5g_channels_count;
+
+extern const unsigned int wifi_6g_channels[];
+extern const unsigned int wifi_6g_channels_count;
 typedef struct wifi_enum_to_str_map
 {
     int enum_val;
@@ -501,6 +510,7 @@ typedef struct wifi_interface_info_t {
     struct wpa_supplicant wpa_s;
     struct wpa_ssid current_ssid_info;
 #endif
+    char mld_name[32];
 } wifi_interface_info_t;
 
 #define MAX_RATES   16
@@ -880,6 +890,9 @@ int wifi_hal_get_vap_interface_type(wifi_vap_name_t vap_name, wifi_vap_type_t va
 wifi_interface_info_t *wifi_hal_get_vap_interface_by_type(wifi_radio_info_t *radio,
     wifi_vap_type_t vap_type);
 int nl80211_init_primary_interfaces();
+#ifdef CONFIG_GENERIC_MLO
+int nl80211_init_mld_links();
+#endif // CONFIG_GENERIC_MLO
 int nl80211_init_radio_info();
 int getIpStringFromAdrress(char * ipString,  ip_addr_t * ip);
 int get_mac_address (char *intf_name,  mac_address_t mac);
@@ -906,7 +919,7 @@ int     nl80211_retry_interface_enable(wifi_interface_info_t *interface, bool en
 void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *event);
 int     nl80211_connect_sta(wifi_interface_info_t *interface);
 
-#if defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 int     nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
 #endif
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
@@ -933,7 +946,7 @@ int     nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         unsigned int num_ssid,  ssid_t *ssid_list);
 int     nl80211_get_scan_results(wifi_interface_info_t *interface);
 int     nl80211_switch_channel(wifi_radio_info_t *radio);
-int     nl80211_tx_control_port(wifi_interface_info_t *interface, const u8 *dest, u16 proto, const u8 *buf, size_t len, int no_encrypt);
+int     nl80211_tx_control_port(wifi_interface_info_t *interface, const u8 *dest, u16 proto, const u8 *buf, size_t len, int no_encrypt, int link_id);
 int     nl80211_set_acl(wifi_interface_info_t *interface);
 int     nl80211_set_acl_mode(wifi_interface_info_t *interface, uint32_t mac_filter_mode);
 int     nl80211_set_mac(wifi_interface_info_t *interface);
@@ -1022,6 +1035,7 @@ int     wifi_sta_get_seqnum(const char *ifname, void *priv, const u8 *addr, int 
 int     wifi_commit(void *priv);
 wifi_radio_info_t *get_radio_by_rdk_index(wifi_radio_index_t index);
 int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *interface);
+int convert_enum_beaconrate_to_int(wifi_bitrate_t rates);
 int get_op_class_from_radio_params(wifi_radio_operationParam_t *param);
 void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len);
 int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int status_code, int rssi);
@@ -1235,7 +1249,8 @@ INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_
 #endif
 
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
-extern void (*g_eht_oneshot_notify)(wifi_interface_info_t *interface);
+extern bool (*g_eht_event_notify)(wifi_interface_info_t *interface);
+int platform_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
 #if defined(KERNEL_NO_320MHZ_SUPPORT)
 void platform_switch_channel(wifi_interface_info_t *interface, struct csa_settings *settings);
 void platform_config_eht_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
@@ -1247,6 +1262,10 @@ void platform_set_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t
 #endif
 #endif
 
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+extern void supplicant_event(void *ctx, enum wpa_event_type event,
+     union wpa_event_data *data);
+#endif
 
 platform_pre_init_t     	get_platform_pre_init_fn();
 platform_post_init_t    	get_platform_post_init_fn();
@@ -1362,4 +1381,22 @@ int wifi_drv_set_supp_port(void *priv, int authorized);
 #ifdef RDKB_ONE_WIFI_PROD
 void remap_wifi_interface_name_index_map();
 #endif /* RDKB_ONE_WIFI_PROD */
+
+char *wifi_hal_get_mld_name_by_interface_name(char *ifname);
+char *wifi_hal_get_interface_name(wifi_interface_info_t *interface);
+unsigned int wifi_hal_get_interface_ifindex(wifi_interface_info_t *interface);
+bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface);
+int wifi_hal_set_mld_enabled(wifi_interface_info_t *interface, bool enabled);
+int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface);
+int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id);
+uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface);
+int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t mac);
+wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info_t *interface,
+    int link_id);
+wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t *interface,
+    uint32_t freq);
+wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_info_t *interface,
+    mac_address_t mac);
+int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
+
 #endif // WIFI_HAL_PRIV_H
