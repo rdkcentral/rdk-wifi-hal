@@ -692,10 +692,10 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         return WIFI_HAL_INVALID_ARGUMENTS;
     }
 
-    operationParam->op_class = op_class;
+    operationParam->operatingClass = op_class;
 
     wifi_hal_info_print("%s:%d:Index:%d Country: %d, Channel: %d, Op Class:%d\n",
-        __func__, __LINE__, index, operationParam->countryCode, operationParam->channel, operationParam->op_class);
+        __func__, __LINE__, index, operationParam->countryCode, operationParam->channel, operationParam->operatingClass);
 
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
@@ -852,7 +852,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         radio->oper_param.channelWidth != operationParam->channelWidth;
     if (radio->configured && radio->oper_param.enable && is_channel_changed) {
         radio->oper_param.channel = operationParam->channel;
-        radio->oper_param.op_class = operationParam->op_class;
+        radio->oper_param.operatingClass = operationParam->operatingClass;
         radio->oper_param.channelWidth = operationParam->channelWidth;
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
 		radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
@@ -1781,7 +1781,7 @@ INT wifi_hal_getScanResults(wifi_radio_index_t index, wifi_channel_t *channel, w
         if (radio_param->band != channel->band) {
             wifi_hal_error_print("%s:%d: Channel not valid on radio index: %d band : 0x%x\n", __func__, __LINE__, index, channel->band);
             return RETURN_ERR;
-        } else if ((freq = ieee80211_chan_to_freq(country, radio_param->op_class, channel->channel)) == -1) {
+        } else if ((freq = ieee80211_chan_to_freq(country, radio_param->operatingClass, channel->channel)) == -1) {
             wifi_hal_error_print("%s:%d: Channel argument error for index : %d channel : %d\n", __func__, __LINE__, index, channel->channel);
             return RETURN_ERR;
         }
@@ -2864,7 +2864,7 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
         return RETURN_ERR;
     }
 
-    op_class = radio->oper_param.op_class;
+    op_class = radio->oper_param.operatingClass;
     {
         unsigned global_op_class = country_to_global_op_class(country, op_class);
         wifi_hal_stats_dbg_print("%s:%d: [SCAN] country code: %s, op_class:%d, global_op_class:%d\n",
@@ -2963,7 +2963,7 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
     }
 
     wifi_hal_stats_dbg_print("%s:%d: [SCAN] oper_param.opclass:%d, oper_param.channel:%d\n", __func__,
-        __LINE__, radio->oper_param.op_class, radio->oper_param.channel);
+        __LINE__, radio->oper_param.operatingClass, radio->oper_param.channel);
     switch (scan_mode) {
     case WIFI_RADIO_SCAN_MODE_ONCHAN: {
         // - get the current channel
