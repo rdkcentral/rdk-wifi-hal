@@ -174,7 +174,15 @@ int platform_get_keypassphrase_default(char *password, int vap_index)
     wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
     /* if the vap_index is that of mesh STA then try to obtain the ssid from
        /nvram/EasymeshCfg.json file */
-    if (is_wifi_hal_vap_mesh_sta(vap_index) || is_wifi_hal_vap_mesh_backhaul(vap_index)) {
+
+    // Mesh STA will get the password it should use to associate to from unified-wifi-mesh
+    // (or any other application)
+    if (is_wifi_hal_vap_mesh_sta(vap_index)){
+        memset(password, 0, MAX_KEYPASSPHRASE_LEN);
+        return 0;
+    }
+
+    if (is_wifi_hal_vap_mesh_backhaul(vap_index)) {
         if (!json_parse_backhaul_keypassphrase(password)) {
             wifi_hal_dbg_print("%s:%d, read password from jSON file\n", __func__, __LINE__);
             return 0;
@@ -198,8 +206,29 @@ int platform_get_ssid_default(char *ssid, int vap_index)
     wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
     /* if the vap_index is that of mesh STA or mesh backhaul then try to obtain the ssid from
        /nvram/EasymeshCfg.json file */
-    if (is_wifi_hal_vap_mesh_sta(vap_index) || is_wifi_hal_vap_mesh_backhaul(vap_index)) {
-        if (!json_parse_backhaul_ssid(ssid)) {
+
+    // Mesh STA will get the SSID it should associate to from unified-wifi-mesh
+    // (or any other application that is telling it which SSID to connect to)
+    if (is_wifi_hal_vap_mesh_sta(vap_index)){
+        memset(ssid, 0, MAX_SSID_LEN);
+        return 0;
+    }
+
+    if (is_wifi_hal_vap_mesh_backhaul(vap_index)) {
+        ret = json_parse_backhaul_ssid(ssid);
+        if(!ret) {
+            wifi_hal_dbg_print("%s:%d, read SSID:%s from jSON file\n", __func__, __LINE__, ssid);
+            return 0;
+        }
+    } else if(is_wifi_hal_vap_xhs(vap_index)) {
+        ret = json_parse_iot_ssid(ssid);
+        if (!ret) {
+            wifi_hal_dbg_print("%s:%d, read SSID:%s from jSON file\n", __func__, __LINE__, ssid);
+            return 0;
+        }
+    } else {
+        ret = json_parse_fronthaul_ssid(ssid);
+        if (!ret) {
             wifi_hal_dbg_print("%s:%d, read SSID:%s from jSON file\n", __func__, __LINE__, ssid);
             return 0;
         }
