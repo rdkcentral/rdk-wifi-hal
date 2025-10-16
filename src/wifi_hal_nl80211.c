@@ -15279,7 +15279,7 @@ int wifi_drv_set_operstate(void *priv, int state)
 #else
     ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:"brww0";
 #endif
-    wifi_util_info_print(WIFI_CTRL, "%s:%d: SREESH Using interface %s\n", __func__, __LINE__, ifname);
+    wifi_hal_info_print("%s:%d: SREESH Using interface %s\n", __func__, __LINE__, ifname);
     memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
     sockaddr.sll_family   = AF_PACKET;
     sockaddr.sll_ifindex  = if_nametoindex(ifname);
