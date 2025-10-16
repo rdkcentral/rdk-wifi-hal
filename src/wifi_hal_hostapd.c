@@ -2909,12 +2909,12 @@ static void wpa_sm_eapol_eap_error_cb(void *ctx, int error_code)
 #define MAX_STR_LEN 64
 #define SUPPORTED_CIPHERS \
         "DEFAULT:@SECLEVEL=0"
+
 void update_eapol_sm_params(wifi_interface_info_t *interface)
 {
     struct eapol_ctx *ctx;
     wifi_vap_info_t *vap;
     wifi_vap_security_t *sec;
-
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
 
@@ -2955,6 +2955,9 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, ForceAuthorized);
         }
 #endif // CONFIG_WIFI_EMULATOR
+        wifi_hal_dbg_print("[%s %d] Mode : %d type : %d phase : %d id : %s password : %s\n",
+            __func__, __LINE__, sec->mode, sec->u.radius.eap_type, sec->u.radius.phase2,
+            sec->u.radius.identity, sec->u.radius.key);
         if (sec->mode == wifi_security_mode_wpa2_enterprise ||
             sec->mode == wifi_security_mode_wpa3_enterprise) {
             switch (sec->u.radius.eap_type) {
@@ -3025,6 +3028,54 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             interface->wpa_s.current_ssid->eap.password_len = strlen(sec->u.radius.key);
             interface->wpa_s.current_ssid->eap.eap_methods = &interface->u.sta.wpa_eapol_method;
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
+
+#else
+            wifi_hal_dbg_print("%s:%d: Ignite-status : %d\n", __func__, __LINE__, vap->u.sta_info.ignite_enabled);
+            if (vap->u.sta_info.ignite_enabled == true) {
+                char *anonymous_identity;
+                anonymous_identity = "anonymous@xfignite.com";
+                if (vap->vap_mode == wifi_vap_mode_sta) {
+                    if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
+                        interface->u.sta.wpa_eapol_config.openssl_ciphers = (char *)malloc(MAX_STR_LEN);
+                        if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
+                            wifi_hal_error_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
+                            return;
+                        }
+                    }
+                    memset(interface->u.sta.wpa_eapol_config.openssl_ciphers, 0, MAX_STR_LEN);
+                    strncpy(interface->u.sta.wpa_eapol_config.openssl_ciphers, SUPPORTED_CIPHERS,
+                        MAX_STR_LEN - 1);
+                    if (interface->u.sta.wpa_eapol_config.phase2 == NULL) {
+                        interface->u.sta.wpa_eapol_config.phase2 = (char *)malloc(MAX_STR_LEN);
+                        if (interface->u.sta.wpa_eapol_config.phase2 == NULL) {
+                            wifi_hal_error_print("%s:%d: NULL Pointer\n", __func__, __LINE__);
+                            return;
+                        }
+                    }
+                    memset(interface->u.sta.wpa_eapol_config.phase2, 0, MAX_STR_LEN);
+                    switch (sec->u.radius.phase2) {
+                    case WIFI_EAP_PHASE2_PAP:
+                        strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP",
+                            MAX_STR_LEN - 1);
+                        break;
+                    case WIFI_EAP_PHASE2_MSCHAP:
+                        strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=MSCHAP",
+                            MAX_STR_LEN - 1);
+                        break;
+                    default:
+                        // using PAP as default value.
+                        strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP",
+                            MAX_STR_LEN - 1);
+                        break;
+                    }
+                }
+                interface->u.sta.wpa_eapol_config.fragment_size = 400;
+                eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
+                interface->u.sta.wpa_eapol_config.anonymous_identity =
+                    (unsigned char *)anonymous_identity;
+                interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(
+                    anonymous_identity);
+            }
 #endif // CONFIG_WIFI_EMULATOR
             interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
             interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
@@ -3038,6 +3089,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
         }
     }
 }
+
 static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
 {
     int ret;

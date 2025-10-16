@@ -9221,7 +9221,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         if (data.key_mgmt & WPA_KEY_MGMT_NONE) {
             wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_NONE;
         } else {
-            sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_PSK_SHA256) & data.key_mgmt;
+            sel = (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK |
+                WPA_KEY_MGMT_PSK_SHA256 ) & data.key_mgmt;
             key_mgmt = pick_akm_suite(sel);
 
             if (key_mgmt == -1) {

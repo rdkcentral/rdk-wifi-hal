@@ -2420,7 +2420,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     hash_map_cleanup(interface->scan_info_map);
     pthread_mutex_unlock(&interface->scan_info_mutex);
 
-    return (nl80211_start_scan(interface, 0, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+    return (nl80211_start_scan(interface, NL80211_SCAN_FLAG_COLOCATED_6GHZ, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
 }
 
 /*****************************/
@@ -4640,6 +4640,17 @@ int wifi_hal_setApMacAddressControlMode(uint32_t apIndex, uint32_t mac_filter_mo
     }
 
     return (nl80211_set_acl(interface));
+}
+
+int wifi_hal_add_station_bridge( char *interface_name,char *bridge_name)
+{
+    nl80211_remove_from_bridge(interface_name);
+    if (nl80211_create_bridge(interface_name, bridge_name) != 0) {
+        wifi_hal_error_print("%s:%d: Interface:%s failed to create bridge:%s\n",
+            __func__, __LINE__, interface_name, bridge_name);
+        return RETURN_ERR;
+    }
+    return 0;
 }
 
 int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)
