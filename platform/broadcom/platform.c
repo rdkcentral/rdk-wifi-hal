@@ -116,7 +116,8 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
     {"he color_collision", "0x7"},
     {"nmode_protection_override", "0"},
     {"protection_control", "0"},
-    {"gmode_protection_control", "0"}
+    {"gmode_protection_control", "0"},
+	{"keep_ap_up", "1"}
 };
 
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
