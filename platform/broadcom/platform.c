@@ -475,24 +475,59 @@ static void get_ifname(int vap_index, char *ifname)
 #endif
 }
 
+static int is_mlo_radio(int radioIndex)
+{
+    if (mlo_MAP != -1 && (mlo_radio_map & (1 << radioIndex)))
+        return TRUE;
+    return FALSE;
+}
+
 int platform_radio_up(int radio_index, bool up)
 {
     int rc = 0, isup = 0;
+    int i, ismlo, start, end, do_ioctl;
     char osifname[16], cmd[BUFLEN_256] = { 0 };
 
-    if (radio_index >= 0) {
-        snprintf(osifname, sizeof(osifname), "wl%d", radio_index);
-        rc = wl_ioctl(osifname, WLC_GET_UP, &isup, sizeof(isup));
-        if (rc == 0 && isup != up) {
-            wifi_hal_info_print("### %s: isup=%d up=%d ###\n", __func__, isup, up);
-            rc = wl_ioctl(osifname, up ? WLC_UP : WLC_DOWN, NULL, 0);
-            snprintf(cmd, sizeof(cmd), "wl_ioctl %s", up ? "WLC_UP" : "WLC_DOWN"); /* For print */
-        }
-    } else {
+    if (radio_index < 0) {
         snprintf(cmd, sizeof(cmd), "wl -p %s", up ? "up" : "down");
         rc = system(cmd);
+        wifi_hal_info_print("### %s: cmd=[%s] rc=%d ###\n", __func__, cmd, rc);
+        return rc;
     }
-    wifi_hal_info_print("### %s: cmd=[%s] rc=%d ###\n", __func__, cmd, rc);
+
+    if (radio_index >= g_wifi_hal.num_radios) {
+        wifi_hal_error_print("### %s: invalid %d up=%d ###\n", __func__, radio_index, up);
+        return -1;
+    }
+
+    if ((ismlo = is_mlo_radio(radio_index)))
+        start = 0, end = g_wifi_hal.num_radios - 1;	/* Check all radios */
+    else
+        start = end = radio_index;	/* Check this nonMLO radio only */
+
+    for (i = start; i <= end; i++) {
+        snprintf(osifname, sizeof(osifname), "wl%d", i);
+        if (ismlo) {
+            /* Skip ioctl for any non-MLO radio */
+            if (is_mlo_radio(i) == FALSE)
+                continue;
+            /* MLO radio, issue ioctl for other MLO radios */
+            do_ioctl = TRUE;
+            isup = -1;	/* don't care */
+        } else {
+            /* non-MLO radio, no need to check other radios */
+            rc = wl_ioctl(osifname, WLC_GET_UP, &isup, sizeof(isup));
+            do_ioctl = (rc == 0 && isup != up) ? TRUE : FALSE;
+        }
+
+        if (do_ioctl) {
+            wifi_hal_info_print("### %s: %s ismlo=%d isup=%d up=%d ###\n", __func__,
+                osifname, is_mlo_radio(i), isup, up);
+            rc = wl_ioctl(osifname, up ? WLC_UP : WLC_DOWN, NULL, 0);
+            snprintf(cmd, sizeof(cmd), "wl_ioctl %s %s", osifname, up ? "WLC_UP" : "WLC_DOWN"); /* For print */
+            wifi_hal_info_print("### %s: cmd=[%s] rc=%d ###\n", __func__, cmd, rc);
+        }
+    }
     return rc;
 }
 
@@ -1568,6 +1603,72 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
 #define ASSOC_HOSTAP_STATUS_CTRL 1
 #define ASSOC_HOSTAP_FULL_CTRL 2
 
+/*
+ *  Any IOCTL that requires IF down shall be checked in this function.
+ *  Please note that "wl -i wlX.Y down" is identical to "wl -i wlX down".
+ *
+ *  When wlX is down, the bss up/dn("wl -i wlX.Y bss") will also show down,
+ *  but after "wl -i wlX up" it will be restored to its previous bss up/dn state.
+ */
+int platform_down_reqd(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
+{
+    char interface_name[8] = { 0 };
+    int index, vap_index, ctrl, current, reqd = false;
+
+    /* Check all params that require down for the given radio */
+
+    /* Check all params that require down for the given VAPs */
+    if (map == NULL)
+        return reqd;
+    for (index = 0; index < map->num_vaps; index++) {
+        vap_index = map->vap_array[index].vap_index;
+        if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
+            wifi_hal_error_print("%s:%d failed to get interface name for vap index: %d, err: %d (%s)\n",
+                __func__, __LINE__, vap_index, errno, strerror(errno));
+            break;
+        }
+
+        /* Check split_assoc_req */
+        if (map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl) {
+            ctrl = ASSOC_HOSTAP_FULL_CTRL;
+        } else if (is_wifi_hal_vap_hotspot_open(vap_index) ||
+            is_wifi_hal_vap_hotspot_secure(vap_index)) {
+            ctrl = ASSOC_HOSTAP_STATUS_CTRL;
+        } else {
+            ctrl = ASSOC_DRIVER_CTRL;
+        }
+        if (wl_iovar_getint(interface_name, "split_assoc_req", &current) < 0) {
+            wifi_hal_error_print("%s:%d failed to get split_assoc_req for %s, err: %d (%s)\n", __func__,
+                __LINE__, interface_name, errno, strerror(errno));
+            break;
+        }
+        if (ctrl != current) {
+            wifi_hal_info_print("### %s: %s split_assoc_req ctrl=%d curr=%d ###\n", __func__,
+                interface_name, ctrl, current);
+            reqd = true;
+        }
+
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+        /* Check mbssid_num_frames, default is 1 */
+        ctrl = 1;
+        if (wl_iovar_getint(interface_name, "mbssid_num_frames", &current) < 0) {
+            wifi_hal_error_print("%s:%d failed to get mbssid_num_frames for %s, err: %d (%s)\n",
+                __func__, __LINE__, interface_name, errno, strerror(errno));
+            break;
+        }
+        if (ctrl != current) {
+            wifi_hal_info_print("### %s: %s mbssid_num_frames ctrl=%d curr=%d ###\n", __func__,
+                interface_name, ctrl, current);
+            reqd = true;
+        }
+#endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+        if (reqd)
+            break;
+    }
+
+    return reqd;
+}
+
 static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, int enable)
 {
     int assoc_ctrl, curr_assoc_ctrl;
@@ -1653,14 +1754,6 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
         return RETURN_OK;
     }
 
-    wifi_hal_info_print("%s:%d Set interface %s down-up to change split assoc\n", __func__,
-        __LINE__, interface_name);
-    if (wl_ioctl(interface_name, WLC_DOWN, NULL, 0) < 0) {
-        wifi_hal_error_print("%s:%d failed to set interface down for %s, err: %d (%s)\n", __func__,
-            __LINE__, interface_name, errno, strerror(errno));
-        return RETURN_ERR;
-    }
-
     if (wl_iovar_set(interface_name, "split_assoc_req", &assoc_ctrl, sizeof(assoc_ctrl)) < 0) {
         wifi_hal_error_print("%s:%d failed to set split_assoc_req %d for %s, err: %d (%s)\n",
             __func__, __LINE__, assoc_ctrl, interface_name, errno, strerror(errno));
@@ -1677,12 +1770,6 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
     }
 #endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
 
-    if (wl_ioctl(interface_name, WLC_UP, NULL, 0) < 0) {
-        wifi_hal_error_print("%s:%d failed to set interface up for %s, err: %d (%s)\n", __func__,
-            __LINE__, interface_name, errno, strerror(errno));
-        return RETURN_ERR;
-    }
-
     return RETURN_OK;
 }
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
@@ -1691,6 +1778,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 {
     wifi_hal_dbg_print("%s:%d: Enter radio index:%d\n", __func__, __LINE__, r_index);
     int  index = 0, l_wps_state = 0;
+    int need_down = false;
     char temp_buff[256];
     char param_name[NVRAM_NAME_SIZE];
     char interface_name[8];
@@ -1699,6 +1787,12 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
     memset(temp_buff, 0 ,sizeof(temp_buff));
     memset(param_name, 0 ,sizeof(param_name));
     memset(interface_name, 0, sizeof(interface_name));
+
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    need_down = platform_down_reqd(r_index, map);
+    if (need_down)
+        platform_radio_up(r_index, FALSE);
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
     for (index = 0; index < map->num_vaps; index++) {
 
@@ -1921,6 +2015,10 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
         }
     }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    if (need_down)
+        platform_radio_up(r_index, TRUE);
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
     return 0;
 }
 
