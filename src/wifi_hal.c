@@ -1642,7 +1642,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             nl80211_interface_enable(interface_name, true);
 #else
    
-            wifi_hal_error_print("%s:%d:SREESH iface-name : %s bridge-name : %s\n", __func__, __LINE__, interface->name, vap->bridge_name);
+            wifi_hal_error_print("%s:%d:SREESH iface-name : %s \n", __func__, __LINE__, interface->name);
+            wifi_hal_error_print("%s:%d SREESH Creating bridge : %s \n", __func__, __LINE__, vap->bridge_name);
             interface->vap_initialized = true;
 
 	    /*nl80211_interface_enable(interface->name, false);
