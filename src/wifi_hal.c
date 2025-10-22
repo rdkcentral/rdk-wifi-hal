@@ -1644,7 +1644,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             nl80211_interface_enable(interface->name, true);*/
 
 	        wifi_hal_error_print("%s:%d SREESH Creating bridge\n", __func__, __LINE__);
-		if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
+		/*if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
                      wifi_hal_error_print("%s:%d: SREESH interface:%s failed to create bridge:%s\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
                 }
@@ -1654,7 +1654,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 	wifi_hal_error_print("%s:%d: interface:%s failed to set bridge %s up\n",
                         __func__, __LINE__, interface->name, vap->bridge_name);
            	//     continue;
-            	}
+            	}*/
 
 #ifdef CONFIG_WIFI_EMULATOR_EXT_AGENT
             nl80211_interface_enable(interface->name, false);
