@@ -52,7 +52,8 @@ typedef struct wl_runtime_params {
 }wl_runtime_params_t;
 
 static wl_runtime_params_t g_wl_runtime_params[] = {
-    {"he color_collision", "0x7"}
+    {"he color_collision", "0x7"},
+	{"keep_ap_up", "1"}
 };
 
 static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map);
