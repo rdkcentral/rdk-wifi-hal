@@ -103,10 +103,10 @@ int notify_assoc_data(wifi_interface_info_t *interface, struct nlattr **tb,
         mgmt_frame.len = frame_len;
         mgmt_frame.data = (unsigned char *)mgmt;
 #ifdef WIFI_HAL_VERSION_3_PHASE2
-        callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame);
+        callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame, 0);
 #else
         callbacks->mgmt_frame_rx_callback(vap->vap_index, sta_mac, (unsigned char *)mgmt, frame_len,
-            mgmt_type, dir);
+            mgmt_type, dir, 0);
 #endif
 
         for (unsigned int i = 0; i < hooks->num_hooks; i++) {
@@ -592,16 +592,16 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             mgmt_frame.len = event.tx_status.data_len;
             mgmt_frame.data = (unsigned char *)event.tx_status.data; 
 #ifdef WIFI_HAL_VERSION_3_PHASE2
-            callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame);
+            callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame, 0);
 #else
 #if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || \
     defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
     defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD))
             callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)event.tx_status.data,
-                event.tx_status.data_len, mgmt_type, dir, sig_dbm, phy_rate);
+                event.tx_status.data_len, mgmt_type, dir, sig_dbm, phy_rate, 0);
 #else
             callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)event.tx_status.data,
-                event.tx_status.data_len, mgmt_type, dir);
+                event.tx_status.data_len, mgmt_type, dir, 0);
 #endif
 #endif
         }
