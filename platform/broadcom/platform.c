@@ -1731,7 +1731,7 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     int mbssid_num_frames = 1;
 #endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
-    bool is_vap_down_needed = false;
+    bool mbssid_num_frames_change, split_assoc_req_change;
 
     if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
         wifi_hal_error_print("%s:%d failed to get interface name for vap index: %d, err: %d (%s)\n",
@@ -1774,11 +1774,12 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
         return RETURN_ERR;
     }
 
-    is_vap_down_needed |= needs_conf_split_assoc_req(vap_index, enable, &assoc_ctrl);
-    is_vap_down_needed |= needs_conf_mbssid_num_frames(vap_index, enable, &mbssid_num_frames);
-    if (!is_vap_down_needed) {
+    split_assoc_req_change = needs_conf_split_assoc_req(vap_index, enable, &assoc_ctrl);
+    mbssid_num_frames_change = needs_conf_mbssid_num_frames(vap_index, enable, &mbssid_num_frames);
+    if (split_assoc_req_change == false && mbssid_num_frames_change == false) {
         return RETURN_OK;
     }
+    /* split_assoc_req, mbssid_num_frames cponfiguration change needs interface down-up */
 #if !(defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB))
     wifi_hal_info_print("%s:%d Set interface %s down-up to change split assoc\n", __func__,
         __LINE__, interface_name);
@@ -1788,10 +1789,19 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
         return RETURN_ERR;
     }
 #endif
-    if (wl_iovar_set(interface_name, "split_assoc_req", &assoc_ctrl, sizeof(assoc_ctrl)) < 0) {
-        wifi_hal_error_print("%s:%d failed to set split_assoc_req %d for %s, err: %d (%s)\n",
-            __func__, __LINE__, assoc_ctrl, interface_name, errno, strerror(errno));
-        return RETURN_ERR;
+    if (split_assoc_req_change) {
+        char name[32 + sizeof("_split_assoc_req")];
+
+        if (wl_iovar_set(interface_name, "split_assoc_req", &assoc_ctrl, sizeof(assoc_ctrl)) < 0) {
+            wifi_hal_error_print("%s:%d failed to set split_assoc_req %d for %s, err: %d (%s)\n",
+                __func__, __LINE__, assoc_ctrl, interface_name, errno, strerror(errno));
+            return RETURN_ERR;
+        }
+
+        (void)snprintf(name, sizeof(name), "%s_split_assoc_req", interface_name);
+        wifi_hal_info_print("%s:%d Writing nvram %s=%d\n", __func__,__LINE__, name, assoc_ctrl);
+        set_decimal_nvram_param(name, assoc_ctrl);
+        nvram_commit();
     }
 
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
