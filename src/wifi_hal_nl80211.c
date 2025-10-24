@@ -15957,11 +15957,56 @@ static void wifi_hal_wps_cancel_on_other_radios(wifi_interface_info_t *interface
     }
 }
 
+static wifi_wps_ev_t convert_wps_event(unsigned int event)
+{
+    switch (event) {
+    case WPS_EV_M2D:
+        return wifi_wps_ev_m2d;
+    case WPS_EV_FAIL:
+        return wifi_wps_ev_fail;
+    case WPS_EV_SUCCESS:
+        return wifi_wps_ev_success;
+    case WPS_EV_PWD_AUTH_FAIL:
+        return wifi_wps_ev_pwd_auth_fail;
+    case WPS_EV_PBC_OVERLAP:
+        return wifi_wps_ev_pbc_overlap;
+    case WPS_EV_PBC_TIMEOUT:
+        return wifi_wps_ev_pbc_timeout;
+    case WPS_EV_PBC_ACTIVE:
+        return wifi_wps_ev_pbc_active;
+    case WPS_EV_PBC_DISABLE:
+        return wifi_wps_ev_pbc_disable;
+    case WPS_EV_PIN_TIMEOUT:
+        return wifi_wps_ev_pin_timeout;
+    case WPS_EV_PIN_DISABLE:
+        return wifi_wps_ev_pin_disable;
+    case WPS_EV_PIN_ACTIVE:
+        return wifi_wps_ev_pin_active;
+    case WPS_EV_ER_AP_ADD:
+        return wifi_wps_ev_er_ap_add;
+    case WPS_EV_ER_AP_REMOVE:
+        return wifi_wps_ev_er_ap_remove;
+    case WPS_EV_ER_ENROLLEE_ADD:
+        return wifi_wps_ev_er_enrollee_add;
+    case WPS_EV_ER_ENROLLEE_REMOVE:
+        return wifi_wps_ev_er_enrollee_remove;
+    case WPS_EV_ER_AP_SETTINGS:
+        return wifi_wps_ev_er_ap_settings;
+    case WPS_EV_ER_SET_SELECTED_REGISTRAR:
+        return wifi_wps_ev_er_set_selected_registrar;
+    case WPS_EV_AP_PIN_SUCCESS:
+        return wifi_wps_ev_ap_pin_success;
+    default:
+        return wifi_wps_ev_fail;
+    }
+}
+
 int wifi_drv_wps_event_notify_cb(void *ctx, unsigned int event, void *data)
 {
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
     wifi_wps_event_t event_data;
+    wifi_device_callbacks_t *callbacks;
 
     memset(&event_data, 0, sizeof(event_data));
 
@@ -15975,13 +16020,20 @@ int wifi_drv_wps_event_notify_cb(void *ctx, unsigned int event, void *data)
         }
     }
 
+#if !defined(TARGET_GEMINI7_2)
     if (event == WPS_EV_SUCCESS) {
         wifi_hal_wps_cancel_on_other_radios(interface);
     }
+#endif
 
     event_data.event = event;
     event_data.wps_data = (unsigned char *)data;
     wifi_hal_wps_event(event_data);
+
+    callbacks = get_hal_device_callbacks();
+    if ((callbacks != NULL) && (callbacks->wps_event_callback != NULL)) {
+        callbacks->wps_event_callback(vap->vap_index, convert_wps_event(event));
+    }
 
     return 0;
 }
