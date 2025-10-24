@@ -3869,6 +3869,7 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 eht_mcs[] = { 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
 #endif /* HOSTAPD_VERSION >= 211 */
     struct hostapd_iface *iface = &interface->u.ap.iface;
+    radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD;
 
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     free(radio->driver_data.extended_capa);
