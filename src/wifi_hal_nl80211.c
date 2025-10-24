@@ -16032,7 +16032,7 @@ int wifi_drv_wps_event_notify_cb(void *ctx, unsigned int event, void *data)
 
     callbacks = get_hal_device_callbacks();
     if ((callbacks != NULL) && (callbacks->wps_event_callback != NULL)) {
-        callbacks->wps_event_callback(vap->vap_index, convert_wps_event(event));
+        callbacks->wps_event_callback(event_data.vap_index, convert_wps_event(event));
     }
 
     return 0;
