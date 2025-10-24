@@ -7114,39 +7114,6 @@ int nl80211_init_primary_interfaces()
     return 0;
 }
 
-#ifdef CONFIG_GENERIC_MLO
-int nl80211_init_mld_links()
-{
-    wifi_radio_info_t *radio;
-    wifi_interface_info_t *interface;
-
-    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
-        radio = get_radio_by_rdk_index(i);
-        if (radio == NULL) {
-            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
-                i);
-            return -1;
-        }
-
-        hash_map_foreach(radio->interface_map, interface) {
-            if (!wifi_hal_is_mld_enabled(interface)) {
-                continue;
-            }
-
-            if (wifi_drv_link_add(interface, wifi_hal_get_mld_link_id(interface), interface->mac,
-                    NULL) < 0) {
-                wifi_hal_error_print("%s:%d: Failed to add MLD link %d, MAC: " MACSTR " for %s\n",
-                    __func__, __LINE__, wifi_hal_get_mld_link_id(interface),
-                    MAC2STR(interface->mac), wifi_hal_get_interface_name(interface));
-                return -1;
-            }
-        }
-    }
-
-    return 0;
-}
-#endif // CONFIG_GENERIC_MLO
-
 int nl80211_init_radio_info()
 {
     unsigned int i;
@@ -7517,6 +7484,16 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
         return -1;
     }
 
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+    link_id = wifi_hal_get_mld_link_id(interface);
+    if (link_id != NL80211_DRV_LINK_ID_NA &&
+        hostapd_drv_link_add(&interface->u.ap.hapd, link_id, interface->mac) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to add MLD link %d, MAC: " MACSTR " for %s\n", __func__,
+            __LINE__, link_id, MAC2STR(interface->mac), wifi_hal_get_interface_name(interface));
+        return -1;
+    }
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+
     if (!radio->configured) {
         nl80211_enable_ap(interface, false);
         wifi_hal_dbg_print("%s:%d: Radio is not configured, set beacon to 0 for %s\n", __func__, __LINE__, interface->name);
@@ -7533,7 +7510,6 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
     }
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-    link_id = wifi_hal_get_mld_link_id(interface);
     if (link_id != NL80211_DRV_LINK_ID_NA &&
         nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0) {
         return -1;
@@ -7581,7 +7557,6 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
             }
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-            link_id = wifi_hal_get_mld_link_id(interface);
             if (link_id != NL80211_DRV_LINK_ID_NA &&
                 nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0) {
                 nlmsg_free(msg);
