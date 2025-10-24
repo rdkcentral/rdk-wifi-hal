@@ -126,7 +126,8 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
     {"he color_collision", "0x7"},
     {"nmode_protection_override", "0"},
     {"protection_control", "0"},
-    {"gmode_protection_control", "0"}
+    {"gmode_protection_control", "0"},
+	{"keep_ap_up", "1"}
 };
 
 static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames);
@@ -3919,6 +3920,7 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 eht_mcs[] = { 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
 #endif /* HOSTAPD_VERSION >= 211 */
     struct hostapd_iface *iface = &interface->u.ap.iface;
+    radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD;
 
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     free(radio->driver_data.extended_capa);
