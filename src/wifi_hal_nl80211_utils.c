@@ -1660,6 +1660,20 @@ int is_backhaul_interface(wifi_interface_info_t *interface)
     return (strncmp(vap->vap_name, "mesh_backhaul", strlen("mesh_backhaul")) == 0) ? true : false;
 }
 
+unsigned int get_band_info_from_radio_name(unsigned int rdk_radio_index)
+{
+    switch (get_nl80211_band_from_rdk_radio_index(rdk_radio_index)) {
+    case NL80211_BAND_2GHZ:
+        return WIFI_FREQUENCY_2_4_BAND;
+    case NL80211_BAND_5GHZ:
+        return WIFI_FREQUENCY_5_BAND;
+    case NL80211_BAND_6GHZ:
+        return WIFI_FREQUENCY_6_BAND;
+    default:
+        return RETURN_ERR;
+    }
+}
+
 void update_vap_mode(wifi_interface_info_t *interface)
 {
     wifi_vap_info_t *vap = &interface->vap_info;
