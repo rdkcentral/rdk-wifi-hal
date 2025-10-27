@@ -890,9 +890,6 @@ int wifi_hal_get_vap_interface_type(wifi_vap_name_t vap_name, wifi_vap_type_t va
 wifi_interface_info_t *wifi_hal_get_vap_interface_by_type(wifi_radio_info_t *radio,
     wifi_vap_type_t vap_type);
 int nl80211_init_primary_interfaces();
-#ifdef CONFIG_GENERIC_MLO
-int nl80211_init_mld_links();
-#endif // CONFIG_GENERIC_MLO
 int nl80211_init_radio_info();
 int getIpStringFromAdrress(char * ipString,  ip_addr_t * ip);
 int get_mac_address (char *intf_name,  mac_address_t mac);
