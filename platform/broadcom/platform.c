@@ -119,7 +119,9 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
     {"gmode_protection_control", "0"}
 };
 
+#if defined(XB10_PORT) || defined(SCXER10_PORT)
 static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames);
+#endif
 static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl);
 
 static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map);
@@ -497,9 +499,10 @@ static bool platform_down_reqd(wifi_radio_index_t r_index, wifi_vap_info_map_t *
 
         reqd |= needs_conf_split_assoc_req(
             vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
-
+#if defined(XB10_PORT) || defined(SCXER10_PORT)
         reqd |= needs_conf_mbssid_num_frames(
             vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
+#endif
         if (reqd)
             break;
     }
@@ -1622,9 +1625,9 @@ static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl
  * [in] hostap_mgt_frame_ctrl
  * [out] mbssid_num_frames
 */
+#if defined(XB10_PORT) || defined(SCXER10_PORT)
 static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames)
 {
-#if defined(XB10_PORT) || defined(SCXER10_PORT)
     char interface_name[8] = { 0 };
     int curr_mbssid_num_frames;
 
@@ -1646,9 +1649,9 @@ static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ct
             interface_name, *mbssid_num_frames, curr_mbssid_num_frames);
         return true;
     }
-#endif // defined(XB10_PORT) || defined(SCXER10_PORT)
     return false;
 }
+#endif // defined(XB10_PORT) || defined(SCXER10_PORT)
 
 static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, int enable)
 {
@@ -1659,7 +1662,8 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
 #if defined(XB10_PORT) || defined(SCXER10_PORT)
     int mbssid_num_frames = 1;
 #endif // defined(XB10_PORT) || defined(SCXER10_PORT)
-    bool mbssid_num_frames_change, split_assoc_req_change;
+    bool split_assoc_req_change = false;
+    bool mbssid_num_frames_change = false;
 
     if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
         wifi_hal_error_print("%s:%d failed to get interface name for vap index: %d, err: %d (%s)\n",
@@ -1703,7 +1707,9 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
     }
 
     split_assoc_req_change = needs_conf_split_assoc_req(vap_index, enable, &assoc_ctrl);
+#if defined(XB10_PORT) || defined(SCXER10_PORT)
     mbssid_num_frames_change = needs_conf_mbssid_num_frames(vap_index, enable, &mbssid_num_frames);
+#endif
     if (split_assoc_req_change == false && mbssid_num_frames_change == false) {
         return RETURN_OK;
     }
@@ -1757,21 +1763,20 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 {
     wifi_hal_dbg_print("%s:%d: Enter radio index:%d\n", __func__, __LINE__, r_index);
     int  index = 0, l_wps_state = 0;
-    bool need_down = false;
     char temp_buff[256];
     char param_name[NVRAM_NAME_SIZE];
     char interface_name[8];
     wifi_radio_info_t *radio;
     char das_ipaddr[45];
-    memset(temp_buff, 0 ,sizeof(temp_buff));
-    memset(param_name, 0 ,sizeof(param_name));
-    memset(interface_name, 0, sizeof(interface_name));
-
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
-    need_down = platform_down_reqd(r_index, map);
+    bool need_down = platform_down_reqd(r_index, map);
+
     if (need_down)
         platform_radio_up(r_index, FALSE);
 #endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL && CONFIG_IEEE80211BE && XB10_PORT */
+    memset(temp_buff, 0 ,sizeof(temp_buff));
+    memset(param_name, 0 ,sizeof(param_name));
+    memset(interface_name, 0, sizeof(interface_name));
 
     for (index = 0; index < map->num_vaps; index++) {
 
