@@ -470,12 +470,6 @@ INT wifi_hal_init()
     }
 #endif //CONFIG_WIFI_EMULATOR_EXT_AGENT
 
-#ifdef CONFIG_GENERIC_MLO
-    if (nl80211_init_mld_links() != 0) {
-        return RETURN_ERR;
-    }
-#endif // CONFIG_GENERIC_MLO
-
     if (nl80211_init_radio_info() != 0) {
         return RETURN_ERR;
     }
@@ -2420,7 +2414,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     hash_map_cleanup(interface->scan_info_map);
     pthread_mutex_unlock(&interface->scan_info_mutex);
 
-    return (nl80211_start_scan(interface, 0, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+    return (nl80211_start_scan(interface, NL80211_SCAN_FLAG_COLOCATED_6GHZ, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
 }
 
 /*****************************/
@@ -4346,6 +4340,20 @@ void wifi_hal_scanResults_callback_register(wifi_scanResults_callback func)
     return;
 }
 
+INT wifi_wpsEvent_callback_register(wifi_wpsEvent_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+    if (callbacks == NULL) {
+        return RETURN_ERR;
+    }
+
+    callbacks->wps_event_callback = func;
+
+    return RETURN_OK;
+}
+
 INT wifi_hal_analytics_callback_register(wifi_analytics_callback l_callback_cb)
 {
     wifi_device_callbacks_t *callbacks;
@@ -4474,6 +4482,9 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     struct ieee80211_hdr *hdr;
     mac_address_t bssid_buf;
     int res = 0;
+#ifdef HOSTAPD_2_11 // 2.11
+    int link_id = 0;
+#endif
     memset(bssid_buf, 0xff, sizeof(bssid_buf));
 
     buf = os_zalloc(24 + data_len);
@@ -4495,7 +4506,11 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
 
     
 #ifdef HOSTAPD_2_11 // 2.11
-    res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait, 0);
+    // Action frames will get rejected by kernel if we pass a valid link_id for non-MLO case.
+    if(!wifi_hal_is_mld_enabled(interface)) {
+        link_id = -1;
+    }
+    res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait, link_id);
 #elif HOSTAPD_2_10 // 2.10
     res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait);
 #else
@@ -4640,6 +4655,17 @@ int wifi_hal_setApMacAddressControlMode(uint32_t apIndex, uint32_t mac_filter_mo
     }
 
     return (nl80211_set_acl(interface));
+}
+
+int wifi_hal_add_station_bridge( char *interface_name,char *bridge_name)
+{
+    nl80211_remove_from_bridge(interface_name);
+    if (nl80211_create_bridge(interface_name, bridge_name) != 0) {
+        wifi_hal_error_print("%s:%d: Interface:%s failed to create bridge:%s\n",
+            __func__, __LINE__, interface_name, bridge_name);
+        return RETURN_ERR;
+    }
+    return 0;
 }
 
 int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)
