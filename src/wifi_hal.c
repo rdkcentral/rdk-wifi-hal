@@ -4340,6 +4340,20 @@ void wifi_hal_scanResults_callback_register(wifi_scanResults_callback func)
     return;
 }
 
+INT wifi_wpsEvent_callback_register(wifi_wpsEvent_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+    if (callbacks == NULL) {
+        return RETURN_ERR;
+    }
+
+    callbacks->wps_event_callback = func;
+
+    return RETURN_OK;
+}
+
 INT wifi_hal_analytics_callback_register(wifi_analytics_callback l_callback_cb)
 {
     wifi_device_callbacks_t *callbacks;
@@ -4468,6 +4482,9 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     struct ieee80211_hdr *hdr;
     mac_address_t bssid_buf;
     int res = 0;
+#ifdef HOSTAPD_2_11 // 2.11
+    int link_id = 0;
+#endif
     memset(bssid_buf, 0xff, sizeof(bssid_buf));
 
     buf = os_zalloc(24 + data_len);
@@ -4489,7 +4506,11 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
 
     
 #ifdef HOSTAPD_2_11 // 2.11
-    res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait, 0);
+    // Action frames will get rejected by kernel if we pass a valid link_id for non-MLO case.
+    if(!wifi_hal_is_mld_enabled(interface)) {
+        link_id = -1;
+    }
+    res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait, link_id);
 #elif HOSTAPD_2_10 // 2.10
     res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait);
 #else
