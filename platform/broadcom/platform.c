@@ -130,6 +130,11 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
 	{"keep_ap_up", "1"}
 };
 
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames);
+#endif
+static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl);
+
 static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map);
 static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char *chspec, wifi_radio_index_t index);
 int sta_disassociated(int ap_index, char *mac, int reason);
@@ -476,24 +481,101 @@ static void get_ifname(int vap_index, char *ifname)
 #endif
 }
 
+static int is_mlo_radio(int radioIndex)
+{
+    if (mlo_MAP != -1 && (mlo_radio_map & (1 << radioIndex)))
+        return TRUE;
+    return FALSE;
+}
+
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+/*
+ *  Any IOCTL that requires IF down shall be checked in this function.
+ *  Please note that "wl -i wlX.Y down" is identical to "wl -i wlX down".
+ *
+ *  When wlX is down, the bss up/dn("wl -i wlX.Y bss") will also show down,
+ *  but after "wl -i wlX up" it will be restored to its previous bss up/dn state.
+ */
+static bool platform_down_reqd(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
+{
+    int index, vap_index, ctrl;
+    bool reqd = false;
+
+    /* Check all params that require down for the given radio */
+    /* Check all params that require down for the given VAPs */
+    if (map == NULL)
+        return reqd;
+    for (index = 0; index < map->num_vaps; index++) {
+        vap_index = map->vap_array[index].vap_index;
+
+        reqd |= needs_conf_split_assoc_req(
+            vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+        reqd |= needs_conf_mbssid_num_frames(
+            vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
+#endif
+        if (reqd)
+            break;
+    }
+
+    return reqd;
+}
+#endif //FEATURE_HOSTAP_MGMT_FRAME_CTRL
+
 int platform_radio_up(int radio_index, bool up)
 {
     int rc = 0, isup = 0;
+    int i, ismlo, start, end, do_ioctl;
     char osifname[16], cmd[BUFLEN_256] = { 0 };
 
-    if (radio_index >= 0) {
-        snprintf(osifname, sizeof(osifname), "wl%d", radio_index);
-        rc = wl_ioctl(osifname, WLC_GET_UP, &isup, sizeof(isup));
-        if (rc == 0 && isup != up) {
-            wifi_hal_info_print("### %s: isup=%d up=%d ###\n", __func__, isup, up);
-            rc = wl_ioctl(osifname, up ? WLC_UP : WLC_DOWN, NULL, 0);
-            snprintf(cmd, sizeof(cmd), "wl_ioctl %s", up ? "WLC_UP" : "WLC_DOWN"); /* For print */
-        }
-    } else {
+    if (radio_index < 0) {
         snprintf(cmd, sizeof(cmd), "wl -p %s", up ? "up" : "down");
         rc = system(cmd);
+        wifi_hal_info_print("### %s: cmd=[%s] rc=%d ###\n", __func__, cmd, rc);
+        return rc;
     }
-    wifi_hal_info_print("### %s: cmd=[%s] rc=%d ###\n", __func__, cmd, rc);
+
+    if (radio_index >= g_wifi_hal.num_radios) {
+        wifi_hal_error_print("### %s: invalid %d up=%d ###\n", __func__, radio_index, up);
+        return -1;
+    }
+
+    if ((ismlo = is_mlo_radio(radio_index)))
+        start = 0, end = g_wifi_hal.num_radios - 1;	/* Check all radios */
+    else
+        start = end = radio_index;	/* Check this nonMLO radio only */
+
+    for (i = start; i <= end; i++) {
+        snprintf(osifname, sizeof(osifname), "wl%d", i);
+        if (ismlo) {
+            /* Skip ioctl for any non-MLO radio */
+            if (is_mlo_radio(i) == FALSE)
+                continue;
+            /* MLO radio, issue ioctl for other MLO radios */
+            do_ioctl = TRUE;
+            isup = -1;	/* don't care */
+        } else {
+            /* non-MLO radio, no need to check other radios */
+            rc = wl_ioctl(osifname, WLC_GET_UP, &isup, sizeof(isup));
+            if (rc < 0) {
+                wifi_hal_error_print("%s:%d failed to get interface status up for %s, err: %d (%s)\n",
+                    __func__,__LINE__, osifname, errno, strerror(errno));
+            }
+            do_ioctl = (rc == 0 && isup != up) ? TRUE : FALSE;
+        }
+
+        if (do_ioctl) {
+            wifi_hal_info_print("### %s: %s ismlo=%d isup=%d up=%d ###\n", __func__,
+                osifname, is_mlo_radio(i), isup, up);
+            rc = wl_ioctl(osifname, up ? WLC_UP : WLC_DOWN, NULL, 0);
+            if (rc < 0) {
+                wifi_hal_error_print("%s:%d failed to set interface status up/down for %s, err: %d (%s)\n",
+                    __func__,__LINE__, osifname, errno, strerror(errno));
+            }
+            snprintf(cmd, sizeof(cmd), "wl_ioctl %s %s", osifname, up ? "WLC_UP" : "WLC_DOWN"); /* For print */
+            wifi_hal_info_print("### %s: cmd=[%s] rc=%d ###\n", __func__, cmd, rc);
+        }
+    }
     return rc;
 }
 
@@ -1569,16 +1651,92 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
 #define ASSOC_HOSTAP_STATUS_CTRL 1
 #define ASSOC_HOSTAP_FULL_CTRL 2
 
+/*
+ * Check if split_assoc_req need reconfiguration to new value
+ * [in] vap_index
+ * [in] hostap_mgt_frame_ctrl
+ * [out] assoc_ctrl
+*/
+static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl)
+{
+    char interface_name[8] = { 0 };
+    int curr_assoc_ctrl;
+
+    if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d failed to get interface name for vap index: %d, err: %d (%s)\n",
+            __func__, __LINE__, vap_index, errno, strerror(errno));
+        return false;
+    }
+
+    if (hostap_mgt_frame_ctrl) {
+        *assoc_ctrl = ASSOC_HOSTAP_FULL_CTRL;
+    } else if (is_wifi_hal_vap_hotspot_open(vap_index) ||
+        is_wifi_hal_vap_hotspot_secure(vap_index)) {
+        *assoc_ctrl = ASSOC_HOSTAP_STATUS_CTRL;
+    } else {
+        *assoc_ctrl = ASSOC_DRIVER_CTRL;
+    }
+
+    if (wl_iovar_getint(interface_name, "split_assoc_req", &curr_assoc_ctrl) < 0) {
+        wifi_hal_error_print("%s:%d failed to get split_assoc_req for %s, err: %d (%s)\n", __func__,
+            __LINE__, interface_name, errno, strerror(errno));
+        return false;
+    }
+
+    if (*assoc_ctrl != curr_assoc_ctrl) {
+        wifi_hal_info_print("### %s: %s split_assoc_req ctrl=%d curr=%d ###\n", __func__,
+            interface_name, *assoc_ctrl, curr_assoc_ctrl);
+        return true;
+    }
+
+    return false;
+}
+
+/*
+ * Check if mbssid_num_frames need reconfiguration to new value
+ * [in] vap_index
+ * [in] hostap_mgt_frame_ctrl
+ * [out] mbssid_num_frames
+*/
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames)
+{
+    char interface_name[8] = { 0 };
+    int curr_mbssid_num_frames;
+
+    *mbssid_num_frames = 1;
+
+    if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d failed to get interface name for vap index: %d, err: %d (%s)\n",
+            __func__, __LINE__, vap_index, errno, strerror(errno));
+        return false;
+    }
+
+    if (wl_iovar_getint(interface_name, "mbssid_num_frames", &curr_mbssid_num_frames) < 0) {
+        wifi_hal_error_print("%s:%d failed to get mbssid_num_frames for %s, err: %d (%s)\n",
+            __func__, __LINE__, interface_name, errno, strerror(errno));
+        return false;
+    }
+    if (*mbssid_num_frames != curr_mbssid_num_frames) {
+        wifi_hal_info_print("### %s: %s mbssid_num_frames ctrl=%d curr=%d ###\n", __func__,
+            interface_name, *mbssid_num_frames, curr_mbssid_num_frames);
+        return true;
+    }
+    return false;
+}
+#endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+
 static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, int enable)
 {
-    int assoc_ctrl, curr_assoc_ctrl;
+    int assoc_ctrl;
     char buf[128] = { 0 };
     char interface_name[8] = { 0 };
     struct maclist *maclist = (struct maclist *)buf;
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
-    int mbssid_num_frames = 1, curr_mbssid_num_frames;
+    int mbssid_num_frames = 1;
 #endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
-    bool is_vap_down_needed = false;
+    bool split_assoc_req_change = false;
+    bool mbssid_num_frames_change = false;
 
     if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
         wifi_hal_error_print("%s:%d failed to get interface name for vap index: %d, err: %d (%s)\n",
@@ -1621,39 +1779,15 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
         return RETURN_ERR;
     }
 
-    if (enable) {
-        assoc_ctrl = ASSOC_HOSTAP_FULL_CTRL;
-    } else if (is_wifi_hal_vap_hotspot_open(vap_index) ||
-        is_wifi_hal_vap_hotspot_secure(vap_index)) {
-        assoc_ctrl = ASSOC_HOSTAP_STATUS_CTRL;
-    } else {
-        assoc_ctrl = ASSOC_DRIVER_CTRL;
-    }
-
-    if (wl_iovar_getint(interface_name, "split_assoc_req", &curr_assoc_ctrl) < 0) {
-        wifi_hal_error_print("%s:%d failed to get split_assoc_req for %s, err: %d (%s)\n", __func__,
-            __LINE__, interface_name, errno, strerror(errno));
-        return RETURN_ERR;
-    }
-    if (assoc_ctrl != curr_assoc_ctrl) {
-        is_vap_down_needed = true;
-    }
-
+    split_assoc_req_change = needs_conf_split_assoc_req(vap_index, enable, &assoc_ctrl);
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
-    if (wl_iovar_getint(interface_name, "mbssid_num_frames", &curr_mbssid_num_frames) < 0) {
-        wifi_hal_error_print("%s:%d failed to get mbssid_num_frames for %s, err: %d (%s)\n",
-            __func__, __LINE__, interface_name, errno, strerror(errno));
-        return RETURN_ERR;
-    }
-    if (mbssid_num_frames != curr_mbssid_num_frames) {
-        is_vap_down_needed = true;
-    }
-#endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
-
-    if (!is_vap_down_needed) {
+    mbssid_num_frames_change = needs_conf_mbssid_num_frames(vap_index, enable, &mbssid_num_frames);
+#endif
+    if (split_assoc_req_change == false && mbssid_num_frames_change == false) {
         return RETURN_OK;
     }
-
+    /* split_assoc_req, mbssid_num_frames cponfiguration change needs interface down-up */
+#if !(defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB))
     wifi_hal_info_print("%s:%d Set interface %s down-up to change split assoc\n", __func__,
         __LINE__, interface_name);
     if (wl_ioctl(interface_name, WLC_DOWN, NULL, 0) < 0) {
@@ -1661,11 +1795,20 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
             __LINE__, interface_name, errno, strerror(errno));
         return RETURN_ERR;
     }
+#endif
+    if (split_assoc_req_change) {
+        char name[32 + sizeof("_split_assoc_req")];
 
-    if (wl_iovar_set(interface_name, "split_assoc_req", &assoc_ctrl, sizeof(assoc_ctrl)) < 0) {
-        wifi_hal_error_print("%s:%d failed to set split_assoc_req %d for %s, err: %d (%s)\n",
-            __func__, __LINE__, assoc_ctrl, interface_name, errno, strerror(errno));
-        return RETURN_ERR;
+        if (wl_iovar_set(interface_name, "split_assoc_req", &assoc_ctrl, sizeof(assoc_ctrl)) < 0) {
+            wifi_hal_error_print("%s:%d failed to set split_assoc_req %d for %s, err: %d (%s)\n",
+                __func__, __LINE__, assoc_ctrl, interface_name, errno, strerror(errno));
+            return RETURN_ERR;
+        }
+
+        (void)snprintf(name, sizeof(name), "%s_split_assoc_req", interface_name);
+        wifi_hal_info_print("%s:%d Writing nvram %s=%d\n", __func__,__LINE__, name, assoc_ctrl);
+        set_decimal_nvram_param(name, assoc_ctrl);
+        nvram_commit();
     }
 
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
@@ -1678,12 +1821,13 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
     }
 #endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
 
+#if !(defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB))
     if (wl_ioctl(interface_name, WLC_UP, NULL, 0) < 0) {
         wifi_hal_error_print("%s:%d failed to set interface up for %s, err: %d (%s)\n", __func__,
             __LINE__, interface_name, errno, strerror(errno));
         return RETURN_ERR;
     }
-
+#endif
     return RETURN_OK;
 }
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
@@ -1697,6 +1841,12 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
     char interface_name[8];
     wifi_radio_info_t *radio;
     char das_ipaddr[45];
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
+    bool need_down = platform_down_reqd(r_index, map);
+
+    if (need_down)
+        platform_radio_up(r_index, FALSE);
+#endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL && CONFIG_IEEE80211BE && XB10_PORT */
     memset(temp_buff, 0 ,sizeof(temp_buff));
     memset(param_name, 0 ,sizeof(param_name));
     memset(interface_name, 0, sizeof(interface_name));
@@ -1922,6 +2072,10 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
         }
     }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
+    if (need_down)
+        platform_radio_up(r_index, TRUE);
+#endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL && CONFIG_IEEE80211BE && XB10_PORT */
     return 0;
 }
 
@@ -3574,6 +3728,10 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x02, 0x03, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
 #endif // TCXB8_PORT || SCXER10_PORT || SCXF10_PORT
+#if defined(SCXER10_PORT)
+    static const u8 eht_phy_cap[EHT_PHY_CAPAB_LEN] = { 0x2c, 0x00, 0x03, 0xe0, 0x00, 0xe7, 0x00,
+        0x7e, 0x00 };
+#endif // SCXER10_PORT
 #if HOSTAPD_VERSION >= 211
     static const u8 eht_mcs[] = { 0x44, 0x44, 0x44 };
 #endif /* HOSTAPD_VERSION >= 211 */
@@ -3610,6 +3768,14 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
 #if HOSTAPD_VERSION >= 211
         memcpy(iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].mcs, eht_mcs, sizeof(eht_mcs));
 #endif /* HOSTAPD_VERSION >= 211 */
+
+// XER-10 uses old kernel that does not support EHT cap NL parameters
+#if defined(SCXER10_PORT)
+        iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].eht_supported = true;
+        iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].mac_cap = 0x0082;
+        memcpy(iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].phy_cap, eht_phy_cap,
+            sizeof(eht_phy_cap));
+#endif // SCXER10_PORT
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
     defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT) || defined(SCXF10_PORT)
@@ -3771,6 +3937,7 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 eht_mcs[] = { 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
 #endif /* HOSTAPD_VERSION >= 211 */
     struct hostapd_iface *iface = &interface->u.ap.iface;
+    radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD;
 
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     free(radio->driver_data.extended_capa);

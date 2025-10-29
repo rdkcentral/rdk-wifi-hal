@@ -470,12 +470,6 @@ INT wifi_hal_init()
     }
 #endif //CONFIG_WIFI_EMULATOR_EXT_AGENT
 
-#ifdef CONFIG_GENERIC_MLO
-    if (nl80211_init_mld_links() != 0) {
-        return RETURN_ERR;
-    }
-#endif // CONFIG_GENERIC_MLO
-
     if (nl80211_init_radio_info() != 0) {
         return RETURN_ERR;
     }
@@ -4511,10 +4505,11 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     struct ieee80211_hdr *hdr;
     mac_address_t bssid_buf;
     int res = 0;
-#ifdef HOSTAPD_2_11
+#ifdef HOSTAPD_2_11 // 2.11
     int link_id = 0;
-    memset(bssid_buf, 0xff, sizeof(bssid_buf));
 #endif
+    memset(bssid_buf, 0xff, sizeof(bssid_buf));
+    
     buf = os_zalloc(24 + data_len);
     if (buf == NULL)
         return -1;
