@@ -15980,7 +15980,7 @@ static wifi_wps_ev_t convert_wps_event(unsigned int event)
 int wifi_drv_wps_event_notify_cb(void *ctx, unsigned int event, void *data)
 {
     wifi_interface_info_t *interface;
-    wifi_vap_info_t *vap;
+    wifi_vap_info_t *vap = NULL;
     wifi_wps_event_t event_data;
     wifi_device_callbacks_t *callbacks;
 
