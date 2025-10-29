@@ -4511,9 +4511,10 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     struct ieee80211_hdr *hdr;
     mac_address_t bssid_buf;
     int res = 0;
+#ifdef HOSTAPD_2_11
     int link_id = 0;
     memset(bssid_buf, 0xff, sizeof(bssid_buf));
-
+#endif
     buf = os_zalloc(24 + data_len);
     if (buf == NULL)
         return -1;
