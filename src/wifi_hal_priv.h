@@ -395,6 +395,7 @@ typedef struct wifi_interface_info_t {
     char bridge[32];
     unsigned int index;
     unsigned int phy_index;
+    unsigned int rdk_radio_index;
     mac_address_t   mac;
     unsigned int type;
     unsigned int interface_status;
