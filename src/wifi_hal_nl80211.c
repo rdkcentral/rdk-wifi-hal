@@ -4070,7 +4070,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
                 }
             }
         }
-    if (strcmp(br_name,"brww0")) {
+    if (strcmp(br_name,"brww0") != 0) {
         char cmd[256];
         int ret;
         snprintf(cmd, sizeof(cmd), "ovs-vsctl set bridge brww0 other-config:hwaddr=D4:E2:CB:9D:47:09");
