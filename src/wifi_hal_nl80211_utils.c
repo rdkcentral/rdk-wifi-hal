@@ -247,8 +247,8 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {0, 1,  "wl1.6",   "",  "br106",    106,   11,     "lnf_radius_5g"},
     {1, 0,  "wl0.7",   "",  "brlan112", 112,   12,     "mesh_backhaul_2g"},
     {0, 1,  "wl1.7",   "",  "brlan113", 113,   13,     "mesh_backhaul_5g"},
-    {1, 0,  "wl0",     "",  "brww0",         0,     14,     "mesh_sta_2g"},
-    {0, 1,  "wl1",     "",  "brww0",         0,     15,     "mesh_sta_5g"},
+    {1, 0,  "wl0",     "",  "",         0,     14,     "mesh_sta_2g"},
+    {0, 1,  "wl1",     "",  "",         0,     15,     "mesh_sta_5g"},
     {2, 2,  "wl2.1",   "",  "brlan0",   100,   16,     "private_ssid_6g"},
     {2, 2,  "wl2.2",   "",  "brlan1",   101,   17,     "iot_ssid_6g"},
     {2, 2,  "wl2.3",   "",  "bropen6g", 2253,  18,     "hotspot_open_6g"},
@@ -258,7 +258,7 @@ static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {2, 2,  "wl2.6",   "",  "br106",    106,   21,     "lnf_radius_6g"},
 #endif
     {2, 2,  "wl2.7",   "",  "brlan114", 114,   22,     "mesh_backhaul_6g"},
-    {2, 2,  "wl2",     "",  "brww0",         0,     23,     "mesh_sta_6g"},
+    {2, 2,  "wl2",     "",  "",         0,     23,     "mesh_sta_6g"},
 #endif
 
 #ifdef XB10_PORT
