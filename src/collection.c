@@ -165,7 +165,7 @@ int8_t hash_map_put    (hash_map_t *map, char *key, void *data)
     map->itr = NULL;
     e = (hash_element_t *)malloc(sizeof(hash_element_t));
     if (e == NULL) {
-        return -1;
+        return -2;
     }
     memset(e, 0, sizeof(hash_element_t));
     e->key = key;
@@ -178,7 +178,7 @@ int8_t hash_map_put    (hash_map_t *map, char *key, void *data)
             e->data = NULL;
         }
         free(e);
-        return -1;
+        return -3;
     }
     return 0;    
 }
