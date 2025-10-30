@@ -4070,7 +4070,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
                 }
             }
         }
-        wifi_hal_dbg_print("%s:%d SREESH ovs bridge mapping for bridge:%s, interface:%s is created\n",  __func__, __LINE__, br_name, if_name);
+        wifi_hal_dbg_print("%s:%d ovs bridge mapping for bridge:%s, interface:%s is created\n",  __func__, __LINE__, br_name, if_name);
         return 0;
     }
 
@@ -15282,9 +15282,10 @@ int wifi_drv_set_operstate(void *priv, int state)
 #ifdef CONFIG_WIFI_EMULATOR
     ifname = vap->bridge_name;
 #else
-    ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:"brww0";
+    ifname = (vap->vap_mode == wifi_vap_mode_ap || vap->u.sta_info.ignite_enabled) ?
+        vap->bridge_name :
+        interface->name;
 #endif
-    wifi_hal_info_print("%s:%d: SREESH Using interface %s\n", __func__, __LINE__, ifname);
     memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
     sockaddr.sll_family   = AF_PACKET;
     sockaddr.sll_ifindex  = if_nametoindex(ifname);

@@ -197,7 +197,7 @@ void init_hostap_bss(wifi_interface_info_t *interface)
     /* use key0 in individual key and key1 in broadcast key */
     conf->broadcast_key_idx_min = 1;
     conf->broadcast_key_idx_max = 2;
-    conf->eap_reauth_period = 450;
+    conf->eap_reauth_period = 3600;
 
     conf->wpa_group_rekey = 0;
     conf->wpa_gmk_rekey = 0;
