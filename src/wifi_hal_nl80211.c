@@ -992,7 +992,21 @@ bm_sta_list_t *steering_add_stalist(wifi_interface_info_t *interface, char *ssid
         bm_client_info->vap_index = interface->vap_info.vap_index;
         memcpy(bm_client_info->mac_addr, client_mac, sizeof(mac_address_t));
 
-        hash_map_put(interface->bm_sta_map, strdup(key), bm_client_info);
+        /*CID 422408: Use after free */
+        char *val = strdup(key);
+        if (val == NULL) {
+            free(bm_client_info);
+            return NULL;
+        }
+        int8_t res = hash_map_put(interface->bm_sta_map, val, bm_client_info);
+        if (res != 0) {
+            wifi_hal_error_print("%s:%d: failed to add bm_client_info to hash map, error: %d\n", __func__, __LINE__, res);
+            if (res == -1 || res == -2) {
+                free(val);
+                free(bm_client_info);
+            }
+            return NULL;
+        }
     }
     if (ssid) {
         strncpy(bm_client_info->ssid, ssid, sizeof(bm_client_info->ssid));
@@ -1793,7 +1807,22 @@ static rate_limit_entry_t *wifi_hal_rate_limit_entry_get(mac_address_t mac)
     memcpy(entry->mac, mac, sizeof(mac_address_t));
     entry->window_start = time_now;
     entry->last_activity = time_now;
-    hash_map_put(g_wifi_hal.mgt_frame_rate_limit_hashmap, strdup(mac_str), entry);
+
+    /*CID 565259: Use after free*/
+    char *key = strdup(mac_str);
+    if (key == NULL) {
+        free(entry);
+        return NULL;
+    }
+    int8_t res = hash_map_put(g_wifi_hal.mgt_frame_rate_limit_hashmap, key, entry);
+    if (res != 0) {
+        wifi_hal_error_print("%s:%d: failed to add entry to hash map, error: %d\n", __func__, __LINE__, res);
+        if (res == -1 || res == -2) {
+            free(key);
+            free(entry);
+        }
+        return NULL;
+    }
 
     return entry;
 }
@@ -3784,7 +3813,9 @@ int get_vap_state(const char *ifname, short *flags)
     struct ifreq ifr;
     int fd, res;
 
+    /*CID: 277465: Buffer not null terminated*/
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
+    ifr.ifr_name[IFNAMSIZ - 1] = '\0';
     wifi_hal_dbg_print("%s:%d interface name = '%s'\n", __func__, __LINE__, ifr.ifr_name);
 
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -4212,7 +4243,9 @@ int nl80211_interface_enable(const char *ifname, bool enable)
     }
 
     ifr.ifr_flags = flags;
+    /*CID: 277605: Buffer not null terminated*/
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
+    ifr.ifr_name[IFNAMSIZ - 1] = '\0';
 
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         wifi_hal_error_print("%s:%d socket error %s\n", __func__, __LINE__, strerror(errno));
@@ -7526,6 +7559,10 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
     wifi_drv_set_txpower(interface, radio->oper_param.transmitPower);
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_SET_WIPHY);
+    /*CID 280330: Dereference null return value */
+    if (msg == NULL) {
+        return -1;
+    }
 
     nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
     if (nl80211_fill_chandef(msg, radio, interface) == -1) {
@@ -7574,6 +7611,10 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
             }
 
            msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_SET_WIPHY);
+           /*CID 280330: Dereference null return value */
+           if (msg == NULL) {
+               return -1;
+           }
 
            nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
            if (nl80211_fill_chandef(msg, radio, interface) == -1) {
@@ -8384,6 +8425,11 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
 
     if (sem_post(sem) == -1) {
         wifi_hal_stats_error_print("%s:%d: Failed to release semaphore\n", __func__, __LINE__);
+    }
+
+    /*CID 508155 Resource Leak */
+    if (munmap(neighbor_data, file_size) == -1) {
+        wifi_hal_stats_error_print("%s:%d: Failed to unmap memory: %s\n", __func__, __LINE__, strerror(errno));
     }
 
     close(fd);
@@ -10579,9 +10625,21 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
                 return NL_SKIP;
             }
 
-            if (hash_map_put(interface->scan_info_map, strdup(key), scan_info)) {
+            char *map_key = strdup(key);
+            if (map_key == NULL) {
                 pthread_mutex_unlock(&interface->scan_info_mutex);
                 free(scan_info);
+                free(scan_info_ap);
+                return NL_SKIP;
+            }
+            int ret = hash_map_put(interface->scan_info_map, map_key, scan_info);
+            if (ret != 0) {
+                pthread_mutex_unlock(&interface->scan_info_mutex);
+                /*CID 422405: Double free */
+                if (ret == -1 || ret == -2) {
+                    free(map_key);
+                    free(scan_info);
+                }
                 free(scan_info_ap);
                 wifi_hal_stats_error_print("%s:%d: [SCAN] map adding error!\n", __func__, __LINE__);
                 return NL_SKIP;
@@ -10594,10 +10652,21 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
 
     // - add AP info into AP map under AP mutex
     pthread_mutex_lock(&interface->scan_info_ap_mutex);
-    if (hash_map_put(interface->scan_info_ap_map[0], strdup(key), scan_info_ap)) {
+    char *ap_map_key = strdup(key);
+    if (ap_map_key == NULL) {
         pthread_mutex_unlock(&interface->scan_info_ap_mutex);
-        wifi_hal_stats_error_print("%s:%d: map adding error!\n", __func__, __LINE__);
         free(scan_info_ap);
+        return NL_SKIP;
+    }
+    int ret = hash_map_put(interface->scan_info_ap_map[0], ap_map_key, scan_info_ap);
+    if (ret != 0) {
+        pthread_mutex_unlock(&interface->scan_info_ap_mutex);
+        /*CID 422416: Double free*/
+        if (ret == -1 || ret == -2) {
+            free(ap_map_key);
+            free(scan_info_ap);
+        }
+        wifi_hal_stats_error_print("%s:%d: map adding error!\n", __func__, __LINE__);
         return NL_SKIP;
     }
     pthread_mutex_unlock(&interface->scan_info_ap_mutex);
@@ -15338,6 +15407,9 @@ int wifi_drv_set_operstate(void *priv, int state)
         interface->u.ap.br_sock_fd = sock_fd;
     } else if (vap->vap_mode == wifi_vap_mode_sta) {
         interface->u.sta.sta_sock_fd = sock_fd;
+    } else {
+        /*CID 277563: Resource leak */
+        close(sock_fd);
     }
 
 #else
