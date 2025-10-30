@@ -4505,6 +4505,7 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     int link_id = 0;
 #endif
     memset(bssid_buf, 0xff, sizeof(bssid_buf));
+    
     buf = os_zalloc(24 + data_len);
     if (buf == NULL)
         return -1;
