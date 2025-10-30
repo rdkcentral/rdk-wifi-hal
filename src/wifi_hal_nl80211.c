@@ -4082,6 +4082,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
         } else {
         wifi_hal_info_print("%s:%d SREESH Successfully set bridge MAC to D4:E2:CB:9D:47:09\n",
             __func__, __LINE__);
+        } 
         }
         wifi_hal_dbg_print("%s:%d SREESH ovs bridge mapping for bridge:%s, interface:%s is created\n",  __func__, __LINE__, br_name, if_name);
         return 0;
