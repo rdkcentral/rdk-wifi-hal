@@ -4836,11 +4836,9 @@ static unsigned int get_akm_suites_info(struct nlattr *tb)
         case RSN_AUTH_KEY_MGMT_CCKM:
             key_mgmt |= WPA_DRIVER_CAPA_KEY_MGMT_CCKM;
             break;
-#if !defined(KERNEL_6_6)
         case RSN_AUTH_KEY_MGMT_OSEN:
             key_mgmt |= WPA_DRIVER_CAPA_KEY_MGMT_OSEN;
             break;
-#endif
 #endif
         case RSN_AUTH_KEY_MGMT_802_1X_SUITE_B:
             key_mgmt |= WPA_DRIVER_CAPA_KEY_MGMT_SUITE_B;
@@ -11671,11 +11669,7 @@ int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int 
 #if !defined(PLATFORM_LINUX)
 #ifdef HOSTAPD_2_11 //2.11
                 /* setting allow_mld_addr_trans to false */
-#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
-                send_assoc_resp(hapd, NULL, mac, status_code, 0, NULL, 0, rssi, 1);
-#else
                 send_assoc_resp(hapd, NULL, mac, status_code, 0, NULL, 0, rssi, 1, false);
-#endif
 #elif HOSTAPD_2_10 //2.10
                 send_assoc_resp(hapd, NULL, mac, status_code, 0, NULL, 0, rssi, 1);
 #else
@@ -11687,11 +11681,7 @@ int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int 
 #if !defined(PLATFORM_LINUX)
 #ifdef HOSTAPD_2_11 //2.11
                 /* setting allow_mld_addr_trans to false */
-#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
-                send_assoc_resp(hapd, NULL, mac, status_code, 1, NULL, 0, rssi, 1);
-#else
                 send_assoc_resp(hapd, NULL, mac, status_code, 1, NULL, 0, rssi, 1, false);
-#endif
 #elif HOSTAPD_2_10 //2.10
                 send_assoc_resp(hapd, NULL, mac, status_code, 1, NULL, 0, rssi, 1);
 #else
@@ -11738,11 +11728,7 @@ void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len)
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
-#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
-int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason, int link_id)
-#else
 int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason)
-#endif
 {
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
@@ -11751,9 +11737,7 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
     wifi_driver_data_t *drv;
     struct ieee80211_mgmt mgmt;
 #if HOSTAPD_VERSION >= 211
-#if !defined(BANANA_PI_PORT) && !defined(KERNEL_6_6)
     int link_id = -1;
-#endif
 #endif // HOSTAPD_VERSION >= 211
 
     interface = (wifi_interface_info_t *)priv;
@@ -11875,11 +11859,7 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
           HOSTAPD_MODE_IEEE80211AD) {
         /* Deauthentication is not used in DMG/IEEE 802.11ad;
            * disassociate the STA instead. */
-#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
-        return wifi_drv_sta_disassoc(priv, own_addr, addr, reason, -1);
-#else
         return wifi_drv_sta_disassoc(priv, own_addr, addr, reason);
-#endif
     }
 #if 0
     //TODO: check if mesh, return
@@ -12263,9 +12243,9 @@ fail:
     return -ENOBUFS;
 }
 
-#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+#ifdef BANANA_PI_PORT
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
-    const char *ifname_wds, u32 radio_mask)
+    const char *ifname_wds)
 #else
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
     char *ifname_wds)
@@ -12924,15 +12904,9 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
-    if (params->eml_cap != 0) {
-        wifi_hal_dbg_print("%s:%d: eml_cap=%u\n", __func__, __LINE__, params->eml_cap);
-        if (nla_put_u16(msg, NL80211_ATTR_EML_CAPABILITY, params->eml_cap) < 0) {
-#else
     if (params->eml_capa != 0) {
         wifi_hal_dbg_print("%s:%d: eml_capa=%u\n", __func__, __LINE__, params->eml_capa);
         if (nla_put_u16(msg, NL80211_ATTR_EML_CAPABILITY, params->eml_capa) < 0) {
-#endif
             goto fail;
         }
     }
@@ -15590,13 +15564,8 @@ int     wifi_drv_send_eapol(void *priv, const u8 *addr, const u8 *data,
     return 0;
 }
 
-#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
-static void * wifi_driver_nl80211_init(void *ctx, const char *ifname,
-		                       void *global_priv, enum wpa_p2p_mode p2p_mode)
-#else
 static void * wifi_driver_nl80211_init(void *ctx, const char *ifname,
                                        void *global_priv)
-#endif
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return NULL;
