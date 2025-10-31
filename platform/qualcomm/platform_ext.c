@@ -51,6 +51,7 @@
 #define CONFIG_FILE        "getConfigFile.sh"
 #define STATICCPGCFG_1     "/tmp/.staticCpgCfg_1"
 #define STA_PWD_LEN         STATICCPGCFG_LEN
+#define QCA_MAX_CMD_SZ 128
 
 extern INT wifi_setMLDaddr(INT apIndex, CHAR *mldMacAddress);
 
@@ -329,55 +330,9 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
     return 0;
 }
 
-void getprivatevap2G(unsigned int *index)
+void qca_getRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam,
+    char *cmd)
 {
-    unsigned int idx = 0;
-    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
-    if (index == NULL) {
-        wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
-        return;
-    }
-
-    get_wifi_interface_info_map(interface_map);
-
-    for (idx = 0; idx < ARRAY_SZ(interface_map); idx++) {
-
-        if (strncmp(interface_map[idx].vap_name, "private_ssid_2g", strlen("private_ssid_2g")) == 0) {
-            *index = interface_map[idx].index;
-
-        }
-    }
-}
-
-void getprivatevap5G(unsigned int *index)
-{
-    unsigned int idx = 0;
-    wifi_interface_name_idex_map_t interface_map[(MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
-    if (index == NULL) {
-        wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
-        return;
-    }
-
-    get_wifi_interface_info_map(interface_map);
-
-    for (idx = 0; idx < ARRAY_SZ(interface_map); idx++) {
-
-        if (strncmp(interface_map[idx].vap_name, "private_ssid_5g", strlen("private_ssid_5g")) == 0) {
-            *index = interface_map[idx].index;
-        }
-    }
-}
-
-void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
-{
-    unsigned int apindex = 0, i = 0; int band = -1;
-    size_t len = 0;
-    char cmd[DEFAULT_CMD_SIZE] = {0};
-    char tmp[DEFAULT_CMD_SIZE] = {0};
-    char command[DEFAULT_CMD_SIZE] = {0};
-    char buffer[DEFAULT_CMD_SIZE] = {0};
-    char output[DEFAULT_CMD_SIZE]={0};
-
     wifi_ieee80211Variant_t variant = WIFI_80211_VARIANT_AX;
     wifi_channelBandwidth_t channelWidth = WIFI_CHANNELBANDWIDTH_80MHZ;
 
@@ -386,7 +341,6 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
     switch (operationParam->band) {
 
         case WIFI_FREQUENCY_2_4_BAND:
-            getprivatevap2G(&apindex);
             if (variant == WIFI_80211_VARIANT_B) {
                 strncpy(cmd, phymode_strings[QCA_HAL_IEEE80211_PHYMODE_11B], DEFAULT_CMD_SIZE);
 
@@ -426,7 +380,6 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
         case WIFI_FREQUENCY_5_BAND:
         case WIFI_FREQUENCY_5L_BAND:
         case WIFI_FREQUENCY_5H_BAND:
-            getprivatevap5G(&apindex);
             if ((variant & WIFI_80211_VARIANT_A) && !(variant & ~WIFI_80211_VARIANT_A)) {
                 strncpy(cmd, phymode_strings[QCA_HAL_IEEE80211_PHYMODE_11A], DEFAULT_CMD_SIZE);
             }
@@ -491,24 +444,6 @@ void qca_setRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
         default:
             break;
     }
-    snprintf(command, DEFAULT_CMD_SIZE, "cfg80211tool %s get_mode | cut -d':' -f2",getInterface(apindex));
-    FILE *fp = popen(command, "r");
-    if (fp == NULL) {
-        wifi_hal_error_print("%s:%d Failed to run command \n",__func__,__LINE__);
-        return;
-    }
-    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
-        strncpy(output, buffer, DEFAULT_CMD_SIZE);
-        output[strcspn(output, "\n")] = '\0';
-    }
-    pclose(fp);
-
-    len = strlen(output) > strlen(cmd) ? strlen(output) : strlen(cmd);
-    if (strncmp(output, cmd, len) != 0 ) {
-        snprintf(tmp, DEFAULT_CMD_SIZE, "cfg80211tool %s mode %s",getInterface(apindex),cmd);
-        system(tmp);
-    }
-
     return;
 }
 
@@ -524,6 +459,8 @@ int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     int vap_itr;
     char interface_name[32];
     char cmd[DEFAULT_CMD_SIZE];
+    char mode[16];
+    wifi_radio_info_t *radio;
 
     for (vap_itr=0; vap_itr < map->num_vaps; vap_itr++) {
         vap = &map->vap_array[vap_itr];
@@ -535,6 +472,14 @@ int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             system(cmd);
             snprintf(cmd, sizeof(cmd), "cfg80211tool %s athnewind 1", interface_name);
             system(cmd);
+        } else {
+            radio = get_radio_by_rdk_index(index);
+            if (radio) {
+                qca_getRadioMode(index, &radio->oper_param, mode);
+                snprintf(cmd, sizeof(cmd), "cfg80211tool %s mode %s", interface_name, mode);
+                system(cmd);
+                wifi_hal_dbg_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
+            }
         }
     }
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
@@ -769,7 +714,7 @@ int nvram_get_current_ssid(char *l_ssid, int vap_index)
     return 0;
 }
 
-
+#if defined(CONFIG_MLO)
 static int qca_get_vap_mld_addr(wifi_vap_info_t* vap_info, char* mld_mac_buf)
 {
     if (vap_info == NULL) {
@@ -787,7 +732,32 @@ static int qca_get_vap_mld_addr(wifi_vap_info_t* vap_info, char* mld_mac_buf)
        __func__, __LINE__, vap_info->vap_index, MAC2STR(mld_mac_buf));
     return RETURN_OK;
 }
+#endif
 
+int platform_create_interface_attributes(struct nl_msg **msg_ptr, wifi_radio_info_t *radio,
+    wifi_vap_info_t *vap)
+{
+    char mld_mac_addr[ETH_ALEN];
+    (void)radio;
+
+    if (msg_ptr == NULL || *msg_ptr == NULL || vap == NULL) {
+        wifi_hal_dbg_print("%s:%d Invalid arguments\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+#if defined(CONFIG_MLO)
+    if (qca_get_vap_mld_addr(vap, mld_mac_addr) == RETURN_ERR) {
+        return RETURN_ERR;
+    }
+    wifi_hal_info_print("%s:%d:Adding MLD addr " MACSTR " for vap index:%d\n", __func__, __LINE__,
+        MAC2STR(mld_mac_addr), vap->vap_index);
+    if (nla_put(*msg_ptr, NL80211_ATTR_MLD_MAC, ETH_ALEN, mld_mac_addr) < 0) {
+        return RETURN_ERR;
+    }
+#endif
+    return RETURN_OK;
+}
+
+#if defined(CONFIG_MLO)
 static int qca_create_mld_interfaces(wifi_vap_info_map_t *map)
 {
     char cmd[DEFAULT_CMD_SIZE];
@@ -812,6 +782,7 @@ static int qca_create_mld_interfaces(wifi_vap_info_map_t *map)
     }
     return RETURN_OK;
 }
+#endif
 
 int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
@@ -827,7 +798,9 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         get_interface_name_from_vap_index(vap->vap_index, interface_name);
         snprintf(param, sizeof(param), "ath%d.vap_enabled", vap->vap_index);
     }
+#ifdef CONFIG_MLO
     qca_create_mld_interfaces(map);
+#endif
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
     return 0;
 }
@@ -1059,8 +1032,6 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
     }
     wifi_hal_dbg_print("%s:%d: EXIT\n", __func__, __LINE__);
     return res;
-#else
-#error "The wifi_drv_set_ap_mlo is not implemented"
 #endif /* CONFIG_MLO */
 }
 
@@ -1126,8 +1097,6 @@ int update_hostap_mlo(wifi_interface_info_t *interface) {
     wifi_hal_dbg_print("%s:%d: EXIT\n", __func__, __LINE__);
 
     return RETURN_OK;
-#else
-#error "The update_hostap_mlo is not implemented"
 #endif /* CONFIG_MLO */
 }
 
@@ -1183,6 +1152,98 @@ static int qca_add_intf_to_bridge(wifi_interface_info_t *interface, bool is_mld)
     return RETURN_OK;
 }
 
+#if defined(CONFIG_MLO)
+static bool is_bonding_slave(const char *mld_name, const char *ifname)
+{
+    char linebuf[512];
+    char slave_list[128];
+    char *slave;
+    char *rest;
+    FILE *fp;
+    bool ret = false;
+
+    snprintf(slave_list, sizeof(slave_list), "/sys/class/net/%s/bonding/slaves", mld_name);
+    fp = fopen(slave_list, "r");
+    if (NULL == fp) {
+        wifi_hal_error_print("%s:%d Failed to open file %s\n", __func__, __LINE__, slave_list);
+        return ret;
+    }
+
+    if (access(slave_list, F_OK) == 0) {
+        linebuf[0] = '\0';
+        fgets(linebuf, sizeof(linebuf), fp);
+        if (strlen(linebuf) && linebuf[strlen(linebuf) - 1] == '\n') {
+            linebuf[strlen(linebuf) - 1] = '\0'; // remove trailing newline character (\n)
+        }
+        wifi_hal_dbg_print("%s:%d  slaves=%s\n", __func__, __LINE__, linebuf);
+        rest = linebuf;
+        while ((slave = strtok_r(rest, " ", &rest))) {
+            printf("%s ", slave);
+            if (strcmp(slave, ifname) == 0) {
+                wifi_hal_dbg_print("%s:%d %s is bonding slave of %s\n", __func__, __LINE__, ifname,
+                    mld_name);
+                ret = true;
+                break;
+            }
+        }
+    }
+    fclose(fp);
+    if (!ret) {
+        wifi_hal_dbg_print("%s:%d %s is not a bonding slave of %s\n", __func__, __LINE__, ifname,
+            mld_name);
+    }
+    return ret;
+}
+
+INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
+{
+    char cmd[QCA_MAX_CMD_SZ];
+    char mld_ifname[32];
+    char ifname[32];
+    char mld_mac_addr[ETH_ALEN];
+    char mld_mac_str[18];
+
+    if (interface == NULL || radio == NULL) {
+        wifi_hal_error_print("%s:%d: Invalid arguments\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    if ((int)interface->vap_info.vap_index >= 0) {
+        if (get_interface_name_from_vap_index(interface->vap_info.vap_index, ifname) != RETURN_OK) {
+            wifi_hal_error_print(
+                "%s:%d: vap index:%d failed to get interface name from vap index\n", __func__,
+                __LINE__, interface->vap_info.vap_index);
+            return RETURN_ERR;
+        }
+        if (qca_get_vap_mld_addr(&interface->vap_info, mld_mac_addr) == RETURN_ERR) {
+            wifi_hal_error_print("%s:%d: vap index:%d failed to get mld address\n", __func__,
+                __LINE__, interface->vap_info.vap_index);
+            return RETURN_ERR;
+        }
+
+        snprintf(mld_mac_str, sizeof(mld_mac_str), MACSTR, MAC2STR(mld_mac_addr));
+        snprintf(mld_ifname, sizeof(mld_ifname), "mld%d", interface->vap_info.vap_index);
+
+        if ((!(radio->oper_param.variant & WIFI_80211_VARIANT_BE)) &&
+            is_bonding_slave(mld_ifname, ifname)) {
+            snprintf(cmd, sizeof(cmd), "cfg80211tool %s mode %s",
+                getInterface(interface->vap_info.vap_index),
+                (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND) ? "11GHE20" : "11AHE80");
+            wifi_hal_info_print("%s:%d Executing: %s\n", __func__, __LINE__, cmd);
+            system(cmd);
+            wifi_hal_info_print("%s:%d Delete bonding between ifname:%s and mld:%s\n", __func__,
+                __LINE__, ifname, mld_ifname);
+            // ToDo :- Check and enable if required
+            // wifi_setMLDaddr(interface->vap_info.vap_index, "00:00:00:00:00:00");
+            wifi_setMLDaddr(interface->vap_info.vap_index, mld_mac_str);
+        } else {
+            wifi_hal_dbg_print("%s:%d No need to changing bonding state for %s\n", __func__,
+                __LINE__, ifname);
+        }
+    }
+    return RETURN_OK;
+}
+#endif 
+
 int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
     #define MAX_INTERFACE_IDX 30
@@ -1217,7 +1278,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         }
         interface = hash_map_get_next(radio->interface_map, interface);
     }
-
+#if defined(CONFIG_MLO)
     for(i=0; i < MAX_INTERFACE_IDX; i++)
     {
         if(!(existing_vap_indices & 1<<i))
@@ -1253,6 +1314,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
             return 0;
         }
     }
+#endif
     wifi_hal_dbg_print("%s:%d Exit\n",__func__,__LINE__);
     return 0;
 }

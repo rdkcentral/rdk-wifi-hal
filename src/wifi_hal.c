@@ -130,7 +130,6 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     wifi_radio_info_t *radio;
     wifi_radio_capabilities_t *cap;
     wifi_vap_info_t *vap;
-    bool is_band_found = false;
     unsigned int radio_band = 0;
     char output[256] = {0};
     mac_addr_str_t al_ctrl_mac;
@@ -342,32 +341,12 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
     for (i = 0; i < hal->wifi_prop.numRadios; i++) {
         radio_band = 0;
-        is_band_found = false;
         radio = get_radio_by_rdk_index(i);
         wifi_hal_info_print("%s:%d:Enumerating interfaces on PHY radio index: %d, RDK radio index:%d\n", __func__, __LINE__, radio->index, i);
         hal->wifi_prop.radio_presence[i] = radio->radio_presence;
         interface = hash_map_get_first(radio->interface_map);
         while (interface != NULL) {
             vap = &interface->vap_info;
-
-            if (is_band_found == false) {
-                if (strstr(vap->vap_name, "2g") != NULL) {
-                    is_band_found = true;
-                    radio_band = WIFI_FREQUENCY_2_4_BAND;
-                } else if (strstr(vap->vap_name, "5gl") != NULL) {
-                    is_band_found = true;
-                    radio_band = WIFI_FREQUENCY_5L_BAND;
-                } else if (strstr(vap->vap_name, "5gh") != NULL) {
-                    is_band_found = true;
-                    radio_band = WIFI_FREQUENCY_5H_BAND;
-                } else if (strstr(vap->vap_name, "5g") != NULL) {
-                    is_band_found = true;
-                    radio_band = WIFI_FREQUENCY_5_BAND;
-                } else if (strstr(vap->vap_name, "6g") != NULL) {
-                    is_band_found = true;
-                    radio_band = WIFI_FREQUENCY_6_BAND;
-                }
-            }
             strncpy(interface->firmware_version, hal->wifi_prop.software_version, sizeof(interface->firmware_version) - 1);
             interface->firmware_version[sizeof(interface->firmware_version) - 1] = '\0';
             wifi_hal_info_print("%s:%d:interface name: %s, interface->firmware_version: %s, vap index: %d, vap name: %s\n", __func__, __LINE__,
@@ -375,6 +354,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
             interface = hash_map_get_next(radio->interface_map, interface);
         }
 
+        radio_band = get_band_info_from_rdk_radio_index(i);
         cap = &hal->wifi_prop.radiocap[i];
         memcpy((unsigned char *)cap, (unsigned char *)&radio->capab, sizeof(wifi_radio_capabilities_t));
         adjust_radio_capability_band(cap, radio_band);
@@ -469,12 +449,6 @@ INT wifi_hal_init()
         return RETURN_ERR;
     }
 #endif //CONFIG_WIFI_EMULATOR_EXT_AGENT
-
-#ifdef CONFIG_GENERIC_MLO
-    if (nl80211_init_mld_links() != 0) {
-        return RETURN_ERR;
-    }
-#endif // CONFIG_GENERIC_MLO
 
     if (nl80211_init_radio_info() != 0) {
         return RETURN_ERR;
@@ -1354,8 +1328,10 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     int filtermode;
 #endif
     //bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-#if defined(VNTXER5_PORT)
+#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#ifdef CONFIG_MLO
     char mld_ifname[32];
+#endif 
 #endif
     char *interface_name = NULL;
 
@@ -1414,12 +1390,14 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
 #endif
 
-#if defined(VNTXER5_PORT)
+#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#ifdef CONFIG_MLO
         if (platform_set_intf_mld_bonding(radio, interface) != RETURN_OK) {
             wifi_hal_error_print("%s:%d: vap index:%d failed to create bonding\n", __func__, __LINE__,
                 vap->vap_index);
             continue;
         }
+#endif
 #endif
         wifi_hal_info_print("%s:%d: vap index:%d mode:%d vap_name:%s\n", __func__, __LINE__,
             vap->vap_index, vap->vap_mode, vap->vap_name);
@@ -1492,7 +1470,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             if (vap->bridge_name[0] != '\0' && vap->u.bss_info.enabled) {
                 wifi_hal_info_print("%s:%d: interface:%s create bridge:%s\n", __func__, __LINE__,
                     interface_name, vap->bridge_name);
-#if defined(VNTXER5_PORT)
+#if (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && defined(CONFIG_MLO)
                 if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d",  vap->vap_index);
                     if (nl80211_create_bridge(mld_ifname, vap->bridge_name) != 0) {
@@ -1607,12 +1585,14 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 wifi_hal_info_print("%s:%d: interface:%s set %s\n", __func__, __LINE__,
                     interface_name, vap->u.bss_info.enabled ? "up" : "down");
                 nl80211_interface_enable(interface_name, vap->u.bss_info.enabled);
-#if defined(VNTXER5_PORT)
+#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#ifdef CONFIG_MLO
                 if(radio->oper_param.variant & WIFI_80211_VARIANT_BE)
                 {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d", vap->vap_index);
                     nl80211_interface_enable(mld_ifname, vap->u.bss_info.enabled);
                 }
+#endif
 #endif
             }
 
@@ -4354,6 +4334,20 @@ void wifi_hal_scanResults_callback_register(wifi_scanResults_callback func)
     return;
 }
 
+INT wifi_wpsEvent_callback_register(wifi_wpsEvent_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+    if (callbacks == NULL) {
+        return RETURN_ERR;
+    }
+
+    callbacks->wps_event_callback = func;
+
+    return RETURN_OK;
+}
+
 INT wifi_hal_analytics_callback_register(wifi_analytics_callback l_callback_cb)
 {
     wifi_device_callbacks_t *callbacks;
@@ -4482,6 +4476,9 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     struct ieee80211_hdr *hdr;
     mac_address_t bssid_buf;
     int res = 0;
+#ifdef HOSTAPD_2_11 // 2.11
+    int link_id = 0;
+#endif
     memset(bssid_buf, 0xff, sizeof(bssid_buf));
 
     buf = os_zalloc(24 + data_len);
@@ -4503,7 +4500,11 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
 
     
 #ifdef HOSTAPD_2_11 // 2.11
-    res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait, 0);
+    // Action frames will get rejected by kernel if we pass a valid link_id for non-MLO case.
+    if(!wifi_hal_is_mld_enabled(interface)) {
+        link_id = -1;
+    }
+    res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait, link_id);
 #elif HOSTAPD_2_10 // 2.10
     res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait);
 #else
