@@ -163,6 +163,11 @@ base64urldecode (unsigned char *data, unsigned char *burl, int len)
     int res, pad, i;
     unsigned char *b64, *unb64;
 
+    /* CID: 559602: Overflowed integer argument fix */
+    if ((data == NULL) || (burl == NULL) || (len <= 0)) {
+        return -1;
+    }
+
     pad = 0;
     switch (len%4) {
         case 2:
@@ -195,6 +200,13 @@ base64urldecode (unsigned char *data, unsigned char *burl, int len)
     }
 
     res = EVP_DecodeBlock(unb64, b64, len + pad);
+    /* CID: 340791: Out-of-bounds access fix */
+    if (res == -1) {
+        free(b64);
+        free(unb64);
+        return -1;
+    }
+
     memcpy(data, unb64, res - pad);
     free(b64);
     free(unb64);
@@ -415,6 +427,11 @@ EC_POINT *dpp_build_point_from_connector_string(wifi_device_dpp_context_t *ctx, 
 
 	printf("%s:%d: Enter\n", __func__, __LINE__);
 
+	/* CID: 175586: Resource leak fix */
+	if ((instance == NULL) || (instance->x == NULL) || (instance->y == NULL)) {
+		return NULL;
+	}
+
 	if ((ptr = strchr(connector, '.')) == NULL) {
 		printf("%s:%d: Wrong connector format\n", __func__, __LINE__);
 		return NULL;	
@@ -512,6 +529,9 @@ int dpp_build_connector(wifi_device_dpp_context_t *dpp_ctx, char* connector, boo
     EVP_MD_CTX  ctx;
 #else
     EVP_MD_CTX  *ctx = EVP_MD_CTX_new();
+    if (ctx == NULL) {
+        return -1;
+    }
 #endif
     BIGNUM *x, *y;
     BIGNUM *r = NULL, *s = NULL;
@@ -530,6 +550,10 @@ int dpp_build_connector(wifi_device_dpp_context_t *dpp_ctx, char* connector, boo
 
     if ((sign == NULL) || recfg == NULL) {
         printf("%s:%d: reconfig context or csign instance does not exist, sign:%p recfg:%p\n", __func__, __LINE__, sign, recfg);
+        /* CID: 269995: Resource leak fix */
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
+        EVP_MD_CTX_free(ctx);
+#endif
         return -1;
     }
 
@@ -605,6 +629,10 @@ int dpp_build_connector(wifi_device_dpp_context_t *dpp_ctx, char* connector, boo
             primelen = 66;
             break;
         default:
+            /* CID: 269995: Resource leak fix */
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
+            EVP_MD_CTX_free(ctx);
+#endif
             return -1;
 
     }
@@ -822,11 +850,23 @@ hkdf (const EVP_MD *h, int skip,
     HMAC_CTX ctx;
 #else
     HMAC_CTX *ctx = HMAC_CTX_new();
+    if (ctx == NULL) {
+        return 0;
+    }
 #endif
 
     digestlen = prklen = EVP_MD_size(h);
+    /* CID: 340805: Out-of-bounds access fix */
+    if (digestlen == UINT_MAX) {
+        return 0;
+    }
+
     if ((digest = (unsigned char *)malloc(digestlen)) == NULL) {
         perror("malloc");
+        /* CID: 272037: Resource leak fix */
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
+        HMAC_CTX_free(ctx);
+#endif
         return 0;
     }
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -842,6 +882,10 @@ hkdf (const EVP_MD *h, int skip,
         if ((prk = (unsigned char *)malloc(digestlen)) == NULL) {
             free(digest);
             perror("malloc");
+            /* CID: 272037: Resource leak fix */
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
+            HMAC_CTX_free(ctx);
+#endif
             return 0;
         }
         /*
@@ -852,6 +896,10 @@ hkdf (const EVP_MD *h, int skip,
                 free(digest);
                 free(prk);
                 perror("malloc");
+                /* CID: 272037: Resource leak fix */
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
+                HMAC_CTX_free(ctx);
+#endif
                 return 0;
             }
             memset(tweak, 0, digestlen);
@@ -905,11 +953,6 @@ hkdf (const EVP_MD *h, int skip,
         } else {
             memcpy(okm + len, digest, digestlen);
         }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-	HMAC_CTX_cleanup(&ctx);
-#else
-        HMAC_CTX_free(ctx);
-#endif
         len += digestlen;
     }
     if (!skip) {
@@ -934,6 +977,9 @@ compute_key_hash (EC_KEY *key, unsigned char *digest)
     EVP_MD_CTX ctx;
 #else
     EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (ctx == NULL) {
+        return -1;
+    }
 #endif
     unsigned int mdlen = SHA256_DIGEST_LENGTH;
     unsigned char *asn1;
@@ -941,6 +987,10 @@ compute_key_hash (EC_KEY *key, unsigned char *digest)
     memset(digest, 0, SHA256_DIGEST_LENGTH);
 
     if ((bio = BIO_new(BIO_s_mem())) == NULL) {
+        /* CID: 260727: Resource leak fix */
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
+        EVP_MD_CTX_free(ctx);
+#endif
         return -1;
     }
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -1763,6 +1813,9 @@ int wifi_dppCreateCSignIntance(unsigned int ap_index, char *c_sign_key, wifi_dpp
     EVP_MD_CTX  ctx;
 #else
     EVP_MD_CTX  *ctx = EVP_MD_CTX_new();
+    if (ctx == NULL) {
+        return -1;
+    }
 #endif
 	unsigned char digest[SHA256_DIGEST_LENGTH];
     unsigned int mdlen = SHA256_DIGEST_LENGTH;
@@ -1772,6 +1825,10 @@ int wifi_dppCreateCSignIntance(unsigned int ap_index, char *c_sign_key, wifi_dpp
 
 	if (inst == NULL) {
 		printf("%s:%d:Invalid parameter\n", __func__, __LINE__);
+                /* CID: 263646: Resource leak fix */
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
+		EVP_MD_CTX_free(ctx);
+#endif
 		return RETURN_ERR;
 	}
 
@@ -2130,6 +2187,11 @@ wifi_dppProcessReconfigAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
     data = &dpp_ctx->session_data;
     instance = (wifi_dpp_instance_t *)data->instance;
 
+    /* CID: 175588: Resource leak fix */
+    if ((instance == NULL) || (instance->x == NULL) || (instance->y == NULL)) {
+        return RETURN_ERR;
+    }
+
     frame = (wifi_dppPublicActionFrameBody_t*)dpp_ctx->received_frame.frame;
     len = dpp_ctx->received_frame.length;
 
@@ -2478,7 +2540,12 @@ INT wifi_dppProcessAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
 
     data = &dpp_ctx->session_data;
 	instance = (wifi_dpp_instance_t *)data->instance;
-	
+
+    /* CID: 175592: Resource leak fix */
+    if ((instance == NULL) || (instance->x == NULL) || (instance->y == NULL)) {
+        return RETURN_ERR;
+    }
+
 	frame = (wifi_dppPublicActionFrameBody_t*)dpp_ctx->received_frame.frame;
 	len = dpp_ctx->received_frame.length; 
 

@@ -1139,7 +1139,7 @@ static void handle_assoc_req_event_for_bm(wifi_interface_info_t *interface, stru
     char *key = NULL;
     unsigned char *ie;
     unsigned int ie_len, ssid_len = 0, g_idx = 0;
-    char ssid[SSID_MAX_LEN];
+    char ssid[SSID_MAX_LEN] = { 0 }; // CID: 420569 unintializes scalar value
     bm_sta_list_t *sta_info = NULL;
     wifi_vap_info_t *vap;
     wifi_device_callbacks_t *callbacks;
@@ -1618,7 +1618,7 @@ static void handle_probe_req_event_for_bm(wifi_interface_info_t *interface, stru
 
     unsigned char *ie;
     unsigned int ie_len, ssid_len = 0;
-    char ssid[SSID_MAX_LEN];
+    char ssid[SSID_MAX_LEN] = { 0 }; // CID: 420570 Uninitialized scalar variable
     bool broadcast = false, ssid_bcast = false;
     wifi_vap_info_t *vap;
     bm_sta_list_t *bm_client_info = NULL;
@@ -2754,6 +2754,11 @@ void recv_data_frame(wifi_interface_info_t *interface)
 
                 rtap_len = WPA_GET_BE16(buff + sizeof(struct ethhdr) + 2);
                 shift = sizeof(struct ethhdr) + ntohs(rtap_len);
+                // CID: 560225 Overflowed integer argument
+                if (buflen < shift) {
+                    wifi_hal_info_print("%s:%d Invalid packet buflen < shift (%d < %d)\n", __func__, __LINE__, buflen, shift);
+                    return;
+                }
                 len  = buflen - shift;
 
                 char rssi = *(buff + sizeof(struct ethhdr) + 15);
@@ -3062,7 +3067,7 @@ void recv_link_status()
     local.nl_groups = RTMGRP_LINK;
     local.nl_pid = getpid();
 
-    struct msghdr msg;
+    struct msghdr msg = { 0 }; // CID: 277576 Uninitialized scalar variable
     {
         msg.msg_name = &local;
         msg.msg_namelen = sizeof(local);
