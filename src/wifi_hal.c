@@ -1733,7 +1733,11 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
     if (memcmp(mac, bcastmac, sizeof(mac_address_t)) == 0) {
         tmp = hapd->sta_list;
         while(tmp) {
-            wifi_drv_sta_disassoc(interface, own_addr,tmp->addr,WLAN_REASON_UNSPECIFIED);
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+            wifi_drv_sta_disassoc(interface, own_addr, tmp->addr, WLAN_REASON_UNSPECIFIED, -1);
+#else
+            wifi_drv_sta_disassoc(interface, own_addr, tmp->addr, WLAN_REASON_UNSPECIFIED);
+#endif
             tmp=tmp->next;
         }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -1741,7 +1745,11 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
     else {
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         wifi_hal_info_print("%s:%d:mac is not a broadcast mac address\n", __func__, __LINE__);
-        wifi_drv_sta_disassoc(interface, own_addr,mac,WLAN_REASON_UNSPECIFIED);
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+        wifi_drv_sta_disassoc(interface, own_addr, mac, WLAN_REASON_UNSPECIFIED, -1);
+#else
+        wifi_drv_sta_disassoc(interface, own_addr, mac, WLAN_REASON_UNSPECIFIED);
+#endif
     }
     return RETURN_OK;
 }
@@ -4517,8 +4525,11 @@ void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac)
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+    wifi_drv_sta_disassoc(interface, own_addr, mac, status, -1);
+#else
     wifi_drv_sta_disassoc(interface, own_addr, mac, status);
+#endif
 }
 
 void wifi_hal_set_neighbor_report(uint apIndex,uint add,mac_address_t mac)
