@@ -2585,7 +2585,7 @@ static int wpa_sm_sta_remove_pmkid(void *_wpa_s, void *network_ctx,
                                             const u8 *bssid, const u8 *pmkid,
                                             const u8 *fils_cache_id)
 {
-    wifi_hal_dbg_print("%s:%d: SREESH Enter\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return 0;
 }
 
