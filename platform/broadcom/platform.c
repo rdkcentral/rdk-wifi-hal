@@ -130,10 +130,12 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
 	{"keep_ap_up", "1"}
 };
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
 static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames);
 #endif
 static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl);
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
 static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map);
 static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char *chspec, wifi_radio_index_t index);
