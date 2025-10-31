@@ -130,7 +130,6 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     wifi_radio_info_t *radio;
     wifi_radio_capabilities_t *cap;
     wifi_vap_info_t *vap;
-    bool is_band_found = false;
     unsigned int radio_band = 0;
     char output[256] = {0};
     mac_addr_str_t al_ctrl_mac;
@@ -342,32 +341,12 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
     for (i = 0; i < hal->wifi_prop.numRadios; i++) {
         radio_band = 0;
-        is_band_found = false;
         radio = get_radio_by_rdk_index(i);
         wifi_hal_info_print("%s:%d:Enumerating interfaces on PHY radio index: %d, RDK radio index:%d\n", __func__, __LINE__, radio->index, i);
         hal->wifi_prop.radio_presence[i] = radio->radio_presence;
         interface = hash_map_get_first(radio->interface_map);
         while (interface != NULL) {
             vap = &interface->vap_info;
-
-            if (is_band_found == false) {
-                if (strstr(vap->vap_name, "2g") != NULL) {
-                    is_band_found = true;
-                    radio_band = WIFI_FREQUENCY_2_4_BAND;
-                } else if (strstr(vap->vap_name, "5gl") != NULL) {
-                    is_band_found = true;
-                    radio_band = WIFI_FREQUENCY_5L_BAND;
-                } else if (strstr(vap->vap_name, "5gh") != NULL) {
-                    is_band_found = true;
-                    radio_band = WIFI_FREQUENCY_5H_BAND;
-                } else if (strstr(vap->vap_name, "5g") != NULL) {
-                    is_band_found = true;
-                    radio_band = WIFI_FREQUENCY_5_BAND;
-                } else if (strstr(vap->vap_name, "6g") != NULL) {
-                    is_band_found = true;
-                    radio_band = WIFI_FREQUENCY_6_BAND;
-                }
-            }
             strncpy(interface->firmware_version, hal->wifi_prop.software_version, sizeof(interface->firmware_version) - 1);
             interface->firmware_version[sizeof(interface->firmware_version) - 1] = '\0';
             wifi_hal_info_print("%s:%d:interface name: %s, interface->firmware_version: %s, vap index: %d, vap name: %s\n", __func__, __LINE__,
@@ -375,10 +354,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
             interface = hash_map_get_next(radio->interface_map, interface);
         }
 
-        if (is_band_found == false) {
-            is_band_found = true;
-            radio_band = get_band_info_from_radio_name(i);
-        }
+        radio_band = get_band_info_from_rdk_radio_index(i);
         cap = &hal->wifi_prop.radiocap[i];
         memcpy((unsigned char *)cap, (unsigned char *)&radio->capab, sizeof(wifi_radio_capabilities_t));
         adjust_radio_capability_band(cap, radio_band);
