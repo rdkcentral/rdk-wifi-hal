@@ -1625,6 +1625,21 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             //nl80211_start_scan(interface);
             interface->vap_initialized = true;
 
+            if (vap->u.sta_info.ignite_enabled) {
+                if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
+                    wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
+                        __func__, __LINE__, interface->name, vap->bridge_name);
+                    return RETURN_ERR;
+                }
+                wifi_hal_info_print("%s:%d: interface:%s set bridge %s up\n", __func__, __LINE__,
+                    interface->name, vap->bridge_name);
+                if (nl80211_interface_enable(vap->bridge_name, true) != 0) {
+                    wifi_hal_error_print("%s:%d: interface:%s failed to set bridge %s up\n",
+                        __func__, __LINE__, interface->name, vap->bridge_name);
+                    return RETURN_ERR;
+                }
+            }
+
 #ifdef CONFIG_WIFI_EMULATOR_EXT_AGENT
             nl80211_interface_enable(interface->name, false);
             nl80211_set_mac(interface);
@@ -1634,6 +1649,10 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
                     __LINE__, interface_name);
                 wifi_drv_set_operstate(interface, 1);
+                if (nl80211_interface_enable(interface->name, true) != 0) {
+                    wifi_hal_error_print("%s:%d interface:%s failed to set bridge %s up\n",
+                        __func__, __LINE__, interface->name, vap->bridge_name);
+                }
             } else {
                 wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__,
                     interface_name);
@@ -4472,7 +4491,7 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     int link_id = 0;
 #endif
     memset(bssid_buf, 0xff, sizeof(bssid_buf));
-
+    
     buf = os_zalloc(24 + data_len);
     if (buf == NULL)
         return -1;
