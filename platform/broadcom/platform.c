@@ -918,6 +918,8 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     char param_name[NVRAM_NAME_SIZE];
     char cmd[BUFLEN_1024]; 
     wifi_radio_info_t *radio;
+    bool is_radio_apply_required = false;
+
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
         wifi_hal_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
@@ -973,20 +975,35 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         return 0;
     }
 
+    if (radio->oper_param.transmitPower != operationParam->transmitPower) {
+        if (wifi_setRadioTransmitPower(index, operationParam->transmitPower) != RETURN_OK)  {
+            wifi_hal_error_print("%s:%d: Failed to set transmitpower : %d for radio index:%d\n",
+                    __func__, __LINE__, operationParam->transmitPower, index);
+            return RETURN_ERR;
+        }
+        is_radio_apply_required = true;
+    }
+
     if (radio->oper_param.countryCode != operationParam->countryCode) {
         memset(temp_buff, 0 ,sizeof(temp_buff));
         get_coutry_str_from_code(operationParam->countryCode, temp_buff);
         if (wifi_setRadioCountryCode(index, temp_buff) != RETURN_OK) {
-            wifi_hal_dbg_print("%s:%d Failure in setting country code as %s in radio index %d\n", __FUNCTION__, __LINE__, temp_buff, index);
+            wifi_hal_error_print("%s:%d Failure in setting country code as %s in radio index %d\n", __FUNCTION__, __LINE__, temp_buff, index);
             return -1;
         }
+        is_radio_apply_required = true;
+    }
 
+    if (is_radio_apply_required == true) {
         if (wifi_applyRadioSettings(index) != RETURN_OK) {
-            wifi_hal_dbg_print("%s:%d Failure in applying Radio settings in radio index %d\n", __FUNCTION__, __LINE__, index);
+            wifi_hal_error_print("%s:%d Failure in applying Radio settings in radio index %d\n", __FUNCTION__, __LINE__, index);
             return -1;
         }
+    }
 
-        //Updating nvram param
+
+    if (radio->oper_param.countryCode != operationParam->countryCode) {
+        //Updating nvram param for country code
         memset(param_name, 0 ,sizeof(param_name));
         sprintf(param_name, "wl%d_country_code", index);
         set_string_nvram_param(param_name, temp_buff);
