@@ -1660,6 +1660,40 @@ int is_backhaul_interface(wifi_interface_info_t *interface)
     return (strncmp(vap->vap_name, "mesh_backhaul", strlen("mesh_backhaul")) == 0) ? true : false;
 }
 
+unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index)
+{
+    unsigned int i;
+    const char *vap_name = NULL;
+
+    for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
+        if (interface_index_map[i].rdk_radio_index == rdk_radio_index) {
+            vap_name = interface_index_map[i].vap_name;
+            if (!vap_name) {
+                break;
+            }
+            if (strstr(vap_name, "2g") != NULL) {
+                return WIFI_FREQUENCY_2_4_BAND;
+            } else if (strstr(vap_name, "5gl") != NULL) {
+                return  WIFI_FREQUENCY_5L_BAND;
+            } else if (strstr(vap_name, "5gh") != NULL) {
+                return  WIFI_FREQUENCY_5H_BAND;
+            } else if (strstr(vap_name, "5g") != NULL) {
+                return WIFI_FREQUENCY_5_BAND;
+            } else if (strstr(vap_name, "6g") != NULL) {
+                return WIFI_FREQUENCY_6_BAND;
+            }
+
+            wifi_hal_error_print("%s:%d: Unable to parse band from vap_name: %s\n",
+                                 __func__, __LINE__, vap_name);
+            break;
+        }
+    }
+
+    wifi_hal_error_print("%s:%d: Failed to resolve band for rdk_radio_index: %u\n",
+                         __func__, __LINE__, rdk_radio_index);
+    return 0;
+}
+
 void update_vap_mode(wifi_interface_info_t *interface)
 {
     wifi_vap_info_t *vap = &interface->vap_info;

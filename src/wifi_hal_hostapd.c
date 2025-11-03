@@ -2232,7 +2232,7 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
 #endif
         goto exit;
     }
-#ifdef CONFIG_IEEE80211BE
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
     if (update_hostap_mlo(interface) != RETURN_OK) {
         goto exit;
     }
