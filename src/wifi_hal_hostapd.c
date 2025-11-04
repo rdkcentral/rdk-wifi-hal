@@ -2878,6 +2878,68 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
         }
     }
 }
+static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
+{
+    int ret;
+
+#if HOSTAPD_VERSION >= 211 //2.11
+    ret = hostapd_setup_bss(hapd, 1, true);
+#elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
+    ret = hostapd_setup_bss(hapd, 1, true);
+#else
+    ret = hostapd_setup_bss(hapd, 1);
+#endif
+    return ret;
+}
+
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+static int set_mld_shared_resources(struct hostapd_data *hapd)
+{
+    int ret;
+
+    if (hapd->mld != NULL && hostapd_mld_is_first_bss(hapd)) {
+        struct hostapd_data *link;
+        for_each_mld_link(link, hapd) {
+            if (hapd == link)
+                continue;
+
+            ret = hostapd_setup_bss_internal(link);
+            if (ret) {
+                wifi_hal_error_print("%s:%d: set shared resources failed for link: %s\n",
+                    __func__, __LINE__, hapd->conf->iface);
+                return RETURN_ERR;
+            }
+        }
+    }
+    return RETURN_OK;
+}
+
+static void clear_mld_shared_resources(struct hostapd_data *hapd)
+{
+    if (hapd->mld != NULL && hostapd_mld_is_first_bss(hapd)) {
+        struct hostapd_data *link;
+        for_each_mld_link(link, hapd) {
+            if (hapd == link)
+                continue;
+            hostapd_bss_deinit_no_free(link);
+            hostapd_free_hapd_data(link);
+        }
+    }
+}
+#endif /* HOSTAPD_VERSION >= 211 */
+#endif /* CONFIG_IEEE80211BE */
+
+void deinit_bss(struct hostapd_data *hapd)
+{
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    clear_mld_shared_resources(hapd);
+#endif
+#endif
+    hostapd_bss_deinit_no_free(hapd);
+    hostapd_free_hapd_data(hapd);
+}
 
 int start_bss(wifi_interface_info_t *interface)
 {
@@ -2902,20 +2964,21 @@ int start_bss(wifi_interface_info_t *interface)
             __LINE__, interface->u.ap.hapd.csa_in_progress, vap->vap_name, vap->vap_index);
     }
     //my_print_hex_dump(conf->ssid.ssid_len, conf->ssid.ssid);
-#if HOSTAPD_VERSION >= 211 //2.11
-    ret = hostapd_setup_bss(hapd, 1, true);
-#elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
-    ret = hostapd_setup_bss(hapd, 1, true);
-#else
-    ret = hostapd_setup_bss(hapd, 1);
-#endif
-
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-
+    ret = hostapd_setup_bss_internal(hapd);
     if (ret != RETURN_OK) {
         wifi_hal_error_print("%s:%d: vap:%s:%d create is failed:%d csa status:%d\n", __func__,
             __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
     }
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    ret = set_mld_shared_resources(hapd);
+    if (ret != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: vap:%s:%d mld set shared resources failed:%d csa status:%d\n", __func__,
+            __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
+    }
+#endif
+#endif
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     return ret;
 }
