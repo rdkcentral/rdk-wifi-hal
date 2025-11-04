@@ -890,9 +890,6 @@ int wifi_hal_get_vap_interface_type(wifi_vap_name_t vap_name, wifi_vap_type_t va
 wifi_interface_info_t *wifi_hal_get_vap_interface_by_type(wifi_radio_info_t *radio,
     wifi_vap_type_t vap_type);
 int nl80211_init_primary_interfaces();
-#ifdef CONFIG_GENERIC_MLO
-int nl80211_init_mld_links();
-#endif // CONFIG_GENERIC_MLO
 int nl80211_init_radio_info();
 int getIpStringFromAdrress(char * ipString,  ip_addr_t * ip);
 int get_mac_address (char *intf_name,  mac_address_t mac);
@@ -1398,5 +1395,5 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t 
 wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_info_t *interface,
     mac_address_t mac);
 int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
-
+unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
 #endif // WIFI_HAL_PRIV_H
