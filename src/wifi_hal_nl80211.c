@@ -2756,7 +2756,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
                 shift = sizeof(struct ethhdr) + ntohs(rtap_len);
                 // CID: 560225 Overflowed integer argument
                 if (buflen < shift) {
-                    wifi_hal_info_print("%s:%d Invalid packet buflen < shift (%d < %d)\n", __func__, __LINE__, buflen, shift);
+                    wifi_hal_info_print("%s:%d Invalid packet buflen < shift (%d < %zu)\n", __func__, __LINE__, buflen, shift);
                     return;
                 }
                 len  = buflen - shift;
