@@ -1236,11 +1236,10 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     platform_create_vap_t set_vap_params_fn;
     unsigned int i;
     char msg[2048];
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
     int set_acl = 0;
-#else
+#if !defined(CMXB7_PORT) && !defined(_PLATFORM_RASPBERRYPI_)
     int filtermode;
-#endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_
+#endif // !CMXB7_PORT && !_PLATFORM_RASPBERRYPI_
     //bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 #if defined(VNTXER5_PORT)
     char mld_ifname[32];
@@ -1303,13 +1302,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             vap->u.bss_info.preassoc.minimum_advertised_mcs,
             vap->u.bss_info.preassoc.sixGOpInfoMinRate);
 
-#if defined(CMXB7_PORT) || defined(_PLATFORM_RASPBERRYPI_)
         if ((vap->u.bss_info.enabled == 1) &&
             ((vap->u.bss_info.mac_filter_enable == TRUE) ||
              (interface->vap_info.u.bss_info.mac_filter_enable != vap->u.bss_info.mac_filter_enable))) {
             set_acl = 1;
         }
-#endif
 #if defined(VNTXER5_PORT)
         if (platform_set_intf_mld_bonding(radio, interface) != RETURN_OK) {
             wifi_hal_error_print("%s:%d: vap index:%d failed to create bonding\n", __func__, __LINE__,
@@ -1572,6 +1569,9 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 wifi_hal_error_print("%s:%d: vap index:%d failed to set mac filter\n", __func__,
                     __LINE__, vap->vap_index);
                 return RETURN_ERR;
+            }
+            if (set_acl == 1) {
+                nl80211_set_acl(interface);
             }
         }
 #endif // CMXB7_PORT || _PLATFORM_RASPBERRYPI_
@@ -1839,10 +1839,6 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
         return RETURN_ERR;
     }
     vap = &interface->vap_info;
-    if (is_wifi_hal_vap_hotspot_from_interfacename(interface->name) && !vap->u.bss_info.enabled) {
-        wifi_hal_info_print("%s:%d Skipping addition of MAC Entry to ACL since %s is not enabled\n",__func__,__LINE__,interface->name);
-        return RETURN_OK;
-    }
 
     key = to_mac_str(DeviceMacAddress, sta_mac_str);
     
@@ -1854,21 +1850,19 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
     }
 
     if (interface->acl_map == NULL) {
-        wifi_hal_info_print("%s:%d: ACL map is NULL for ap index %d\n", __func__, __LINE__, apIndex);
-#ifdef CMXB7_PORT
+        wifi_hal_error_print("%s:%d: ACL map is NULL for ap index %d\n", __func__, __LINE__, apIndex);
         interface->acl_map = hash_map_create();
         if (interface->acl_map == NULL) {
             wifi_hal_error_print("%s:%d: ACL map create failure for ap index %d\n", __func__, __LINE__, apIndex);
             return RETURN_ERR;
         }
-#endif
     }
 
     acl_map = hash_map_get(interface->acl_map, key);
 
     if (acl_map != NULL) {
         wifi_hal_error_print("%s:%d: MAC %s already present in acl list\n", __func__, __LINE__, key);
-        return RETURN_ERR;
+        return RETURN_OK;
     }
 
     acl_map = (acl_map_t *)malloc(sizeof(acl_map_t));
@@ -1906,11 +1900,7 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
         return RETURN_ERR;
     }
     vap = &interface->vap_info;
-    if (is_wifi_hal_vap_hotspot_from_interfacename(interface->name) && !vap->u.bss_info.enabled) {
-        wifi_hal_info_print("%s:%d Skipping addition of MAC Entry to ACL since %s is not enabled\n",__func__,__LINE__,interface->name);
-        return RETURN_OK;
-    }
-    
+
     wifi_hal_info_print("%s:%d: Interface: %s MAC: %s\n",  __func__, __LINE__, interface->name, DeviceMacAddress);
 
     if (vap->vap_mode != wifi_vap_mode_ap) {
@@ -1919,21 +1909,19 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
     }
 
     if (interface->acl_map == NULL) {
-        wifi_hal_info_print("%s:%d: ACL map is NULL for ap index %d\n", __func__, __LINE__, apIndex);
-#ifdef CMXB7_PORT
+        wifi_hal_error_print("%s:%d: ACL map is NULL for ap index %d\n", __func__, __LINE__, apIndex);
         interface->acl_map = hash_map_create();
         if (interface->acl_map == NULL) {
             wifi_hal_info_print("%s:%d: ACL map create failure for ap index %d\n", __func__, __LINE__, apIndex);
             return RETURN_ERR;
         }
-#endif
     }
 
     acl_map = hash_map_get(interface->acl_map, DeviceMacAddress);
 
     if (acl_map != NULL) {
         wifi_hal_error_print("%s:%d: MAC %s already present in acl list\n", __func__, __LINE__, DeviceMacAddress);
-        return RETURN_ERR;
+        return RETURN_OK;
     }
 
     acl_map = (acl_map_t *)malloc(sizeof(acl_map_t));
@@ -1987,14 +1975,14 @@ INT wifi_hal_delApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
 
     if (interface->acl_map == NULL) {
         wifi_hal_error_print("%s:%d: ACL map is NULL for ap index %d\n", __func__, __LINE__, apIndex);
-        return RETURN_ERR;
+        return RETURN_OK;
     }
 
     acl_map = hash_map_get(interface->acl_map, key);
 
     if (acl_map == NULL) {
         wifi_hal_error_print("%s:%d: MAC %s is not present in acl list\n", __func__, __LINE__, key);
-        return RETURN_ERR;
+        return RETURN_OK;
     }
 
     hash_map_remove(interface->acl_map, key);
@@ -2038,14 +2026,14 @@ INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
 
     if (interface->acl_map == NULL) {
         wifi_hal_error_print("%s:%d: ACL map is NULL for ap index %d\n", __func__, __LINE__, apIndex);
-        return RETURN_ERR;
+        return RETURN_OK;
     }
 
     acl_map = hash_map_get(interface->acl_map, DeviceMacAddress);
 
     if (acl_map == NULL) {
         wifi_hal_error_print("%s:%d: MAC %s is not present in acl list\n", __func__, __LINE__, DeviceMacAddress);
-        return RETURN_ERR;
+        return RETURN_OK;
     }
 
     hash_map_remove(interface->acl_map, DeviceMacAddress);
