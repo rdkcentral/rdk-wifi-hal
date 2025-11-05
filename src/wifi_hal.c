@@ -2002,10 +2002,15 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
         tmp = hapd->sta_list;
         while(tmp) {
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
-            wifi_drv_sta_disassoc(interface, own_addr, tmp->addr, WLAN_REASON_UNSPECIFIED, -1);
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+            int link_id = wifi_hal_get_mld_link_id(interface);
+#else
+            int link_id = NL80211_DRV_LINK_ID_NA;
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+            wifi_drv_sta_disassoc(interface, own_addr, tmp->addr, WLAN_REASON_UNSPECIFIED, link_id);
 #else
             wifi_drv_sta_disassoc(interface, own_addr, tmp->addr, WLAN_REASON_UNSPECIFIED);
-#endif
+#endif // BANANA_PI_PORT && KERNEL_6_6
             tmp=tmp->next;
         }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -2014,10 +2019,15 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         wifi_hal_info_print("%s:%d:mac is not a broadcast mac address\n", __func__, __LINE__);
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
-        wifi_drv_sta_disassoc(interface, own_addr, mac, WLAN_REASON_UNSPECIFIED, -1);
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+        int link_id = wifi_hal_get_mld_link_id(interface);
+#else
+        int link_id = NL80211_DRV_LINK_ID_NA;
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+        wifi_drv_sta_disassoc(interface, own_addr, mac, WLAN_REASON_UNSPECIFIED, link_id);
 #else
         wifi_drv_sta_disassoc(interface, own_addr, mac, WLAN_REASON_UNSPECIFIED);
-#endif
+#endif // BANANA_PI_PORT && KERNEL_6_6
     }
     return RETURN_OK;
 }
@@ -4777,11 +4787,17 @@ void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac)
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
-    wifi_drv_sta_disassoc(interface, own_addr, mac, status, -1);
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+    int link_id = wifi_hal_get_mld_link_id(interface);
+#else
+    int link_id = NL80211_DRV_LINK_ID_NA;
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+    wifi_drv_sta_disassoc(interface, own_addr, mac, status, link_id);
 #else
     wifi_drv_sta_disassoc(interface, own_addr, mac, status);
-#endif
+#endif // BANANA_PI_PORT && KERNEL_6_6
 }
 
 void wifi_hal_set_neighbor_report(uint apIndex,uint add,mac_address_t mac)
