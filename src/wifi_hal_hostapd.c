@@ -2002,6 +2002,10 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     iconf->ap_table_expiration_time = 60;
     iconf->track_sta_max_age = 180;
 
+#if defined(BANANA_PI_PORT) && HOSTAPD_VERSION >= 211
+    iconf->no_ht_coex = 1;
+#endif // BANANA_PI_PORT && HOSTAPD_VERSION >= 211
+
     iconf->acs = 0;
     iconf->acs_ch_list.num = 0;
 #ifdef CONFIG_ACS
