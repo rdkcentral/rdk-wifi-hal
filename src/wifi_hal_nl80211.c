@@ -12014,7 +12014,7 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
     wifi_driver_data_t *drv;
     struct ieee80211_mgmt mgmt;
 #if HOSTAPD_VERSION >= 211
-#if !defined(BANANA_PI_PORT) && !defined(KERNEL_6_6)
+#if !defined(KERNEL_6_6)
     int link_id = -1;
 #endif
 #endif // HOSTAPD_VERSION >= 211
@@ -12139,10 +12139,15 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
         /* Deauthentication is not used in DMG/IEEE 802.11ad;
            * disassociate the STA instead. */
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
-        return wifi_drv_sta_disassoc(priv, own_addr, addr, reason, -1);
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+        int link_id = wifi_hal_get_mld_link_id(interface);
+#else
+        int link_id = NL80211_DRV_LINK_ID_NA;
+#endif // HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+        return wifi_drv_sta_disassoc(priv, own_addr, addr, reason, link_id);
 #else
         return wifi_drv_sta_disassoc(priv, own_addr, addr, reason);
-#endif
+#endif // BANANA_PI_PORT && KERNEL_6_6
     }
 #if 0
     //TODO: check if mesh, return
@@ -12518,9 +12523,14 @@ fail:
     return -ENOBUFS;
 }
 
-#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+#ifdef BANANA_PI_PORT
+#if defined(KERNEL_6_6)
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
     const char *ifname_wds, u32 radio_mask)
+#else
+int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
+    const char *ifname_wds)
+#endif //KERNEL_6_6
 #else
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
     char *ifname_wds)
