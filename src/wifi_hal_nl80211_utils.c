@@ -4020,14 +4020,15 @@ int wifi_ieee80211Variant_to_str(char *dest, size_t dest_size, wifi_ieee80211Var
                     str_list_append(dest, dest_size, "ax");
                     str_list_append(dest, dest_size, "be");
                 } else {
-                    if (variant & WIFI_80211_VARIANT_BE)
+                    if (variant & WIFI_80211_VARIANT_BE) {
                         mode = "be";
-                    else if (variant & WIFI_80211_VARIANT_AX)
+                    } else if (variant & WIFI_80211_VARIANT_AX) {
                         mode = "ax";
-                    else if (variant & WIFI_80211_VARIANT_AC)
+                    } else if (variant & WIFI_80211_VARIANT_AC) {
                         mode = "ac";
-                    else
+                    } else {
                         mode = "n";
+                    }
                     str_list_append(dest, dest_size, mode);
                 }
             }
