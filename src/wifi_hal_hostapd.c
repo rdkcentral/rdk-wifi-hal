@@ -1469,7 +1469,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     }
     wifi_hal_dbg_print("NTesting CID:277488: entered %s for interface '%s'\n", __FUNCTION__, interface ? interface->name : "(null)");
 
-    wifi_hal_dbg_print("NTesting CID:277385: entry %s iface_phy_addr=%p iface_phy_size=%zu radio_name=%s\n", __FUNCTION__, (void*)iface->phy, sizeof(iface->phy), radio ? radio->name : "(null)");
+    wifi_hal_dbg_print("NTesting CID:277385: entry %s \n", __FUNCTION__);
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
     param = &radio->oper_param;
