@@ -3630,6 +3630,8 @@ int create_ecomode_interfaces(void)
 {
     uint8_t radioIndex;
 
+    wifi_hal_dbg_print("NTesting CID:336324: entered %s\n", __FUNCTION__);
+
     for (radioIndex = 0; radioIndex < get_sizeof_radio_interfaces_map(); radioIndex++)
     {
         int found = 0, j;
@@ -3658,6 +3660,7 @@ int create_ecomode_interfaces(void)
           radio->rdk_radio_index = l_radio_interface_map[radioIndex].radio_index;
           radio->capab.index = radio->index;
           // CID 336324: Calling risky function
+          wifi_hal_dbg_print("NTesting CID:336324: operation %s radioIndex=%u dest=%p dest_size=%zu src='%s'\n", __FUNCTION__, radioIndex, (void*)radio->name, sizeof(radio->name), l_radio_interface_map[radioIndex].radio_name);
           snprintf(radio->name, sizeof(radio->name), "%s", l_radio_interface_map[radioIndex].radio_name);
           g_wifi_hal.num_radios++;
           radio->capab.maxNumberVAPs = 0;
@@ -3684,6 +3687,7 @@ int create_ecomode_interfaces(void)
               interface->phy_index = radio->index;
               interface->index = interface_index_map[vapIndex].index;
               // CID 336324: Calling risky function
+              wifi_hal_dbg_print("NTesting CID:336324: operation %s vapIndex=%d dest=%p dest_size=%zu src='%s'\n", __FUNCTION__, vapIndex, (void*)interface->name, sizeof(interface->name), interface_index_map[vapIndex].interface_name);
               snprintf(interface->name, sizeof(interface->name), "%s", interface_index_map[vapIndex].interface_name);
               if (set_interface_properties(interface->phy_index , interface) != 0) {
                   wifi_hal_info_print("%s:%d: Could not map interface name to index:%d\n", __func__, __LINE__, interface->phy_index);
@@ -3701,6 +3705,7 @@ int create_ecomode_interfaces(void)
        }
     }
     wifi_hal_dbg_print("\n%s:%d: Number of radios %d\n", __func__, __LINE__, g_wifi_hal.num_radios);
+    wifi_hal_dbg_print("NTesting CID:336324: exit %s num_radios=%d\n", __FUNCTION__, g_wifi_hal.num_radios);
     return 0;
 }
 

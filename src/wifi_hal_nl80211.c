@@ -1135,6 +1135,8 @@ static void wifi_hal_send_rssi_xing_event(uint32_t group_index, int ap_idx, bm_s
 
 static void handle_assoc_req_event_for_bm(wifi_interface_info_t *interface, struct ieee80211_mgmt *mgmt, unsigned int len, mac_address_t client_mac)
 {
+    wifi_hal_dbg_print("NTesting CID:420569: entered %s\n", __FUNCTION__);
+    
     mac_addr_str_t sta_mac_str;
     char *key = NULL;
     unsigned char *ie;
@@ -1148,10 +1150,12 @@ static void handle_assoc_req_event_for_bm(wifi_interface_info_t *interface, stru
     vap = &interface->vap_info;
     if (vap->vap_mode != wifi_vap_mode_ap || vap->u.bss_info.enabled != true) {
         wifi_hal_error_print("%s:%d: vap is not enabled:%s vap_mode:%d\n", __func__, __LINE__, vap->vap_name, vap->vap_mode);
+        wifi_hal_dbg_print("NTesting CID:420569: exit %s (vap not enabled)\n", __FUNCTION__);
         return;
     }
 
     if (len < IEEE80211_HDRLEN) {
+        wifi_hal_dbg_print("NTesting CID:420569: exit %s (len too short)\n", __FUNCTION__);
         return;
     }
 
@@ -1185,6 +1189,7 @@ static void handle_assoc_req_event_for_bm(wifi_interface_info_t *interface, stru
     if (sta_info == NULL) {
         wifi_hal_error_print("Fail to get the sta MAC=%s after adding it to list\n", key);
         pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
+        wifi_hal_dbg_print("NTesting CID:420569: exit %s (sta_info NULL)\n", __FUNCTION__);
         return;
     }
     if (steering_find_ap_cfg(sta_info->vap_index, &g_idx) == NULL) {
@@ -1205,6 +1210,7 @@ static void handle_assoc_req_event_for_bm(wifi_interface_info_t *interface, stru
         sta_info->event_sent |= BM_SENT_E_ASSOC;
     }
     pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
+    wifi_hal_dbg_print("NTesting CID:420569: exit %s (success)\n", __FUNCTION__);
 }
 
 static void handle_disconnect_event_for_bm(wifi_interface_info_t *interface, mac_address_t client_mac, wifi_mgmtFrameType_t mgmt_type, u16 reason)
@@ -1616,6 +1622,8 @@ static void wifi_hal_send_probe_req_event(wifi_interface_info_t *interface, uint
 
 static void handle_probe_req_event_for_bm(wifi_interface_info_t *interface, struct ieee80211_mgmt *mgmt, unsigned int len, mac_address_t client_mac, int sig_dbm) {
 
+    wifi_hal_dbg_print("NTesting CID:420570: entered %s\n", __FUNCTION__);
+    
     unsigned char *ie;
     unsigned int ie_len, ssid_len = 0;
     char ssid[SSID_MAX_LEN] = { 0 }; // CID: 420570 Uninitialized scalar variable
@@ -1631,11 +1639,13 @@ static void handle_probe_req_event_for_bm(wifi_interface_info_t *interface, stru
     vap = &interface->vap_info;
     if (vap->vap_mode != wifi_vap_mode_ap || vap->u.bss_info.enabled != true) {
         wifi_hal_error_print("%s:%d: vap is not enabled:%s vap_mode:%d\n", __func__, __LINE__, vap->vap_name, vap->vap_mode);
+        wifi_hal_dbg_print("NTesting CID:420570: exit %s (vap not enabled)\n", __FUNCTION__);
         return;
     }
 
     if (len < IEEE80211_HDRLEN) {
         wifi_hal_error_print("%s:%d: wrong mgmt:%d frame for vap:%d\n", __func__, __LINE__, len, vap->vap_index);
+        wifi_hal_dbg_print("NTesting CID:420570: exit %s (len too short)\n", __FUNCTION__);
         return;
     }
 
@@ -1740,6 +1750,7 @@ static void handle_probe_req_event_for_bm(wifi_interface_info_t *interface, stru
         wifi_hal_send_probe_req_event(interface, group_index, vap->vap_index, bm_client_info, bm_client_info->rssi, broadcast);
     }
     pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
+    wifi_hal_dbg_print("NTesting CID:420570: exit %s (success)\n", __FUNCTION__);
 }
 
 void wifi_hal_set_mgt_frame_rate_limit(bool enable, int rate_limit, int window_size,
@@ -2709,6 +2720,8 @@ void recv_data_frame(wifi_interface_info_t *interface)
     uint8_t *interface_mac = NULL;
 #endif // CONFIG_GENERIC_MLO
 
+    wifi_hal_dbg_print("NTesting CID:560225: entered %s for interface %s\n", __FUNCTION__, interface ? interface->name : "(null)");
+
     vap = &interface->vap_info;
     saddr_len = sizeof(saddr);
     memset(buff, 0, sizeof(buff));
@@ -2759,6 +2772,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
                     wifi_hal_info_print("%s:%d Invalid packet buflen < shift (%d < %zu)\n", __func__, __LINE__, buflen, shift);
                     return;
                 }
+                wifi_hal_dbg_print("NTesting CID:560225: %s overflow check passed, buflen=%d shift=%zu rtap_len=%u\n", __FUNCTION__, buflen, shift, rtap_len);
                 len  = buflen - shift;
 
                 char rssi = *(buff + sizeof(struct ethhdr) + 15);
@@ -2993,6 +3007,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
             memcpy(interface->u.sta.src_addr, sta, sizeof(mac_address_t));
         }
     }
+    wifi_hal_dbg_print("NTesting CID:560225: exiting %s\n", __FUNCTION__);
 }
 
 int parsertattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
@@ -3046,6 +3061,7 @@ void process_vapstatus_event(wifi_interface_info_t *interface, bool status)
 
 void recv_link_status()
 {
+    wifi_hal_dbg_print("NTesting CID:277576: entered %s\n", __FUNCTION__);
 
     struct sockaddr_nl local;
     char buf[8192];
@@ -3078,6 +3094,7 @@ void recv_link_status()
     ssize_t recvlen = recvmsg(g_wifi_hal.link_fd, &msg, 0);
 
     if (recvlen < 0) {
+        wifi_hal_dbg_print("NTesting CID:277576: exit %s (recvmsg failed)\n", __FUNCTION__);
         return;
     }
 
@@ -3085,6 +3102,7 @@ void recv_link_status()
 
     for (nlmsgHdr = (struct nlmsghdr *)buf; NLMSG_OK(nlmsgHdr, (unsigned int)recvlen); nlmsgHdr = NLMSG_NEXT(nlmsgHdr, recvlen)) {
         if (nlmsgHdr->nlmsg_type == NLMSG_DONE) {
+            wifi_hal_dbg_print("NTesting CID:277576: exit %s (NLMSG_DONE)\n", __FUNCTION__);
             return;
         }
 
@@ -3169,6 +3187,7 @@ void recv_link_status()
                 }
             }
             if (!found) {
+                wifi_hal_dbg_print("NTesting CID:277576: exit %s (interface not found)\n", __FUNCTION__);
                 return;
             }
 
@@ -3186,6 +3205,7 @@ void recv_link_status()
             }
         }
     }
+    wifi_hal_dbg_print("NTesting CID:277576: exit %s\n", __FUNCTION__);
 }
 
 void *nl_recv_func(void *arg)
@@ -3818,10 +3838,14 @@ int get_vap_state(const char *ifname, short *flags)
     struct ifreq ifr;
     int fd, res;
 
+    wifi_hal_dbg_print("NTesting CID:277465: entered %s src_ifname='%s'\n", __FUNCTION__, ifname);
+
     /*CID: 277465: Buffer not null terminated*/
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
     ifr.ifr_name[IFNAMSIZ - 1] = '\0';
     wifi_hal_dbg_print("%s:%d interface name = '%s'\n", __func__, __LINE__, ifr.ifr_name);
+
+    wifi_hal_dbg_print("NTesting CID:277465: %s after strncpy src_ifname='%s' dest_ifr_name='%s'\n", __FUNCTION__, ifname, ifr.ifr_name);
 
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         wifi_hal_error_print("%s %d socket error %s\n", __func__, __LINE__, strerror(errno));
@@ -3836,6 +3860,8 @@ int get_vap_state(const char *ifname, short *flags)
     close(fd);
 
     *flags = ifr.ifr_flags;
+
+    wifi_hal_dbg_print("NTesting CID:277465: exiting %s src_ifname='%s' res=%d flags=0x%hx\n", __FUNCTION__, ifname, res, *flags);
 
     return res;
 }
@@ -4224,6 +4250,8 @@ int nl80211_interface_enable(const char *ifname, bool enable)
     int fd, res;
     short flags;
 
+    wifi_hal_dbg_print("NTesting CID:277605: entered %s for interface '%s' enable=%d\n", __FUNCTION__, ifname, enable);
+
     if (get_vap_state(ifname, &flags) < 0) {
         wifi_hal_error_print("%s:%d could not get state of interface %s\n", __func__, __LINE__, ifname);
         return -1;
@@ -4252,6 +4280,8 @@ int nl80211_interface_enable(const char *ifname, bool enable)
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
     ifr.ifr_name[IFNAMSIZ - 1] = '\0';
 
+    wifi_hal_dbg_print("NTesting CID:277605: %s after strncpy, src_ifname='%s' dest_ifr_name='%s'\n", __FUNCTION__, ifname, ifr.ifr_name);
+
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         wifi_hal_error_print("%s:%d socket error %s\n", __func__, __LINE__, strerror(errno));
         return -1;
@@ -4261,6 +4291,8 @@ int nl80211_interface_enable(const char *ifname, bool enable)
     close(fd);
 
     wifi_hal_dbg_print("Interface %s %s\n", ifname, enable ? "enabled" : "disabled");
+
+    wifi_hal_dbg_print("NTesting CID:277605: exiting %s for interface '%s' res=%d\n", __FUNCTION__, ifname, res);
 
     return res;
 }
@@ -7550,6 +7582,9 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
         }
     }
 
+    /* CID 280330: entry print for nl80211_update_wiphy */
+    wifi_hal_dbg_print("NTesting CID:280330: entered %s radio_index=%d interface=%p\n", __FUNCTION__, radio ? radio->index : -1, (void*)interface);
+
     if (!interface) {
         wifi_hal_error_print("%s:%d: Error updating dev:%d no interfaces exist\n", __func__, __LINE__, radio->index);
         return -1;
@@ -7565,12 +7600,15 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_SET_WIPHY);
     /*CID 280330: Dereference null return value */
+    wifi_hal_dbg_print("NTesting CID:280330: operation %s msg=%p\n", __FUNCTION__, (void*)msg);
     if (msg == NULL) {
+        wifi_hal_dbg_print("NTesting CID:280330: exit %s msg==NULL returning -1\n", __FUNCTION__);
         return -1;
     }
 
     nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
     if (nl80211_fill_chandef(msg, radio, interface) == -1) {
+        wifi_hal_dbg_print("NTesting CID:280330: exit %s nl80211_fill_chandef failed returning -1\n", __FUNCTION__);
         return -1;
     }
 
@@ -7617,7 +7655,9 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
 
            msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_SET_WIPHY);
            /*CID 280330: Dereference null return value */
+           wifi_hal_dbg_print("NTesting CID:280330: operation(reconfig) %s msg=%p\n", __FUNCTION__, (void*)msg);
            if (msg == NULL) {
+               wifi_hal_dbg_print("NTesting CID:280330: exit(reconfig) %s msg==NULL returning -1\n", __FUNCTION__);
                return -1;
            }
 
@@ -8351,6 +8391,8 @@ int nl80211_disconnect_sta(wifi_interface_info_t *interface)
 int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
     wifi_neighbor_ap2_t *neighbor_stats, unsigned int count)
 {
+    wifi_hal_dbg_print("NTesting CID:508155: entered %s\n", __FUNCTION__);
+    
     int fd;
     emu_neighbor_stats_t *neighbor_data;
     size_t file_size;
@@ -8362,12 +8404,14 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
     sem = sem_open(SEM_NAME, O_CREAT, 0666, 1);
     if (sem == SEM_FAILED) {
         wifi_hal_stats_error_print("%s:%d: Failed to open semaphore\n", __func__, __LINE__);
+        wifi_hal_dbg_print("NTesting CID:508155: exit %s returning RETURN_ERR (sem open failed)\n", __FUNCTION__);
         return RETURN_ERR;
     }
 
     if (sem_wait(sem) == -1) {
         wifi_hal_stats_error_print("%s:%d: Failed to acquire semaphore\n", __func__, __LINE__);
         sem_close(sem);
+        wifi_hal_dbg_print("NTesting CID:508155: exit %s returning RETURN_ERR (sem wait failed)\n", __FUNCTION__);
         return RETURN_ERR;
     }
 
@@ -8393,6 +8437,7 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
 
         sem_post(sem);
         sem_close(sem);
+        wifi_hal_dbg_print("NTesting CID:508155: exit %s returning RETURN_OK (emu disabled)\n", __FUNCTION__);
         return RETURN_OK;
     }
 
@@ -8403,6 +8448,7 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
         wifi_hal_stats_error_print("%s:%d: Failed to open file: %s\n", __func__, __LINE__, file_path);
         sem_post(sem);
         sem_close(sem);
+        wifi_hal_dbg_print("NTesting CID:508155: exit %s returning RETURN_ERR (file open failed)\n", __FUNCTION__);
         return RETURN_ERR;
     }
 
@@ -8411,6 +8457,7 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
         close(fd);
         sem_post(sem);
         sem_close(sem);
+        wifi_hal_dbg_print("NTesting CID:508155: exit %s returning RETURN_ERR (ftruncate failed)\n", __FUNCTION__);
         return RETURN_ERR;
     }
 
@@ -8420,6 +8467,7 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
         close(fd);
         sem_post(sem);
         sem_close(sem);
+        wifi_hal_dbg_print("NTesting CID:508155: exit %s returning RETURN_ERR (mmap failed)\n", __FUNCTION__);
         return RETURN_ERR;
     }
 
@@ -8433,12 +8481,16 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
     }
 
     /*CID 508155 Resource Leak */
-    if (munmap(neighbor_data, file_size) == -1) {
+    wifi_hal_dbg_print("NTesting CID:508155: operation in %s unmapping neighbor_data=%p file_size=%zu\n", __FUNCTION__, neighbor_data, file_size);
+    int munmap_ret = munmap(neighbor_data, file_size);
+    wifi_hal_dbg_print("NTesting CID:508155: operation in %s munmap returned %d\n", __FUNCTION__, munmap_ret);
+    if (munmap_ret == -1) {
         wifi_hal_stats_error_print("%s:%d: Failed to unmap memory: %s\n", __func__, __LINE__, strerror(errno));
     }
 
     close(fd);
     sem_close(sem);
+    wifi_hal_dbg_print("NTesting CID:508155: exit %s returning RETURN_OK\n", __FUNCTION__);
     return RETURN_OK;
 }
 
@@ -15293,6 +15345,8 @@ error:
 
 int wifi_drv_set_operstate(void *priv, int state)
 {
+    wifi_hal_dbg_print("NTesting CID:277563: entered %s\n", __FUNCTION__);
+    
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
 #ifndef EAPOL_OVER_NL
@@ -15311,15 +15365,18 @@ int wifi_drv_set_operstate(void *priv, int state)
     if (interface->vap_configured == true) {
         if (state == 1) {
             wifi_hal_dbg_print("%s:%d: VAP already configured\n", __func__, __LINE__);
+            wifi_hal_dbg_print("NTesting CID:277563: exit %s returning 0 (VAP already configured)\n", __FUNCTION__);
             return 0;
         }
         else {
             wifi_hal_dbg_print("%s:%d: Configured VAP is being disabled\n", __func__, __LINE__);
+            wifi_hal_dbg_print("NTesting CID:277563: exit %s returning 0 (VAP being disabled)\n", __FUNCTION__);
             return 0;
         }
     } else {
         if (state == 0) {
             wifi_hal_dbg_print("%s:%d: VAP is not configured\n", __func__, __LINE__);
+            wifi_hal_dbg_print("NTesting CID:277563: exit %s returning 0 (VAP not configured)\n", __FUNCTION__);
             return 0;
         }
     }
@@ -15327,6 +15384,7 @@ int wifi_drv_set_operstate(void *priv, int state)
 
     if (vap->u.bss_info.enabled == false && vap->u.sta_info.enabled == false) {
         wifi_hal_dbg_print("%s:%d: VAP not enabled\n", __func__, __LINE__);
+        wifi_hal_dbg_print("NTesting CID:277563: exit %s returning 0 (VAP not enabled)\n", __FUNCTION__);
         return 0;
     }
 
@@ -15334,12 +15392,14 @@ int wifi_drv_set_operstate(void *priv, int state)
         // Both STAs and APs can register for management frames but not spurious frames
         if (nl80211_register_mgmt_frames(interface) != 0) {
             wifi_hal_error_print("%s:%d: Failed to register for management frames\n", __func__, __LINE__);
+            wifi_hal_dbg_print("NTesting CID:277563: exit %s returning -1 (mgmt frames failed)\n", __FUNCTION__);
             return -1;
         }
     }
     if (vap->vap_mode == wifi_vap_mode_ap) {
         if (nl80211_register_spurious_frames(interface) != 0) {
             wifi_hal_error_print("%s:%d: Failed to register spurious frames\n", __func__, __LINE__);
+            wifi_hal_dbg_print("NTesting CID:277563: exit %s returning -1 (spurious frames failed)\n", __FUNCTION__);
             return -1;
         }
     }
@@ -15355,12 +15415,14 @@ int wifi_drv_set_operstate(void *priv, int state)
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
         if (sock_fd < 0) {
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
+            wifi_hal_dbg_print("NTesting CID:277563: exit %s returning -1 (AP socket failed)\n", __FUNCTION__);
             return -1;
         }
     } else {
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
         if (sock_fd < 0) {
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
+            wifi_hal_dbg_print("NTesting CID:277563: exit %s returning -1 (STA socket failed)\n", __FUNCTION__);
             return -1;
         }
     }
@@ -15374,6 +15436,7 @@ int wifi_drv_set_operstate(void *priv, int state)
     sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock_fd < 0) {
         wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
+        wifi_hal_dbg_print("NTesting CID:277563: exit %s returning -1 (emulator socket failed)\n", __FUNCTION__);
         return -1;
     }
 #endif
@@ -15408,12 +15471,14 @@ int wifi_drv_set_operstate(void *priv, int state)
         return -1;
     }
 
+    wifi_hal_dbg_print("NTesting CID:277563: operation in %s checking vap_mode=%d sock_fd=%d\n", __FUNCTION__, vap->vap_mode, sock_fd);
     if (vap->vap_mode == wifi_vap_mode_ap) {
         interface->u.ap.br_sock_fd = sock_fd;
     } else if (vap->vap_mode == wifi_vap_mode_sta) {
         interface->u.sta.sta_sock_fd = sock_fd;
     } else {
         /*CID 277563: Resource leak */
+        wifi_hal_dbg_print("NTesting CID:277563: operation in %s closing sock_fd=%d vap_mode=%d\n", __FUNCTION__, sock_fd, vap->vap_mode);
         close(sock_fd);
     }
 
@@ -15429,6 +15494,7 @@ int wifi_drv_set_operstate(void *priv, int state)
     wifi_hal_info_print("%s:%d: Exit, interface:%s bridge:%s driver configured for 802.11\n",
             __func__, __LINE__, interface->name, vap->bridge_name);
 
+    wifi_hal_dbg_print("NTesting CID:277563: exit %s returning 0\n", __FUNCTION__);
     return 0;
 }
 

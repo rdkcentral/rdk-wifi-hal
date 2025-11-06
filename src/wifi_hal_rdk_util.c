@@ -447,6 +447,8 @@ time_t get_boot_time_in_sec(void)
 
 cJSON *json_open_file(const char *file_name)
 {
+    wifi_hal_dbg_print("NTesting CID:520771: entered %s\n", __FUNCTION__);
+    
     FILE *fp;
     cJSON *json = NULL;
     size_t len;
@@ -456,6 +458,7 @@ cJSON *json_open_file(const char *file_name)
     if (fp == NULL) {
         wifi_hal_error_print("%s:%d: Failed (err=%d, msg=%s) to open file:%s\n", __func__, __LINE__,
             errno, strerror(errno), file_name);
+        wifi_hal_dbg_print("NTesting CID:520771: exit %s returning NULL (fopen failed)\n", __FUNCTION__);
         return json;
     }
     fseek(fp, 0, SEEK_END);
@@ -467,6 +470,7 @@ cJSON *json_open_file(const char *file_name)
         wifi_hal_error_print("%s:%d: Failed to allocate %zu bytes for json file\n", __func__,
             __LINE__, len);
         /*CID 520771: Resource leak */
+        wifi_hal_dbg_print("NTesting CID:520771: operation in %s closing fp=%p\n", __FUNCTION__, fp);
         fclose(fp);
         return NULL;
     }
@@ -479,6 +483,7 @@ cJSON *json_open_file(const char *file_name)
     }
     free(buff);
     fclose(fp);
+    wifi_hal_dbg_print("NTesting CID:520771: exit %s returning json=%p\n", __FUNCTION__, json);
     return json;
 }
 

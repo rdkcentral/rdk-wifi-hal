@@ -1464,8 +1464,12 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 #endif // CONFIG_IEEE80211BE
 
     if (interface == NULL) {
+        wifi_hal_dbg_print("NTesting CID:338904: exit %s returning RETURN_ERR (interface NULL)\n", __FUNCTION__);
         return RETURN_ERR;
     }
+    wifi_hal_dbg_print("NTesting CID:277488: entered %s for interface '%s'\n", __FUNCTION__, interface ? interface->name : "(null)");
+
+    wifi_hal_dbg_print("NTesting CID:277385: entry %s iface_phy_addr=%p iface_phy_size=%zu radio_name=%s\n", __FUNCTION__, (void*)iface->phy, sizeof(iface->phy), radio ? radio->name : "(null)");
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
     param = &radio->oper_param;
@@ -1476,6 +1480,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     /*CID 277488, 277385 Destination buffer too small*/
     strncpy(iface->phy, radio->name, sizeof(iface->phy) - 1);
     iface->phy[sizeof(iface->phy) - 1] = '\0';
+    wifi_hal_dbg_print("NTesting CID:277488 277385: %s after strncpy src_radio_name='%s' dest_iface_phy='%s'\n", __FUNCTION__, radio ? radio->name : "(null)", iface->phy);
     iface->state = HAPD_IFACE_ENABLED;
 
     iface->num_bss = 1;
@@ -1513,6 +1518,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     default:
         wifi_hal_error_print("%s:%d: Unknown band: %d\n", __func__, __LINE__,
             radio->oper_param.band);
+        wifi_hal_dbg_print("NTesting CID:338904: exit %s returning RETURN_ERR (unknown band) preassoc_supp_rates=%p preassoc_basic_rates=%p\n", __FUNCTION__, preassoc_supp_rates, preassoc_basic_rates);
         if(preassoc_supp_rates) {
           os_free(preassoc_supp_rates);
           preassoc_supp_rates = NULL;
@@ -1535,6 +1541,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         wifi_hal_error_print("%s:%d failed to get mode, interface: %s hw mode: %d, freq: %d\n",
             __func__, __LINE__, interface->name, iface->conf->hw_mode, iface->freq);
         /*CID 338904, 338903 - Resource leak */
+        wifi_hal_dbg_print("NTesting CID:338904: operation in %s freeing preassoc_supp_rates=%p preassoc_basic_rates=%p\n", __FUNCTION__, preassoc_supp_rates, preassoc_basic_rates);
         if (preassoc_supp_rates) {
            os_free(preassoc_supp_rates);
            preassoc_supp_rates = NULL;
@@ -1543,6 +1550,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
            os_free(preassoc_basic_rates);
            preassoc_basic_rates = NULL;
         }
+        wifi_hal_dbg_print("NTesting CID:338904: operation in %s freed preassoc_supp_rates=%p preassoc_basic_rates=%p\n", __FUNCTION__, preassoc_supp_rates, preassoc_basic_rates);
         return RETURN_ERR;
     }
 #else
@@ -1557,6 +1565,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         iface->current_cac_rates = os_calloc(mode->num_rates, sizeof(struct hostapd_rate_data));
         if (!iface->current_cac_rates) {
             wifi_hal_info_print("%s:%d Failed to allocate memory\n",__func__,__LINE__);
+            wifi_hal_dbg_print("NTesting CID:338904: exit %s returning RETURN_ERR (memory allocation failed) preassoc_supp_rates=%p preassoc_basic_rates=%p\n", __FUNCTION__, preassoc_supp_rates, preassoc_basic_rates);
             if(preassoc_supp_rates) {
                 os_free(preassoc_supp_rates);
                 preassoc_supp_rates = NULL;
@@ -1565,6 +1574,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
                 os_free(preassoc_basic_rates);
                 preassoc_basic_rates = NULL;
             }
+            wifi_hal_dbg_print("NTesting CID:338904: exit %s returning RETURN_ERR (memory allocation failed)\n", __FUNCTION__);
             return RETURN_ERR;
         }
     }
@@ -1795,6 +1805,8 @@ int update_hostap_iface(wifi_interface_info_t *interface)
       preassoc_basic_rates = NULL;
     }
 
+    wifi_hal_dbg_print("NTesting CID:338904: exit %s returning RETURN_OK preassoc_supp_rates=%p preassoc_basic_rates=%p\n", __FUNCTION__, preassoc_supp_rates, preassoc_basic_rates);
+    wifi_hal_dbg_print("NTesting CID:277488: exiting %s\n", __FUNCTION__);
     return RETURN_OK;
 }
 
@@ -1937,6 +1949,8 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
 
     struct hostapd_config   *iconf;
     wifi_radio_operationParam_t *param;
+
+    wifi_hal_dbg_print("NTesting CID:329163: entered %s for radio index %d\n", __FUNCTION__, radio ? radio->index : -1);
 #ifdef CONFIG_IEEE80211AX
     struct ieee80211_he_mu_edca_parameter_set he_mu_edca = { 0x4, { 0x00, 0xa4, 0x08 },
         { 0x20, 0xa4, 0x08 }, { 0x40, 0x43, 0x08 }, { 0x60, 0x32, 0x08 } };
@@ -2069,6 +2083,7 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
 
     get_coutry_str_from_oper_params(param, country_code);
     memcpy(iconf->country, country_code, sizeof(iconf->country)); // CID: 329163 Out-of-bounds access
+    wifi_hal_dbg_print("NTesting CID:329163: %s after memcpy, src_country_code='%s' dest_iconf_country='%.3s' sizeof(iconf->country)=%zu\n", __FUNCTION__, country_code, iconf->country, sizeof(iconf->country));
     // use global operating class in country info
     iconf->country[2] = 0x04;
 
@@ -2253,6 +2268,7 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
 
     ret = RETURN_OK;
 exit:
+    wifi_hal_dbg_print("NTesting CID:329163: exiting %s ret=%d\n", __FUNCTION__, ret);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return ret;
 }

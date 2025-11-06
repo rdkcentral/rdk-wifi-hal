@@ -3247,6 +3247,8 @@ static int get_radio_diag_handler(struct nl_msg *msg, void *arg)
     };
     wifi_radioTrafficStats2_t *radioTrafficStats = arg;
 
+    wifi_hal_dbg_print("NTesting CID:507523: entered %s\n", __FUNCTION__);
+
     if (nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL) <
         0) {
         wifi_hal_stats_error_print("%s:%d Failed to parse vendor data\n", __func__, __LINE__);
@@ -3278,6 +3280,7 @@ static int get_radio_diag_handler(struct nl_msg *msg, void *arg)
         wifi_hal_stats_error_print("%s:%d Failed to parse radio info attribute\n", __func__, __LINE__);
         return NL_SKIP;
     }
+    wifi_hal_dbg_print("NTesting CID:507523: %s after nla_parse_nested operation completed, RDK_VENDOR_ATTR_RADIO_INFO_MAX=%d, tb_vendor[RDK_VENDOR_ATTR_RADIO_INFO]=%p\n", __FUNCTION__, RDK_VENDOR_ATTR_RADIO_INFO_MAX, tb_vendor[RDK_VENDOR_ATTR_RADIO_INFO]);
 
     for (i = 0; i <= RDK_VENDOR_ATTR_RADIO_INFO_MAX; i++) {
         if (radio_diag_policy[i].type != 0 && tb_radio_info[i] == NULL) {
@@ -3353,6 +3356,7 @@ static int get_radio_diag_handler(struct nl_msg *msg, void *arg)
         radioTrafficStats->radio_MinimumNoiseFloorOnChannel,
         radioTrafficStats->radio_MedianNoiseFloorOnChannel,
         radioTrafficStats->radio_StatisticsStartTime);
+    wifi_hal_dbg_print("NTesting CID:507523: exiting %s\n", __FUNCTION__);
     return NL_SKIP;
 }
 

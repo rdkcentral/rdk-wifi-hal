@@ -1048,8 +1048,14 @@ static int handle_radio_msmt_report(wifi_interface_info_t *interface, const mac_
 int wifi_rrm_send_beacon_resp(unsigned int ap_index, wifi_neighbor_ap2_t *bss,
     unsigned int num_ssid, unsigned int token, unsigned int num_report)
 {
+    wifi_hal_dbg_print("NTesting CID:556453: entered %s\n", __FUNCTION__);
+
+    /* CID 556454: instrument uninitialized scalar 'rep' */
+    wifi_hal_dbg_print("NTesting CID:556454: entry %s ap_index=%u num_report=%u token=%u bss=%p\n", __FUNCTION__, ap_index, num_report, token, bss);
+
     struct wpabuf *wpa_buf = NULL;
     struct rrm_measurement_beacon_report rep = { 0 }; // CID: 556454 Uninitialized scalar variable
+    wifi_hal_dbg_print("NTesting CID:556454: operation %s rep_addr=%p sizeof(rep)=%zu\n", __FUNCTION__, &rep, sizeof(rep));
     uint8_t idx = 0;
     size_t ssid_len = 0;
     unsigned int itr = 0;
@@ -1140,7 +1146,10 @@ int wifi_rrm_send_beacon_resp(unsigned int ap_index, wifi_neighbor_ap2_t *bss,
     wifi_hal_send_mgmt_frame(ap_index, backhaul->bssid, wpabuf_head(report), wpabuf_len(report), 0, 0);
     os_free(wpa_buf);
     /*CID 556453: Resource leak */
+    wifi_hal_dbg_print("NTesting CID:556453: operation in %s freeing report=%p\n", __FUNCTION__, report);
     wpabuf_free(report);
+    wifi_hal_dbg_print("NTesting CID:556453: exit %s returning RETURN_OK\n", __FUNCTION__);
+    wifi_hal_dbg_print("NTesting CID:556454: exit %s rep_addr=%p returning RETURN_OK\n", __FUNCTION__, &rep);
     return RETURN_OK;
 }
 
