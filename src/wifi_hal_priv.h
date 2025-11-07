@@ -877,6 +877,7 @@ wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index);
 wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index);
 BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, size_t *ie_out_len);
 BOOL get_ie_ext_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len);
+const u8 * get_vendor_ie_by_type(const u8 *pos, size_t len, u32 vendor_type);
 INT get_coutry_str_from_code(wifi_countrycode_type_t code, char *country);
 INT get_coutry_str_from_oper_params(wifi_radio_operationParam_t *operParams, char *country);
 char *to_mac_str    (mac_address_t mac, mac_addr_str_t key);

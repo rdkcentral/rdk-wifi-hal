@@ -9018,12 +9018,24 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     update_wpa_sm_params(interface);
     init_wpa_sm_param(interface);
     interface->wpa_s.current_ssid->proto = WPA_PROTO_RSN;
-    interface->wpa_s.current_ssid->group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
+    if (security->mode != wifi_security_mode_wpa3_compatibility) {
+        interface->wpa_s.current_ssid->group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
+    }
+#if HOSTAPD_VERSION >= 211 //2.11
+#ifdef CONFIG_IEEE80211BE
+    if (security->mode == wifi_security_mode_wpa3_compatibility &&
+        wpa_sm_get_rsn_override(interface->u.sta.wpa_sm) == RSN_OVERRIDE_RSNE_OVERRIDE_2) {
+        interface->wpa_s.current_ssid->pairwise_cipher = WPA_CIPHER_GCMP_256;
+    }
+#endif
+#endif
+    interface->wpa_s.current_ssid->ieee80211w = security->mfp;
 
     interface->wpa_s.current_ssid->key_mgmt = interface->u.sta.wpa_sm->key_mgmt;
     if ((security->mode == wifi_security_mode_wpa3_personal) ||
         (security->mode == wifi_security_mode_wpa3_transition) ||
-        (security->mode == wifi_security_mode_wpa3_enterprise)) {
+        (security->mode == wifi_security_mode_wpa3_enterprise) ||
+        (security->mode == wifi_security_mode_wpa3_compatibility)) {
         interface->wpa_s.current_ssid->ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
         if (interface->wpa_s.conf->sae_groups == NULL) {
             interface->wpa_s.conf->sae_groups =
@@ -9039,7 +9051,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 	interface->wpa_s.conf->sae_groups[0] = 19;
 	interface->wpa_s.conf->sae_groups[1] = 20;
 	interface->wpa_s.conf->sae_groups[2] = 21;
-	interface->wpa_s.conf->sae_groups[3] = -1;
+	interface->wpa_s.conf->sae_groups[3] = 0;
     }
     if (interface->wpa_s.current_ssid->ssid == NULL) {
         interface->wpa_s.current_ssid->ssid = malloc(strlen(backhaul->ssid) + 1);
@@ -9090,14 +9102,9 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             MAX_PWD_LEN-1);
     }
 
-    if (security->mode != wifi_security_mode_wpa3_personal) {
-        interface->wpa_s.current_ssid->ieee80211w = security->mfp;
-    }
-
     memset(interface->wpa_s.current_ssid->ssid, 0, (strlen(backhaul->ssid) + 1));
     strcpy(interface->wpa_s.current_ssid->ssid, backhaul->ssid);
-    if ((security->mode != wifi_security_mode_wpa2_personal) &&
-            (security->mode != wifi_security_mode_wpa3_compatibility)) {
+    if ((security->mode != wifi_security_mode_wpa2_personal)) {
         interface->wpa_s.current_ssid->ssid_len = strlen(backhaul->ssid);
     }
     interface->wpa_s.current_bss->freq = backhaul->freq;
@@ -9131,17 +9138,23 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     curr_bss->ie_len = bss_ie->buff_len;
     curr_bss->beacon_ie_len = beacon_ie->buff_len;
     if (bss_ie->buff != NULL) {
-        memcpy(curr_bss + 1, bss_ie->buff, bss_ie->buff_len);
+        memcpy(curr_bss->ies, bss_ie->buff, bss_ie->buff_len);
         rsnxe = get_ie(bss_ie->buff, bss_ie->buff_len, WLAN_EID_RSNX);
         if (rsnxe && rsnxe[1] >= 1)
             rsnxe_capa = rsnxe[2]; 
     }
     if (((security->mode == wifi_security_mode_wpa3_personal) ||
         (security->mode == wifi_security_mode_wpa3_transition) ||
-        (security->mode == wifi_security_mode_wpa3_enterprise)) &&
+        (security->mode == wifi_security_mode_wpa3_enterprise) ||
+        (security->mode == wifi_security_mode_wpa3_compatibility)) &&
         (rsnxe_capa & BIT(WLAN_RSNX_CAPAB_SAE_H2E) ||
         radio->oper_param.band == WIFI_FREQUENCY_6_BAND)) {
-        interface->wpa_s.conf->sae_pwe = 1;
+
+        if (security->mode == wifi_security_mode_wpa3_compatibility) {
+            interface->wpa_s.conf->sae_pwe = 2;
+        } else {
+            interface->wpa_s.conf->sae_pwe = 1;
+        }
 
         interface->wpa_s.current_ssid->pt = sae_derive_pt(interface->wpa_s.conf->sae_groups,
             interface->wpa_s.current_ssid->ssid,
@@ -9162,7 +9175,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 
     bss = wpa_bss_get_bssid_latest(&interface->wpa_s, backhaul->bssid);
     if (bss) { 
-        memcpy(bss + 1, bss_ie->buff, bss_ie->buff_len);
+        memcpy(bss->ies, bss_ie->buff, bss_ie->buff_len);
     }
 
     wpa_hexdump(MSG_MSGDUMP, "CONN_BSS_IE", bss_ie->buff, bss_ie->buff_len);
