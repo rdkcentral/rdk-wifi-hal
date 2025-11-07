@@ -2030,6 +2030,27 @@ BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len,
     return false;
 }
 
+const u8 * get_vendor_ie_by_type(const u8 *pos, size_t len, u32 vendor_type)
+{
+    const u8 *end;
+
+    end = pos + len;
+
+    while (end - pos > 1) {
+        if (2 + pos[1] > end - pos) {
+            break;
+        }
+
+        if (pos[0] == WLAN_EID_VENDOR_SPECIFIC && pos[1] >= 4 && vendor_type == WPA_GET_BE32(&pos[2])) {
+            return pos;
+        }
+
+        pos += 2 + pos[1];
+    }
+
+    return NULL;
+}
+
 int get_radio_variant_str_from_int(unsigned int variant, char *variant_str)
 {
     unsigned char index = 0;

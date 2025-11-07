@@ -222,6 +222,7 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
     const struct ieee80211_mgmt *mgmt;
     u16 status = 0;
     size_t len = 0;
+    uint32_t radio_index = 0;
 
     memset(&event, 0, sizeof(event));
     wifi_hal_dbg_print("%s:%d: Enter \n", __func__, __LINE__);
@@ -262,9 +263,12 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
     }
 
     if (interface->vap_info.radio_index < MAX_NUM_RADIOS) {
-        wifi_hal_dbg_print("%s:%d: set beacon ie for radio_index:%d\n", __func__,
-            __LINE__, interface->vap_info.radio_index);
-        wifi_ie_info_t *bss_ie = &interface->bss_elem_ie[interface->vap_info.radio_index];
+        wifi_convert_freq_band_to_radio_index(interface->u.sta.backhaul.oper_freq_band,
+            (int *)&radio_index);
+
+        wifi_hal_dbg_print("%s:%d: set beacon ie for radio_index:%d sta radio:%d\n", __func__,
+            __LINE__, interface->vap_info.radio_index, radio_index);
+        wifi_ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
         wpa_hexdump(MSG_MSGDUMP, "ASSOC_BSS_IE", bss_ie->buff, bss_ie->buff_len);
         event.assoc_info.beacon_ies = bss_ie->buff;
         event.assoc_info.beacon_ies_len = bss_ie->buff_len;
