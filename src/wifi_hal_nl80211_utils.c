@@ -3642,13 +3642,13 @@ int create_ecomode_interfaces(void)
                wifi_hal_error_print("%s:%d: Failed in creating eco mode interfaces\n", __func__, __LINE__);
                return -1;
            }
-           if (radio->rdk_radio_index == l_radio_interface_map[radioIndex].radio_index) {
-               //Radio interface not in ECO mode [Added already in g_wifi_hal.radio_info after notification from driver]
-               found = 1;
-               radio->radio_presence = true;
-               wifi_hal_dbg_print("%s:%d: Found ECO Active mode radio , coming out\n", __func__, __LINE__);
-               break;
-           }
+        //    if (radio->rdk_radio_index == l_radio_interface_map[radioIndex].radio_index) {
+        //        //Radio interface not in ECO mode [Added already in g_wifi_hal.radio_info after notification from driver]
+        //        found = 1;
+        //        radio->radio_presence = true;
+        //        wifi_hal_dbg_print("%s:%d: Found ECO Active mode radio , coming out\n", __func__, __LINE__);
+        //        //break;
+        //    }
         }
 
         if (!found) {
@@ -3662,6 +3662,7 @@ int create_ecomode_interfaces(void)
           // CID 336324: Calling risky function
           wifi_hal_dbg_print("NTesting CID:336324: operation %s radioIndex=%u dest=%p dest_size=%zu src='%s'\n", __FUNCTION__, radioIndex, (void*)radio->name, sizeof(radio->name), l_radio_interface_map[radioIndex].radio_name);
           snprintf(radio->name, sizeof(radio->name), "%s", l_radio_interface_map[radioIndex].radio_name);
+          wifi_hal_dbg_print("NTesting CID:336324: post-snprintf %s radio->name='%s' strlen=%zu\n", __FUNCTION__, radio->name, strlen(radio->name));
           g_wifi_hal.num_radios++;
           radio->capab.maxNumberVAPs = 0;
           radio->interface_map = hash_map_create();
@@ -3689,6 +3690,7 @@ int create_ecomode_interfaces(void)
               // CID 336324: Calling risky function
               wifi_hal_dbg_print("NTesting CID:336324: operation %s vapIndex=%d dest=%p dest_size=%zu src='%s'\n", __FUNCTION__, vapIndex, (void*)interface->name, sizeof(interface->name), interface_index_map[vapIndex].interface_name);
               snprintf(interface->name, sizeof(interface->name), "%s", interface_index_map[vapIndex].interface_name);
+              wifi_hal_dbg_print("NTesting CID:336324: post-snprintf %s interface->name='%s' strlen=%zu\n", __FUNCTION__, interface->name, strlen(interface->name));
               if (set_interface_properties(interface->phy_index , interface) != 0) {
                   wifi_hal_info_print("%s:%d: Could not map interface name to index:%d\n", __func__, __LINE__, interface->phy_index);
               }
