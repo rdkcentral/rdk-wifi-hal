@@ -2780,6 +2780,7 @@ int get_vap_state(const char *ifname, short *flags)
     int fd, res;
 
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
+    ifr.ifr_name[IFNAMSIZ - 1] = '\0';
     wifi_hal_dbg_print("%s:%d interface name = '%s'\n", __func__, __LINE__, ifr.ifr_name);
 
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -3204,6 +3205,7 @@ int nl80211_interface_enable(const char *ifname, bool enable)
 
     ifr.ifr_flags = flags;
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
+    ifr.ifr_name[IFNAMSIZ - 1] = '\0';
 
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         wifi_hal_error_print("%s:%d socket error %s\n", __func__, __LINE__, strerror(errno));
@@ -6363,6 +6365,9 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
     wifi_drv_set_txpower(interface, radio->oper_param.transmitPower);
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_SET_WIPHY);
+    if (msg == NULL) {
+        return -1;
+    }
 
     nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
     if (nl80211_fill_chandef(msg, radio, interface) == -1) {
@@ -6403,6 +6408,9 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
             }
 
            msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_SET_WIPHY);
+           if (msg == NULL) {
+               return -1;
+           }
 
            nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
            if (nl80211_fill_chandef(msg, radio, interface) == -1) {
@@ -7175,6 +7183,10 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
 
     if (sem_post(sem) == -1) {
         wifi_hal_stats_error_print("%s:%d: Failed to release semaphore\n", __func__, __LINE__);
+    }
+
+    if (munmap(neighbor_data, file_size) == -1) {
+        wifi_hal_stats_error_print("%s:%d: Failed to unmap memory: %s\n", __func__, __LINE__, strerror(errno));
     }
 
     close(fd);
@@ -13802,6 +13814,8 @@ int wifi_drv_set_operstate(void *priv, int state)
         interface->u.ap.br_sock_fd = sock_fd;
     } else if (vap->vap_mode == wifi_vap_mode_sta) {
         interface->u.sta.sta_sock_fd = sock_fd;
+    } else {
+        close(sock_fd);
     }
 
 #else
