@@ -1139,6 +1139,7 @@ int wifi_rrm_send_beacon_resp(unsigned int ap_index, wifi_neighbor_ap2_t *bss,
     backhaul = &interface->u.sta.backhaul;
     wifi_hal_send_mgmt_frame(ap_index, backhaul->bssid, wpabuf_head(report), wpabuf_len(report), 0, 0);
     os_free(wpa_buf);
+    wpabuf_free(report);
     return RETURN_OK;
 }
 
