@@ -2754,7 +2754,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                 } else if (sec->mode == wifi_security_mode_wpa3_enterprise) {
                     sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
                 } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
-#if HOSTAPD_VERSION >= 211 //2.11
+#if !defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
                     wpa_sm_set_param(sm, WPA_PARAM_RSN_OVERRIDE_SUPPORT, true);
 #ifdef CONFIG_IEEE80211BE
                     if (wpa_sm_get_rsn_override(sm) == RSN_OVERRIDE_RSNE_OVERRIDE_2) {
@@ -2763,7 +2763,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                         sel = (wpa_key_mgmt_11w | WPA_KEY_MGMT_SAE_EXT_KEY) & data.key_mgmt;
                     } else
 #endif //CONFIG_IEEE80211BE
-#endif //2.11
+#endif //!BANANA_PI_PORT && HOSTAPD_VERSION >= 211
                     {
                         sel = (wpa_key_mgmt_11w | WPA_KEY_MGMT_SAE) & data.key_mgmt;
                     }

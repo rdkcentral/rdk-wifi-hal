@@ -9021,7 +9021,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     if (security->mode != wifi_security_mode_wpa3_compatibility) {
         interface->wpa_s.current_ssid->group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
     }
-#if HOSTAPD_VERSION >= 211 //2.11
+#if !defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
 #ifdef CONFIG_IEEE80211BE
     if (security->mode == wifi_security_mode_wpa3_compatibility &&
         wpa_sm_get_rsn_override(interface->u.sta.wpa_sm) == RSN_OVERRIDE_RSNE_OVERRIDE_2) {
