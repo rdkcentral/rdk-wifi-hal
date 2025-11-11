@@ -471,6 +471,7 @@ cJSON *json_open_file(const char *file_name)
     if (buff == NULL) {
         wifi_hal_error_print("%s:%d: Failed to allocate %zu bytes for json file\n", __func__,
             __LINE__, len);
+        fclose(fp);
         return NULL;
     }
     len = fread(buff, 1, len, fp);
