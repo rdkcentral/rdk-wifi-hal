@@ -1758,6 +1758,10 @@ void recv_data_frame(wifi_interface_info_t *interface)
 
                 rtap_len = WPA_GET_BE16(buff + sizeof(struct ethhdr) + 2);
                 shift = sizeof(struct ethhdr) + ntohs(rtap_len);
+                if (buflen < shift) {
+                    wifi_hal_info_print("%s:%d Invalid packet buflen < shift (%d < %zu)\n", __func__, __LINE__, buflen, shift);
+                    return;
+                }
                 len  = buflen - shift;
 
                 char rssi = *(buff + sizeof(struct ethhdr) + 15);
@@ -2039,7 +2043,7 @@ void recv_link_status()
     local.nl_groups = RTMGRP_LINK;
     local.nl_pid = getpid();
 
-    struct msghdr msg;
+    struct msghdr msg = { 0 };
     {
         msg.msg_name = &local;
         msg.msg_namelen = sizeof(local);
