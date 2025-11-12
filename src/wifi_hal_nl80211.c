@@ -9228,7 +9228,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_NONE;
         } else {
             sel = (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK |
-                WPA_KEY_MGMT_PSK_SHA256 ) & data.key_mgmt;
+                      WPA_KEY_MGMT_IEEE8021X_SHA256 WPA_KEY_MGMT_PSK_SHA256) &
+                data.key_mgmt;
             key_mgmt = pick_akm_suite(sel);
 
             if (key_mgmt == -1) {
@@ -9273,8 +9274,11 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                     wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_IEEE8021X;
                     break;
                 case wifi_security_mode_wpa3_personal:
-                case wifi_security_mode_wpa3_enterprise:
                     wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_SAE;
+                    break;
+
+                case wifi_security_mode_wpa3_enterprise:
+                    wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_IEEE8021X_SHA256;
                     break;
                 case wifi_security_mode_wpa3_transition:
                     wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE;
@@ -9293,7 +9297,17 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         }
     }
 
-    wpa_conf.ieee80211w = 0;
+#ifdef CONFIG_IEEE80211W
+    if (security->mode == wifi_security_mode_wpa3_personal ||
+        security->mode == wifi_security_mode_wpa3_enterprise ||
+        security->mode == wifi_security_mode_wpa3_transition) {
+        // WPA3 REQUIRES MFP
+        wpa_conf.ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
+        wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
+    } else {
+        wpa_conf.ieee80211w = security->mfp;
+    }
+#endif
 
     if (security->mode != wifi_security_mode_none) {
         if ((ret = wpa_write_rsn_ie(&wpa_conf, pos, rsn_ie + sizeof(rsn_ie) - pos, NULL)) < 0) {
@@ -9313,22 +9327,12 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             nla_put(msg, NL80211_ATTR_IE, pos - rsn_ie, rsn_ie);
         }
 
-        if (security->mode == wifi_security_mode_wpa2_enterprise || security->mode == wifi_security_mode_wpa2_personal)
-            ver |= NL80211_WPA_VERSION_2;
-        else
-            ver |= NL80211_WPA_VERSION_1;
-        nla_put_u32(msg, NL80211_ATTR_WPA_VERSIONS, ver);
-
-        nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITES_PAIRWISE, RSN_CIPHER_SUITE_CCMP);
-        nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITE_GROUP, RSN_CIPHER_SUITE_CCMP);
-
-        if (security->mode == wifi_security_mode_wpa2_enterprise)
-            nla_put_u32(msg, NL80211_ATTR_AKM_SUITES, RSN_AUTH_KEY_MGMT_UNSPEC_802_1X);
-        else if (security->mode == wifi_security_mode_wpa2_personal)
-            nla_put_u32(msg, NL80211_ATTR_AKM_SUITES, RSN_AUTH_KEY_MGMT_PSK_OVER_802_1X);
-
-        nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
-        nla_put_flag(msg, NL80211_ATTR_PRIVACY);
+        if ((ret = configure_nl80211_security(msg, security, &wpa_conf)) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to configure security: %d\n",
+                           __func__, __LINE__, ret);
+            nlmsg_free(msg);
+            return ret;
+        }
     } else {
         nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
         wifi_hal_dbg_print("security mode open:%d encr:%d\n", security->mode, security->encr);

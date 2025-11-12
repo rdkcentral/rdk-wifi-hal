@@ -2344,6 +2344,296 @@ INT get_coutry_str_from_oper_params(wifi_radio_operationParam_t *operParams, cha
     return RETURN_OK;
 }
 
+u32 get_wpa_version(wifi_security_modes_t mode)
+{
+    switch (mode) {
+    case wifi_security_mode_wpa3_enterprise:
+    case wifi_security_mode_wpa3_personal:
+    case wifi_security_mode_wpa3_transition:
+    case wifi_security_mode_wpa3_compatibility:
+    case wifi_security_mode_wpa2_enterprise:
+    case wifi_security_mode_wpa2_personal:
+    case wifi_security_mode_wpa_wpa2_personal:
+    case wifi_security_mode_wpa_wpa2_enterprise:
+        return NL80211_WPA_VERSION_2;
+
+    default: // Covers modes WPA and WEP
+        return NL80211_WPA_VERSION_1;
+    }
+}
+
+bool is_wpa3_192bit_mode(const struct wpa_auth_config *wpa_conf)
+{
+#if HOSTAPD_VERSION >= 211
+    return (wpa_conf->wpa_key_mgmt &
+        (WPA_KEY_MGMT_IEEE8021X_SHA384 | WPA_KEY_MGMT_FT_IEEE8021X_SHA384 |
+            WPA_KEY_MGMT_IEEE8021X_SUITE_B_192));
+#else
+    return (wpa_conf->wpa_key_mgmt &
+        (WPA_KEY_MGMT_FT_IEEE8021X_SHA384 | WPA_KEY_MGMT_IEEE8021X_SUITE_B_192));
+#endif
+}
+
+void get_cipher_suites(wifi_security_modes_t mode, wifi_encryption_method_t encr,
+    const struct wpa_auth_config *wpa_conf, u32 *pairwise, u32 *group)
+{
+    if (mode == wifi_security_mode_none) {
+        *pairwise = RSN_CIPHER_SUITE_NONE;
+        *group = RSN_CIPHER_SUITE_NONE;
+        return;
+    }
+
+    if (mode == wifi_security_mode_wpa3_enterprise && is_wpa3_192bit_mode(wpa_conf)) {
+        *pairwise = RSN_CIPHER_SUITE_GCMP_256;
+        *group = RSN_CIPHER_SUITE_GCMP_256;
+        wifi_hal_info_print("%s:%d: Using WPA3-Enterprise 192-bit ciphers (GCMP-256)\n", __func__,
+            __LINE__);
+        return;
+    }
+
+    switch (encr) {
+    case wifi_encryption_aes:
+        *pairwise = RSN_CIPHER_SUITE_CCMP;
+        *group = RSN_CIPHER_SUITE_CCMP;
+        break;
+
+    case wifi_encryption_tkip:
+        *pairwise = RSN_CIPHER_SUITE_TKIP;
+        *group = RSN_CIPHER_SUITE_TKIP;
+        break;
+
+    case wifi_encryption_aes_tkip:
+        *pairwise = RSN_CIPHER_SUITE_CCMP;
+        *group = RSN_CIPHER_SUITE_TKIP;
+        break;
+
+    case wifi_encryption_none:
+        *pairwise = RSN_CIPHER_SUITE_NONE;
+        *group = RSN_CIPHER_SUITE_NONE;
+        break;
+
+    default:
+        if (mode == wifi_security_mode_wpa3_enterprise ||
+            mode == wifi_security_mode_wpa3_personal ||
+            mode == wifi_security_mode_wpa3_transition ||
+            mode == wifi_security_mode_wpa2_enterprise ||
+            mode == wifi_security_mode_wpa2_personal) {
+            *pairwise = RSN_CIPHER_SUITE_CCMP;
+            *group = RSN_CIPHER_SUITE_CCMP;
+        } else {
+            *pairwise = RSN_CIPHER_SUITE_TKIP;
+            *group = RSN_CIPHER_SUITE_TKIP;
+        }
+        wifi_hal_info_print("%s:%d: Using default cipher for encr=%d, mode=%d\n", __func__,
+            __LINE__, encr, mode);
+        break;
+    }
+}
+
+enum nl80211_mfp get_mfp_mode(wifi_security_modes_t mode, int configured_mfp)
+{
+    switch (mode) {
+    case wifi_security_mode_wpa3_enterprise:
+    case wifi_security_mode_wpa3_personal:
+    case wifi_security_mode_wpa3_transition:
+        return NL80211_MFP_REQUIRED;
+
+    case wifi_security_mode_wpa3_compatibility:
+    case wifi_security_mode_wpa2_enterprise:
+    case wifi_security_mode_wpa2_personal:
+    case wifi_security_mode_wpa_wpa2_personal:
+    case wifi_security_mode_wpa_wpa2_enterprise:
+        if (configured_mfp == MGMT_FRAME_PROTECTION_REQUIRED) {
+            return NL80211_MFP_REQUIRED;
+        } else if (configured_mfp == MGMT_FRAME_PROTECTION_OPTIONAL) {
+            return NL80211_MFP_OPTIONAL;
+        }
+        return NL80211_MFP_NO;
+
+    default:
+        return NL80211_MFP_NO;
+    }
+}
+
+u32 get_akm_suite(int wpa_key_mgmt, wifi_security_modes_t mode)
+{
+    u32 akm_suite = 0;
+
+    if (wpa_key_mgmt == WPA_KEY_MGMT_NONE) {
+        return 0;
+    }
+
+    if (wpa_key_mgmt & WPA_KEY_MGMT_IEEE8021X_SUITE_B_192) {
+        akm_suite = RSN_AUTH_KEY_MGMT_802_1X_SUITE_B_192;
+    }
+#if HOSTAPD_VERSION >= 211
+    else if (wpa_key_mgmt & WPA_KEY_MGMT_IEEE8021X_SHA384) {
+        akm_suite = RSN_AUTH_KEY_MGMT_802_1X_SUITE_B_192;
+    }
+#endif
+    else if (wpa_key_mgmt & WPA_KEY_MGMT_FT_IEEE8021X_SHA384) {
+        akm_suite = RSN_AUTH_KEY_MGMT_FT_802_1X_SHA384;
+    }
+
+    else if (wpa_key_mgmt & WPA_KEY_MGMT_SAE) {
+        akm_suite = RSN_AUTH_KEY_MGMT_SAE;
+    } else if (wpa_key_mgmt & WPA_KEY_MGMT_FT_SAE) {
+        akm_suite = RSN_AUTH_KEY_MGMT_FT_SAE;
+    }
+
+    else if (wpa_key_mgmt & WPA_KEY_MGMT_IEEE8021X_SUITE_B) {
+        akm_suite = RSN_AUTH_KEY_MGMT_802_1X_SUITE_B;
+    }
+
+    else if (wpa_key_mgmt & WPA_KEY_MGMT_IEEE8021X_SHA256) {
+        akm_suite = RSN_AUTH_KEY_MGMT_802_1X_SHA256;
+    } else if (wpa_key_mgmt & WPA_KEY_MGMT_FT_IEEE8021X) {
+        akm_suite = RSN_AUTH_KEY_MGMT_FT_802_1X;
+    }
+
+    else if (wpa_key_mgmt & WPA_KEY_MGMT_IEEE8021X) {
+        akm_suite = RSN_AUTH_KEY_MGMT_UNSPEC_802_1X;
+    }
+
+    else if (wpa_key_mgmt & WPA_KEY_MGMT_PSK_SHA256) {
+        akm_suite = RSN_AUTH_KEY_MGMT_PSK_SHA256;
+    } else if (wpa_key_mgmt & WPA_KEY_MGMT_FT_PSK) {
+        akm_suite = RSN_AUTH_KEY_MGMT_FT_PSK;
+    }
+
+    else if (wpa_key_mgmt & WPA_KEY_MGMT_PSK) {
+        akm_suite = RSN_AUTH_KEY_MGMT_PSK_OVER_802_1X;
+    }
+
+    else if (wpa_key_mgmt & WPA_KEY_MGMT_FILS_SHA384) {
+        akm_suite = RSN_AUTH_KEY_MGMT_FILS_SHA384;
+    } else if (wpa_key_mgmt & WPA_KEY_MGMT_FILS_SHA256) {
+        akm_suite = RSN_AUTH_KEY_MGMT_FILS_SHA256;
+    } else if (wpa_key_mgmt & WPA_KEY_MGMT_FT_FILS_SHA384) {
+        akm_suite = RSN_AUTH_KEY_MGMT_FT_FILS_SHA384;
+    } else if (wpa_key_mgmt & WPA_KEY_MGMT_FT_FILS_SHA256) {
+        akm_suite = RSN_AUTH_KEY_MGMT_FT_FILS_SHA256;
+    }
+
+    else if (wpa_key_mgmt & WPA_KEY_MGMT_OWE) {
+        akm_suite = RSN_AUTH_KEY_MGMT_OWE;
+    } else if (wpa_key_mgmt & WPA_KEY_MGMT_DPP) {
+        akm_suite = RSN_AUTH_KEY_MGMT_DPP;
+    } else {
+        wifi_hal_error_print("%s:%d: Unknown key_mgmt=0x%x, no matching AKM suite\n", __func__,
+            __LINE__, wpa_key_mgmt);
+    }
+
+    if (akm_suite != 0) {
+        wifi_hal_dbg_print("%s:%d: Selected AKM suite 0x%x for key_mgmt 0x%x\n", __func__, __LINE__,
+            akm_suite, wpa_key_mgmt);
+    }
+
+    return akm_suite;
+}
+
+enum nl80211_auth_type get_auth_type(wifi_security_modes_t mode, u32 akm_suite)
+{
+    if (mode == wifi_security_mode_wpa3_personal || mode == wifi_security_mode_wpa3_transition ||
+        akm_suite == RSN_AUTH_KEY_MGMT_SAE || akm_suite == RSN_AUTH_KEY_MGMT_FT_SAE) {
+        return NL80211_AUTHTYPE_SAE;
+    }
+
+    if (akm_suite == RSN_AUTH_KEY_MGMT_FT_802_1X || akm_suite == RSN_AUTH_KEY_MGMT_FT_PSK ||
+        akm_suite == RSN_AUTH_KEY_MGMT_FT_802_1X_SHA384 ||
+        akm_suite == RSN_AUTH_KEY_MGMT_FT_FILS_SHA256 ||
+        akm_suite == RSN_AUTH_KEY_MGMT_FT_FILS_SHA384) {
+        return NL80211_AUTHTYPE_FT;
+    }
+
+    if (akm_suite == RSN_AUTH_KEY_MGMT_FILS_SHA256 || akm_suite == RSN_AUTH_KEY_MGMT_FILS_SHA384) {
+        return NL80211_AUTHTYPE_FILS_SK;
+    }
+
+    return NL80211_AUTHTYPE_OPEN_SYSTEM;
+}
+
+int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *security,
+    const struct wpa_auth_config *wpa_conf)
+{
+    u32 ver, pairwise_cipher, group_cipher, akm_suite;
+    enum nl80211_mfp mfp;
+    enum nl80211_auth_type auth_type;
+    int ret;
+
+    if (!msg || !security || !wpa_conf) {
+        wifi_hal_error_print("%s:%d: Invalid parameters\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if (security->mode == wifi_security_mode_none) {
+        if ((ret = nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM)) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set auth type: %d\n", __func__, __LINE__, ret);
+            return ret;
+        }
+        wifi_hal_dbg_print("%s:%d: Open network (no security)\n", __func__, __LINE__);
+        return 0;
+    }
+
+    ver = get_wpa_version(security->mode);
+    if ((ret = nla_put_u32(msg, NL80211_ATTR_WPA_VERSIONS, ver)) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set WPA version: %d\n", __func__, __LINE__, ret);
+        return ret;
+    }
+    wifi_hal_info_print("%s:%d: WPA version: 0x%x\n", __func__, __LINE__, ver);
+
+    get_cipher_suites(security->mode, security->encr, wpa_conf, &pairwise_cipher, &group_cipher);
+
+    if ((ret = nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITES_PAIRWISE, pairwise_cipher)) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set pairwise cipher: %d\n", __func__, __LINE__, ret);
+        return ret;
+    }
+
+    if ((ret = nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITE_GROUP, group_cipher)) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set group cipher: %d\n", __func__, __LINE__, ret);
+        return ret;
+    }
+
+    wifi_hal_info_print("%s:%d: Cipher - Pairwise: 0x%x, Group: 0x%x\n", __func__, __LINE__,
+        pairwise_cipher, group_cipher);
+
+    akm_suite = get_akm_suite(wpa_conf->wpa_key_mgmt, security->mode);
+    if (akm_suite != 0) {
+        if ((ret = nla_put_u32(msg, NL80211_ATTR_AKM_SUITES, akm_suite)) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set AKM suite: %d\n", __func__, __LINE__, ret);
+            return ret;
+        }
+        wifi_hal_dbg_print("%s:%d: Set AKM suite to 0x%x\n", __func__, __LINE__, akm_suite);
+    } else {
+        wifi_hal_error_print("%s:%d: No valid AKM suite found for key_mgmt=0x%x\n", __func__,
+            __LINE__, wpa_conf->wpa_key_mgmt);
+        return -1;
+    }
+
+    auth_type = get_auth_type(security->mode, akm_suite);
+    if ((ret = nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, auth_type)) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set auth type: %d\n", __func__, __LINE__, ret);
+        return ret;
+    }
+    wifi_hal_info_print("%s:%d: Auth type: %d\n", __func__, __LINE__, auth_type);
+
+    mfp = get_mfp_mode(security->mode, wpa_conf->ieee80211w);
+    if (mfp != NL80211_MFP_NO) {
+        if ((ret = nla_put_u32(msg, NL80211_ATTR_USE_MFP, mfp)) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set MFP: %d\n", __func__, __LINE__, ret);
+            return ret;
+        }
+        wifi_hal_dbg_print("%s:%d: MFP mode: %d\n", __func__, __LINE__, mfp);
+    }
+
+    if ((ret = nla_put_flag(msg, NL80211_ATTR_PRIVACY)) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set privacy flag: %d\n", __func__, __LINE__, ret);
+        return ret;
+    }
+
+    return 0;
+}
+
 // Based on wpa_supplicant_set_suites
 int pick_akm_suite(int sel)
 {
