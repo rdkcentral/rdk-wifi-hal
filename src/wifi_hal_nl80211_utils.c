@@ -3712,7 +3712,7 @@ int create_ecomode_interfaces(void)
           radio->index =  l_radio_interface_map[radioIndex].phy_index;
           radio->rdk_radio_index = l_radio_interface_map[radioIndex].radio_index;
           radio->capab.index = radio->index;
-          sprintf(radio->name, "%s", l_radio_interface_map[radioIndex].radio_name);
+          snprintf(radio->name, sizeof(radio->name), "%s", l_radio_interface_map[radioIndex].radio_name);
           g_wifi_hal.num_radios++;
           radio->capab.maxNumberVAPs = 0;
           radio->interface_map = hash_map_create();
@@ -3737,7 +3737,7 @@ int create_ecomode_interfaces(void)
               memset(interface, 0, sizeof(wifi_interface_info_t));
               interface->phy_index = radio->index;
               interface->index = interface_index_map[vapIndex].index;
-              sprintf(interface->name, "%s", interface_index_map[vapIndex].interface_name);
+              snprintf(interface->name, sizeof(interface->name), "%s", interface_index_map[vapIndex].interface_name);
               if (set_interface_properties(interface->phy_index , interface) != 0) {
                   wifi_hal_info_print("%s:%d: Could not map interface name to index:%d\n", __func__, __LINE__, interface->phy_index);
               }
@@ -3748,7 +3748,6 @@ int create_ecomode_interfaces(void)
               hash_map_put(radio->interface_map, strdup(interface->name), interface);
               radio->capab.maxNumberVAPs++;
 
-              wifi_hal_dbg_print("%s:%d: Fetch next interface after the radio interface hash map [%s]\n", __func__, __LINE__, interface->name);
            }
            // Build the sleeping radio capabilities manually based on the available info in the 'radio' to bringup webconfig,  Device.WiFi.**
            update_ecomode_radio_capabilities(radio);
