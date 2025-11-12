@@ -4218,7 +4218,7 @@ void wifi_hal_newApAssociatedDevice_callback_register(wifi_newApAssociatedDevice
 
     callbacks = get_hal_device_callbacks();
 
-    if (callbacks == NULL || callbacks->num_assoc_cbs > MAX_REGISTERED_CB_NUM) {
+    if (callbacks == NULL || callbacks->num_assoc_cbs >= MAX_REGISTERED_CB_NUM) {
         return;
     }
 
@@ -4232,7 +4232,7 @@ void wifi_hal_apDeAuthEvent_callback_register(wifi_device_deauthenticated_callba
 
     callbacks = get_hal_device_callbacks();
 
-    if (callbacks == NULL || callbacks->num_apDeAuthEvent_cbs > MAX_REGISTERED_CB_NUM) {
+    if (callbacks == NULL || callbacks->num_apDeAuthEvent_cbs >= MAX_REGISTERED_CB_NUM) {
         return;
     }
 
@@ -4245,7 +4245,7 @@ INT wifi_vapstatus_callback_register(wifi_vapstatus_callback func) {
 
     callbacks = get_hal_device_callbacks();
 
-    if(callbacks == NULL || callbacks->num_vapstatus_cbs > MAX_REGISTERED_CB_NUM) {
+    if (callbacks == NULL || callbacks->num_vapstatus_cbs >= MAX_REGISTERED_CB_NUM) {
         return RETURN_ERR;
     }
     callbacks->vapstatus_cb[callbacks->num_vapstatus_cbs] = func;
@@ -4272,7 +4272,7 @@ void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_
 
     callbacks = get_hal_device_callbacks();
 
-    if (callbacks == NULL || callbacks->num_disassoc_cbs> MAX_REGISTERED_CB_NUM) {
+    if (callbacks == NULL || callbacks->num_disassoc_cbs >= MAX_REGISTERED_CB_NUM) {
         return;
     }
 
@@ -4286,7 +4286,7 @@ void wifi_hal_stamode_callback_register(wifi_stamode_callback func)
 
     callbacks = get_hal_device_callbacks();
 
-    if (callbacks == NULL || callbacks->num_stamode_cbs> MAX_REGISTERED_CB_NUM) {
+    if (callbacks == NULL || callbacks->num_stamode_cbs >= MAX_REGISTERED_CB_NUM) {
         return;
     }
 
@@ -4300,7 +4300,7 @@ void wifi_hal_apStatusCode_callback_register(wifi_apStatusCode_callback func)
 
     callbacks = get_hal_device_callbacks();
 
-    if (callbacks == NULL || callbacks->num_statuscode_cbs> MAX_REGISTERED_CB_NUM) {
+    if (callbacks == NULL || callbacks->num_statuscode_cbs >= MAX_REGISTERED_CB_NUM) {
         return;
     }
 
@@ -4731,4 +4731,14 @@ int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)
 
     vap->u.bss_info.mac_filter_mode = mac_filter_mode;
     return (nl80211_set_acl(interface));
+}
+
+INT wifi_hal_get_RegDomain(wifi_radio_index_t radioIndex, UINT *reg_domain)
+{
+    platform_get_RegDomain_t platform_get_RegDomain_fn;
+    if ((platform_get_RegDomain_fn = get_platform_get_RegDomain_fn()) != NULL) {
+        wifi_hal_dbg_print("%s:%d: Get RegDomain \n", __func__, __LINE__);
+        return (platform_get_RegDomain_fn(radioIndex, reg_domain));
+    }
+    return RETURN_ERR;
 }

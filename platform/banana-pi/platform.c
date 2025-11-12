@@ -486,6 +486,11 @@ int platform_get_radio_caps(wifi_radio_index_t index)
     return RETURN_OK;
 }
 
+int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
+{
+    return RETURN_OK;
+}
+
 INT wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
 {
     int res = wifi_hal_send_mgmt_frame(apIndex, MacAddr, frame, len, frequency, wait);
