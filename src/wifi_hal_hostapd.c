@@ -1931,6 +1931,7 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     const struct hostapd_tx_queue_params txq_be = { 3, ecw2cw(aCWmin), 4 * (ecw2cw(aCWmin) + 1) - 1, 0};
     const struct hostapd_tx_queue_params txq_vi = { 1, (ecw2cw(aCWmin) + 1) / 2 - 1, ecw2cw(aCWmin), 30};
     const struct hostapd_tx_queue_params txq_vo = { 1, (ecw2cw(aCWmin) + 1) / 4 - 1, (ecw2cw(aCWmin) + 1) / 2 - 1, 15};
+    char country_code[4] = { 0 };
 
     struct hostapd_config   *iconf;
     wifi_radio_operationParam_t *param;
@@ -2068,7 +2069,8 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     iconf->op_class = param->operatingClass;
 #endif
 
-    get_coutry_str_from_oper_params(param, iconf->country);
+    get_coutry_str_from_oper_params(param, country_code);
+    memcpy(iconf->country, country_code, sizeof(iconf->country));
     // use global operating class in country info
     iconf->country[2] = 0x04;
 

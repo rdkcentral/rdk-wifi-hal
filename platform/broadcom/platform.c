@@ -3445,7 +3445,7 @@ static int get_radio_diag_handler(struct nl_msg *msg, void *arg)
         }
     }
 
-    if (nla_parse_nested(tb_radio_info, RDK_VENDOR_ATTR_STA_INFO_MAX,
+    if (nla_parse_nested(tb_radio_info, RDK_VENDOR_ATTR_RADIO_INFO_MAX,
             tb_vendor[RDK_VENDOR_ATTR_RADIO_INFO], radio_diag_policy)) {
         wifi_hal_stats_error_print("%s:%d Failed to parse radio info attribute\n", __func__, __LINE__);
         return NL_SKIP;
@@ -4068,6 +4068,11 @@ int platform_get_radio_caps(wifi_radio_index_t index)
     return RETURN_OK;
 }
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
+
+int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
+{
+    return RETURN_OK;
+}
 
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
 static bool platform_radio_state(wifi_radio_index_t index)
