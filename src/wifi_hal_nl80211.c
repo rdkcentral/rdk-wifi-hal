@@ -9326,16 +9326,13 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 #endif
             nla_put(msg, NL80211_ATTR_IE, pos - rsn_ie, rsn_ie);
         }
+    }
 
-        if ((ret = configure_nl80211_security(msg, security, &wpa_conf)) < 0) {
-            wifi_hal_error_print("%s:%d: Failed to configure security: %d\n",
-                           __func__, __LINE__, ret);
-            nlmsg_free(msg);
-            return ret;
-        }
-    } else {
-        nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
-        wifi_hal_dbg_print("security mode open:%d encr:%d\n", security->mode, security->encr);
+    if ((ret = configure_nl80211_security(msg, security, &wpa_conf)) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to configure security: %d\n",
+                      __func__, __LINE__, ret);
+        nlmsg_free(msg);
+        return ret;
     }
 #ifdef EAPOL_OVER_NL
     if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_CONTROL_PORT_FRAME &&
