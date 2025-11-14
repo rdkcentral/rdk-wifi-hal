@@ -2450,7 +2450,7 @@ enum nl80211_mfp get_mfp_mode(wifi_security_modes_t mode, int configured_mfp)
         } //fallthrough
 
     default: 
-        return NL80211_MFP_NO
+        return NL80211_MFP_NO;
     }
 }
 
