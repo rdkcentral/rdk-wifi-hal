@@ -14698,6 +14698,60 @@ static int nl80211_mbssid(struct nl_msg *msg, struct wpa_driver_ap_params *param
 }
 #endif
 
+int nl_set_beacon_rate_ioctl(wifi_interface_info_t *interface, wifi_vap_info_t *vap, unsigned int force_bcn_rspec)
+{
+    struct nl_msg *msg;
+    struct nlattr *nlattr_vendor;
+    int ret = RETURN_ERR;
+
+    wifi_hal_dbg_print("%s:%d: Setting beacon rate %d for vap index %d\n", __func__, __LINE__, force_bcn_rspec, vap->vap_index);
+
+  /* Per requirement on wifi_setApBeaconRate, user shall only select on of the following
+   * rate as beacon rate
+   * "1Mbps"; "5.5Mbps"; "6Mbps"; "2Mbps"; "11Mbps"; "12Mbps"; "24Mbps"*/
+    if (force_bcn_rspec == 1 || force_bcn_rspec == 5.5 || force_bcn_rspec == 6 ||
+        force_bcn_rspec == 2 || force_bcn_rspec == 11 || force_bcn_rspec == 12 ||
+        force_bcn_rspec == 24) {
+        //BCM mapping
+        force_bcn_rspec = force_bcn_rspec*2;
+        wifi_hal_dbg_print("%s:%d: Mapped beacon rate %d for vap index %d\n", __func__, __LINE__, force_bcn_rspec, vap->vap_index);
+    } else {
+        wifi_hal_error_print("%s:%d: Invalid beacon rate %d\n", __func__, __LINE__, force_bcn_rspec);
+        return -1;
+    }
+
+    msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST, RDK_VENDOR_NL80211_SUBCMD_SET_BEACON_RATE);
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
+        return -1;
+    }
+
+    nlattr_vendor = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+
+    if (nla_put(msg, RDK_VENDOR_ATTR_BEACON_RATE, sizeof(force_bcn_rspec), &force_bcn_rspec) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set beacon rate\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    nla_nest_end(msg, nlattr_vendor);
+
+    wifi_hal_dbg_print("%s:%d: Disabling AP before setting beacon rate\n", __func__, __LINE__);
+    nl80211_enable_ap(interface, false);
+
+    ret = nl80211_send_and_recv(msg, NULL, &force_bcn_rspec, NULL, NULL);
+
+    if (ret) {
+        wifi_hal_error_print("%s:%d Failed to send NL message: %d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
+        return -1;
+    }
+    
+    wifi_hal_dbg_print("%s:%d: Enabling AP after setting beacon rate\n", __func__, __LINE__);
+    nl80211_enable_ap(interface, true);
+
+    return 0;   
+}
+
 int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
 {
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
@@ -14758,6 +14812,25 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     if (params->beacon_int > 0) {
         nla_put_u32(msg, NL80211_ATTR_BEACON_INTERVAL, params->beacon_int);
     }
+
+    /* Beacon frame rate can be only in BEACON_RATE_LEGACY i.e, 6Mbps to 54Mbps basic rates.
+       BEACON_RATE_HT/VHT/HE uses MCS set/NSS for beacon frame which are not valid for commercial gateways */
+    params->rate_type = BEACON_RATE_LEGACY;
+
+    /*update beacon rate params and interface struct.
+    NL expects beacon rate in 100kbps units*/
+    params->beacon_rate = convert_enum_beaconrate_to_int(vap->u.bss_info.beaconRate)*10;
+    interface->u.ap.hapd.iconf->beacon_rate = vap->u.bss_info.beaconRate;
+
+    if (params->beacon_rate != 0) {
+        ret = nl_set_beacon_rate_ioctl(interface, vap, convert_enum_beaconrate_to_int(vap->u.bss_info.beaconRate));
+        if (ret != 0) {
+            wifi_hal_error_print("%s:%d: Failed to set beacon rate %d for vap index %d\n", __func__, __LINE__, convert_enum_beaconrate_to_int(vap->u.bss_info.beaconRate), vap->vap_index);
+            nlmsg_free(msg);
+            return -1;
+        }
+    }
+
 #if HOSTAPD_VERSION < 210
     nl80211_put_beacon_rate(msg, drv->capa.flags, params);
 #else
