@@ -1851,6 +1851,54 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
 }
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
+int nl_set_beacon_rate_ioctl(int vap_index, int beacon_rate)
+{
+    char interface_name[8] = { 0 };
+
+    if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: failed to get interface name for vap index: %d, err: %d (%s)\n",
+            __func__, __LINE__, vap_index, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    wifi_hal_dbg_print("%s:%d: Setting beacon rate %d for vap_index:%d\n", __func__,
+        __LINE__, beacon_rate, vap_index);
+
+    if (beacon_rate == 1 || beacon_rate == 2 || beacon_rate == 5.5 || beacon_rate == 6 ||
+        beacon_rate == 11 || beacon_rate == 12 || beacon_rate == 24) {
+            // BCM expects rate in 500 Kbps units (×2)
+            beacon_rate = beacon_rate * 2;
+            wifi_hal_dbg_print("%s:%d: Setting beacon rate to %d (in units of 500kbps) for vap_index:%d\n",
+                __func__, __LINE__, beacon_rate, vap_index);
+    } else {
+        wifi_hal_error_print("%s:%d: Invalid beacon rate:%d for vap_index:%d\n", __func__, __LINE__, beacon_rate, vap_index);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_dbg_print("%s:%d:Setting interface %s down before setting beacon rate\n", __func__, __LINE__, interface_name);
+    if (wl_ioctl(interface_name, WLC_DOWN, NULL, 0) < 0) {
+        wifi_hal_error_print("%s:%d: failed to set interface down for %s, err: %d (%s)\n", __func__,
+            __LINE__, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    if (wl_iovar_set(interface_name, "force_bcn_rspec", &beacon_rate, sizeof(beacon_rate)) < 0) {
+        wifi_hal_error_print("%s:%d: failed to set beacon_rate=%d for interface=%s, err: %d (%s)\n", __func__,
+            __LINE__, beacon_rate, interface_name, errno, strerror(errno));
+            return RETURN_ERR;
+    }
+
+    wifi_hal_dbg_print("%s:%d:Setting interface %s up after setting beacon rate\n", __func__, __LINE__, interface_name);
+    if (wl_ioctl(interface_name, WLC_UP, NULL, 0) < 0) {
+        wifi_hal_error_print("%s:%d: failed to set interface up for %s, err: %d (%s)\n", __func__,
+            __LINE__, interface_name, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    return RETURN_OK;
+
+}
+
 int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 {
     wifi_hal_dbg_print("%s:%d: Enter radio index:%d\n", __func__, __LINE__, r_index);
@@ -1904,6 +1952,23 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             platform_set_hostap_ctrl(radio, map->vap_array[index].vap_index,
                 map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl);
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
+
+            wifi_hal_dbg_print("%s:%d: beacon rate for vap_index:%d is %d\n", __func__,
+                __LINE__, map->vap_array[index].vap_index,
+                map->vap_array[index].u.bss_info.beaconRate);
+            int beacon_rate = 0;
+            beacon_rate = convert_enum_beaconrate_to_int(map->vap_array[index].u.bss_info.beaconRate);
+            wifi_hal_dbg_print("%s:%d: converted beacon rate for vap_index:%d is %d\n", __func__,
+                __LINE__, map->vap_array[index].vap_index, beacon_rate);
+            if (nl_set_beacon_rate_ioctl(map->vap_array[index].vap_index, beacon_rate) != RETURN_OK) {
+                wifi_hal_error_print("%s:%d: Failed to set beacon rate %d for vap_index:%d\n", __func__,
+                    __LINE__, beacon_rate, map->vap_array[index].vap_index);
+                return RETURN_ERR;
+            } else {
+                wifi_hal_dbg_print("%s:%d: Successfully set beacon rate %d for vap_index:%d\n", __func__,
+                    __LINE__, beacon_rate, map->vap_array[index].vap_index);
+            }
+
             prepare_param_name(param_name, interface_name, "_akm");
             memset(temp_buff, 0 ,sizeof(temp_buff));
             if (get_security_mode_str_from_int(map->vap_array[index].u.bss_info.security.mode, map->vap_array[index].vap_index, temp_buff) == RETURN_OK) {
