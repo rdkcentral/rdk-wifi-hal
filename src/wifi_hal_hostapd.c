@@ -2787,7 +2787,9 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
 #endif
             {
                 sel = (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK |
-                    WPA_KEY_MGMT_PSK_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+                          WPA_KEY_MGMT_IEEE8021X_SHA256 | WPA_KEY_MGMT_PSK_SHA256 |
+                          wpa_key_mgmt_11w) &
+                    data.key_mgmt;
             }
 
             key_mgmt = pick_akm_suite(sel); 
@@ -2843,6 +2845,15 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, key_mgmt);
         }
     }
+
+#ifdef CONFIG_IEEE80211W
+    // Force MFP for WPA3 modes
+    if (sec->mode == wifi_security_mode_wpa3_personal ||
+        sec->mode == wifi_security_mode_wpa3_enterprise ||
+        sec->mode == wifi_security_mode_wpa3_transition) {
+        wpa_sm_set_param(sm, WPA_PARAM_MFP, MGMT_FRAME_PROTECTION_REQUIRED);
+    }
+#endif
 
     if (get_ie_by_eid(WLAN_EID_RSN, assoc_req, interface->u.sta.assoc_req_len, &ie, &ie_len)
                 == true) {
