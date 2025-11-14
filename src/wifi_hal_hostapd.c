@@ -1473,7 +1473,8 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     iface = &interface->u.ap.iface;
     iface->interfaces = &radio->interfaces;
     iface->conf = &radio->iconf;
-    strcpy(iface->phy, radio->name);
+    strncpy(iface->phy, radio->name, sizeof(iface->phy) - 1);
+    iface->phy[sizeof(iface->phy) - 1] = '\0';
     iface->state = HAPD_IFACE_ENABLED;
 
     iface->num_bss = 1;
@@ -1532,6 +1533,14 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     if (iface->current_mode == NULL) {
         wifi_hal_error_print("%s:%d failed to get mode, interface: %s hw mode: %d, freq: %d\n",
             __func__, __LINE__, interface->name, iface->conf->hw_mode, iface->freq);
+        if (preassoc_supp_rates) {
+           os_free(preassoc_supp_rates);
+           preassoc_supp_rates = NULL;
+        }
+        if (preassoc_basic_rates) {
+           os_free(preassoc_basic_rates);
+           preassoc_basic_rates = NULL;
+        }
         return RETURN_ERR;
     }
 #else
@@ -1922,6 +1931,7 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     const struct hostapd_tx_queue_params txq_be = { 3, ecw2cw(aCWmin), 4 * (ecw2cw(aCWmin) + 1) - 1, 0};
     const struct hostapd_tx_queue_params txq_vi = { 1, (ecw2cw(aCWmin) + 1) / 2 - 1, ecw2cw(aCWmin), 30};
     const struct hostapd_tx_queue_params txq_vo = { 1, (ecw2cw(aCWmin) + 1) / 4 - 1, (ecw2cw(aCWmin) + 1) / 2 - 1, 15};
+    char country_code[4] = { 0 };
 
     struct hostapd_config   *iconf;
     wifi_radio_operationParam_t *param;
@@ -2002,6 +2012,10 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     iconf->ap_table_expiration_time = 60;
     iconf->track_sta_max_age = 180;
 
+#if defined(BANANA_PI_PORT) && HOSTAPD_VERSION >= 211
+    iconf->no_ht_coex = 1;
+#endif // BANANA_PI_PORT && HOSTAPD_VERSION >= 211
+
     iconf->acs = 0;
     iconf->acs_ch_list.num = 0;
 #ifdef CONFIG_ACS
@@ -2055,7 +2069,8 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     iconf->op_class = param->operatingClass;
 #endif
 
-    get_coutry_str_from_oper_params(param, iconf->country);
+    get_coutry_str_from_oper_params(param, country_code);
+    memcpy(iconf->country, country_code, sizeof(iconf->country));
     // use global operating class in country info
     iconf->country[2] = 0x04;
 
@@ -2604,7 +2619,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
     mac_addr_str_t bssid_str;
     int sel, key_mgmt = 0;
     int wpa_key_mgmt_11w = 0;
-    ieee80211_tlv_t *rsn_ie = NULL;
+    const unsigned char *rsn_ie = NULL;
     unsigned short max_wpa_ie_len = 500;
 #if HOSTAPD_VERSION >= 210
     unsigned short max_rsnx_ie_len = 50;
@@ -2702,11 +2717,32 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
     wpa_sm_set_pmk(sm, pmk, PMK_LEN, NULL, NULL);
     wpa_sm_set_param(sm, WPA_PARAM_RSN_ENABLED, 1);
     wpa_sm_set_param(sm, WPA_PARAM_PROTO, WPA_PROTO_RSN);
+#if HOSTAPD_VERSION >= 211 //2.11
+    wpa_sm_set_param(sm, WPA_PARAM_RSN_OVERRIDE_SUPPORT, false);
+    wpa_sm_set_param(sm, WPA_PARAM_RSN_OVERRIDE, RSN_OVERRIDE_NOT_USED);
 
-    rsn_ie = (ieee80211_tlv_t *)get_ie(backhaul->ie, backhaul->ie_len, WLAN_EID_RSN);
+#if defined(CONFIG_WIFI_EMULATOR)
+#ifdef CONFIG_IEEE80211BE
+    if (sec->mode == wifi_security_mode_wpa3_compatibility && ((rsn_ie =
+        get_vendor_ie_by_type(backhaul->ie, backhaul->ie_len, RSNE_OVERRIDE_2_IE_VENDOR_TYPE)) != NULL)) {
+            wpa_sm_set_param(sm, WPA_PARAM_RSN_OVERRIDE, RSN_OVERRIDE_RSNE_OVERRIDE_2);
+            wifi_hal_dbg_print("%s:%d: Using RSNO2\n", __func__, __LINE__);
+    }
+    else
+#endif //CONFIG_IEEE80211BE
+    if (sec->mode == wifi_security_mode_wpa3_compatibility && ((rsn_ie =
+        get_vendor_ie_by_type(backhaul->ie, backhaul->ie_len, RSNE_OVERRIDE_IE_VENDOR_TYPE)) != NULL)) {
+            wifi_hal_dbg_print("%s:%d: Using RSNO\n", __func__, __LINE__);
+    } else
+#endif
+#endif //2.11
+    {
+        rsn_ie = get_ie(backhaul->ie, backhaul->ie_len, WLAN_EID_RSN);
+        wifi_hal_dbg_print("%s:%d: Using RSN\n", __func__, __LINE__);
+    }
+
     if (rsn_ie &&
-        (wpa_parse_wpa_ie_rsn((const unsigned char *)rsn_ie,
-             rsn_ie->length + sizeof(ieee80211_tlv_t), &data) == 0)) {
+        (wpa_parse_wpa_ie_rsn(rsn_ie, ((ieee80211_tlv_t *)rsn_ie)->length + 2, &data) == 0)) {
         wpa_sm_set_param(sm, WPA_PARAM_PAIRWISE, WPA_CIPHER_CCMP);
         wpa_sm_set_param(sm, WPA_PARAM_GROUP, data.group_cipher);
 
@@ -2729,7 +2765,20 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                 } else if (sec->mode == wifi_security_mode_wpa3_enterprise) {
                     sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
                 } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
-                    sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE) & data.key_mgmt;
+#if !defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+                    wpa_sm_set_param(sm, WPA_PARAM_RSN_OVERRIDE_SUPPORT, true);
+#ifdef CONFIG_IEEE80211BE
+                    if (wpa_sm_get_rsn_override(sm) == RSN_OVERRIDE_RSNE_OVERRIDE_2) {
+                        wpa_sm_set_param(sm, WPA_PARAM_PAIRWISE, data.pairwise_cipher);
+                        wpa_sm_set_param(sm, WPA_PARAM_MGMT_GROUP, data.mgmt_group_cipher);
+                        sel = (wpa_key_mgmt_11w | WPA_KEY_MGMT_SAE_EXT_KEY) & data.key_mgmt;
+                    } else
+#endif //CONFIG_IEEE80211BE
+#endif //!BANANA_PI_PORT && HOSTAPD_VERSION >= 211
+                    {
+                        sel = (wpa_key_mgmt_11w | WPA_KEY_MGMT_SAE) & data.key_mgmt;
+                    }
+
                 } else {
                     wifi_hal_error_print("Unsupported security mode : 0x%x\n", sec->mode);
                     return;
@@ -2751,8 +2800,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, key_mgmt);
         }
 
-        wifi_hal_dbg_print("%s:%d:%x %x %x\n", __func__, __LINE__, data.group_cipher,
-            data.pairwise_cipher, key_mgmt);
+        wifi_hal_dbg_print("%s:%d:%x %x %x %x\n", __func__, __LINE__, data.group_cipher,
+            data.pairwise_cipher, data.mgmt_group_cipher, key_mgmt);
     } else {
         if (sec->mode == wifi_security_mode_none) {
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, WPA_KEY_MGMT_NONE);

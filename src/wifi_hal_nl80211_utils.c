@@ -491,6 +491,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef BANANA_PI_PORT // for reference device platforms
@@ -524,6 +525,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef TCXB7_PORT // for Broadcom based platforms
@@ -557,6 +559,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef VNTXER5_PORT // for Qualcomm based platforms
@@ -590,6 +593,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef TARGET_GEMINI7_2
@@ -616,11 +620,14 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    NULL,
+    NULL,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif 
 
 #ifdef TCXB8_PORT // for Broadcom based platforms
@@ -654,6 +661,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 
@@ -688,6 +696,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef XB10_PORT // for Broadcom based platforms
@@ -726,6 +735,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef SCXER10_PORT // for Broadcom based platforms
@@ -759,6 +769,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef SCXF10_PORT // for Broadcom based platforms
@@ -792,6 +803,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
  
 #ifdef CMXB7_PORT
@@ -825,6 +837,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef XLE_PORT // for Broadcom XLE
@@ -858,6 +871,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef SKYSR213_PORT // for Broadcom HUB6
@@ -891,6 +905,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 #ifdef RDKB_ONE_WIFI_PROD // for Broadcom based platforms
     "rdkb",
@@ -921,6 +936,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
     
 };
@@ -1205,7 +1221,7 @@ static const char *const eu_op_class_cc[] = {
         "AL", "AM", "AT", "AZ", "BA", "BE", "BG", "BY", "CH", "CY", "CZ", "DE",
         "DK", "EE", "EL", "ES", "FI", "FR", "GE", "HR", "HU", "IE", "IS", "IT",
         "LI", "LT", "LU", "LV", "MD", "ME", "MK", "MT", "NL", "NO", "PL", "PT",
-        "RO", "RS", "RU", "SE", "SI", "SK", "TR", "UA", "GB", NULL
+        "RO", "RS", "RU", "SE", "SI", "SK", "TR", "UA", "GB", "GR", NULL
 };
 
 static const char *const jp_op_class_cc[] = {
@@ -2028,6 +2044,27 @@ BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len,
     }
 
     return false;
+}
+
+const u8 * get_vendor_ie_by_type(const u8 *pos, size_t len, u32 vendor_type)
+{
+    const u8 *end;
+
+    end = pos + len;
+
+    while (end - pos > 1) {
+        if (2 + pos[1] > end - pos) {
+            break;
+        }
+
+        if (pos[0] == WLAN_EID_VENDOR_SPECIFIC && pos[1] >= 4 && vendor_type == WPA_GET_BE32(&pos[2])) {
+            return pos;
+        }
+
+        pos += 2 + pos[1];
+    }
+
+    return NULL;
 }
 
 int get_radio_variant_str_from_int(unsigned int variant, char *variant_str)
@@ -3605,6 +3642,11 @@ platform_get_radio_caps_t get_platform_get_radio_caps_fn()
     return driver_info.platform_get_radio_caps_fn;
 }
 
+platform_get_RegDomain_t get_platform_get_RegDomain_fn()
+{
+    return driver_info.platform_get_RegDomain_fn;
+}
+
 bool lsmod_by_name(const char *name)
 {
     FILE *fp = NULL;
@@ -3713,7 +3755,7 @@ int create_ecomode_interfaces(void)
           radio->index =  l_radio_interface_map[radioIndex].phy_index;
           radio->rdk_radio_index = l_radio_interface_map[radioIndex].radio_index;
           radio->capab.index = radio->index;
-          sprintf(radio->name, "%s", l_radio_interface_map[radioIndex].radio_name);
+          snprintf(radio->name, sizeof(radio->name), "%s", l_radio_interface_map[radioIndex].radio_name);
           g_wifi_hal.num_radios++;
           radio->capab.maxNumberVAPs = 0;
           radio->interface_map = hash_map_create();
@@ -3738,7 +3780,7 @@ int create_ecomode_interfaces(void)
               memset(interface, 0, sizeof(wifi_interface_info_t));
               interface->phy_index = radio->index;
               interface->index = interface_index_map[vapIndex].index;
-              sprintf(interface->name, "%s", interface_index_map[vapIndex].interface_name);
+              snprintf(interface->name, sizeof(interface->name), "%s", interface_index_map[vapIndex].interface_name);
               if (set_interface_properties(interface->phy_index , interface) != 0) {
                   wifi_hal_info_print("%s:%d: Could not map interface name to index:%d\n", __func__, __LINE__, interface->phy_index);
               }
@@ -3749,7 +3791,6 @@ int create_ecomode_interfaces(void)
               hash_map_put(radio->interface_map, strdup(interface->name), interface);
               radio->capab.maxNumberVAPs++;
 
-              wifi_hal_dbg_print("%s:%d: Fetch next interface after the radio interface hash map [%s]\n", __func__, __LINE__, interface->name);
            }
            // Build the sleeping radio capabilities manually based on the available info in the 'radio' to bringup webconfig,  Device.WiFi.**
            update_ecomode_radio_capabilities(radio);
@@ -4071,16 +4112,22 @@ int wifi_ieee80211Variant_to_str(char *dest, size_t dest_size, wifi_ieee80211Var
             if (variant &
                 (WIFI_80211_VARIANT_N | WIFI_80211_VARIANT_AC | WIFI_80211_VARIANT_AX |
                     WIFI_80211_VARIANT_BE)) {
-                if (variant & WIFI_80211_VARIANT_BE) {
-                    mode = "be";
-                } else if (variant & WIFI_80211_VARIANT_AX) {
-                    mode = "ax";
-                } else if (variant & WIFI_80211_VARIANT_AC) {
-                    mode = "ac";
+                if ((variant & WIFI_80211_VARIANT_BE) && (variant & WIFI_80211_VARIANT_AX)) {
+                    // Wi-Fi 7 supports both AX (6E base) and BE (Wi-Fi 7)
+                    str_list_append(dest, dest_size, "ax");
+                    str_list_append(dest, dest_size, "be");
                 } else {
-                    mode = "n";
+                    if (variant & WIFI_80211_VARIANT_BE) {
+                        mode = "be";
+                    } else if (variant & WIFI_80211_VARIANT_AX) {
+                        mode = "ax";
+                    } else if (variant & WIFI_80211_VARIANT_AC) {
+                        mode = "ac";
+                    } else {
+                        mode = "n";
+                    }
+                    str_list_append(dest, dest_size, mode);
                 }
-                str_list_append(dest, dest_size, mode);
             }
         } else {
             wifi_hal_error_print("%s:%d: NULL or zero-size buffer\n", __func__, __LINE__);

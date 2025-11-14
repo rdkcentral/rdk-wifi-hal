@@ -1752,7 +1752,16 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
     if (memcmp(mac, bcastmac, sizeof(mac_address_t)) == 0) {
         tmp = hapd->sta_list;
         while(tmp) {
-            wifi_drv_sta_disassoc(interface, own_addr,tmp->addr,WLAN_REASON_UNSPECIFIED);
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+            int link_id = wifi_hal_get_mld_link_id(interface);
+#else
+            int link_id = NL80211_DRV_LINK_ID_NA;
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+            wifi_drv_sta_disassoc(interface, own_addr, tmp->addr, WLAN_REASON_UNSPECIFIED, link_id);
+#else
+            wifi_drv_sta_disassoc(interface, own_addr, tmp->addr, WLAN_REASON_UNSPECIFIED);
+#endif // BANANA_PI_PORT && KERNEL_6_6
             tmp=tmp->next;
         }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -1760,7 +1769,16 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
     else {
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         wifi_hal_info_print("%s:%d:mac is not a broadcast mac address\n", __func__, __LINE__);
-        wifi_drv_sta_disassoc(interface, own_addr,mac,WLAN_REASON_UNSPECIFIED);
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+        int link_id = wifi_hal_get_mld_link_id(interface);
+#else
+        int link_id = NL80211_DRV_LINK_ID_NA;
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+        wifi_drv_sta_disassoc(interface, own_addr, mac, WLAN_REASON_UNSPECIFIED, link_id);
+#else
+        wifi_drv_sta_disassoc(interface, own_addr, mac, WLAN_REASON_UNSPECIFIED);
+#endif // BANANA_PI_PORT && KERNEL_6_6
     }
     return RETURN_OK;
 }
@@ -4200,7 +4218,7 @@ void wifi_hal_newApAssociatedDevice_callback_register(wifi_newApAssociatedDevice
 
     callbacks = get_hal_device_callbacks();
 
-    if (callbacks == NULL || callbacks->num_assoc_cbs > MAX_REGISTERED_CB_NUM) {
+    if (callbacks == NULL || callbacks->num_assoc_cbs >= MAX_REGISTERED_CB_NUM) {
         return;
     }
 
@@ -4214,7 +4232,7 @@ void wifi_hal_apDeAuthEvent_callback_register(wifi_device_deauthenticated_callba
 
     callbacks = get_hal_device_callbacks();
 
-    if (callbacks == NULL || callbacks->num_apDeAuthEvent_cbs > MAX_REGISTERED_CB_NUM) {
+    if (callbacks == NULL || callbacks->num_apDeAuthEvent_cbs >= MAX_REGISTERED_CB_NUM) {
         return;
     }
 
@@ -4227,7 +4245,7 @@ INT wifi_vapstatus_callback_register(wifi_vapstatus_callback func) {
 
     callbacks = get_hal_device_callbacks();
 
-    if(callbacks == NULL || callbacks->num_vapstatus_cbs > MAX_REGISTERED_CB_NUM) {
+    if (callbacks == NULL || callbacks->num_vapstatus_cbs >= MAX_REGISTERED_CB_NUM) {
         return RETURN_ERR;
     }
     callbacks->vapstatus_cb[callbacks->num_vapstatus_cbs] = func;
@@ -4254,7 +4272,7 @@ void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_
 
     callbacks = get_hal_device_callbacks();
 
-    if (callbacks == NULL || callbacks->num_disassoc_cbs> MAX_REGISTERED_CB_NUM) {
+    if (callbacks == NULL || callbacks->num_disassoc_cbs >= MAX_REGISTERED_CB_NUM) {
         return;
     }
 
@@ -4268,7 +4286,7 @@ void wifi_hal_stamode_callback_register(wifi_stamode_callback func)
 
     callbacks = get_hal_device_callbacks();
 
-    if (callbacks == NULL || callbacks->num_stamode_cbs> MAX_REGISTERED_CB_NUM) {
+    if (callbacks == NULL || callbacks->num_stamode_cbs >= MAX_REGISTERED_CB_NUM) {
         return;
     }
 
@@ -4282,7 +4300,7 @@ void wifi_hal_apStatusCode_callback_register(wifi_apStatusCode_callback func)
 
     callbacks = get_hal_device_callbacks();
 
-    if (callbacks == NULL || callbacks->num_statuscode_cbs> MAX_REGISTERED_CB_NUM) {
+    if (callbacks == NULL || callbacks->num_statuscode_cbs >= MAX_REGISTERED_CB_NUM) {
         return;
     }
 
@@ -4537,7 +4555,16 @@ void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac)
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+    int link_id = wifi_hal_get_mld_link_id(interface);
+#else
+    int link_id = NL80211_DRV_LINK_ID_NA;
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+    wifi_drv_sta_disassoc(interface, own_addr, mac, status, link_id);
+#else
     wifi_drv_sta_disassoc(interface, own_addr, mac, status);
+#endif // BANANA_PI_PORT && KERNEL_6_6
 }
 
 void wifi_hal_set_neighbor_report(uint apIndex,uint add,mac_address_t mac)
@@ -4704,4 +4731,14 @@ int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode)
 
     vap->u.bss_info.mac_filter_mode = mac_filter_mode;
     return (nl80211_set_acl(interface));
+}
+
+INT wifi_hal_get_RegDomain(wifi_radio_index_t radioIndex, UINT *reg_domain)
+{
+    platform_get_RegDomain_t platform_get_RegDomain_fn;
+    if ((platform_get_RegDomain_fn = get_platform_get_RegDomain_fn()) != NULL) {
+        wifi_hal_dbg_print("%s:%d: Get RegDomain \n", __func__, __LINE__);
+        return (platform_get_RegDomain_fn(radioIndex, reg_domain));
+    }
+    return RETURN_ERR;
 }

@@ -35,6 +35,21 @@
 #include "server_hal_ipc.h"
 #endif
 
+#include <asm/byteorder.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+#include <linux/socket.h>
+#include <linux/wireless.h>
+#include <pthread.h>
+#if defined(__LITTLE_ENDIAN)
+#define _BYTE_ORDER _LITTLE_ENDIAN
+#elif defined(__BIG_ENDIAN)
+#define _BYTE_ORDER _BIG_ENDIAN
+#else
+#error "Please fix asm/byteorder.h"
+#endif
+#include <ieee80211_external.h>
+
 #define DEFAULT_CMD_SIZE 256
 #define MAX_BUF_SIZE 300
 #define MAX_NUM_RADIOS 2
@@ -52,6 +67,13 @@
 #define STATICCPGCFG_1     "/tmp/.staticCpgCfg_1"
 #define STA_PWD_LEN         STATICCPGCFG_LEN
 #define QCA_MAX_CMD_SZ 128
+
+static int nl_fd = -1;
+static int dfs_nl_listen_start(void);
+static void *dfs_event_thread(void *arg);
+static void parse_iwcustom_buffer(const void *buf, unsigned int len);
+static pthread_t dfs_thread;
+static int dfs_thread_running = 0;
 
 extern INT wifi_setMLDaddr(INT apIndex, CHAR *mldMacAddress);
 
@@ -1107,6 +1129,28 @@ int platform_get_radio_caps(wifi_radio_index_t index)
     return RETURN_OK;
 }
 
+int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
+{
+    char cmd[64] = { 0 };
+    char buf[16] = { 0 };
+    int ret;
+
+    wifi_hal_dbg_print("%s:%d: radioIndex %d\n", __func__, __LINE__, radioIndex);
+
+    snprintf(cmd, sizeof(cmd), "cfg80211tool wifi%d getRegdomain | cut -d':' -f2", radioIndex);
+
+    ret = _syscmd(cmd, buf, sizeof(buf));
+    if ((ret != 0) && (strlen(buf) == 0)) {
+        wifi_hal_error_print("%s:%d Error ret %d \n", __func__, __LINE__, ret);
+        return RETURN_ERR;
+    }
+
+    *reg_domain = atoi(buf);
+
+    wifi_hal_dbg_print(" %s:%d Reg domain is %d", __func__, __LINE__, *reg_domain);
+    return RETURN_OK;
+}
+
 static int qca_add_intf_to_bridge(wifi_interface_info_t *interface, bool is_mld)
 {
     char mld_ifname[32];
@@ -1262,6 +1306,11 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
     if(!radio->configured)
     {
+        if (dfs_nl_listen_start()) {
+            wifi_hal_error_print("%s:%d DFS socket establishment failed\n", __func__, __LINE__);
+        } else {
+            wifi_hal_dbg_print("%s:%d DFS socket initialized\n", __func__, __LINE__);
+        }
         wifi_hal_info_print("%s:%d: Radio is getting configured for the first time.\n", __func__, __LINE__);
         return RETURN_OK;
     }
@@ -1315,6 +1364,12 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         }
     }
 #endif
+    if (dfs_nl_listen_start()) {
+        wifi_hal_error_print("%s:%d DFS socket establishment failed\n", __func__, __LINE__);
+    } else {
+        wifi_hal_dbg_print("%s:%d DFS socket initialized\n", __func__, __LINE__);
+    }
+
     wifi_hal_dbg_print("%s:%d Exit\n",__func__,__LINE__);
     return 0;
 }
@@ -1328,4 +1383,201 @@ INT wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, 
 INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCHAR *frame, UINT len)
 {
     return wifi_sendActionFrameExt(apIndex, MacAddr, frequency, 0, frame, len);
+}
+
+static int dfs_nl_listen_start(void)
+{
+    struct sockaddr_nl addr;
+    int fd;
+
+    if (nl_fd != -1) {
+        wifi_hal_dbg_print("%s:%d: DFS socket registered already\n", __func__, __LINE__);
+        return 0;
+    }
+
+    fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    if (fd < 0) {
+        wifi_hal_error_print("%s:%d: failed to create socket: %d (%s)\n", __func__, __LINE__, errno,
+            strerror(errno));
+        return -1;
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.nl_family = AF_NETLINK;
+    addr.nl_groups = RTMGRP_LINK;
+
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        wifi_hal_error_print("%s:%d: failed to bind: %d (%s)\n", __func__, __LINE__, errno,
+            strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    nl_fd = fd;
+
+    // Start listener thread
+    dfs_thread_running = 1;
+    if (pthread_create(&dfs_thread, NULL, dfs_event_thread, NULL) != 0) {
+        wifi_hal_error_print("%s:%d: Failed to start DFS thread (%s)\n", __func__, __LINE__,
+            strerror(errno));
+        close(nl_fd);
+        nl_fd = -1;
+        dfs_thread_running = 0;
+        return -1;
+    }
+    pthread_detach(dfs_thread);
+
+    wifi_hal_dbg_print("%s:%d: DFS listener initialized\n", __func__, __LINE__);
+    return 0;
+}
+
+static void *dfs_event_thread(void *arg)
+{
+    struct pollfd pfd;
+    int len = 0;
+    int ret;
+    size_t buf_size = 3000;
+
+    pfd.fd = nl_fd;
+    pfd.events = POLLIN;
+
+    wifi_hal_dbg_print("%s:%d: DFS event thread started\n", __func__, __LINE__);
+
+    while (dfs_thread_running) {
+        ret = poll(&pfd, 1, 1000);
+        if (ret < 0) {
+            if (errno == EINTR)
+                continue;
+            wifi_hal_error_print("%s:%d: poll failed, err %d (%s)\n", __func__, __LINE__, errno,
+                strerror(errno));
+            break;
+        }
+        if (ret == 0) {
+            // no event this cycle just continue
+            continue;
+        }
+        if (pfd.revents & POLLIN) {
+            char *event_buf = (char *)malloc(buf_size * sizeof(char));
+            if (!event_buf) {
+                wifi_hal_error_print("%s:%d: Failed to allocate memory for dfs event\n", __func__,
+                    __LINE__);
+                continue;
+            }
+            len = recvfrom(nl_fd, event_buf, buf_size, MSG_DONTWAIT, NULL, 0);
+            if (len > 0) {
+                parse_iwcustom_buffer(event_buf, len);
+            } else {
+                wifi_hal_error_print("%s:%d: recvfrom returned %d (%s)\n", __func__, __LINE__, len,
+                    strerror(errno));
+            }
+            free(event_buf);
+        }
+    }
+
+    wifi_hal_dbg_print("%s:%d: DFS event thread exiting\n", __func__, __LINE__);
+    return NULL;
+}
+
+static void process_event_to_onewifi(const char *ifname,
+    wifi_channel_change_event_t radio_channel_param)
+{
+    radio_interface_mapping_t radio_map_t[MAX_NUM_RADIOS];
+    wifi_device_callbacks_t *callbacks;
+    wifi_radio_info_t *radio = NULL;
+    int radio_index;
+
+    get_radio_interface_info_map(radio_map_t);
+    callbacks = get_hal_device_callbacks();
+
+    for (int i = 0; i < MAX_NUM_RADIOS; i++) {
+        if (strncmp(ifname, radio_map_t[i].interface_name, sizeof(radio_map_t[i].interface_name)) ==
+            0) {
+            radio_index = radio_map_t[i].radio_index;
+            radio = get_radio_by_rdk_index(radio_index);
+            radio_channel_param.radioIndex = radio_index;
+            radio_channel_param.channel = radio->oper_param.channel;
+            radio_channel_param.channelWidth = radio->oper_param.channelWidth;
+            radio_channel_param.op_class = radio->oper_param.operatingClass;
+        }
+        wifi_hal_dbg_print("%s:%d RadioIndex:%d channel:%d chwid:%d opclass:%d sub-event:%d\n",
+            __func__, __LINE__, radio_index, radio_channel_param.channel,
+            radio_channel_param.channelWidth, radio_channel_param.op_class,
+            radio_channel_param.sub_event);
+    }
+    radio_channel_param.event = WIFI_EVENT_DFS_RADAR_DETECTED;
+
+    if ((callbacks != NULL) && (callbacks->channel_change_event_callback) &&
+        !(radio_channel_param.sub_event == WIFI_EVENT_RADAR_NOP_FINISHED) &&
+        (radio->oper_param.channel)) {
+        callbacks->channel_change_event_callback(radio_channel_param);
+    }
+}
+
+static void parse_iwcustom_buffer(const void *buf, unsigned int len)
+{
+    const struct nlmsghdr *hdr;
+    const struct rtattr *attr;
+    struct ifinfomsg *ifi;
+    const struct iw_event *iwe;
+    int iwelen;
+    int attrlen;
+    char ifname[32];
+    int ifindex;
+    wifi_channel_change_event_t radio_channel_param = { 0 };
+
+    memset(ifname, 0, sizeof(ifname));
+
+    for (hdr = buf; NLMSG_OK(hdr, len); hdr = NLMSG_NEXT(hdr, len)) {
+        if (hdr->nlmsg_type != RTM_NEWLINK)
+            continue;
+
+        ifi = NLMSG_DATA(hdr);
+        attr = IFLA_RTA(ifi);
+        attrlen = IFLA_PAYLOAD(hdr);
+
+        for (attr = NLMSG_DATA(hdr) + NLMSG_ALIGN(sizeof(struct ifinfomsg)),
+            attrlen = NLMSG_PAYLOAD(hdr, sizeof(struct ifinfomsg));
+             RTA_OK(attr, attrlen); attr = RTA_NEXT(attr, attrlen)) {
+            if (attr->rta_type != IFLA_WIRELESS)
+                continue;
+
+            ifindex = ifi->ifi_index;
+            if (!if_indextoname(ifindex, ifname)) {
+                strncpy(ifname, "unknown", sizeof(ifname));
+            }
+            for (iwe = RTA_DATA(attr), iwelen = RTA_PAYLOAD(attr);
+                 ((iwelen) >= (iwe)->len && (iwelen) > 0);
+                 iwe = ((iwelen) -= (iwe)->len, (void *)(iwe) + (iwe)->len)) {
+                if (iwe->cmd == IWEVCUSTOM) {
+                    const struct iw_point *iwp;
+                    const void *data;
+                    data = ((void *)(iwe) + IW_EV_LCP_LEN);
+
+                    iwp = data - IW_EV_POINT_OFF;
+                    data += IW_EV_POINT_LEN - IW_EV_POINT_OFF;
+                    switch (iwp->flags) {
+                    case IEEE80211_EV_CAC_STARTED:
+                        radio_channel_param.sub_event = WIFI_EVENT_RADAR_CAC_STARTED;
+                        process_event_to_onewifi(ifname, radio_channel_param);
+                        break;
+                    case IEEE80211_EV_CAC_COMPLETED:
+                        radio_channel_param.sub_event = WIFI_EVENT_RADAR_CAC_FINISHED;
+                        process_event_to_onewifi(ifname, radio_channel_param);
+                        break;
+                    case IEEE80211_EV_NOL_FINISHED:
+                        radio_channel_param.sub_event = WIFI_EVENT_RADAR_NOP_FINISHED;
+                        process_event_to_onewifi(ifname, radio_channel_param);
+                        break;
+                    case IEEE80211_EV_RADAR_DETECTED:
+                        radio_channel_param.sub_event = WIFI_EVENT_RADAR_DETECTED;
+                        process_event_to_onewifi(ifname, radio_channel_param);
+                        break;
+                    default:
+                        wifi_hal_info_print("Unknown event %s:%d\n", __func__, __LINE__);
+                        break;
+                    }
+                }
+            }
+        }
+    }
 }

@@ -1125,7 +1125,7 @@ static void handle_assoc_req_event_for_bm(wifi_interface_info_t *interface, stru
     char *key = NULL;
     unsigned char *ie;
     unsigned int ie_len, ssid_len = 0, g_idx = 0;
-    char ssid[SSID_MAX_LEN];
+    char ssid[SSID_MAX_LEN] = { 0 };
     bm_sta_list_t *sta_info = NULL;
     wifi_vap_info_t *vap;
     wifi_device_callbacks_t *callbacks;
@@ -1604,7 +1604,7 @@ static void handle_probe_req_event_for_bm(wifi_interface_info_t *interface, stru
 
     unsigned char *ie;
     unsigned int ie_len, ssid_len = 0;
-    char ssid[SSID_MAX_LEN];
+    char ssid[SSID_MAX_LEN] = { 0 };
     bool broadcast = false, ssid_bcast = false;
     wifi_vap_info_t *vap;
     bm_sta_list_t *bm_client_info = NULL;
@@ -2725,6 +2725,10 @@ void recv_data_frame(wifi_interface_info_t *interface)
 
                 rtap_len = WPA_GET_BE16(buff + sizeof(struct ethhdr) + 2);
                 shift = sizeof(struct ethhdr) + ntohs(rtap_len);
+                if (buflen < shift) {
+                    wifi_hal_info_print("%s:%d Invalid packet buflen < shift (%d < %zu)\n", __func__, __LINE__, buflen, shift);
+                    return;
+                }
                 len  = buflen - shift;
 
                 char rssi = *(buff + sizeof(struct ethhdr) + 15);
@@ -3033,7 +3037,7 @@ void recv_link_status()
     local.nl_groups = RTMGRP_LINK;
     local.nl_pid = getpid();
 
-    struct msghdr msg;
+    struct msghdr msg = { 0 };
     {
         msg.msg_name = &local;
         msg.msg_namelen = sizeof(local);
@@ -3785,6 +3789,7 @@ int get_vap_state(const char *ifname, short *flags)
     int fd, res;
 
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
+    ifr.ifr_name[IFNAMSIZ - 1] = '\0';
     wifi_hal_dbg_print("%s:%d interface name = '%s'\n", __func__, __LINE__, ifr.ifr_name);
 
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -4213,6 +4218,7 @@ int nl80211_interface_enable(const char *ifname, bool enable)
 
     ifr.ifr_flags = flags;
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
+    ifr.ifr_name[IFNAMSIZ - 1] = '\0';
 
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         wifi_hal_error_print("%s:%d socket error %s\n", __func__, __LINE__, strerror(errno));
@@ -4836,9 +4842,11 @@ static unsigned int get_akm_suites_info(struct nlattr *tb)
         case RSN_AUTH_KEY_MGMT_CCKM:
             key_mgmt |= WPA_DRIVER_CAPA_KEY_MGMT_CCKM;
             break;
+#if !defined(KERNEL_6_6)
         case RSN_AUTH_KEY_MGMT_OSEN:
             key_mgmt |= WPA_DRIVER_CAPA_KEY_MGMT_OSEN;
             break;
+#endif
 #endif
         case RSN_AUTH_KEY_MGMT_802_1X_SUITE_B:
             key_mgmt |= WPA_DRIVER_CAPA_KEY_MGMT_SUITE_B;
@@ -7503,6 +7511,9 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
     wifi_drv_set_txpower(interface, radio->oper_param.transmitPower);
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_SET_WIPHY);
+    if (msg == NULL) {
+        return -1;
+    }
 
     nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
     if (nl80211_fill_chandef(msg, radio, interface) == -1) {
@@ -7550,6 +7561,9 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
             }
 
            msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_SET_WIPHY);
+           if (msg == NULL) {
+               return -1;
+           }
 
            nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
            if (nl80211_fill_chandef(msg, radio, interface) == -1) {
@@ -8363,6 +8377,10 @@ int wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state,
         wifi_hal_stats_error_print("%s:%d: Failed to release semaphore\n", __func__, __LINE__);
     }
 
+    if (munmap(neighbor_data, file_size) == -1) {
+        wifi_hal_stats_error_print("%s:%d: Failed to unmap memory: %s\n", __func__, __LINE__, strerror(errno));
+    }
+
     close(fd);
     sem_close(sem);
     return RETURN_OK;
@@ -9016,12 +9034,24 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     update_wpa_sm_params(interface);
     init_wpa_sm_param(interface);
     interface->wpa_s.current_ssid->proto = WPA_PROTO_RSN;
-    interface->wpa_s.current_ssid->group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
+    if (security->mode != wifi_security_mode_wpa3_compatibility) {
+        interface->wpa_s.current_ssid->group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
+    }
+#if !defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+#ifdef CONFIG_IEEE80211BE
+    if (security->mode == wifi_security_mode_wpa3_compatibility &&
+        wpa_sm_get_rsn_override(interface->u.sta.wpa_sm) == RSN_OVERRIDE_RSNE_OVERRIDE_2) {
+        interface->wpa_s.current_ssid->pairwise_cipher = WPA_CIPHER_GCMP_256;
+    }
+#endif
+#endif
+    interface->wpa_s.current_ssid->ieee80211w = security->mfp;
 
     interface->wpa_s.current_ssid->key_mgmt = interface->u.sta.wpa_sm->key_mgmt;
     if ((security->mode == wifi_security_mode_wpa3_personal) ||
         (security->mode == wifi_security_mode_wpa3_transition) ||
-        (security->mode == wifi_security_mode_wpa3_enterprise)) {
+        (security->mode == wifi_security_mode_wpa3_enterprise) ||
+        (security->mode == wifi_security_mode_wpa3_compatibility)) {
         interface->wpa_s.current_ssid->ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
         if (interface->wpa_s.conf->sae_groups == NULL) {
             interface->wpa_s.conf->sae_groups =
@@ -9037,7 +9067,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 	interface->wpa_s.conf->sae_groups[0] = 19;
 	interface->wpa_s.conf->sae_groups[1] = 20;
 	interface->wpa_s.conf->sae_groups[2] = 21;
-	interface->wpa_s.conf->sae_groups[3] = -1;
+	interface->wpa_s.conf->sae_groups[3] = 0;
     }
     if (interface->wpa_s.current_ssid->ssid == NULL) {
         interface->wpa_s.current_ssid->ssid = malloc(strlen(backhaul->ssid) + 1);
@@ -9088,14 +9118,9 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             MAX_PWD_LEN-1);
     }
 
-    if (security->mode != wifi_security_mode_wpa3_personal) {
-        interface->wpa_s.current_ssid->ieee80211w = security->mfp;
-    }
-
     memset(interface->wpa_s.current_ssid->ssid, 0, (strlen(backhaul->ssid) + 1));
     strcpy(interface->wpa_s.current_ssid->ssid, backhaul->ssid);
-    if ((security->mode != wifi_security_mode_wpa2_personal) &&
-            (security->mode != wifi_security_mode_wpa3_compatibility)) {
+    if ((security->mode != wifi_security_mode_wpa2_personal)) {
         interface->wpa_s.current_ssid->ssid_len = strlen(backhaul->ssid);
     }
     interface->wpa_s.current_bss->freq = backhaul->freq;
@@ -9129,17 +9154,23 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     curr_bss->ie_len = bss_ie->buff_len;
     curr_bss->beacon_ie_len = beacon_ie->buff_len;
     if (bss_ie->buff != NULL) {
-        memcpy(curr_bss + 1, bss_ie->buff, bss_ie->buff_len);
+        memcpy(curr_bss->ies, bss_ie->buff, bss_ie->buff_len);
         rsnxe = get_ie(bss_ie->buff, bss_ie->buff_len, WLAN_EID_RSNX);
         if (rsnxe && rsnxe[1] >= 1)
             rsnxe_capa = rsnxe[2]; 
     }
     if (((security->mode == wifi_security_mode_wpa3_personal) ||
         (security->mode == wifi_security_mode_wpa3_transition) ||
-        (security->mode == wifi_security_mode_wpa3_enterprise)) &&
+        (security->mode == wifi_security_mode_wpa3_enterprise) ||
+        (security->mode == wifi_security_mode_wpa3_compatibility)) &&
         (rsnxe_capa & BIT(WLAN_RSNX_CAPAB_SAE_H2E) ||
         radio->oper_param.band == WIFI_FREQUENCY_6_BAND)) {
-        interface->wpa_s.conf->sae_pwe = 1;
+
+        if (security->mode == wifi_security_mode_wpa3_compatibility) {
+            interface->wpa_s.conf->sae_pwe = 2;
+        } else {
+            interface->wpa_s.conf->sae_pwe = 1;
+        }
 
         interface->wpa_s.current_ssid->pt = sae_derive_pt(interface->wpa_s.conf->sae_groups,
             interface->wpa_s.current_ssid->ssid,
@@ -9160,7 +9191,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 
     bss = wpa_bss_get_bssid_latest(&interface->wpa_s, backhaul->bssid);
     if (bss) { 
-        memcpy(bss + 1, bss_ie->buff, bss_ie->buff_len);
+        memcpy(bss->ies, bss_ie->buff, bss_ie->buff_len);
     }
 
     wpa_hexdump(MSG_MSGDUMP, "CONN_BSS_IE", bss_ie->buff, bss_ie->buff_len);
@@ -11669,7 +11700,11 @@ int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int 
 #if !defined(PLATFORM_LINUX)
 #ifdef HOSTAPD_2_11 //2.11
                 /* setting allow_mld_addr_trans to false */
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+                send_assoc_resp(hapd, NULL, mac, status_code, 0, NULL, 0, rssi, 1);
+#else
                 send_assoc_resp(hapd, NULL, mac, status_code, 0, NULL, 0, rssi, 1, false);
+#endif
 #elif HOSTAPD_2_10 //2.10
                 send_assoc_resp(hapd, NULL, mac, status_code, 0, NULL, 0, rssi, 1);
 #else
@@ -11681,7 +11716,11 @@ int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int 
 #if !defined(PLATFORM_LINUX)
 #ifdef HOSTAPD_2_11 //2.11
                 /* setting allow_mld_addr_trans to false */
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+                send_assoc_resp(hapd, NULL, mac, status_code, 1, NULL, 0, rssi, 1);
+#else
                 send_assoc_resp(hapd, NULL, mac, status_code, 1, NULL, 0, rssi, 1, false);
+#endif
 #elif HOSTAPD_2_10 //2.10
                 send_assoc_resp(hapd, NULL, mac, status_code, 1, NULL, 0, rssi, 1);
 #else
@@ -11728,7 +11767,11 @@ void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len)
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason, int link_id)
+#else
 int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason)
+#endif
 {
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
@@ -11737,7 +11780,9 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
     wifi_driver_data_t *drv;
     struct ieee80211_mgmt mgmt;
 #if HOSTAPD_VERSION >= 211
+#if !defined(KERNEL_6_6)
     int link_id = -1;
+#endif
 #endif // HOSTAPD_VERSION >= 211
 
     interface = (wifi_interface_info_t *)priv;
@@ -11859,7 +11904,16 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
           HOSTAPD_MODE_IEEE80211AD) {
         /* Deauthentication is not used in DMG/IEEE 802.11ad;
            * disassociate the STA instead. */
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+        int link_id = wifi_hal_get_mld_link_id(interface);
+#else
+        int link_id = NL80211_DRV_LINK_ID_NA;
+#endif // HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+        return wifi_drv_sta_disassoc(priv, own_addr, addr, reason, link_id);
+#else
         return wifi_drv_sta_disassoc(priv, own_addr, addr, reason);
+#endif // BANANA_PI_PORT && KERNEL_6_6
     }
 #if 0
     //TODO: check if mesh, return
@@ -12244,8 +12298,13 @@ fail:
 }
 
 #ifdef BANANA_PI_PORT
+#if defined(KERNEL_6_6)
+int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
+    const char *ifname_wds, u32 radio_mask)
+#else
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
     const char *ifname_wds)
+#endif //KERNEL_6_6
 #else
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
     char *ifname_wds)
@@ -12904,9 +12963,15 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+    if (params->eml_cap != 0) {
+        wifi_hal_dbg_print("%s:%d: eml_cap=%u\n", __func__, __LINE__, params->eml_cap);
+        if (nla_put_u16(msg, NL80211_ATTR_EML_CAPABILITY, params->eml_cap) < 0) {
+#else
     if (params->eml_capa != 0) {
         wifi_hal_dbg_print("%s:%d: eml_capa=%u\n", __func__, __LINE__, params->eml_capa);
         if (nla_put_u16(msg, NL80211_ATTR_EML_CAPABILITY, params->eml_capa) < 0) {
+#endif
             goto fail;
         }
     }
@@ -15390,6 +15455,8 @@ int wifi_drv_set_operstate(void *priv, int state)
         interface->u.ap.br_sock_fd = sock_fd;
     } else if (vap->vap_mode == wifi_vap_mode_sta) {
         interface->u.sta.sta_sock_fd = sock_fd;
+    } else {
+        close(sock_fd);
     }
 
 #else
@@ -15639,8 +15706,13 @@ int     wifi_drv_send_eapol(void *priv, const u8 *addr, const u8 *data,
     return 0;
 }
 
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+static void * wifi_driver_nl80211_init(void *ctx, const char *ifname,
+		                       void *global_priv, enum wpa_p2p_mode p2p_mode)
+#else
 static void * wifi_driver_nl80211_init(void *ctx, const char *ifname,
                                        void *global_priv)
+#endif
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return NULL;
