@@ -65,7 +65,7 @@
 #include "collection.h"
 #include "driver.h"
 
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 #include "wpa_supplicant_i.h"
 #include "bss.h"
 #include "sme.h"
@@ -147,6 +147,8 @@ extern "C" {
 #define ecw2cw(ecw) ((1 << (ecw)) - 1)
 
 #define     MAX_BSSID_IN_ESS    8
+
+#define MAX_FREQ_LIST_SIZE 128
 
 #define BUF_SIZE         32
 #define NL_SOCK_MAX_BUF_SIZE             262144
@@ -398,6 +400,13 @@ static inline uint* uint_array_values(const uint_array_t *array) {
     return array ? array->values : NULL;
 }
 
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+typedef struct ie_info {
+    uint8_t *buff;
+    size_t  buff_len;
+} wifi_ie_info_t;
+#endif
+
 typedef struct wifi_interface_info_t {
     char name[32];
     char bridge[32];
@@ -461,12 +470,11 @@ typedef struct wifi_interface_info_t {
     bool wnm_bss_trans_query_auto_resp;
     u8 bss_transition_token;
 #endif
-#ifdef CONFIG_WIFI_EMULATOR
-    unsigned char *ie;
-    size_t ie_len;
-    unsigned char *beacon_ie;
-    size_t beacon_ie_len;
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+    wifi_ie_info_t bss_elem_ie[MAX_NUM_RADIOS];
+    wifi_ie_info_t beacon_elem_ie[MAX_NUM_RADIOS];
     struct wpa_supplicant wpa_s;
+    struct wpa_ssid current_ssid_info;
 #endif
 } wifi_interface_info_t;
 
@@ -749,7 +757,7 @@ INT wifi_hal_RMBeaconRequestCallbackUnregister(UINT apIndex, wifi_RMBeaconReport
 wifi_radio_info_t *get_radio_by_index(wifi_radio_index_t index);
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index);
 wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index);
-BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len);
+BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, size_t *ie_out_len);
 BOOL get_ie_ext_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len);
 INT get_coutry_str_from_code(wifi_countrycode_type_t code, char *country);
 INT get_coutry_str_from_oper_params(wifi_radio_operationParam_t *operParams, char *country);
@@ -1005,6 +1013,7 @@ int json_parse_boolean(const char* file_name, const char *item_name, bool *val);
 bool get_ifname_from_mac(const mac_address_t *mac, char *ifname);
 int wifi_hal_configure_sta_4addr_to_bridge(wifi_interface_info_t *interface, int add);
 int wifi_convert_freq_band_to_radio_index(int band, int *radio_index);
+struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface);
 
 #ifdef CONFIG_IEEE80211BE
 int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
@@ -1235,4 +1244,5 @@ static inline enum nl80211_iftype wpa_driver_nl80211_if_type(enum wpa_driver_if_
 #ifdef RDKB_ONE_WIFI_PROD
 void remap_wifi_interface_name_index_map();
 #endif /* RDKB_ONE_WIFI_PROD */
+int wifi_drv_set_supp_port(void *priv, int authorized);
 #endif // WIFI_HAL_PRIV_H

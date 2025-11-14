@@ -2157,7 +2157,7 @@ exit:
     return ret;
 }
 
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 static enum wpa_states wpa_sm_supplicant_sta_get_state(void *ctx)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
@@ -2188,7 +2188,7 @@ static void wpa_sm_sta_set_state(void *ctx, enum wpa_states state)
     wifi_bss_info_t bss;
     wifi_station_stats_t sta;
     interface = (wifi_interface_info_t *)ctx;
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     interface->wpa_s.wpa_state = state;
 #endif
     interface->u.sta.state = state;
@@ -2400,6 +2400,11 @@ static int wpa_sm_sta_get_beacon_ie(void *ctx)
     wifi_interface_info_t *interface;
     wifi_bss_info_t *backhaul;
     wifi_bss_info_t *bss;
+    ieee80211_tlv_t *rsn_ie = NULL;
+#if HOSTAPD_VERSION >= 210
+    ieee80211_tlv_t *rsnx_ie = NULL;
+#endif
+    int ret = -1;
 
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
@@ -2409,14 +2414,32 @@ static int wpa_sm_sta_get_beacon_ie(void *ctx)
     pthread_mutex_lock(&interface->scan_info_mutex);
     bss = hash_map_get_first(interface->scan_info_map);
     while (bss != NULL) {
-        if (memcmp(backhaul->bssid, bss->bssid, sizeof(bssid_t)) == 0) {
-            if (bss->ie_len > 0) {
-                int ret;
-                wifi_hal_dbg_print("SET RSN IE\n");
-                ret = wpa_sm_set_ap_rsn_ie(interface->u.sta.wpa_sm, bss->ie, bss->ie_len);
-                pthread_mutex_unlock(&interface->scan_info_mutex);
-                return ret;
+        if (memcmp(backhaul->bssid, bss->bssid, sizeof(bssid_t)) == 0 && bss->ie != NULL) {
+
+            rsn_ie = (ieee80211_tlv_t *)get_ie((unsigned char *)bss->ie, bss->ie_len, WLAN_EID_RSN);
+#if HOSTAPD_VERSION >= 210
+            rsnx_ie = (ieee80211_tlv_t *)get_ie((unsigned char *)bss->ie, bss->ie_len,
+                WLAN_EID_RSNX);
+            if (rsn_ie == NULL && rsnx_ie == NULL) {
+#else
+            if (rsn_ie == NULL) {
+#endif
+                bss = hash_map_get_next(interface->scan_info_map, bss);
+                continue;
             }
+
+            if (rsn_ie != NULL) {
+                ret = wpa_sm_set_ap_rsn_ie(interface->u.sta.wpa_sm, (const unsigned char *)rsn_ie,
+                    rsn_ie->length + sizeof(ieee80211_tlv_t));
+            }
+#if HOSTAPD_VERSION >= 210
+            if (rsnx_ie != NULL) {
+                ret = wpa_sm_set_ap_rsnxe(interface->u.sta.wpa_sm, (const unsigned char *)rsnx_ie,
+                    rsnx_ie->length + sizeof(ieee80211_tlv_t));
+            }
+#endif
+            pthread_mutex_unlock(&interface->scan_info_mutex);
+            return ret;
         }
         bss = hash_map_get_next(interface->scan_info_map, bss);
     }
@@ -2471,11 +2494,15 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
     struct wpa_sm *sm;
     unsigned char *assoc_req;
     unsigned char *ie = NULL;
-    unsigned short ie_len;
+    size_t ie_len;
     mac_addr_str_t bssid_str;
     int sel, key_mgmt = 0;
     int wpa_key_mgmt_11w = 0;
-
+    unsigned short max_wpa_ie_len = 500;
+    ieee80211_tlv_t *rsn_ie = NULL;
+#if HOSTAPD_VERSION >= 210
+    unsigned short max_rsnx_ie_len = 50;
+#endif
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
     backhaul = &interface->u.sta.backhaul;
@@ -2497,7 +2524,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         ctx->set_state = wpa_sm_sta_set_state;
         ctx->get_state = wpa_sm_sta_get_state;
         ctx->cancel_auth_timeout = wpa_sm_sta_cancel_auth_timeout;
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         if((sec->mode == wifi_security_mode_wpa3_personal) || (sec->mode == wifi_security_mode_wpa3_enterprise) ||
                 (sec->mode == wifi_security_mode_wpa3_transition) || (sec->mode == wifi_security_mode_wpa3_compatibility)) {
             ctx->get_state = wpa_sm_supplicant_sta_get_state;
@@ -2517,7 +2544,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
 
         interface->u.sta.wpa_sm = wpa_sm_init(ctx);
     }
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     interface->wpa_s.wpa = interface->u.sta.wpa_sm;
 #ifdef CONFIG_IEEE80211W
     unsigned int ieee80211w;
@@ -2555,7 +2582,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         break;
     }
 #endif
-#endif
+#endif //CONFIG_WIFI_EMULATOR || BANANA_PI_PORT
 
     sm = interface->u.sta.wpa_sm;
 
@@ -2569,8 +2596,11 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
     wpa_sm_set_param(sm, WPA_PARAM_RSN_ENABLED, 1);
     wpa_sm_set_param(sm, WPA_PARAM_PROTO, WPA_PROTO_RSN);
 
-    if (backhaul->ie_len && (wpa_parse_wpa_ie_rsn(backhaul->ie, backhaul->ie_len, &data) == 0)) {
-	wpa_sm_set_param(sm, WPA_PARAM_PAIRWISE, WPA_CIPHER_CCMP);
+    rsn_ie = (ieee80211_tlv_t *)get_ie(backhaul->ie, backhaul->ie_len, WLAN_EID_RSN);
+    if (rsn_ie &&
+        (wpa_parse_wpa_ie_rsn((const unsigned char *)rsn_ie,
+             rsn_ie->length + sizeof(ieee80211_tlv_t), &data) == 0)) {
+        wpa_sm_set_param(sm, WPA_PARAM_PAIRWISE, WPA_CIPHER_CCMP);
         wpa_sm_set_param(sm, WPA_PARAM_GROUP, data.group_cipher);
 
         if (data.key_mgmt & WPA_KEY_MGMT_NONE) {
@@ -2661,7 +2691,34 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
     if (get_ie_by_eid(WLAN_EID_RSN, assoc_req, interface->u.sta.assoc_req_len, &ie, &ie_len)
                 == true) {
         wpa_sm_set_assoc_wpa_ie(sm, ie, ie_len);
+    } else {
+        ie = os_malloc(max_wpa_ie_len);
+        if (ie) {
+            ie_len = max_wpa_ie_len;
+            if (wpa_sm_set_assoc_wpa_ie_default(sm, ie, &ie_len)) {
+                wifi_hal_dbg_print("Failures in wpa_sm_set_assoc_wpa_ie_default");
+            }
+            os_free(ie);
+            ie = NULL;
+            ie_len = 0;
+        }
     }
+#if HOSTAPD_VERSION >= 210
+    if (get_ie_by_eid(WLAN_EID_RSNX, assoc_req, interface->u.sta.assoc_req_len, &ie, &ie_len) ==
+        true) {
+        wpa_sm_set_assoc_rsnxe(sm, ie, ie_len);
+    } else {
+        ie = os_malloc(max_rsnx_ie_len);
+        ie_len = max_rsnx_ie_len;
+        if (ie) {
+            if (wpa_sm_set_assoc_rsnxe_default(sm, ie, &ie_len)) {
+                wifi_hal_dbg_print("Failed to add rsnxe default value");
+            }
+            os_free(ie);
+            ie = NULL;
+        }
+    }
+#endif
     wpa_sm_notify_assoc(sm, sm->bssid);
 }
 
@@ -2765,6 +2822,8 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
 
     if (interface->u.sta.wpa_sm->eapol == NULL) {
         ctx = os_zalloc(sizeof(struct eapol_ctx));
+        wifi_hal_info_print("%s:%d: wifi eapol context:%p created for vap_index:%d\n",
+            __func__, __LINE__, ctx, vap->vap_index);
 
         ctx->ctx = interface;
         ctx->msg_ctx = interface;
@@ -2780,14 +2839,16 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
         ctx->cb_ctx = interface;
 
         interface->u.sta.wpa_sm->eapol = eapol_sm_init(ctx);
-#ifdef CONFIG_WIFI_EMULATOR
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         interface->wpa_s.wpa->eapol = interface->u.sta.wpa_sm->eapol;
         interface->wpa_s.eapol = interface->u.sta.wpa_sm->eapol;
 #endif
-        eapol_sm_notify_eap_success(interface->u.sta.wpa_sm->eapol, 1);
+        eapol_sm_notify_eap_success(interface->u.sta.wpa_sm->eapol, 0);
         eapol_sm_notify_eap_fail(interface->u.sta.wpa_sm->eapol, 0);
 #ifndef CONFIG_WIFI_EMULATOR
-        eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, ForceAuthorized);
+        /* Ensure the state machine is set to DISCONNECTED to prevent DHCP RX packets from being
+         * dropped */
+        eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
 #else
         if ((sec->mode == wifi_security_mode_wpa2_enterprise) ||
             (sec->mode == wifi_security_mode_wpa3_enterprise)) {
