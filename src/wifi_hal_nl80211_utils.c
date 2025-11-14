@@ -2443,12 +2443,13 @@ enum nl80211_mfp get_mfp_mode(wifi_security_modes_t mode, int configured_mfp)
     case wifi_security_mode_wpa2_personal:
     case wifi_security_mode_wpa_wpa2_personal:
     case wifi_security_mode_wpa_wpa2_enterprise:
-        if (configured_mfp == MGMT_FRAME_PROTECTION_REQUIRED) {
-            return NL80211_MFP_REQUIRED;
-        } else if (configured_mfp == MGMT_FRAME_PROTECTION_OPTIONAL) {
+        if (configured_mfp == MGMT_FRAME_PROTECTION_OPTIONAL) {
             return NL80211_MFP_OPTIONAL;
-        }
-        return NL80211_MFP_NO;
+        } else if (configured_mfp == MGMT_FRAME_PROTECTION_REQUIRED) {
+            return NL80211_MFP_REQUIRED;
+        } //fallthrough
+    default: 
+        return NL80211_MFP_NO
 
     default:
         return NL80211_MFP_NO;
