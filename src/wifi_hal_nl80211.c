@@ -9308,7 +9308,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         wpa_conf.ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
         wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
     } else {
-        wpa_conf.ieee80211w = security->mfp;
+        wpa_conf.ieee80211w = (enum mfp_options)security->mfp;
     }
 #endif
 
