@@ -1150,6 +1150,15 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     conf->isolate = vap->u.bss_info.isolation;
     wifi_hal_dbg_print("%s:%d: AP isolate:%d \r\n", __func__, __LINE__, conf->isolate);
 
+#if (defined(EASY_MESH_NODE) || defined(EASY_MESH_COLOCATED_NODE))
+    if (is_backhaul_interface(interface)) {
+        // For backhaul VAPs, set multi-ap flag to 1
+        conf->multi_ap = BACKHAUL_BSS;
+        wifi_hal_info_print("%s:%d: Enabled multi_ap:%d for interface:%s\n", __func__,
+            __LINE__, conf->multi_ap, interface->name);
+    }
+#endif // EASY_MESH_NODE || EASY_MESH_COLOCATED_NODE
+
 #if defined(CONFIG_WPS)
     wifi_hal_wps_init(radio, vap, conf);
 #endif
