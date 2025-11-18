@@ -1158,7 +1158,7 @@ wifi_country_radio_op_class_t other_op_class = {
     }
 };
 
-static unsigned int get_sizeof_interfaces_index_map(void) {
+unsigned int get_sizeof_interfaces_index_map(void) {
 #ifdef CONFIG_WIFI_EMULATOR
     unsigned int count = 0;
     const wifi_interface_name_idex_map_t *tmp_interface_index_map = interface_index_map;
