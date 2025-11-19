@@ -826,9 +826,14 @@ static void remove_station_from_other_interfaces(wifi_interface_info_t *interfac
 
     to_mac_str(sta, sta_mac_str);
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    iter = hash_map_get_first(radio->interface_map);
-    while (iter != NULL) {
+    hash_map_foreach(radio->interface_map, iter) {
         if (iter->index != interface->index && iter->vap_info.vap_mode == wifi_vap_mode_ap) {
+#if (HOSTAPD_VERSION >= 211) && defined(CONFIG_GENERIC_MLO)
+            if (hostapd_is_mld_ap(&iter->u.ap.hapd)) {
+                continue;
+            }
+#endif // (HOSTAPD_VERSION >= 211) && defined(CONFIG_GENERIC_MLO)
+
             struct sta_info *station = ap_get_sta(&iter->u.ap.hapd, sta);
             if (station) {
                 wifi_hal_dbg_print("%s:%d: {phy %s (index %d), interface %s (ifindex %d)} stale sta %s on interface %s (ifindex %d)\n", __func__, __LINE__,
@@ -836,7 +841,6 @@ static void remove_station_from_other_interfaces(wifi_interface_info_t *interfac
                 ap_free_sta(&iter->u.ap.hapd, station);
             }
         }
-        iter = hash_map_get_next(radio->interface_map, iter);
     }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
@@ -2104,7 +2108,9 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                 reason = station->disconnect_reason_code;
             }
 #endif
+#if !defined(CONFIG_GENERIC_MLO)
             ap_free_sta(&interface->u.ap.hapd, station);
+#endif // !defined(CONFIG_GENERIC_MLO)
         } else {
             wifi_hal_dbg_print("%s:%d: interface:%s sta %s not found\n", __func__, __LINE__,
                 interface->name, to_mac_str(sta, sta_mac_str));
@@ -2176,7 +2182,9 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                     reason = station->disconnect_reason_code;
                 }
 #endif
+#if !defined(CONFIG_GENERIC_MLO)
             ap_free_sta(&interface->u.ap.hapd, station);
+#endif // !defined(CONFIG_GENERIC_MLO)
         }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
