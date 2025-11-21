@@ -1044,6 +1044,15 @@ int wifi_hal_purgeScanResult(unsigned int vap_index, unsigned char *sta_mac);
 void get_wifi_interface_info_map(wifi_interface_name_idex_map_t *interface_map);
 void get_radio_interface_info_map(radio_interface_mapping_t *radio_interface_map);
 unsigned int get_sizeof_interfaces_index_map(void);
+u32 get_wpa_version(wifi_security_modes_t mode);
+bool is_wpa3_192bit_mode(const struct wpa_auth_config *wpa_conf);
+void get_cipher_suites(wifi_security_modes_t mode, wifi_encryption_method_t encr,
+    const struct wpa_auth_config *wpa_conf, u32 *pairwise, u32 *group);
+enum nl80211_mfp get_mfp_mode(wifi_security_modes_t mode, int configured_mfp);
+u32 get_akm_suite(int wpa_key_mgmt, wifi_security_modes_t mode);
+enum nl80211_auth_type get_auth_type(wifi_security_modes_t mode, u32 akm_suite);
+int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *security,
+    const struct wpa_auth_config *wpa_conf);
 int validate_radio_operation_param(wifi_radio_operationParam_t *param);
 int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg, int len);
 int is_backhaul_interface(wifi_interface_info_t *interface);
