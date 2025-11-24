@@ -245,6 +245,8 @@ extern "C" {
 #define CHANWIDTH_320MHZ CONF_OPER_CHWIDTH_320MHZ
 #endif /* HOSTAPD_VERSION >= 211 */
 
+#define MLD_INVALID_VALUE 255
+
 extern const struct wpa_driver_ops g_wpa_driver_nl80211_ops;
 #ifdef CONFIG_WIFI_EMULATOR
 extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
@@ -876,7 +878,7 @@ int wifi_hal_parse_rm_beacon_request(unsigned int apIndex, char* buff, size_t le
     wifi_hal_rrm_request_t *req);
 wifi_radio_info_t *get_radio_by_index(wifi_radio_index_t index);
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index);
-wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index);
+wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index, u8 link_id);
 BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, size_t *ie_out_len);
 BOOL get_ie_ext_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len);
 const u8 * get_vendor_ie_by_type(const u8 *pos, size_t len, u32 vendor_type);
@@ -945,7 +947,7 @@ int     nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         unsigned int num_freq, unsigned int  *freq_list, unsigned int dwell_time,
         unsigned int num_ssid,  ssid_t *ssid_list);
 int     nl80211_get_scan_results(wifi_interface_info_t *interface);
-int     nl80211_switch_channel(wifi_radio_info_t *radio);
+int     nl80211_switch_channel(wifi_radio_info_t *radio, wifi_interface_info_t *interface, struct csa_settings *csa_settings);
 int     nl80211_tx_control_port(wifi_interface_info_t *interface, const u8 *dest, u16 proto, const u8 *buf, size_t len, int no_encrypt, int link_id);
 int     nl80211_set_acl(wifi_interface_info_t *interface);
 int     nl80211_set_acl_mode(wifi_interface_info_t *interface, uint32_t mac_filter_mode);
@@ -987,6 +989,7 @@ int nl80211_send_and_recv(struct nl_msg *msg, int (*valid_handler)(struct nl_msg
     void *valid_data, int (*valid_finish_handler)(struct nl_msg *, void *),
     void *valid_finish_data);
 int interface_info_handler(struct nl_msg *msg, void *arg);
+int fill_csa_params(wifi_radio_info_t *radio, struct csa_settings *csa_settings);
 
 #if HOSTAPD_VERSION >= 210 //2.10
 int wifi_drv_vendor_cmd(void *priv, unsigned int vendor_id,
@@ -1171,6 +1174,7 @@ void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nla
 int update_hostap_mlo(wifi_interface_info_t *interface);
 #if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
 void mlo_remove_link(wifi_interface_info_t *interface);
+bool wifi_hal_is_mld_link_exists(struct wifi_interface_info_t *interface);
 #endif
 #endif /* CONFIG_IEEE80211BE */
 

@@ -836,9 +836,23 @@ void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nla
 // TODO: support multiple mld
 static struct hostapd_mld mld;
 
-static bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
+bool mld_exists(u8 mld_id)
 {
+    if (mld_id == MLD_INVALID_VALUE)
+        return false;
+
+    // currently we support only one MLD group which exists always
+    return true;
+}
+
+bool wifi_hal_is_mld_link_exists(wifi_interface_info_t *interface)
+{
+    struct hostapd_data *hapd = &interface->u.ap.hapd;
     struct hostapd_data *link_bss;
+    u8 mld_id = interface->vap_info.u.bss_info.mld_info.common_info.mld_id;
+
+    if (!mld_exists(mld_id))
+        return false;
 
     dl_list_for_each(link_bss, &mld.links, struct hostapd_data, link) {
         if (link_bss == hapd) {
@@ -862,7 +876,7 @@ void mlo_remove_link(wifi_interface_info_t *interface)
 
     hapd = &interface->u.ap.hapd;
 
-    if (!wifi_hal_is_mld_link_exists(hapd)) {
+    if (!wifi_hal_is_mld_link_exists(interface)) {
         wifi_hal_info_print(
             "%s:%d - iface:%s MLD link: %d does not exist in MLD group - not removing\n", __func__,
             __LINE__, hapd->conf->iface, hapd->mld->num_links);
@@ -917,7 +931,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     }
     hapd->mld = &mld;
 
-    if (!wifi_hal_is_mld_link_exists(hapd)) {
+    if (!wifi_hal_is_mld_link_exists(interface)) {
         wifi_hal_info_print("%s:%d: Adding MLD link %d MLD setup\n", __func__, __LINE__,
             hapd->mld_link_id);
         if (hostapd_mld_add_link(hapd) != 0) {
