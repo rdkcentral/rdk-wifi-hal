@@ -1976,11 +1976,12 @@ wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index)
     return NULL;
 }
 
-wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index)
+wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index, u8 link_id)
 {
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
     unsigned int i;
+    u8 if_link_id;
 
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = &g_wifi_hal.radio_info[i];
@@ -1988,7 +1989,12 @@ wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index)
 
         while (interface != NULL) {
             if (interface->index == if_index) {
-                return interface;
+                if_link_id = wifi_hal_get_mld_link_id(interface);
+                if (if_link_id == link_id) {
+                    wifi_hal_dbg_print("%s:%d: Found for ifidx:%d and link_id:%d - name %s\n",
+                        __func__, __LINE__, if_index, link_id, interface->name);
+                    return interface;
+                }
             }
             interface = hash_map_get_next(radio->interface_map, interface);
         }
