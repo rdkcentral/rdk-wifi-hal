@@ -1976,11 +1976,12 @@ wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index)
     return NULL;
 }
 
-wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index)
+wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index, u8 link_id)
 {
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
     unsigned int i;
+    u8 if_link_id;
 
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = &g_wifi_hal.radio_info[i];
@@ -1988,15 +1989,20 @@ wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index)
 
         while (interface != NULL) {
             if (interface->index == if_index) {
+#if defined(CONFIG_GENERIC_MLO)
+                if_link_id = wifi_hal_get_mld_link_id(interface);
+                if (if_link_id == link_id) {
+                    return interface;
+                }
+#else
                 return interface;
+#endif
             }
             interface = hash_map_get_next(radio->interface_map, interface);
         }
     }
-
     return NULL;
 }
-
 
 BOOL get_ie_ext_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len)
 {
