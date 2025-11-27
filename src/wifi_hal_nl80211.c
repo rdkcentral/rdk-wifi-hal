@@ -18347,6 +18347,101 @@ int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx)
 
     return 0;
 }
+
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
+static int del_beacon(wifi_interface_info_t *interface, int link_id)
+{
+    struct nl_msg *msg;
+
+    if (interface == NULL || !interface->beacon_set) {
+        wifi_hal_dbg_print("%s:%d nl80211: Beacon for link=%u already unset\n", __func__, __LINE__,
+            link_id);
+        return 0;
+    }
+
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_DEL_BEACON);
+    if (msg == NULL) {
+        wifi_hal_dbg_print("%s:%d nl80211: failed to create msg\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    if (interface != NULL) {
+        nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
+        nla_put_u32(msg, NL80211_ATTR_WIPHY, interface->phy_index);
+    }
+
+    if (link_id != NL80211_DRV_LINK_ID_NA) {
+        wifi_hal_dbg_print("%s:%d nl80211: Stop beaconing on link=%u\n", __func__, __LINE__,
+            link_id);
+        if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0) {
+            nlmsg_free(msg);
+            return -1;
+        }
+    }
+
+    if (nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL) < 0) {
+        wifi_hal_error_print("%s:%d nl80211: del beacon failed for link=%u\n", __func__,
+            __LINE__, link_id);
+        return -1;
+    }
+
+    interface->beacon_set = 0;
+
+    return 0;
+}
+
+static int remove_link(wifi_interface_info_t *interface, int link_id)
+{
+    struct nl_msg *msg;
+
+    wifi_hal_dbg_print("%s:%d nl80211: Remove link (ifindex=%d link_id=%u)\n", __func__, __LINE__,
+        interface->index, link_id);
+
+    del_beacon(interface, link_id);
+
+    /* Remove the link from the kernel */
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_REMOVE_LINK);
+    if (msg == NULL) {
+        wifi_hal_dbg_print("%s:%d nl80211: failed to create msg\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    if (interface != NULL) {
+        nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
+        nla_put_u32(msg, NL80211_ATTR_WIPHY, interface->phy_index);
+    }
+
+    if (msg == NULL || nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0) {
+        nlmsg_free(msg);
+        wifi_hal_error_print("%s:%d nl80211: remove link (%d) failed\n", __func__, __LINE__,
+            link_id);
+        return -1;
+    }
+
+    return nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
+}
+
+int wifi_drv_link_remove(void *priv, enum wpa_driver_if_type type, const char *ifname, u8 link_id)
+{
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        wifi_hal_error_print("%s:%d Invalid removal - MLO for interface %s is disabled\n", __func__,
+            __LINE__, interface->name);
+        return -1;
+    }
+
+    if (link_id >= MAX_NUM_MLD_LINKS || link_id < 0) {
+        wifi_hal_error_print("%s:%d Invalid link_id: %u\n", __func__, __LINE__, link_id);
+        return -1;
+    }
+
+    return remove_link(interface, link_id);
+}
+#endif // BANANA_PI_PORT && CONFIG_GENERIC_MLO
+
 #endif // HOSTAPD_VERSION >= 211
 
 const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
@@ -18533,6 +18628,9 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
 #endif /* HOSTAPD_VERSION >= 210 */
 #if HOSTAPD_VERSION >= 211 // 2.11
     .link_add = wifi_drv_link_add,
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
+    .link_remove = wifi_drv_link_remove,
+#endif
 #endif // HOSTAPD_VERSION >= 211
 };
 

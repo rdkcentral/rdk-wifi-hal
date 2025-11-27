@@ -1172,6 +1172,9 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
 int nl80211_send_mlo_msg(struct nl_msg *msg);
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb);
 int update_hostap_mlo(wifi_interface_info_t *interface);
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
+void mlo_remove_link(wifi_interface_info_t *interface);
+#endif
 #endif /* CONFIG_IEEE80211BE */
 
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio);
