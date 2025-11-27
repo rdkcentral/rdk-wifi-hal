@@ -1532,6 +1532,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                         __LINE__, interface_name);
                     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                     hostapd_reload_config(interface->u.ap.hapd.iface);
+
 #ifdef CONFIG_SAE
                     if (interface->u.ap.conf.sae_groups) {
                         interface->u.ap.conf.sae_groups = NULL;
@@ -1541,6 +1542,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
                     wifi_hal_info_print("%s:%d: interface:%s disable ap\n", __func__, __LINE__,
                         interface_name);
+
+                    interface->bss_started = false;
                     nl80211_enable_ap(interface, false);
 
                     wifi_hal_info_print("%s:%d: interface:%s free hostapd data\n", __func__,
