@@ -311,9 +311,10 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         // TODO: dynamic configuration
         vap->u.bss_info.mld_info.common_info.mld_enable =
             interface->vap_info.u.bss_info.mld_info.common_info.mld_enable;
-        memcpy(vap->u.bss_info.mld_info.common_info.mld_addr,
+        if(*(vap->u.bss_info.mld_info.common_info.mld_addr) == '\0'){
+            memcpy(vap->u.bss_info.mld_info.common_info.mld_addr,
             interface->vap_info.u.bss_info.mld_info.common_info.mld_addr,
-            sizeof(vap->u.bss_info.mld_info.common_info.mld_addr));
+            sizeof(vap->u.bss_info.mld_info.common_info.mld_addr));}
         vap->u.bss_info.mld_info.common_info.mld_link_id =
             interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
         vap->u.bss_info.mld_info.common_info.mld_id =
