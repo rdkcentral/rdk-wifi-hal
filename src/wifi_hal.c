@@ -450,6 +450,12 @@ INT wifi_hal_init()
     }
 #endif //CONFIG_WIFI_EMULATOR_EXT_AGENT
 
+#ifdef CONFIG_GENERIC_MLO
+    if (nl80211_init_mld_links() != 0) {
+        return RETURN_ERR;
+    }
+#endif // CONFIG_GENERIC_MLO
+
     if (nl80211_init_radio_info() != 0) {
         return RETURN_ERR;
     }
