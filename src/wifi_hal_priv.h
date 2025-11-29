@@ -631,7 +631,7 @@ typedef struct {
     unsigned int port_bitmap[32];
     unsigned int num_radios;
 #ifdef CONFIG_WIFI_EMULATOR
-     wifi_radio_info_t radio_info[MAX_NUM_SIMULATED_CLIENT];
+    wifi_radio_info_t radio_info[MAX_NUM_SIMULATED_CLIENT];
 #else
     wifi_radio_info_t radio_info[MAX_NUM_RADIOS];
 #endif
