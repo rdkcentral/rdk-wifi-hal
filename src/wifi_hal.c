@@ -716,6 +716,8 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     return status;
 }
 
+#define DEFAULT_CS_COUNT 5
+
 INT _wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 #else
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
@@ -729,7 +731,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     wifi_radio_operationParam_t old_operationParam;
     platform_set_radio_pre_init_t set_radio_pre_init_fn;
     bool is_channel_changed;
-    int ret;
+    int ret = 0;
 
 #ifdef CMXB7_PORT
     int dfs_start_chan = 52, dfs_end_chan = 144;
@@ -925,14 +927,15 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     is_channel_changed = radio->oper_param.channel != operationParam->channel ||
         radio->oper_param.channelWidth != operationParam->channelWidth;
     if (radio->configured && radio->oper_param.enable && is_channel_changed) {
+
         radio->oper_param.channel = operationParam->channel;
         radio->oper_param.operatingClass = operationParam->operatingClass;
         radio->oper_param.channelWidth = operationParam->channelWidth;
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
-		radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
-		strncpy(radio->oper_param.radarDetected, operationParam->radarDetected,
-				sizeof(radio->oper_param.radarDetected)-1);
-		radio->oper_param.DFSTimer = operationParam->DFSTimer;
+        radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
+        strncpy(radio->oper_param.radarDetected, operationParam->radarDetected,
+            sizeof(radio->oper_param.radarDetected) - 1);
+        radio->oper_param.DFSTimer = operationParam->DFSTimer;
         memcpy(radio->oper_param.channel_map, operationParam->channel_map,
             sizeof(radio->oper_param.channel_map));
 
@@ -977,7 +980,72 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
             if (is_channel_changed) {
                 wifi_hal_dbg_print("%s:%d: Switch channel on radio index:%d\n", __func__, __LINE__,
                     index);
-                if ((ret = nl80211_switch_channel(radio)) == -1) {
+                wifi_interface_info_t *if_it;
+                bool first_interface = true;
+
+                struct csa_settings csa_settings;
+                ret = fill_csa_params(radio, &csa_settings);
+                if (ret < 0) {
+                    return ret;
+                }
+
+                hash_map_foreach(radio->interface_map, if_it) {
+                    ret = nl80211_switch_channel(radio, if_it, &csa_settings);
+                    if (ret != 0) {
+                        if (first_interface) {
+                            goto channel_switch_failure;
+                        }
+                    }
+                    // we assume that the error is due to CSA being
+                    // active when this is not first interface
+                    first_interface = false;
+                }
+
+#if defined(CONFIG_GENERIC_MLO) && defined(BANANA_PI_PORT)
+                // On Mediatek currently we have to send messages for all
+                // affiliated links in MLD group.
+                hash_map_foreach(radio->interface_map, if_it) {
+                    if (wifi_hal_is_mld_link_exists(if_it)) {
+                        for (int i = 0; i < g_wifi_hal.num_radios; ++i) {
+                            wifi_radio_info_t *radio_it = &g_wifi_hal.radio_info[i];
+                            if (radio_it == radio) {
+                                continue;
+                            }
+
+                            struct csa_settings csa_settings;
+                            ret = fill_csa_params(radio_it, &csa_settings);
+                            if (ret < 0) {
+                                return RETURN_ERR;
+                            }
+                            wifi_interface_info_t *if_it_radio;
+                            hash_map_foreach(radio_it->interface_map, if_it_radio) {
+                                if (wifi_hal_is_mld_link_exists(if_it_radio)) {
+                                    if (interface->u.ap.hapd.csa_in_progress) {
+                                        // TODO: Can happen in case of
+                                        // simultaneous changes on many
+                                        // bands. CSA is very long for
+                                        // BPi, should there be some
+                                        // retry mechanism ?
+                                    }
+                                    // No changes are done here,
+                                    // just resending the message.
+                                    if (nl80211_switch_channel(radio_it, if_it_radio, &csa_settings)) {
+                                        wifi_hal_error_print(
+                                            "%s:%d: Error notifying link %d on radio %d switching "
+                                            "channel, ret:%d, CSA active:%d\n",
+                                            __func__, __LINE__,
+                                            wifi_hal_get_mld_link_id(if_it_radio), i, ret,
+                                            interface->u.ap.hapd.csa_in_progress);
+                                        return RETURN_ERR;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+#endif
+            channel_switch_failure:
+                if (ret == -1) {
                     wifi_hal_error_print("%s:%d: Error switching channel\n", __func__, __LINE__);
                     goto reload_config;
                 } else if (ret != 0) {
@@ -1526,6 +1594,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                         __LINE__, interface_name);
                     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                     hostapd_reload_config(interface->u.ap.hapd.iface);
+
 #ifdef CONFIG_SAE
                     if (interface->u.ap.conf.sae_groups) {
                         interface->u.ap.conf.sae_groups = NULL;
@@ -1537,6 +1606,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                         interface_name);
                     nl80211_enable_ap(interface, false);
 
+                    // For reconfiguration the links have to be removed
+                    // from the MLD group.
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
+                    mlo_remove_link(interface);
+#endif
                     wifi_hal_info_print("%s:%d: interface:%s free hostapd data\n", __func__,
                         __LINE__, interface_name);
                     pthread_mutex_lock(&g_wifi_hal.hapd_lock);

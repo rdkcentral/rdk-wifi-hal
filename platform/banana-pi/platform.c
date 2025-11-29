@@ -836,9 +836,23 @@ void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nla
 // TODO: support multiple mld
 static struct hostapd_mld mld;
 
-static bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
+bool mld_exists(u8 mld_id)
 {
+    if (mld_id == MLD_INVALID_VALUE)
+        return false;
+
+    // currently we support only one MLD group which exists always
+    return true;
+}
+
+bool wifi_hal_is_mld_link_exists(wifi_interface_info_t *interface)
+{
+    struct hostapd_data *hapd = &interface->u.ap.hapd;
     struct hostapd_data *link_bss;
+    u8 mld_id = interface->vap_info.u.bss_info.mld_info.common_info.mld_id;
+
+    if (!mld_exists(mld_id))
+        return false;
 
     dl_list_for_each(link_bss, &mld.links, struct hostapd_data, link) {
         if (link_bss == hapd) {
@@ -848,6 +862,47 @@ static bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
     return false;
 }
 
+void mlo_remove_link(wifi_interface_info_t *interface)
+{
+    struct hostapd_data *hapd;
+
+    if (interface->u.ap.conf.disable_11be) {
+        return;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return;
+    }
+
+    hapd = &interface->u.ap.hapd;
+
+    if (!wifi_hal_is_mld_link_exists(interface)) {
+        wifi_hal_info_print(
+            "%s:%d - iface:%s MLD link: %d does not exist in MLD group - not removing\n", __func__,
+            __LINE__, hapd->conf->iface, hapd->mld->num_links);
+    } else {
+        hostapd_mld_remove_link(hapd);
+        wifi_hal_info_print(
+            "%s:%d - iface:%s removing VAP from MLD group - mld links num left: %d\n", __func__,
+            __LINE__, hapd->conf->iface, hapd->mld->num_links);
+    }
+}
+
+static inline int copy_ssid(char *dest, char *source, size_t old_len, size_t len)
+{
+    if (len >= SSID_MAX_LEN) {
+        wifi_hal_error_print("%s:%d: Setting of SSID failed - SSID too long\n", __func__, __LINE__);
+        return -1;
+    }
+    memset(dest, 0, old_len);
+    strncpy(dest, source, len);
+    return 0;
+}
+
+/* NOTE: For Banana Pi, calling of this function results in setting the
+ * beacon more than once during any scenario - this is expected, as on
+ * BPi for some reason beacons will not be broadcasted unless set twice.
+ * */
 int update_hostap_mlo(wifi_interface_info_t *interface)
 {
 #if (HOSTAPD_VERSION >= 211)
@@ -876,28 +931,39 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     }
     hapd->mld = &mld;
 
-    if (!wifi_hal_is_mld_link_exists(hapd) && hostapd_mld_add_link(hapd) != 0) {
-        wifi_hal_error_print("Failed to add link %d in MLD %s\n", hapd->mld_link_id,
-            hapd->conf->iface);
-        return -1;
+    if (!wifi_hal_is_mld_link_exists(interface)) {
+        wifi_hal_info_print("%s:%d: Adding MLD link %d MLD setup\n", __func__, __LINE__,
+            hapd->mld_link_id);
+        if (hostapd_mld_add_link(hapd) != 0) {
+            wifi_hal_error_print("%s:%d: Failed to add link %d in MLD %s\n", __func__, __LINE__,
+                hapd->mld_link_id, hapd->conf->iface);
+            return -1;
+        }
     }
 
     /* Links have been removed due to interface down-up. Re-add all links and enable them,
      * but enable the first link BSS before doing that. */
     first_link = hostapd_mld_is_first_bss(hapd) ? hapd : hostapd_mld_get_first_bss(hapd);
-
     if (hostapd_drv_link_add(first_link, first_link->mld_link_id, first_link->own_addr)) {
-        wifi_hal_error_print("Failed to add link %d in MLD %s\n", first_link->mld_link_id,
-            first_link->conf->iface);
-        return -1;
+        wifi_hal_error_print("%s:%d: Failed to add link %d in-driver MLD setup %s\n", __func__,
+            __LINE__, first_link->mld_link_id, first_link->conf->iface);
+    }
+
+    /* SSID has to be unified across all MLD links as they can not
+     * differ, as driver set will fail if they do - copying them
+     * explicitly avoids issues with beacons having bad SSID. */
+    size_t ssid_len = strlen(interface->vap_info.u.bss_info.ssid);
+    if (!copy_ssid(first_link->conf->ssid.ssid, interface->vap_info.u.bss_info.ssid,
+            first_link->conf->ssid.ssid_len, ssid_len)) {
+        first_link->conf->ssid.ssid_len = ssid_len;
     }
 
     /* If it is current link configuration it will be enabled later by start_bss */
     if (first_link != hapd) {
         if (ieee802_11_set_beacon(first_link) != 0) {
-            wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
+            wifi_hal_error_print(
+                "%s:%d: Failed to set beacon for non-first link interface: %s link id: %d\n",
                 __func__, __LINE__, first_link->conf->iface, first_link->mld_link_id);
-            return -1;
         }
     }
 
@@ -908,20 +974,21 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         }
 
         if (hostapd_drv_link_add(link_bss, link_bss->mld_link_id, link_bss->own_addr)) {
-            wifi_hal_error_print("Failed to add link %d in MLD %s\n", link_bss->mld_link_id,
-                link_bss->conf->iface);
-            return -1;
+            wifi_hal_error_print("%s:%d: Failed to add non-first link with link id :%d in MLD %s\n",
+                __func__, __LINE__, link_bss->mld_link_id, link_bss->conf->iface);
         }
-
         /* If it is current link configuration it will be enabled later by start_bss */
         if (link_bss == hapd) {
             continue;
         }
 
+        if (!copy_ssid(link_bss->conf->ssid.ssid, interface->vap_info.u.bss_info.ssid,
+                link_bss->conf->ssid.ssid_len, ssid_len)) {
+            link_bss->conf->ssid.ssid_len = ssid_len;
+        }
         if (ieee802_11_set_beacon(link_bss) != 0) {
             wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
                 __func__, __LINE__, link_bss->conf->iface, link_bss->mld_link_id);
-            return -1;
         }
     }
 #endif

@@ -442,7 +442,6 @@ int update_hostap_data(wifi_interface_info_t *interface)
 
     init_oem_config(interface);
     init_radius_config(interface);
-    
     update_hostap_driver(vap->vap_index, hapd);
     driver_init(interface);
 
