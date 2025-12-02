@@ -7783,6 +7783,14 @@ int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
 
     unsigned short frame_type;
 
+#if defined(CONFIG_GENERIC_MLO)
+    interface = wifi_hal_get_first_mld_interface(interface);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get first MLD interface\n", __func__, __LINE__);
+        return -1;
+    }
+#endif // CONFIG_GENERIC_MLO
+
     if (interface->mgmt_frames_registered == 1) {
         wifi_hal_dbg_print("%s:%d: Mgmt frames already registered for %s\n", __func__, __LINE__,
             wifi_hal_get_interface_name(interface));
@@ -7863,14 +7871,22 @@ int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
 
 static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface)
 {
+#if defined(CONFIG_GENERIC_MLO)
+    interface = wifi_hal_get_first_mld_interface(interface);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get first MLD interface\n", __func__, __LINE__);
+        return;
+    }
+#endif // CONFIG_GENERIC_MLO
+
     if (interface->mgmt_frames_registered == 0) {
         wifi_hal_dbg_print("%s:%d: interface:%s mgmt frames not registered\n", __func__, __LINE__,
-            interface->name);
+            wifi_hal_get_interface_name(interface));
         return;
     }
 
     wifi_hal_info_print("%s:%d: interface:%s ifindex:%d nl sock:%d\n", __func__, __LINE__,
-        interface->name, interface->index, interface->nl_event_fd);
+        wifi_hal_get_interface_name(interface), interface->index, interface->nl_event_fd);
 
     nl_destroy_handles(&interface->nl_event);
     interface->nl_event = NULL;
@@ -15217,19 +15233,27 @@ int nl80211_register_spurious_frames(wifi_interface_info_t *interface)
     struct nl_msg *msg = NULL;
     int ret = 0;
 
+#if defined(CONFIG_GENERIC_MLO)
+    interface = wifi_hal_get_first_mld_interface(interface);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get first MLD interface\n", __func__, __LINE__);
+        return -1;
+    }
+#endif // CONFIG_GENERIC_MLO
+
     if (interface->spurious_frames_registered == 1) {
         wifi_hal_info_print("%s:%d: spurious frames handler already registered for %s\n", __func__,
-            __LINE__, interface->name);
+            __LINE__, wifi_hal_get_interface_name(interface));
         return 0;
     }
 
     wifi_hal_info_print("%s:%d: register spurious frames handler for %s\n", __func__, __LINE__,
-        interface->name);
+        wifi_hal_get_interface_name(interface));
 
     interface->spurious_nl_cb = nl_cb_alloc(NL_CB_DEFAULT);
     if (interface->spurious_nl_cb == NULL) {
         wifi_hal_error_print("%s:%d: failed to alloc nl_cb for %s interface\n", __func__, __LINE__,
-            interface->name);
+            wifi_hal_get_interface_name(interface));
         return -1;
     }
 
@@ -15239,20 +15263,20 @@ int nl80211_register_spurious_frames(wifi_interface_info_t *interface)
     interface->spurious_nl_event = nl_create_handle(g_wifi_hal.nl_cb, "spurious");
     if (interface->spurious_nl_event == NULL) {
         wifi_hal_error_print("%s:%d: failed to create nl handle for %s interface\n", __func__,
-            __LINE__, interface->name);
+            __LINE__, wifi_hal_get_interface_name(interface));
         goto error;
     }
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_UNEXPECTED_FRAME);
     if (msg == NULL) {
         wifi_hal_error_print("%s:%d: failed to create message for %s interface\n", __func__,
-            __LINE__, interface->name);
+            __LINE__, wifi_hal_get_interface_name(interface));
         goto error;
     }
 
     if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index) < 0) {
         wifi_hal_error_print("%s:%d: failed set interface index in message for %s interface\n",
-            __func__, __LINE__, interface->name);
+            __func__, __LINE__, wifi_hal_get_interface_name(interface));
         goto error;
     }
 
@@ -15260,7 +15284,8 @@ int nl80211_register_spurious_frames(wifi_interface_info_t *interface)
         spurious_frame_register_handler, interface, NULL, NULL);
     if (ret) {
         wifi_hal_error_print("%s:%d: failed to register for spurious frames on interface %s, "
-            "error: %d (%s)\n", __func__, __LINE__, interface->name, ret, strerror(-ret));
+                             "error: %d (%s)\n",
+            __func__, __LINE__, wifi_hal_get_interface_name(interface), ret, strerror(-ret));
         goto error;
     }
 
