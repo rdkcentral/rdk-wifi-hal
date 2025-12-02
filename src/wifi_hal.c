@@ -443,6 +443,12 @@ INT wifi_hal_init()
         return RETURN_ERR;
     }
 
+#ifdef CONFIG_GENERIC_MLO
+    if (nl80211_init_mld_links() != 0) {
+        return RETURN_ERR;
+    }
+#endif // CONFIG_GENERIC_MLO
+
     if (nl80211_init_radio_info() != 0) {
         return RETURN_ERR;
     }
