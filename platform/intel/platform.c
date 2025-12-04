@@ -1636,3 +1636,9 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 {
     return 0;
 }
+
+int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
+{
+    return RETURN_OK;
+}
+
