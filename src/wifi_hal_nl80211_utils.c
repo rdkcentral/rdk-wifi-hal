@@ -454,6 +454,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef TCXB7_PORT // for Broadcom based platforms
@@ -487,6 +488,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef VNTXER5_PORT // for Qualcomm based platforms
@@ -520,6 +522,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef TARGET_GEMINI7_2
@@ -546,11 +549,14 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    NULL,
+    NULL,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif 
 
 #ifdef TCXB8_PORT // for Broadcom based platforms
@@ -584,6 +590,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 
@@ -618,6 +625,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef XB10_PORT // for Broadcom based platforms
@@ -656,6 +664,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef SCXER10_PORT // for Broadcom based platforms
@@ -689,8 +698,9 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
-  
+
 #ifdef CMXB7_PORT
     "cmxb7",
     "mtlk",
@@ -720,6 +730,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef XLE_PORT // for Broadcom XLE
@@ -753,6 +764,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 
 #ifdef SKYSR213_PORT // for Broadcom HUB6
@@ -786,6 +798,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
 #ifdef RDKB_ONE_WIFI_PROD // for Broadcom based platforms
     "rdkb",
@@ -816,6 +829,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
     
 };
@@ -3405,6 +3419,11 @@ platform_set_dfs_t get_platform_dfs_set_fn()
 platform_get_radio_caps_t get_platform_get_radio_caps_fn()
 {
     return driver_info.platform_get_radio_caps_fn;
+}
+
+platform_get_RegDomain_t get_platform_get_RegDomain_fn()
+{
+    return driver_info.platform_get_RegDomain_fn;
 }
 
 bool lsmod_by_name(const char *name)
