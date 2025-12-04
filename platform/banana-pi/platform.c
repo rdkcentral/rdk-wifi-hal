@@ -229,7 +229,7 @@ int platform_get_ssid_default(char *ssid, int vap_index)
     {
         if (fgets(serial, sizeof(serial), fp) != NULL)
         {
-            serial[strcspn(serial,"\n")] = 0;
+            serial[strcspn(serial, "\n")] = 0;
             wifi_hal_dbg_print("%s:%d, appending serial is :%s \n", __func__, __LINE__, serial);
         }
         pclose(fp);
@@ -237,7 +237,7 @@ int platform_get_ssid_default(char *ssid, int vap_index)
 #ifdef CONFIG_GENERIC_MLO
     snprintf(ssid, BPI_LEN_16, "BPI-RDKB-MLO-AP");
 #else    
-    snprintf(ssid,BPI_LEN_32,"BPI_RDKB-AP%d-%s",vap_index,serial);
+    snprintf(ssid, BPI_LEN_32, "BPI_RDKB-AP%d-%s", vap_index, serial);
 #endif    
     return 0;
 }
