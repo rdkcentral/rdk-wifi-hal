@@ -1294,7 +1294,6 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
              (interface->vap_info.u.bss_info.mac_filter_enable != vap->u.bss_info.mac_filter_enable))) {
             set_acl = 1;
         }
-#endif
 
 #if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
 #ifdef CONFIG_MLO
@@ -1366,7 +1365,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 __LINE__, interface->name, vap->u.bss_info.enabled, vap->bridge_name);
             if (vap->bridge_name[0] != '\0' && vap->u.bss_info.enabled) {
                 wifi_hal_info_print("%s:%d: interface:%s create bridge:%s\n", __func__, __LINE__,
-                    interface_name, vap->bridge_name);
+                    interface->name, vap->bridge_name);
 #if (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && defined(CONFIG_MLO)
                 if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d",  vap->vap_index);
@@ -1480,8 +1479,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
             if (radio->configured && radio->oper_param.enable) {
                 wifi_hal_info_print("%s:%d: interface:%s set %s\n", __func__, __LINE__,
-                    interface_name, vap->u.bss_info.enabled ? "up" : "down");
-                nl80211_interface_enable(interface_name, vap->u.bss_info.enabled);
+                    interface->name, vap->u.bss_info.enabled ? "up" : "down");
+                nl80211_interface_enable(interface->name, vap->u.bss_info.enabled);
 #if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
 #ifdef CONFIG_MLO
                 if(radio->oper_param.variant & WIFI_80211_VARIANT_BE)
