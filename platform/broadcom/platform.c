@@ -4038,6 +4038,18 @@ int platform_get_radio_caps(wifi_radio_index_t index)
                     EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_ALL_TO_ONE) |
                 ((0 << 4) & EHT_ML_MLD_CAPA_SRS_SUPP) |
                 ((MAX_NUM_MLD_LINKS - 1) & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK));
+
+    /* FIXME: NSTR capability disabled by default */
+    if (radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa
+        & EHT_ML_EML_CAPA_EMLMR_SUPP)
+        radio->capab.mldOperationalCap |= eMLMR;
+    if (radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa
+        & EHT_ML_EML_CAPA_EMLSR_SUPP)
+        radio->capab.mldOperationalCap |= eMLSR;
+    if ((radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops
+        & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK) > 0)
+        radio->capab.mldOperationalCap |= STR;
+
 #endif /* CONFIG_IEEE80211BE */
 
     for (interface = hash_map_get_first(radio->interface_map); interface != NULL;
