@@ -296,7 +296,11 @@ void init_hostap_bss(wifi_interface_info_t *interface)
     conf->max_auth_rounds_short = 50;
 #endif
 
+#ifdef TARGET_GEMINI7_2
+    conf->send_probe_response = 0;
+#else
     conf->send_probe_response = 1;
+#endif
 
 #ifdef CONFIG_HS20
 //Not Defined
@@ -542,7 +546,12 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
                        __func__, __LINE__, conf->iface, conf->sae_pwe);
             } else {
 #ifdef CONFIG_IEEE80211BE
-                conf->sae_pwe = (1 * !conf->disable_11be);
+                /* Update sae_pwe to 2, for 2G/5G radio interfaces  *
+                 * 0 = Hunt-and-Peck, 1 = Hash-to-Element, 2 = both *
+                 */
+                conf->sae_pwe = (2 * !conf->disable_11be);
+                wifi_hal_info_print("%s:%d: interface_name:%s sae_pwe:%d\n",
+                    __func__, __LINE__, conf->iface, conf->sae_pwe);
 #else
                 conf->sae_pwe = 0;
 #endif /* CONFIG_IEEE80211BE */
@@ -1149,6 +1158,15 @@ int update_hostap_bss(wifi_interface_info_t *interface)
 
     conf->isolate = vap->u.bss_info.isolation;
     wifi_hal_dbg_print("%s:%d: AP isolate:%d \r\n", __func__, __LINE__, conf->isolate);
+
+#if (defined(EASY_MESH_NODE) || defined(EASY_MESH_COLOCATED_NODE))
+    if (is_backhaul_interface(interface)) {
+        // For backhaul VAPs, set multi-ap flag to 1
+        conf->multi_ap = BACKHAUL_BSS;
+        wifi_hal_info_print("%s:%d: Enabled multi_ap:%d for interface:%s\n", __func__,
+            __LINE__, conf->multi_ap, interface->name);
+    }
+#endif // EASY_MESH_NODE || EASY_MESH_COLOCATED_NODE
 
 #if defined(CONFIG_WPS)
     wifi_hal_wps_init(radio, vap, conf);
