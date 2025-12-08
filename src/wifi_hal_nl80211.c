@@ -3012,7 +3012,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
     bool is_hotspot_interface = false, is_lnf_psk_interface = false;
     bool is_mdu_enabled = false;
     wifi_vap_info_t *vap_cfg = NULL;
-#if defined(VNTXER5_PORT)
+#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     int ap_index;
 #endif
 #if defined (RDKB_ONE_WIFI_PROD)
@@ -3025,7 +3025,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
         is_lnf_psk_interface = is_wifi_hal_vap_lnf_psk(vap_cfg->vap_index);
         is_mdu_enabled = vap_cfg->u.bss_info.mdu_enabled;
     }
-#if defined(VNTXER5_PORT)
+#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     if (strncmp(if_name, "mld", 3) == 0) {
         sscanf(if_name + 3, "%d", &ap_index);
         wifi_hal_info_print("%s:%d: ap_index is %d for interface:%s\n", __func__, __LINE__, ap_index, if_name);
@@ -6824,11 +6824,13 @@ int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wif
         return -1;
     }
 
-#if defined(VNTXER5_PORT)
+#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#ifdef CONFIG_MLO
     if (platform_create_interface_attributes(&msg, radio, vap) != RETURN_OK) {
         nlmsg_free(msg);
         return -1;
     }
+#endif
 #endif
 
     if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
@@ -9187,7 +9189,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
         ie = nla_data(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
         len = nla_len(bss[NL80211_BSS_INFORMATION_ELEMENTS]);
         //wifi_hal_stats_dbg_print("[SCAN] BSSID: %s, IE LEN %d\n", bssid_str, len);
-        if (len > 512) {
+        if (len > MAX_IE_ELEMENT_LEN) {
             wifi_hal_stats_error_print("[Wrong NL SCAN output] BSSID: %s, IE LEN %d\n", bssid_str, len);
             return NL_SKIP;
         }
@@ -9502,6 +9504,16 @@ int wifi_drv_send_external_auth_status(void *priv, struct external_auth *params)
 int wifi_drv_update_connection_params(
     void *priv, struct wpa_driver_associate_params *params,
     enum wpa_drv_update_connect_params_mask mask)
+{
+    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
+    return 0;
+}
+
+#ifdef TARGET_GEMINI7_2
+int wifi_drv_add_sta_node(void *priv, const u8 *addr, u16 auth_alg, bool is_ml)
+#else
+int wifi_drv_add_sta_node(void *priv, const u8 *addr, u16 auth_alg)
+#endif
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return 0;
@@ -13141,7 +13153,7 @@ static int nl80211_mbssid(struct nl_msg *msg, struct wpa_driver_ap_params *param
 
 int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
 {
-#ifdef CONFIG_IEEE80211BE
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
     struct nl_msg *msg_mlo;
 #endif /* CONFIG_IEEE80211BE */
     struct nl_msg *msg;
@@ -13340,7 +13352,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     }
 #endif
 
-#ifdef CONFIG_IEEE80211BE
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
     ret = nl80211_drv_mlo_msg(msg, &msg_mlo, interface, params);
     if (ret < 0) {
         wifi_hal_error_print("%s:%d: Failed to create mlo msg on interface %s, error: %d\n",
@@ -13403,7 +13415,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
         set_bss_param(priv, params);
     }
 
-#ifdef CONFIG_IEEE80211BE
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
     ret = nl80211_send_mlo_msg(msg_mlo);
     if (ret < 0) {
         wifi_hal_error_print("%s:%d: Failed to send mlo msg on interface %s, error: %d\n", __func__,
@@ -16331,6 +16343,7 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .add_tx_ts = wifi_drv_add_ts,
     .del_tx_ts = wifi_drv_del_ts,
     .get_ifindex = wifi_drv_get_ifindex,
+    .add_sta_node = wifi_drv_add_sta_node,
 #ifdef CONFIG_DRIVER_NL80211_QCA
     .roaming = wifi_drv_roaming,
     .disable_fils = wifi_drv_disable_fils,
@@ -16524,7 +16537,8 @@ const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops = {
     .set_bssid_blacklist = wifi_drv_set_bssid_blacklist,
 #endif /* CONFIG_DRIVER_NL80211_QCA */
     .configure_data_frame_filters = wifi_drv_configure_data_frame_filters,
-#if defined(CONFIG_HW_CAPABILITIES) || defined(CMXB7_PORT) || defined(VNTXER5_PORT)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(CMXB7_PORT) || defined(VNTXER5_PORT) || \
+    defined(TARGET_GEMINI7_2)
     .get_ext_capab = wifi_drv_get_ext_capab,
 #endif /* CONFIG_HW_CAPABILITIES || CMXB7_PORT || VNTXER5_PORT */
     .update_connect_params = wifi_drv_update_connection_params,
