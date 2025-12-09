@@ -1101,7 +1101,7 @@ static const char *const eu_op_class_cc[] = {
         "AL", "AM", "AT", "AZ", "BA", "BE", "BG", "BY", "CH", "CY", "CZ", "DE",
         "DK", "EE", "EL", "ES", "FI", "FR", "GE", "HR", "HU", "IE", "IS", "IT",
         "LI", "LT", "LU", "LV", "MD", "ME", "MK", "MT", "NL", "NO", "PL", "PT",
-        "RO", "RS", "RU", "SE", "SI", "SK", "TR", "UA", "GB", NULL
+        "RO", "RS", "RU", "SE", "SI", "SK", "TR", "UA", "GB", "GR", NULL
 };
 
 static const char *const jp_op_class_cc[] = {
