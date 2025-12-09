@@ -229,7 +229,11 @@ void init_hostap_bss(wifi_interface_info_t *interface)
     conf->max_auth_rounds_short = 50;
 #endif
 
+#ifdef TARGET_GEMINI7_2
+    conf->send_probe_response = 0;
+#else
     conf->send_probe_response = 1;
+#endif
 
 #ifdef CONFIG_HS20
 //Not Defined
