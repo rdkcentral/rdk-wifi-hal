@@ -3356,7 +3356,7 @@ static int get_radio_diag_handler(struct nl_msg *msg, void *arg)
         }
     }
 
-    if (nla_parse_nested(tb_radio_info, RDK_VENDOR_ATTR_STA_INFO_MAX,
+    if (nla_parse_nested(tb_radio_info, RDK_VENDOR_ATTR_RADIO_INFO_MAX,
             tb_vendor[RDK_VENDOR_ATTR_RADIO_INFO], radio_diag_policy)) {
         wifi_hal_stats_error_print("%s:%d Failed to parse radio info attribute\n", __func__, __LINE__);
         return NL_SKIP;
