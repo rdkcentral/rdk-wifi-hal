@@ -37,6 +37,7 @@
 #define MAX_CMD_SIZE 1024
 #define BPI_LEN_32 32
 #define BPI_LEN_16 16
+#define BPI_LEN_8 8
 #define MAX_KEYPASSPHRASE_LEN 129
 #define MAX_SSID_LEN 33
 #define INVALID_KEY  "12345678"
@@ -219,10 +220,29 @@ int platform_get_ssid_default(char *ssid, int vap_index)
             return 0;
         }
     }
+    char serial[BPI_LEN_8] = {0};
+    FILE *fp = NULL;
+    size_t bytes_read = 0;
+
+    if((fp = fopen("/nvram/serial_number.txt", "rb")) != NULL)
+    {
+        if(fseek(fp, -7, SEEK_END))
+        {
+            wifi_hal_dbg_print("%s:%d, fseek() failed \n", __func__, __LINE__);
+	        fclose(fp);
+	        return -1;
+        }
+	    bytes_read = fread(serial, 1, sizeof(serial)-1, fp);
+	    fclose(fp);
+	    if(!bytes_read)
+	        return -1;
+	    serial[strcspn(serial, "\n")] = 0;
+	    wifi_hal_dbg_print("%s:%d, appending serial is :%s \n", __func__, __LINE__, serial);
+    }
 #ifdef CONFIG_GENERIC_MLO
-    snprintf(ssid, BPI_LEN_16, "BPI-RDKB-MLO-AP");
+    snprintf(ssid, BPI_LEN_32, "BPI-RDKB-MLO-AP-%s", serial);
 #else    
-    snprintf(ssid,BPI_LEN_16,"BPI_RDKB-AP%d",vap_index);
+    snprintf(ssid, BPI_LEN_32, "BPI_RDKB-AP%d-%s", vap_index, serial);
 #endif    
     return 0;
 }
