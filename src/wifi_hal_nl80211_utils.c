@@ -1654,10 +1654,10 @@ int get_rdk_radio_indices(unsigned int phy_index, int *rdk_radio_indices, int *n
             }
         }
     }
-    *num_radios_mapped = num_radios;
     if (num_radios == 0) {
         return RETURN_ERR;
     }
+    *num_radios_mapped = num_radios;
     wifi_hal_dbg_print("%s:%d: Filled rdk_radio_indices, size:%d\n", __func__, __LINE__,
         *num_radios_mapped);
     for (i = 0; i < *num_radios_mapped; i++) {
