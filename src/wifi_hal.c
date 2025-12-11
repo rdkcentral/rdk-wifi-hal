@@ -735,7 +735,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     wifi_radio_operationParam_t old_operationParam;
     platform_set_radio_pre_init_t set_radio_pre_init_fn;
     bool is_channel_changed;
-    int ret;
+    int ret = 0;
 
 #ifdef CMXB7_PORT
     int dfs_start_chan = 52, dfs_end_chan = 144;
@@ -931,14 +931,15 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     is_channel_changed = radio->oper_param.channel != operationParam->channel ||
         radio->oper_param.channelWidth != operationParam->channelWidth;
     if (radio->configured && radio->oper_param.enable && is_channel_changed) {
+
         radio->oper_param.channel = operationParam->channel;
         radio->oper_param.operatingClass = operationParam->operatingClass;
         radio->oper_param.channelWidth = operationParam->channelWidth;
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
-		radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
-		strncpy(radio->oper_param.radarDetected, operationParam->radarDetected,
-				sizeof(radio->oper_param.radarDetected)-1);
-		radio->oper_param.DFSTimer = operationParam->DFSTimer;
+        radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
+        strncpy(radio->oper_param.radarDetected, operationParam->radarDetected,
+            sizeof(radio->oper_param.radarDetected) - 1);
+        radio->oper_param.DFSTimer = operationParam->DFSTimer;
         memcpy(radio->oper_param.channel_map, operationParam->channel_map,
             sizeof(radio->oper_param.channel_map));
 
@@ -1532,6 +1533,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                         __LINE__, interface_name);
                     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                     hostapd_reload_config(interface->u.ap.hapd.iface);
+
 #ifdef CONFIG_SAE
                     if (interface->u.ap.conf.sae_groups) {
                         interface->u.ap.conf.sae_groups = NULL;
@@ -1541,6 +1543,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
                     wifi_hal_info_print("%s:%d: interface:%s disable ap\n", __func__, __LINE__,
                         interface_name);
+
+                    interface->bss_started = false;
                     nl80211_enable_ap(interface, false);
 
                     wifi_hal_info_print("%s:%d: interface:%s free hostapd data\n", __func__,
