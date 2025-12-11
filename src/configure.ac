@@ -1,5 +1,5 @@
 ##########################################################################
-# If not stated otherwise in this file or this component's Licenses.txt
+# If not stated otherwise in this file or this component's LICENSE
 # file the following copyright and licenses apply:
 #
 # Copyright 2015 RDK Management
@@ -44,11 +44,13 @@ AM_CONDITIONAL([ONE_WIFIBUILD], [test "x$ONE_WIFIBUILD" = "xtrue"])
 AM_CONDITIONAL([RASPBERRY_PI_PORT], [test "x$RASPBERRY_PI_PORT" = "xtrue"])
 AM_CONDITIONAL([TCXB7_PORT], [test "x$TCXB7_PORT" = "xtrue"])
 AM_CONDITIONAL([VNTXER5_PORT], [test "x$VNTXER5_PORT" = "xtrue"])
+AM_CONDITIONAL([DEVICE_EXTENDER], [test "x$DEVICE_EXTENDER" = "xtrue"])
 AM_CONDITIONAL([TCHCBRV2_PORT], [test "x$TCHCBRV2_PORT" = "xtrue"])
 AM_CONDITIONAL([SKYSR300_PORT], [test "x$SKYSR300_PORT" = "xtrue"])
 AM_CONDITIONAL([XLE_PORT], [test "x$XLE_PORT" = "xtrue"])
 AM_CONDITIONAL([TCXB8_PORT], [test "x$TCXB8_PORT" = "xtrue"])
 AM_CONDITIONAL([XB10_PORT], [test "x$XB10_PORT" = "xtrue"])
+AM_CONDITIONAL([RDKB_ONE_WIFI_PROD], [test "x$RDKB_ONE_WIFI_PROD" = "xtrue"])
 AM_CONDITIONAL([SCXER10_PORT], [test "x$SCXER10_PORT" = "xtrue"])
 AM_CONDITIONAL([SKYSR213_PORT], [test "x$SKYSR213_PORT" = "xtrue"])
 AM_CONDITIONAL([CMXB7_PORT], [test "x$CMXB7_PORT" = "xtrue"])

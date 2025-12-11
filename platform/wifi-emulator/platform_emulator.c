@@ -1,32 +1,3 @@
-/************************************************************************************
-  If not stated otherwise in this file or this component's LICENSE file the
-  following copyright and licenses apply:
-
-  Copyright 2024 RDK Management
-
-  Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
-
-  http://www.apache.org/licenses/LICENSE-2.0
-
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
- **************************************************************************/
-
-
-/* Adapted code from hostap, which is:
-Copyright (c) 2002-2015, Jouni Malinen j@w1.fi
-Copyright (c) 2003-2004, Instant802 Networks, Inc.
-Copyright (c) 2005-2006, Devicescape Software, Inc.
-Copyright (c) 2007, Johannes Berg johannes@sipsolutions.net
-Copyright (c) 2009-2010, Atheros Communications
-Licensed under the BSD-3 License
-*/
-
 #include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
@@ -38,8 +9,6 @@ Licensed under the BSD-3 License
 #define MAX_BUF_SIZE 128
 #define MAX_CMD_SIZE 1024
 #define RPI_LEN_32 32
-#define MAX_KEYPASSPHRASE_LEN 129
-#define MAX_SSID_LEN 33
 #define INVALID_KEY                      "12345678"
 
 int wifi_nvram_defaultRead(char *in,char *out);
@@ -88,17 +57,6 @@ int wifi_nvram_defaultRead(char *in,char *out)
     position++;
     strncpy(out,position,strlen(position)+1);
     return 0; 
-}
-
-static int json_parse_backhaul_keypassphrase(char *backhaul_keypassphrase)
-{
-    return json_parse_string(EM_CFG_FILE, "Backhaul_KeyPassphrase", backhaul_keypassphrase,
-        MAX_KEYPASSPHRASE_LEN);
-}
-
-static int json_parse_backhaul_ssid(char *backhaul_ssid)
-{
-    return json_parse_string(EM_CFG_FILE, "Backhaul_SSID", backhaul_ssid, MAX_SSID_LEN);
 }
 
 int platform_pre_init()
@@ -171,40 +129,21 @@ int nvram_get_current_security_mode(wifi_security_modes_t *security_mode,int vap
 
 int platform_get_keypassphrase_default(char *password, int vap_index)
 {
-    wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
-    /* if the vap_index is that of mesh STA then try to obtain the ssid from
-       /nvram/EasymeshCfg.json file */
-    if (is_wifi_hal_vap_mesh_sta(vap_index)) {
-        if (!json_parse_backhaul_keypassphrase(password)) {
-            wifi_hal_dbg_print("%s:%d, read password from jSON file\n", __func__, __LINE__);
-            return 0;
-        }
-    }
-    /*password is not sensitive,won't grant access to real devices*/
-    wifi_nvram_defaultRead("rpi_wifi_password", password);
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);  
+    /*password is not sensitive,won't grant access to real devices*/ 
+    wifi_nvram_defaultRead("rpi_wifi_password",password);
     if (strlen(password) == 0) {
-        wifi_hal_error_print("%s:%d nvram default password not found, "
-                             "enforced alternative default password\n",
-            __func__, __LINE__);
-        strncpy(password, INVALID_KEY, strlen(INVALID_KEY) + 1);
+       wifi_hal_error_print("%s:%d nvram default password not found, "
+           "enforced alternative default password\n", __func__, __LINE__);
+       strncpy(password, INVALID_KEY, strlen(INVALID_KEY) + 1);
     }
     return 0;
 }
 
 int platform_get_ssid_default(char *ssid, int vap_index)
 {
-    int ret = 0;
-
-    wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
-    /* if the vap_index is that of mesh STA or mesh backhaul then try to obtain the ssid from
-       /nvram/EasymeshCfg.json file */
-    if (is_wifi_hal_vap_mesh_sta(vap_index)) {
-        if (!json_parse_backhaul_ssid(ssid)) {
-            wifi_hal_dbg_print("%s:%d, read SSID:%s from jSON file\n", __func__, __LINE__, ssid);
-            return 0;
-        }
-    }
-    sprintf(ssid, "RPI_RDKB-AP%d", vap_index);
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);   
+    sprintf(ssid,"RPI_RDKB-AP%d",vap_index);
     return 0;
 }
 
@@ -251,7 +190,7 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
 int platform_flags_init(int *flags)
 {
-    wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     *flags = PLATFORM_FLAGS_STA_INACTIVITY_TIMER;
     return 0;
 }
@@ -318,13 +257,13 @@ int platform_get_acl_num(int vap_index, uint *acl_count)
 
 int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     return 0;
 }
 
 int platform_set_acs_exclusion_list(wifi_radio_index_t index,char *buff)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     return 0;
 }
 
@@ -486,12 +425,12 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
 
     if (nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),genlmsg_attrlen(gnlh, 0),
         NULL) < 0) {
-        wifi_hal_error_print("%s:%d Failed to parse sta data\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to parse sta data\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
     if (!tb[NL80211_ATTR_STA_INFO]) {
-        wifi_hal_error_print("%s:%d Failed to get sta info attribute\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to get sta info attribute\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -500,7 +439,7 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
 
     if (nla_parse_nested(stats, NL80211_STA_INFO_MAX, tb[NL80211_ATTR_STA_INFO], stats_policy)) {
-	wifi_hal_error_print("%s:%d Failed to parse nested attributes\n", __func__, __LINE__);
+	wifi_hal_stats_error_print("%s:%d Failed to parse nested attributes\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
@@ -549,7 +488,7 @@ static int get_sta_stats(wifi_interface_info_t *interface, mac_address_t mac, wi
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_GET_STATION);
     if (msg == NULL) {
-        wifi_hal_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to create NL command\n", __func__, __LINE__);
         return -1;
     }
 
@@ -557,7 +496,7 @@ static int get_sta_stats(wifi_interface_info_t *interface, mac_address_t mac, wi
 
     ret = nl80211_send_and_recv(msg, get_sta_stats_handler, dev, NULL, NULL);
     if (ret < 0) {
-        wifi_hal_error_print("%s:%d Failed to execute NL command\n", __func__, __LINE__);
+        wifi_hal_stats_error_print("%s:%d Failed to execute NL command\n", __func__, __LINE__);
         return -1;
     }
 
@@ -650,6 +589,11 @@ int handle_rrm_action_frame(struct wifi_interface_info_t *interface, const mac_a
 }
 
 INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
+{
+    return 0;
+}
+
+int wifi_drv_set_ap_mlo(struct nl_msg *msg, void *priv, struct wpa_driver_ap_params *params)
 {
     return 0;
 }
@@ -748,9 +692,15 @@ INT wifi_getApInterworkingServiceEnable(INT apIndex, BOOL *output_bool)
     return 0;
 }
 
+INT wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
+{
+    int res = wifi_hal_send_mgmt_frame(apIndex, MacAddr, frame, len, frequency, wait);
+    return (res == 0) ? WIFI_HAL_SUCCESS : WIFI_HAL_ERROR;
+}
+
 INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCHAR *frame, UINT len)
 {
-    return 0;
+    return wifi_sendActionFrameExt(apIndex, MacAddr, frequency, 0, frame, len);
 }
 
 INT wifi_setDownStreamGroupAddress(INT apIndex, BOOL disabled)
@@ -760,8 +710,4 @@ INT wifi_setDownStreamGroupAddress(INT apIndex, BOOL disabled)
 INT wifi_getApAssociatedClientDiagnosticResult(INT ap_index, char *key,wifi_associated_dev3_t *assoc)
 {
     return RETURN_ERR;
-}
-INT wifi_getApManagementFramePowerControl(INT apIndex, INT *output_dBm)
-{
-    return 0;
 }

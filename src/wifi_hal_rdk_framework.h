@@ -1,5 +1,5 @@
 /*
- * If not stated otherwise in this file or this component's Licenses.txt file the
+ * If not stated otherwise in this file or this component's LICENSE file the
  * following copyright and licenses apply:
  *
  * Copyright 2018 RDK Management
@@ -170,6 +170,7 @@ typedef struct {
     wifi_analytics_callback                 analytics_callback;
     wifi_csi_callback                       csi_callback;
     wifi_steering_eventCB_t                 steering_event_callback;
+    wifi_wpsEvent_callback                  wps_event_callback;
 } wifi_device_callbacks_t;
 
 
