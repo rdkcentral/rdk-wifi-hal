@@ -1126,6 +1126,14 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
                     get_ccspwifiagent_interface_name_from_vap_index(vap_map->vap_array[index].vap_index, interface_name);
 #endif
                     if (vap_map->vap_array[index].vap_mode == wifi_vap_mode_ap) {
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+                        /* Update beacon info of APs after init configuration is done*/
+                        wifi_interface_info_t * interface = get_interface_by_vap_index(vap_map->vap_array[index].vap_index);
+                        if (interface && interface->vap_info.u.bss_info.enabled &&
+                            interface->vap_info.u.bss_info.hostap_mgt_frame_ctrl) {
+                            ieee802_11_update_beacons(interface->u.ap.hapd.iface);
+                        }
+#endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
                         prepare_param_name(param_name, interface_name, "_bss_maxassoc");
                         set_decimal_nvram_param(param_name, vap_map->vap_array[index].u.bss_info.bssMaxSta);
                         wifi_hal_dbg_print("%s:%d: nvram param name:%s vap_bssMaxSta:%d\r\n", __func__, __LINE__, param_name, vap_map->vap_array[index].u.bss_info.bssMaxSta);
@@ -2028,6 +2036,37 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 #if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
             platform_mld_update(&map->vap_array[index]);
 #endif /* CONFIG_IEEE80211BE && XB10_PORT */
+
+            /* Update beacon info of neighboring APs*/
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+            wifi_interface_info_t *interface = NULL;
+#if defined(CONFIG_IEEE80211BE) && defined(MLO_ENAB)
+            wifi_mld_common_info_t *mld_cmn = &(map->vap_array[index].u.bss_info.mld_info.common_info);
+#endif /* CONFIG_IEEE80211BE */
+            if (_platform_init_done && (radio->oper_param.band == WIFI_FREQUENCY_6_BAND
+#if defined(CONFIG_IEEE80211BE) && defined(MLO_ENAB)
+                || (mld_cmn->mld_enable && mld_cmn->mld_id < MAX_MLD_UNITS)
+#endif /* CONFIG_IEEE80211BE */
+            )) {
+                for (int tgt_index = 0; tgt_index < g_wifi_hal.num_radios; tgt_index++) {
+                    wifi_radio_info_t *tgt_radio = get_radio_by_rdk_index(tgt_index);
+                    if (!tgt_radio)
+                        continue;
+                    for (interface = hash_map_get_first(tgt_radio->interface_map); interface != NULL;
+                        interface = hash_map_get_next(tgt_radio->interface_map, interface)) {
+
+                        if (interface->vap_info.vap_mode != wifi_vap_mode_ap ||
+                            !interface->vap_info.u.bss_info.enabled ||
+                            !interface->vap_info.u.bss_info.hostap_mgt_frame_ctrl ||
+                            interface->vap_info.vap_index == map->vap_array[index].vap_index)
+                            continue;
+
+                        ieee802_11_update_beacons(interface->u.ap.hapd.iface);
+                    }
+                }
+            }
+#endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
+
         } else if (map->vap_array[index].vap_mode == wifi_vap_mode_sta) {
 
             prepare_param_name(param_name, interface_name, "_akm");
