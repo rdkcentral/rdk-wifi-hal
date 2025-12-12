@@ -5563,7 +5563,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh;
     const u32 nl_split_wiphy = (*(u32 *)arg & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP);
-    u8 max_radio_count;
+    unsigned int max_radio_count;
     unsigned int phy_index;
 
 #ifdef CONFIG_WIFI_EMULATOR
