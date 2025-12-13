@@ -1851,6 +1851,63 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
 }
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
+int nl_set_beacon_rate_ioctl(int vap_index, int beacon_rate)
+{
+    struct nlattr *nlattr_vendor;
+    struct nl_msg *msg;
+    int ret = RETURN_ERR;
+    wifi_interface_info_t *interface;
+
+    interface = get_interface_by_vap_index(vap_index);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: failed to get interface for vap index: %d\n",
+            __func__, __LINE__, vap_index);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_dbg_print("%s:%d: Setting beacon rate %d for vap_index:%d\n", __func__,
+        __LINE__, beacon_rate, vap_index);
+    
+    /* Per requirement on wifi_setApBeaconRate, user shall only select on of the following
+     * rate as beacon rate
+     * "1Mbps"; "5.5Mbps"; "6Mbps"; "2Mbps"; "11Mbps"; "12Mbps"; "24Mbps"*/
+    if (beacon_rate == 1 || beacon_rate == 2 || beacon_rate == 5.5 || beacon_rate == 6 ||
+        beacon_rate == 11 || beacon_rate == 12 || beacon_rate == 24) {
+            // BCM expects rate in 500 Kbps units (×2)
+            beacon_rate = beacon_rate * 2;
+            wifi_hal_dbg_print("%s:%d: Setting beacon rate to %d (in units of 500kbps) for vap_index:%d\n",
+                __func__, __LINE__, beacon_rate, vap_index);
+    } else {
+        wifi_hal_error_print("%s:%d: Invalid beacon rate:%d for vap_index:%d\n", __func__, __LINE__, beacon_rate, vap_index);
+        return RETURN_ERR;
+    }
+
+    msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST, RDK_VENDOR_NL80211_SUBCMD_SET_BEACON_RATE);
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    nlattr_vendor = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+
+    if (nla_put(msg, RDK_VENDOR_ATTR_BEACON_RATE, sizeof(beacon_rate), &beacon_rate) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to put beacon rate attribute\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return RETURN_ERR;
+    }
+
+    nla_nest_end(msg, nlattr_vendor);
+
+    ret = nl80211_send_and_recv(msg, NULL, &beacon_rate, NULL, NULL);
+    if (ret != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: failed to set beacon_rate=%d for vap_index=%d, err: %d (%s)\n", __func__,
+            __LINE__, beacon_rate, vap_index, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    return RETURN_OK;
+}
+
 int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 {
     wifi_hal_dbg_print("%s:%d: Enter radio index:%d\n", __func__, __LINE__, r_index);
@@ -1904,6 +1961,20 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             platform_set_hostap_ctrl(radio, map->vap_array[index].vap_index,
                 map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl);
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
+
+            wifi_hal_dbg_print("%s:%d: beacon rate for vap_index:%d is %d\n", __func__,
+                __LINE__, map->vap_array[index].vap_index,
+                map->vap_array[index].u.bss_info.beaconRate);
+            int beacon_rate = 0;
+            beacon_rate = convert_enum_beaconrate_to_int(map->vap_array[index].u.bss_info.beaconRate);
+            wifi_hal_dbg_print("%s:%d: converted beacon rate for vap_index:%d is %d\n", __func__,
+                __LINE__, map->vap_array[index].vap_index, beacon_rate);
+            if (nl_set_beacon_rate_ioctl(map->vap_array[index].vap_index, beacon_rate) != RETURN_OK) {
+                wifi_hal_error_print("%s:%d: Failed to set beacon rate %d for vap_index:%d\n", __func__,
+                    __LINE__, beacon_rate, map->vap_array[index].vap_index);
+                return RETURN_ERR;
+            }
+
             prepare_param_name(param_name, interface_name, "_akm");
             memset(temp_buff, 0 ,sizeof(temp_buff));
             if (get_security_mode_str_from_int(map->vap_array[index].u.bss_info.security.mode, map->vap_array[index].vap_index, temp_buff) == RETURN_OK) {
