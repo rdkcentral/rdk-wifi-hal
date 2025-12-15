@@ -5973,7 +5973,7 @@ static int protocol_feature_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 }
 
-static u32 get_nl80211_protocol_features(int nl_id, u32 *feat)
+static u32 fetch_nl80211_protocol_features(int nl_id, u32 *feat)
 {
     struct nl_msg *msg;
 
@@ -5992,7 +5992,7 @@ static u32 get_nl80211_protocol_features(int nl_id, u32 *feat)
     return -1;
 }
 #else
-static int get_nl80211_protocol_features(int nl_id, u32 *feat)
+static int fetch_nl80211_protocol_features(int nl_id, u32 *feat)
 {
     (void)nl_id;
     (void)feat;
@@ -6261,7 +6261,7 @@ int init_nl80211()
         return -1;
     }
 
-    if (get_nl80211_protocol_features(g_wifi_hal.nl80211_id, &feat)) {
+    if (fetch_nl80211_protocol_features(g_wifi_hal.nl80211_id, &feat)) {
         wifi_hal_error_print("%s:%d: Failed to get protocol features - treating them as disabled\n",
             __func__, __LINE__);
     }
@@ -13746,7 +13746,7 @@ wifi_drv_get_hw_feature_data(void *priv, u16 *num_modes, u16 *flags, u8 *dfs_dom
     nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
 #else
     u32 feat;
-    if (get_nl80211_protocol_features(g_wifi_hal.nl80211_id, &feat)) {
+    if (fetch_nl80211_protocol_features(g_wifi_hal.nl80211_id, &feat)) {
         wifi_hal_error_print("%s:%d: Failed to get protocol features - treating them as disabled\n",
             __func__, __LINE__);
     }
