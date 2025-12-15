@@ -2402,6 +2402,39 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                     memcpy(c_buff, mgmt, len);
                     c_buff += len;
 
+                    if (msg_ops_type == wlan_emu_frm80211_ops_type_prb_req) {
+                        wifi_hal_info_print("%s:%d: probe request\n", __func__, __LINE__);
+                        unsigned char *ie;
+                        char *ssid;
+                        unsigned int ie_len;
+                        size_t ssid_len = 0;
+
+                        ie = ((unsigned char *)mgmt) + IEEE80211_HDRLEN;
+                        ie_len = len - IEEE80211_HDRLEN;
+                        ie = get_ie(ie, ie_len, WLAN_EID_SSID);
+
+                        if (ie == NULL) {
+                            wifi_hal_info_print("%s:%d: WLAN_EID_SSID ie is NULL\n", __func__, __LINE__);
+                            memcpy(c_buff, &ssid_len, sizeof(size_t));
+                            c_buff += sizeof(size_t);
+                        } else {
+                            ssid_len = ie[1];
+                            memcpy(c_buff, &ssid_len, sizeof(size_t));
+                            c_buff += sizeof(size_t);
+                            wifi_hal_info_print("%s:%d: SSID LEN is %zu\n", __func__, __LINE__, ssid_len);
+                            if (ssid_len > SSID_MAX_LEN) {
+                                ssid_len = SSID_MAX_LEN;
+                            }
+
+                            if (ssid_len > 0) {
+                                ssid = ie + 2;
+                                wifi_hal_info_print("%s:%d: SSID is %s\n", __func__, __LINE__, ssid);
+                                memcpy(c_buff, ssid, ssid_len);
+                                c_buff += ssid_len;
+                            }
+                        }
+                    }
+
                     if (write(fd_c, frame_buff, total_len) > 0) {
                         wifi_hal_dbg_print("%s:%d: write succesful bytes written : %d for msg_ops_type : %d\n", __func__, __LINE__, total_len, msg_ops_type);
                     }
