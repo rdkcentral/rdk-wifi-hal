@@ -3901,16 +3901,22 @@ int wifi_ieee80211Variant_to_str(char *dest, size_t dest_size, wifi_ieee80211Var
             if (variant &
                 (WIFI_80211_VARIANT_N | WIFI_80211_VARIANT_AC | WIFI_80211_VARIANT_AX |
                     WIFI_80211_VARIANT_BE)) {
-                if (variant & WIFI_80211_VARIANT_BE) {
-                    mode = "be";
-                } else if (variant & WIFI_80211_VARIANT_AX) {
-                    mode = "ax";
-                } else if (variant & WIFI_80211_VARIANT_AC) {
-                    mode = "ac";
+                if ((variant & WIFI_80211_VARIANT_BE) && (variant & WIFI_80211_VARIANT_AX)) {
+                    // Wi-Fi 7 supports both AX (6E base) and BE (Wi-Fi 7)
+                    str_list_append(dest, dest_size, "ax");
+                    str_list_append(dest, dest_size, "be");
                 } else {
-                    mode = "n";
+                    if (variant & WIFI_80211_VARIANT_BE) {
+                        mode = "be";
+                    } else if (variant & WIFI_80211_VARIANT_AX) {
+                        mode = "ax";
+                    } else if (variant & WIFI_80211_VARIANT_AC) {
+                        mode = "ac";
+                    } else {
+                        mode = "n";
+                    }
+                    str_list_append(dest, dest_size, mode);
                 }
-                str_list_append(dest, dest_size, mode);
             }
         } else {
             wifi_hal_error_print("%s:%d: NULL or zero-size buffer\n", __func__, __LINE__);
