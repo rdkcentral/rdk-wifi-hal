@@ -1393,7 +1393,8 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     iface = &interface->u.ap.iface;
     iface->interfaces = &radio->interfaces;
     iface->conf = &radio->iconf;
-    strcpy(iface->phy, radio->name);
+    strncpy(iface->phy, radio->name, sizeof(iface->phy) - 1);
+    iface->phy[sizeof(iface->phy) - 1] = '\0';
     iface->state = HAPD_IFACE_ENABLED;
 
     iface->num_bss = 1;
@@ -1452,6 +1453,14 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     if (iface->current_mode == NULL) {
         wifi_hal_error_print("%s:%d failed to get mode, interface: %s hw mode: %d, freq: %d\n",
             __func__, __LINE__, interface->name, iface->conf->hw_mode, iface->freq);
+        if (preassoc_supp_rates) {
+           os_free(preassoc_supp_rates);
+           preassoc_supp_rates = NULL;
+        }
+        if (preassoc_basic_rates) {
+           os_free(preassoc_basic_rates);
+           preassoc_basic_rates = NULL;
+        }
         return RETURN_ERR;
     }
 #else
@@ -1847,6 +1856,7 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     const struct hostapd_tx_queue_params txq_be = { 3, ecw2cw(aCWmin), 4 * (ecw2cw(aCWmin) + 1) - 1, 0};
     const struct hostapd_tx_queue_params txq_vi = { 1, (ecw2cw(aCWmin) + 1) / 2 - 1, ecw2cw(aCWmin), 30};
     const struct hostapd_tx_queue_params txq_vo = { 1, (ecw2cw(aCWmin) + 1) / 4 - 1, (ecw2cw(aCWmin) + 1) / 2 - 1, 15};
+    char country_code[4] = { 0 };
 
     struct hostapd_config   *iconf;
     wifi_radio_operationParam_t *param;
@@ -1977,7 +1987,8 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     iconf->op_class = param->operatingClass;
 #endif
 
-    get_coutry_str_from_oper_params(param, iconf->country);
+    get_coutry_str_from_oper_params(param, country_code);
+    memcpy(iconf->country, country_code, sizeof(iconf->country));
     // use global operating class in country info
     iconf->country[2] = 0x04;
 
