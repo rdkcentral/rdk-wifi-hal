@@ -2050,7 +2050,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
     case WLAN_FC_STYPE_PROBE_REQ:
         mgmt_type = WIFI_MGMT_FRAME_TYPE_PROBE_REQ;
-        //wifi_hal_dbg_print("%s:%d: Received probe req frame on interface:%s from the sta : %s and the phy_rate:%d\n", __func__, __LINE__,interface->name,to_mac_str(sta, sta_mac_str),phy_rate);
+        wifi_hal_dbg_print("%s:%d: Received probe req frame on interface:%s from the sta : %s and the phy_rate:%d\n", __func__, __LINE__,interface->name,to_mac_str(sta, sta_mac_str),phy_rate);
 
         if (callbacks->steering_event_callback != 0) {
             handle_probe_req_event_for_bm(interface, mgmt, len, sta, sig_dbm);
@@ -2058,10 +2058,12 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #ifdef NL80211_ACL
         // If mac filter acl is enabled then we need to drop mgmt frame based on acl config
         if (is_core_acl_drop_mgmt_frame(interface, sta)) {
+            wifi_hal_dbg_print("%s:%d: Dropping probe request based on acl config\n", __func__, __LINE__);
             return -1;
         }
 #endif
 #ifdef WIFI_EMULATOR_CHANGE
+        wifi_hal_dbg_print("%s:%d: Setting the capture to true\n", __func__, __LINE__);
         msg_ops_type = wlan_emu_frm80211_ops_type_prb_req;
         send_mgmt_to_char_dev = true;
 #endif
