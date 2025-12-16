@@ -2404,7 +2404,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                     memcpy(c_buff, mgmt, len);
                     c_buff += len;
 
-                    if (msg_ops_type == wlan_emu_frm80211_ops_type_prb_req) {
+                   /* if (msg_ops_type == wlan_emu_frm80211_ops_type_prb_req) {
                         wifi_hal_info_print("%s:%d: probe request\n", __func__, __LINE__);
                         unsigned char *ie;
                         char *ssid;
@@ -2435,7 +2435,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                                 c_buff += ssid_len;
                             }
                         }
-                    }
+                    }*/
 
                     if (write(fd_c, frame_buff, total_len) > 0) {
                         wifi_hal_dbg_print("%s:%d: write succesful bytes written : %d for msg_ops_type : %d\n", __func__, __LINE__, total_len, msg_ops_type);
