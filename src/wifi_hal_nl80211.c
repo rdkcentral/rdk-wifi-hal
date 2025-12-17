@@ -9363,16 +9363,22 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         security->mode == wifi_security_mode_wpa3_enterprise ||
         security->mode == wifi_security_mode_wpa3_transition) {
         // WPA3 REQUIRES MFP
-        wpa_conf.ieee80211w = (enum mfp_options)MGMT_FRAME_PROTECTION_REQUIRED;
+        wpa_conf.ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
         wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
-    } else {
+    } else if(security->mfp != NO_MGMT_FRAME_PROTECTION){
+        wifi_hal_dbg_print("%s:%d SREESH Value of security->mfp is %d\n",__func__,__LINE__, security->mfp);
         wpa_conf.ieee80211w = (enum mfp_options)security->mfp;
+        wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
     }
 #endif
 
     if (security->mode != wifi_security_mode_none) {
         if ((ret = wpa_write_rsn_ie(&wpa_conf, pos, rsn_ie + sizeof(rsn_ie) - pos, NULL)) < 0) {
-            wifi_hal_error_print("%s:%d Failed to build RSN %d\r\n", __func__, __LINE__, ret);
+            wifi_hal_error_print("%s:%d: SREESH Failed to build RSN IE: ret=%d "
+                                "(key_mgmt=0x%x, group=0x%x, pairwise=0x%x, mfp=%d, gmgmt=0x%x)\n",
+                                __func__, __LINE__, ret, wpa_conf.wpa_key_mgmt, 
+                                wpa_conf.wpa_group, wpa_conf.rsn_pairwise, 
+                                wpa_conf.ieee80211w, wpa_conf.group_mgmt_cipher);
             return ret;
         }
         else {
