@@ -9447,7 +9447,6 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 
 #ifdef CONFIG_IEEE80211W
 wifi_hal_dbg_print("%s:%d SREESH Value of security->mfp is %d\n",__func__,__LINE__, security->mfp);
-        wpa_conf.ieee80211w = (enum mfp_options)security->mfp;
     if (security->mode == wifi_security_mode_wpa3_personal ||
         security->mode == wifi_security_mode_wpa3_enterprise ||
         security->mode == wifi_security_mode_wpa3_transition) {
@@ -9455,6 +9454,7 @@ wifi_hal_dbg_print("%s:%d SREESH Value of security->mfp is %d\n",__func__,__LINE
         wpa_conf.ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
         wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
     } else if(security->mfp != NO_MGMT_FRAME_PROTECTION){
+        wpa_conf.ieee80211w = (enum mfp_options)security->mfp;
         wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
     }
 #endif
