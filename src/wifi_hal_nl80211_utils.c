@@ -1654,10 +1654,10 @@ int get_rdk_radio_indices(unsigned int phy_index, int *rdk_radio_indices, int *n
             }
         }
     }
-    *num_radios_mapped = num_radios;
     if (num_radios == 0) {
         return RETURN_ERR;
     }
+    *num_radios_mapped = num_radios;
     wifi_hal_dbg_print("%s:%d: Filled rdk_radio_indices, size:%d\n", __func__, __LINE__,
         *num_radios_mapped);
     for (i = 0; i < *num_radios_mapped; i++) {
@@ -2840,6 +2840,28 @@ int get_wifi_op_class_info(wifi_countrycode_type_t country_code, wifi_country_ra
     }
 
     return RETURN_OK;
+}
+
+int convert_enum_beaconrate_to_int(wifi_bitrate_t rates)
+{
+    switch (rates) {
+        case WIFI_BITRATE_1MBPS: return 1;
+        case WIFI_BITRATE_2MBPS: return 2;
+        case WIFI_BITRATE_5_5MBPS: return 5.5;
+        case WIFI_BITRATE_11MBPS: return 11;
+        case WIFI_BITRATE_6MBPS: return 6;
+        case WIFI_BITRATE_9MBPS: return 9;
+        case WIFI_BITRATE_12MBPS: return 12;
+        case WIFI_BITRATE_18MBPS: return 18;
+        case WIFI_BITRATE_24MBPS: return 24;
+        case WIFI_BITRATE_36MBPS: return 36;
+        case WIFI_BITRATE_48MBPS: return 48;
+        case WIFI_BITRATE_54MBPS: return 54;
+        default:
+            wifi_hal_error_print("%s:%d: failed to convert beacon rate %d to nl80211 rate\n",
+                __func__, __LINE__, rates);
+            return RETURN_ERR;
+    }
 }
 
 int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
@@ -5321,37 +5343,6 @@ wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_inf
     }
 
     return NULL;
-}
-
-wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *interface)
-{
-    wifi_radio_info_t *radio;
-    wifi_interface_info_t *interface_iter;
-
-    if (!wifi_hal_is_mld_enabled(interface)) {
-        return interface;
-    }
-
-    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
-        radio = get_radio_by_rdk_index(i);
-        if (radio == NULL) {
-            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
-                i);
-            return NULL;
-        }
-
-        hash_map_foreach(radio->interface_map, interface_iter) {
-            if (!wifi_hal_is_mld_enabled(interface_iter)) {
-                continue;
-            }
-
-            if (interface_iter->index == interface->index) {
-                return interface_iter;
-            }
-        }
-    }
-
-    return interface;
 }
 
 int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac)
