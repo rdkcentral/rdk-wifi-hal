@@ -37,6 +37,7 @@
 #define MAX_CMD_SIZE 1024
 #define BPI_LEN_32 32
 #define BPI_LEN_16 16
+#define BPI_LEN_8 8
 #define MAX_KEYPASSPHRASE_LEN 129
 #define MAX_SSID_LEN 33
 #define INVALID_KEY  "12345678"
@@ -219,10 +220,29 @@ int platform_get_ssid_default(char *ssid, int vap_index)
             return 0;
         }
     }
+    char serial[BPI_LEN_8] = {0};
+    FILE *fp = NULL;
+    size_t bytes_read = 0;
+
+    if((fp = fopen("/nvram/serial_number.txt", "rb")) != NULL)
+    {
+        if(fseek(fp, -7, SEEK_END))
+        {
+            wifi_hal_dbg_print("%s:%d, fseek() failed \n", __func__, __LINE__);
+	        fclose(fp);
+	        return -1;
+        }
+	    bytes_read = fread(serial, 1, sizeof(serial)-1, fp);
+	    fclose(fp);
+	    if(!bytes_read)
+	        return -1;
+	    serial[strcspn(serial, "\n")] = 0;
+	    wifi_hal_dbg_print("%s:%d, appending serial is :%s \n", __func__, __LINE__, serial);
+    }
 #ifdef CONFIG_GENERIC_MLO
-    snprintf(ssid, BPI_LEN_16, "BPI-RDKB-MLO-AP");
+    snprintf(ssid, BPI_LEN_32, "BPI-RDKB-MLO-AP-%s", serial);
 #else    
-    snprintf(ssid,BPI_LEN_16,"BPI_RDKB-AP%d",vap_index);
+    snprintf(ssid, BPI_LEN_32, "BPI_RDKB-AP%d-%s", vap_index, serial);
 #endif    
     return 0;
 }
@@ -885,31 +905,6 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     /* Links have been removed due to interface down-up. Re-add all links and enable them,
      * but enable the first link BSS before doing that. */
     first_link = hostapd_mld_is_first_bss(hapd) ? hapd : hostapd_mld_get_first_bss(hapd);
-
-    /* The driver expects the sequence NL80211_CMD_ADD_LINK link 0,
-     * NL80211_CMD_SET_WIPHY link 0, and NL80211_CMD_START_AP link 0.
-     * However, we add the links and configure the PHY for all bands
-     * before the AP is started. In this case, a data-path issue is observed.
-     * To fix the flow, the links are removed and added again.
-     */
-    if (!interface->bss_started) {
-        for_each_mld_link(link_bss, first_link) {
-            if (link_bss == first_link) {
-                continue;
-            }
-            if (hostapd_if_link_remove(link_bss, WPA_IF_AP_BSS, link_bss->conf->iface,
-                    link_bss->mld_link_id)) {
-                wifi_hal_error_print("%s:%d: Failed to remove link %d from MLD %s\n", __func__,
-                    __LINE__, link_bss->mld_link_id, link_bss->conf->iface);
-            }
-        }
-
-        if (hostapd_if_link_remove(first_link, WPA_IF_AP_BSS, first_link->conf->iface,
-                first_link->mld_link_id)) {
-            wifi_hal_error_print("%s:%d: Failed to remove link %d from MLD %s\n", __func__,
-                __LINE__, first_link->mld_link_id, first_link->conf->iface);
-        }
-    }
 
     if (hostapd_drv_link_add(first_link, first_link->mld_link_id, first_link->own_addr)) {
         wifi_hal_error_print("Failed to add link %d in MLD %s\n", first_link->mld_link_id,
