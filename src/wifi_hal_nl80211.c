@@ -9453,7 +9453,7 @@ wifi_hal_dbg_print("%s:%d SREESH Value of security->mfp is %d AND security->mode
         // WPA3 REQUIRES MFP
         wpa_conf.ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
         wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
-    } else if(security->mfp != NO_MGMT_FRAME_PROTECTION){
+    } else if(security->mfp != wifi_mfp_cfg_disabled){
         wpa_conf.ieee80211w = (enum mfp_options)security->mfp;
         wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
     }
