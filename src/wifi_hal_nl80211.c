@@ -9446,7 +9446,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     }
 
 #ifdef CONFIG_IEEE80211W
-wifi_hal_dbg_print("%s:%d SREESH Value of security->mfp is %d\n",__func__,__LINE__, security->mfp);
+wifi_hal_dbg_print("%s:%d SREESH Value of security->mfp is %d AND security->mode = %d\n",__func__,__LINE__, security->mfp, security->mode);
     if (security->mode == wifi_security_mode_wpa3_personal ||
         security->mode == wifi_security_mode_wpa3_enterprise ||
         security->mode == wifi_security_mode_wpa3_transition) {
