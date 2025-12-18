@@ -1989,7 +1989,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #endif
         remove_station_from_other_interfaces(interface, sta);
 #ifdef WIFI_EMULATOR_CHANGE
-        //msg_ops_type = wlan_emu_frm80211_ops_type_auth;
+        msg_ops_type = wlan_emu_frm80211_ops_type_auth;
         send_mgmt_to_char_dev = true;
 #endif
         break;
@@ -2015,7 +2015,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         }
         remove_station_from_other_interfaces(interface, sta);
 #ifdef WIFI_EMULATOR_CHANGE
-        //msg_ops_type = wlan_emu_frm80211_ops_type_assoc_req;
+        msg_ops_type = wlan_emu_frm80211_ops_type_assoc_req;
         send_mgmt_to_char_dev = true;
 #endif
         break;
@@ -2038,7 +2038,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
         remove_station_from_other_interfaces(interface, sta);
 #ifdef WIFI_EMULATOR_CHANGE
-        //msg_ops_type = wlan_emu_frm80211_ops_type_reassoc_req;
+        msg_ops_type = wlan_emu_frm80211_ops_type_reassoc_req;
         send_mgmt_to_char_dev = true;
 #endif
         break;
@@ -2097,7 +2097,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             break;
         }
 #ifdef WIFI_EMULATOR_CHANGE
-        //msg_ops_type = wlan_emu_frm80211_ops_type_action;
+        msg_ops_type = wlan_emu_frm80211_ops_type_action;
         send_mgmt_to_char_dev = true;
 #endif
         break;
@@ -2156,7 +2156,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             handle_disconnect_event_for_bm(interface, sta, mgmt_type, reason);
         }
 #ifdef WIFI_EMULATOR_CHANGE
-        //msg_ops_type = wlan_emu_frm80211_ops_type_disassoc;
+        msg_ops_type = wlan_emu_frm80211_ops_type_disassoc;
         send_mgmt_to_char_dev = true;
 #endif
         break;
@@ -2234,7 +2234,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             handle_disconnect_event_for_bm(interface, sta, mgmt_type, reason);
         }
 #ifdef WIFI_EMULATOR_CHANGE
-        //msg_ops_type = wlan_emu_frm80211_ops_type_deauth;
+        msg_ops_type = wlan_emu_frm80211_ops_type_deauth;
         send_mgmt_to_char_dev = true;
 #endif
         break;
