@@ -1035,6 +1035,7 @@ int     wifi_sta_get_seqnum(const char *ifname, void *priv, const u8 *addr, int 
 int     wifi_commit(void *priv);
 wifi_radio_info_t *get_radio_by_rdk_index(wifi_radio_index_t index);
 int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *interface);
+int convert_enum_beaconrate_to_int(wifi_bitrate_t rates);
 int get_op_class_from_radio_params(wifi_radio_operationParam_t *param);
 void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len);
 int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int status_code, int rssi);
@@ -1411,7 +1412,6 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t 
     uint32_t freq);
 wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_info_t *interface,
     mac_address_t mac);
-wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *interface);
 int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
 #endif // WIFI_HAL_PRIV_H
