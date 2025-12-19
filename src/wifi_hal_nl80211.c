@@ -14265,7 +14265,7 @@ int nl80211_set_acl(wifi_interface_info_t *interface)
         }
 
         if (nla_put_u32(msg, NL80211_ATTR_ACL_POLICY, policy) < 0) {
-            wifi_hal_dbg_print("%s %d:nl80211: Failed to set ACL policy\n", __func__, __LINE__);
+            wifi_hal_dbg_print("%s %d: nl80211: Failed to set ACL policy\n", __func__, __LINE__);
             nlmsg_free(msg);
             return -ENOMEM;
         }
@@ -14282,7 +14282,7 @@ int nl80211_set_acl(wifi_interface_info_t *interface)
             acl_map = hash_map_get_first(interface->acl_map);
             while (acl_map != NULL) {
                 if (nla_put(msg, i, ETH_ALEN, acl_map->mac_addr) < 0) {
-                    wifi_hal_dbg_print("%s %d:nl80211: Failed to add MAC to ACL list\n", __func__, __LINE__);
+                    wifi_hal_dbg_print("%s %d: nl80211: Failed to add MAC to ACL list\n", __func__, __LINE__);
                     nla_nest_cancel(msg, acl);
                     nlmsg_free(msg);
                     return -ENOMEM;
@@ -14293,7 +14293,7 @@ int nl80211_set_acl(wifi_interface_info_t *interface)
         }
         if (i == 0) {
             if (nla_put(msg, i, ETH_ALEN, null_mac) < 0) {
-                wifi_hal_dbg_print("%s %d:nl80211: Failed to add MAC to ACL list\n", __func__, __LINE__);
+                wifi_hal_dbg_print("%s %d: nl80211: Failed to add MAC to ACL list\n", __func__, __LINE__);
                 nla_nest_cancel(msg, acl);
                 nlmsg_free(msg);
                 return -ENOMEM;
@@ -15033,7 +15033,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     switch (params->hide_ssid) {
         case NO_SSID_HIDING:
             if (nla_put_u32(msg, NL80211_ATTR_HIDDEN_SSID, NL80211_HIDDEN_SSID_NOT_IN_USE) < 0) {
-                wifi_hal_error_print("%s:%d: Failed to set hidden SSID\n", __func__, __LINE__);
+                wifi_hal_error_print("%s:%d: Failed to set hidden SSID not in use\n", __func__, __LINE__);
                 nlmsg_free(msg);
                 return -1;
             }
@@ -15041,7 +15041,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
 
         case HIDDEN_SSID_ZERO_LEN:
             if (nla_put_u32(msg, NL80211_ATTR_HIDDEN_SSID, NL80211_HIDDEN_SSID_ZERO_LEN) < 0) {
-                wifi_hal_error_print("%s:%d: Failed to set hidden SSID\n", __func__, __LINE__);
+                wifi_hal_error_print("%s:%d: Failed to set hidden SSID zero len\n", __func__, __LINE__);
                 nlmsg_free(msg);
                 return -1;
             }
@@ -15049,7 +15049,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
 
         case HIDDEN_SSID_ZERO_CONTENTS:
             if (nla_put_u32(msg, NL80211_ATTR_HIDDEN_SSID, NL80211_HIDDEN_SSID_ZERO_CONTENTS) < 0) {
-                wifi_hal_error_print("%s:%d: Failed to set hidden SSID\n", __func__, __LINE__);
+                wifi_hal_error_print("%s:%d: Failed to set hidden SSID zero contents\n", __func__, __LINE__);
                 nlmsg_free(msg);
                 return -1;
             }
@@ -15221,7 +15221,8 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
             nlmsg_free(msg);
             return -1;
         }
-        if (nla_put_u8(msg, NL80211_ATTR_SAE_PWE, sae_pwe)) {
+        if (nla_put_u8(msg, NL80211_ATTR_SAE_PWE, sae_pwe) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set SAE PWE\n", __func__, __LINE__);
             nlmsg_free(msg);
             return -1;
         }
