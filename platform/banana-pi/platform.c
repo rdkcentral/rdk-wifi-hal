@@ -856,7 +856,7 @@ void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nla
 // TODO: support multiple mld
 static struct hostapd_mld mld;
 
-static bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
+bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 {
     struct hostapd_data *link_bss;
 
