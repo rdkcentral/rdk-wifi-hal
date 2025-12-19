@@ -1662,9 +1662,9 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
     char buf[128] = { 0 };
     char interface_name[8] = { 0 };
     struct maclist *maclist = (struct maclist *)buf;
-#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXER10_PORT)
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     int mbssid_num_frames = 1;
-#endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXER10_PORT)
+#endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     bool split_assoc_req_change = false;
     bool mbssid_num_frames_change = false;
 

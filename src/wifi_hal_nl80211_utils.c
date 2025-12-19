@@ -768,6 +768,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
 #endif
  
 #ifdef CMXB7_PORT
