@@ -124,7 +124,7 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
 };
 
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
-#if defined(XB10_PORT) || defined(SCXER10_PORT)
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
 static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames);
 #endif
 static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl);
@@ -505,7 +505,7 @@ static bool platform_down_reqd(wifi_radio_index_t r_index, wifi_vap_info_map_t *
 
         reqd |= needs_conf_split_assoc_req(
             vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
-#if defined(XB10_PORT) || defined(SCXER10_PORT)
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
         reqd |= needs_conf_mbssid_num_frames(
             vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
 #endif
@@ -785,7 +785,7 @@ static int enable_spect_management(int radio_index, int enable)
 
 int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t chanlist, char* buff)
 {
-#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     unsigned int bw = convert_channelBandwidth_to_bcmwifibandwidth(bandwidth);
     unsigned int band = convert_radioindex_to_bcmband(radioIndex);
     if(bw != UINT_MAX && band != UINT_MAX)
@@ -802,7 +802,7 @@ int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t 
 
 int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
 {
-#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     char excl_chan_string[20];
     snprintf(excl_chan_string,sizeof(excl_chan_string),"wl%u_acs_excl_chans",radioIndex);
     if(str != NULL)
@@ -1631,7 +1631,7 @@ static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl
  * [in] hostap_mgt_frame_ctrl
  * [out] mbssid_num_frames
 */
-#if defined(XB10_PORT) || defined(SCXER10_PORT)
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
 static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames)
 {
     char interface_name[8] = { 0 };
@@ -1657,7 +1657,7 @@ static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ct
     }
     return false;
 }
-#endif // defined(XB10_PORT) || defined(SCXER10_PORT)
+#endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
 
 static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, int enable)
 {
