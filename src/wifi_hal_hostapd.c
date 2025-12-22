@@ -2242,6 +2242,23 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
 {
     int ret = RETURN_ERR;
 
+#ifdef CONFIG_GENERIC_MLO
+    if (wifi_hal_is_mld_enabled(interface)) {
+        wifi_interface_info_t *first_interface = wifi_hal_get_first_mld_interface(interface);
+
+        if (first_interface != interface) {
+            wifi_hal_info_print("%s:%d: interface:%s link id:%d set ssid:%s\n", __func__, __LINE__,
+                wifi_hal_get_interface_name(interface), wifi_hal_get_mld_link_id(interface),
+                first_interface->vap_info.u.bss_info.ssid);
+            /* The kernel requires the same SSID for all links in MLD */
+            strncpy(interface->vap_info.u.bss_info.ssid, first_interface->vap_info.u.bss_info.ssid,
+                sizeof(interface->vap_info.u.bss_info.ssid) - 1);
+            interface->vap_info.u.bss_info.ssid[sizeof(interface->vap_info.u.bss_info.ssid) - 1] =
+                '\0';
+        }
+    }
+#endif /* CONFIG_GENERIC_MLO */
+
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     // initialize the default params
     if (update_hostap_data(interface) != RETURN_OK) {
@@ -3191,6 +3208,7 @@ static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
     return ret;
 }
 
+#ifndef CONFIG_GENERIC_MLO
 #ifdef CONFIG_IEEE80211BE
 #if HOSTAPD_VERSION >= 211
 static int set_mld_shared_resources(struct hostapd_data *hapd)
@@ -3228,14 +3246,17 @@ static void clear_mld_shared_resources(struct hostapd_data *hapd)
 }
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif /* CONFIG_IEEE80211BE */
+#endif /* CONFIG_GENERIC_MLO */
 
 void deinit_bss(struct hostapd_data *hapd)
 {
+#ifndef CONFIG_GENERIC_MLO
 #ifdef CONFIG_IEEE80211BE
 #if HOSTAPD_VERSION >= 211
     clear_mld_shared_resources(hapd);
 #endif
 #endif
+#endif /* CONFIG_GENERIC_MLO */
     hostapd_bss_deinit_no_free(hapd);
     hostapd_free_hapd_data(hapd);
 }
@@ -3268,6 +3289,7 @@ int start_bss(wifi_interface_info_t *interface)
         wifi_hal_error_print("%s:%d: vap:%s:%d create is failed:%d csa status:%d\n", __func__,
             __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
     }
+#ifndef CONFIG_GENERIC_MLO
 #ifdef CONFIG_IEEE80211BE
 #if HOSTAPD_VERSION >= 211
     ret = set_mld_shared_resources(hapd);
@@ -3277,6 +3299,7 @@ int start_bss(wifi_interface_info_t *interface)
     }
 #endif
 #endif
+#endif /* CONFIG_GENERIC_MLO */
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     return ret;

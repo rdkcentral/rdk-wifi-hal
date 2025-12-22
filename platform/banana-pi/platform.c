@@ -882,6 +882,9 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         return 0;
     }
 
+    wifi_hal_info_print("%s:%d: interface:%s link id:%d update MLD links\n", __func__, __LINE__,
+        wifi_hal_get_interface_name(interface), wifi_hal_get_mld_link_id(interface));
+
     hapd = &interface->u.ap.hapd;
     conf = hapd->conf;
 
@@ -897,8 +900,8 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     hapd->mld = &mld;
 
     if (!wifi_hal_is_mld_link_exists(hapd) && hostapd_mld_add_link(hapd) != 0) {
-        wifi_hal_error_print("Failed to add link %d in MLD %s\n", hapd->mld_link_id,
-            hapd->conf->iface);
+        wifi_hal_error_print("%s:%d: Failed to add link %d in MLD %s\n", __func__, __LINE__,
+            hapd->mld_link_id, hapd->conf->iface);
         return -1;
     }
 
@@ -907,18 +910,9 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     first_link = hostapd_mld_is_first_bss(hapd) ? hapd : hostapd_mld_get_first_bss(hapd);
 
     if (hostapd_drv_link_add(first_link, first_link->mld_link_id, first_link->own_addr)) {
-        wifi_hal_error_print("Failed to add link %d in MLD %s\n", first_link->mld_link_id,
-            first_link->conf->iface);
+        wifi_hal_error_print("%s:%d: Failed to add link %d in MLD %s\n", __func__, __LINE__,
+            first_link->mld_link_id, first_link->conf->iface);
         return -1;
-    }
-
-    /* If it is current link configuration it will be enabled later by start_bss */
-    if (first_link != hapd) {
-        if (ieee802_11_set_beacon(first_link) != 0) {
-            wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
-                __func__, __LINE__, first_link->conf->iface, first_link->mld_link_id);
-            return -1;
-        }
     }
 
     /* Add other affiliated links */
@@ -928,19 +922,8 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         }
 
         if (hostapd_drv_link_add(link_bss, link_bss->mld_link_id, link_bss->own_addr)) {
-            wifi_hal_error_print("Failed to add link %d in MLD %s\n", link_bss->mld_link_id,
-                link_bss->conf->iface);
-            return -1;
-        }
-
-        /* If it is current link configuration it will be enabled later by start_bss */
-        if (link_bss == hapd) {
-            continue;
-        }
-
-        if (ieee802_11_set_beacon(link_bss) != 0) {
-            wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
-                __func__, __LINE__, link_bss->conf->iface, link_bss->mld_link_id);
+            wifi_hal_error_print("%s:%d: Failed to add link %d in MLD %s\n", __func__, __LINE__,
+                link_bss->mld_link_id, link_bss->conf->iface);
             return -1;
         }
     }
