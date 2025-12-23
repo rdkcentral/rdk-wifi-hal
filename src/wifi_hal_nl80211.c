@@ -2038,7 +2038,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
         //Capture the EAPOL frames.
         push_eapol_to_char_dev(buff, buflen, eth_hdr);
 #endif //defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
-        if (interface->u.sta.wpa_sm) {
+        if (interface->u.sta.wpa_sm && interface->u.sta.state >= WPA_ASSOCIATED) {
 #if HOSTAPD_VERSION >= 211 //2.11
             if (!interface->u.sta.wpa_sm->eapol || !eapol_sm_rx_eapol(interface->u.sta.wpa_sm->eapol,(unsigned char *)&sta,
                 (unsigned char *)hdr, buflen - sizeof(struct ieee8023_hdr), FRAME_ENCRYPTION_UNKNOWN)) {
