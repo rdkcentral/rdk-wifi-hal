@@ -3815,7 +3815,7 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
     defined(SKYSR213_PORT) || defined(SCXF10_PORT)
     static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || SKYSR213_PORT
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || SKYSR213_PORT || SCXF10_PORT
 #if defined(TCHCBRV2_PORT)
     static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x01, 0x00, 0x08, 0x12, 0x00, 0x10 };
 #endif // TCHCBRV2_PORT
@@ -3823,7 +3823,7 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT) || defined(SCXF10_PORT)
     static const u8 he_mcs[HE_MAX_MCS_CAPAB_SIZE] = { 0xaa, 0xff, 0xaa, 0xff };
     static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x1b, 0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT
 #if defined(TCXB7_PORT) || defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT)
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x0f, 0x03, 0x95,
         0x18, 0x00, 0xcc, 0x00 };
@@ -4167,7 +4167,7 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 {
     return RETURN_OK;
 }
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
+#endif /* TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD */
 
 int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
 {
