@@ -10642,7 +10642,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     // - noise
     if (bss[NL80211_BSS_NOISE]) {
         int noise = nla_get_u8(bss[NL80211_BSS_NOISE]);
-        scan_info_ap->noise = noise - 255;
+        scan_info_ap->noise = noise - 256;
         wifi_hal_stats_dbg_print("SREESH noise: %d\n", scan_info_ap->noise);
     }
     if (bss[NL80211_BSS_SNR]) {
