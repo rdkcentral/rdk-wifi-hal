@@ -10641,19 +10641,19 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     wifi_hal_stats_dbg_print(" SREESH noise attribute: %p snr attribute: %p cu attribute: %p\n", bss[NL80211_BSS_NOISE], bss[NL80211_BSS_SNR], bss[NL80211_BSS_CU]);
     // - noise
     if (bss[NL80211_BSS_NOISE]) {
-        uint8_t noise = nla_get_u8(bss[NL80211_BSS_NOISE]);
-        scan_info_ap->noise = noise;
-        wifi_hal_stats_dbg_print("SREESH noise: %d\n", noise);
+        int noise = nla_get_u8(bss[NL80211_BSS_NOISE]);
+        scan_info_ap->noise = noise - 255;
+        wifi_hal_stats_dbg_print("SREESH noise: %d\n", scan_info_ap->noise);
     }
     if (bss[NL80211_BSS_SNR]) {
         uint8_t snr = nla_get_u8(bss[NL80211_BSS_SNR]);
         scan_info_ap->snr = snr;
-        wifi_hal_stats_dbg_print("SREESH snr: %d\n", snr);
+        wifi_hal_stats_dbg_print("SREESH snr: %d\n", scan_info_ap->snr);
     }
     if (bss[NL80211_BSS_CU]) {
         uint8_t cu = nla_get_u8(bss[NL80211_BSS_CU]);
         scan_info_ap->chan_utilization = cu;
-        wifi_hal_stats_dbg_print("SREESH chan_utilization: %d\n", cu);
+        wifi_hal_stats_dbg_print("SREESH chan_utilization: %d\n", scan_info_ap->chan_utilization);
     }
 #else
     // wifi_hal_dbg_print("WARNING: NL80211_BSS_NOISE is not defined! Need to update header nl80211.h\n");
