@@ -9446,7 +9446,6 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     }
 
 #ifdef CONFIG_IEEE80211W
-wifi_hal_dbg_print("%s:%d SREESH Value of security->mfp is %d AND security->mode = %d\n",__func__,__LINE__, security->mfp, security->mode);
     if (security->mode == wifi_security_mode_wpa3_personal ||
         security->mode == wifi_security_mode_wpa3_enterprise ||
         security->mode == wifi_security_mode_wpa3_transition || 
@@ -9459,11 +9458,7 @@ wifi_hal_dbg_print("%s:%d SREESH Value of security->mfp is %d AND security->mode
 
     if (security->mode != wifi_security_mode_none) {
         if ((ret = wpa_write_rsn_ie(&wpa_conf, pos, rsn_ie + sizeof(rsn_ie) - pos, NULL)) < 0) {
-            wifi_hal_error_print("%s:%d: SREESH Failed to build RSN IE: ret=%d "
-                                "(key_mgmt=0x%x, group=0x%x, pairwise=0x%x, mfp=%d, gmgmt=0x%x)\n",
-                                __func__, __LINE__, ret, wpa_conf.wpa_key_mgmt, 
-                                wpa_conf.wpa_group, wpa_conf.rsn_pairwise, 
-                                wpa_conf.ieee80211w, wpa_conf.group_mgmt_cipher);
+            wifi_hal_error_print("%s:%d Failed to build RSN %d\r\n", __func__, __LINE__, ret);
             return ret;
         }
         else {
