@@ -1371,6 +1371,20 @@ int nvram_get_mgmt_frame_power_control(int vap_index, int* output_dbm)
     return 0;
 }
 
+/* Stub for MXL platform to resolve build issue. */
+int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff)
+{
+    //wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__); 
+    return 0;
+}
+
+/* Stub for MXL platform to resolve build issue. */
+int platform_set_acs_exclusion_list(wifi_radio_index_t index,char *buff)
+{
+    //wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__); 
+    return 0;
+}
+
 int platform_get_vendor_oui (char *vendor_oui, int vendor_oui_len)
 {
     return -1;
@@ -1636,3 +1650,45 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 {
     return 0;
 }
+
+int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
+{
+    return RETURN_OK;
+}
+
+#ifdef CONFIG_IEEE80211BE
+int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
+    struct wpa_driver_ap_params *params)
+{
+    (void)msg;
+    (void)msg_mlo;
+    (void)priv;
+    (void)params;
+
+    return 0;
+}
+
+int nl80211_send_mlo_msg(struct nl_msg *msg)
+{
+    (void)msg;
+
+    return 0;
+}
+
+void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb)
+{
+    wifi_hal_error_print("%s:%d: not implemented\n", __func__, __LINE__);
+}
+
+int update_hostap_mlo(wifi_interface_info_t *interface)
+{
+#ifdef CONFIG_MLO
+    wifi_hal_error_print("%s:%d: not implemented\n", __func__, __LINE__);
+    return RETURN_ERR;
+#else
+    wifi_hal_error_print("%s:%d: CONFIG_MLO is not set\n", __func__, __LINE__);
+    return RETURN_OK;
+#endif /* CONFIG_MLO */
+}
+
+#endif /* CONFIG_IEEE80211BE */
