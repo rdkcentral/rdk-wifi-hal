@@ -5202,6 +5202,37 @@ int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id)
     return -1;
 }
 
+wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *interface)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface_iter;
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return interface;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+                i);
+            return NULL;
+        }
+
+        hash_map_foreach(radio->interface_map, interface_iter) {
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            if (interface_iter->index == interface->index) {
+                return interface_iter;
+            }
+        }
+    }
+
+    return interface;
+}
+
 uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
 {
     if (interface == NULL) {
