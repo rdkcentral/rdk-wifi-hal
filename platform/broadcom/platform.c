@@ -136,7 +136,7 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
 static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames);
 #endif
-static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl);
+static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl, int mld_link_id);
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
 static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map);
@@ -513,8 +513,8 @@ static bool platform_down_reqd(wifi_radio_index_t r_index, wifi_vap_info_map_t *
         vap_index = map->vap_array[index].vap_index;
 
         reqd |= needs_conf_split_assoc_req(
-            vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+            vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl, map->vap_array[index].u.bss_info.mld_info.common_info.mld_link_id);
         reqd |= needs_conf_mbssid_num_frames(
             vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
 #endif
@@ -1678,7 +1678,7 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
  * [in] hostap_mgt_frame_ctrl
  * [out] assoc_ctrl
 */
-static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl)
+static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl, int mld_link_id)
 {
     char interface_name[8] = { 0 };
     int curr_assoc_ctrl;
@@ -1689,7 +1689,7 @@ static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl
         return false;
     }
 
-    if (hostap_mgt_frame_ctrl) {
+    if (hostap_mgt_frame_ctrl && mld_link_id == 0) {
         *assoc_ctrl = ASSOC_HOSTAP_FULL_CTRL;
     } else if (is_wifi_hal_vap_hotspot_open(vap_index) ||
         is_wifi_hal_vap_hotspot_secure(vap_index)) {
@@ -1747,7 +1747,7 @@ static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ct
 }
 #endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
 
-static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, int enable)
+static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, int enable, int mld_link_id)
 {
     int assoc_ctrl;
     char buf[128] = { 0 };
@@ -1800,7 +1800,7 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
         return RETURN_ERR;
     }
 
-    split_assoc_req_change = needs_conf_split_assoc_req(vap_index, enable, &assoc_ctrl);
+    split_assoc_req_change = needs_conf_split_assoc_req(vap_index, enable, &assoc_ctrl, mld_link_id);
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     mbssid_num_frames_change = needs_conf_mbssid_num_frames(vap_index, enable, &mbssid_num_frames);
 #endif
@@ -1970,7 +1970,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
                 __LINE__, map->vap_array[index].vap_index,
                 map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl);
             platform_set_hostap_ctrl(radio, map->vap_array[index].vap_index,
-                map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl);
+                map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, map->vap_array[index].u.bss_info.mld_info.common_info.mld_link_id);
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
