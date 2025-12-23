@@ -1348,6 +1348,8 @@ extern u8_bitmap g_DialogToken[MAX_AP_INDEX];
 
 int wifi_freq_to_channel(int freq, uint *channel);
 int wifi_channel_to_freq(const char* country, UCHAR opclass, uint channel, uint *freq);
+int bw_enum_to_mhz(wifi_channelBandwidth_t chwid);
+uint16_t freq_to_primary(uint16_t freq, wifi_channelBandwidth_t chwid);
 enum nl80211_band wifi_freq_band_to_nl80211_band(wifi_freq_bands_t band);
 enum nl80211_band get_nl80211_band_from_rdk_radio_index(unsigned int rdk_radio_index);
 const char* get_chan_dfs_state(struct hostapd_channel_data *chan);
