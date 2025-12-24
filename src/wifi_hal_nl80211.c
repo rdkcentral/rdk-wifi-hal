@@ -7545,67 +7545,98 @@ static int fill_csa_params(wifi_radio_info_t *radio, struct csa_settings *csa_se
     return 0;
 }
 
+#if defined(CONFIG_GENERIC_MLO)
+static int wait_for_csa_completion(wifi_interface_info_t *interface)
+{
+    int retry = 20;
+    const unsigned int wait_usec = 100000;
+
+    while (retry-- > 0) {
+        bool csa_in_progress;
+
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        csa_in_progress = interface->u.ap.hapd.csa_in_progress;
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        if (!csa_in_progress) {
+            break;
+        }
+        wifi_hal_dbg_print("%s:%d: CSA in progress on interface %s, waiting...\n",
+            __func__, __LINE__, interface->name);
+        usleep(wait_usec);
+    }
+    if (retry <= 0) {
+        wifi_hal_error_print("%s:%d: Timeout waiting for CSA to complete on interface %s\n",
+            __func__, __LINE__, interface->name);
+        return -1;
+    }
+
+    return 0;
+}
+
 static int notify_mld_partner_links(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
     wifi_interface_info_t *interface_it;
     struct csa_settings csa_settings;
     int ret = 0;
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return 0;
+    }
+
     // For MLD related devices we have to notify all links in MLD groups
-    if (wifi_hal_is_mld_enabled(interface)) {
-        for (int i = 0; i < g_wifi_hal.num_radios; ++i) {
-            wifi_radio_info_t *radio_it = &g_wifi_hal.radio_info[i];
-            if (radio_it == radio) {
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; ++i) {
+        wifi_radio_info_t *radio_it = &g_wifi_hal.radio_info[i];
+        if (radio_it == radio) {
+            continue;
+        }
+
+        ret = fill_csa_params(radio_it, &csa_settings);
+        if (ret < 0) {
+            wifi_hal_error_print("%s:%d: Error filling csa_settings for radio idx %d\n", __func__,
+                __LINE__, i);
+            return ret;
+        }
+
+        hash_map_foreach(radio_it->interface_map, interface_it) {
+            if (!wifi_hal_is_mld_enabled(interface_it)) {
                 continue;
             }
 
-            ret = fill_csa_params(radio_it, &csa_settings);
-            if (ret < 0) {
-                wifi_hal_error_print("%s:%d: Error filling csa_settings for radio idx %d\n",
-                    __func__, __LINE__, i);
-                return ret;
+            if (interface_it->index != interface->index) {
+                continue;
             }
 
-            hash_map_foreach(radio_it->interface_map, interface_it) {
-                if (!wifi_hal_is_mld_enabled(interface_it)) {
-                    continue;
-                }
+            if (wait_for_csa_completion(interface_it) < 0) {
+                return -1;
+            }
 
-                if (interface_it->u.ap.hapd.csa_in_progress) {
-                    // We are skipping since this is either
-                    // already on changing channel or this was
-                    // done just to satisfy MLD channel switch
-                    // requirement
-                    wifi_hal_dbg_print("%s:%d: CSA active - skip\n", __func__, __LINE__);
-                    continue;
-                }
+            wifi_hal_dbg_print("%s:%d interface: %s switch channel to %d\n", __func__, __LINE__,
+                interface_it->name, radio_it->oper_param.channel);
 
-                wifi_hal_dbg_print("%s:%d interface: %s switch channel to %d\n", __func__, __LINE__,
-                    interface_it->name, radio_it->oper_param.channel);
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            ret = hostapd_switch_channel(&interface_it->u.ap.hapd, &csa_settings);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-                pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-                ret = hostapd_switch_channel(&interface_it->u.ap.hapd, &csa_settings);
-                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-
-                if (ret != 0) {
-                    wifi_hal_error_print("%s:%d: Error notifying link %d on radio %d switching "
-                                         "channel, ret:%d, CSA active:%d\n",
-                        __func__, __LINE__, wifi_hal_get_mld_link_id(interface_it), i, ret,
-                        interface_it->u.ap.hapd.csa_in_progress);
-                    return ret;
-                }
+            if (ret != 0) {
+                wifi_hal_error_print("%s:%d: Error notifying link %d on radio %d switching "
+                                     "channel, ret:%d\n",
+                    __func__, __LINE__, wifi_hal_get_mld_link_id(interface_it), i, ret);
+                return ret;
             }
         }
     }
+
     return 0;
 }
+#endif // CONFIG_GENERIC_MLO
 
 int nl80211_switch_channel(wifi_radio_info_t *radio)
 {
     int ret = 0;
     wifi_interface_info_t *interface;
     bool is_first_interface = true;
-
     struct csa_settings csa_settings;
+
     ret = fill_csa_params(radio, &csa_settings);
     if (ret != 0) {
         wifi_hal_error_print("%s:%d: Failed to fill CSA params for radio %d\n", __func__, __LINE__,
@@ -7618,17 +7649,11 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
             continue;
         }
 
-#if defined(CONFIG_GENERIC_MLO) && defined(_PLATFORM_BANANAPI_R4_)
-        if (interface->u.ap.hapd.csa_in_progress) {
-            // This can happen in case of multiple requests - clear CSA and
-            // try to change the channel
-            if (is_first_interface) {
-                wifi_hal_error_print("%s:%d: CSA active - force resending channel switch\n",
-                    __func__, __LINE__);
-                hostapd_cleanup_cs_params(&interface->u.ap.hapd);
-            }
+#if defined(CONFIG_GENERIC_MLO)
+        if (wait_for_csa_completion(interface) < 0) {
+            return -1;
         }
-#endif
+#endif // CONFIG_GENERIC_MLO
 
         wifi_hal_dbg_print("%s:%d interface: %s switch channel to %d\n", __func__, __LINE__,
             interface->name, radio->oper_param.channel);
@@ -7646,14 +7671,14 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
         }
         is_first_interface = false;
 
-#if defined(CONFIG_GENERIC_MLO) && defined(_PLATFORM_BANANAPI_R4_)
+#if defined(CONFIG_GENERIC_MLO)
         ret = notify_mld_partner_links(radio, interface);
         if (ret != 0) {
             wifi_hal_error_print("%s:%d Error encountered during notifying partner links\n",
                 __func__, __LINE__);
             return ret;
         }
-#endif
+#endif // CONFIG_GENERIC_MLO
     }
     return 0;
 }
