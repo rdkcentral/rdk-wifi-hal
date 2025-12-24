@@ -5109,3 +5109,352 @@ int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
         __LINE__, ifname);
     return -1;
 }
+
+char *wifi_hal_get_mld_name_by_interface_name(char *ifname)
+{
+    for (unsigned int i = 0; i < get_sizeof_interfaces_index_map(); i++) {
+        if (interface_index_map[i].mld_interface_name[0] == '\0') {
+            continue;
+        }
+        if ((strncmp(ifname, interface_index_map[i].interface_name,
+                 sizeof(interface_index_map[i].interface_name)) == 0)) {
+            return interface_index_map[i].mld_interface_name;
+        }
+    }
+    return NULL;
+}
+
+char *wifi_hal_get_interface_name(wifi_interface_info_t *interface)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return NULL;
+    }
+
+    if (interface->mld_name[0] == '\0') {
+        return interface->name;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap &&
+        interface->vap_info.u.bss_info.mld_info.common_info.mld_enable) {
+        return interface->mld_name;
+    }
+
+    return interface->name;
+}
+
+bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return false;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        return interface->vap_info.u.bss_info.mld_info.common_info.mld_enable;
+    }
+
+    return false;
+}
+
+int wifi_hal_set_mld_enabled(wifi_interface_info_t *interface, bool enabled)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        interface->vap_info.u.bss_info.mld_info.common_info.mld_enable = enabled;
+        return 0;
+    }
+
+    return -1;
+}
+
+#ifndef NL80211_DRV_LINK_ID_NA
+#define NL80211_DRV_LINK_ID_NA (-1)
+#endif
+
+int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return NL80211_DRV_LINK_ID_NA;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return NL80211_DRV_LINK_ID_NA;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        return interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
+    }
+
+    return NL80211_DRV_LINK_ID_NA;
+}
+
+int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id = link_id;
+        return 0;
+    }
+
+    return -1;
+}
+
+wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *interface)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface_iter;
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return interface;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+                i);
+            return NULL;
+        }
+
+        hash_map_foreach(radio->interface_map, interface_iter) {
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            if (interface_iter->index == interface->index) {
+                return interface_iter;
+            }
+        }
+    }
+
+    return interface;
+}
+
+uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return NULL;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return NULL;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        return interface->vap_info.u.bss_info.mld_info.common_info.mld_addr;
+    }
+
+    return NULL;
+}
+
+int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t mac)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+        memcpy(interface->vap_info.u.bss_info.mld_info.common_info.mld_addr, mac,
+            sizeof(mac_address_t));
+        return 0;
+    }
+
+    return -1;
+}
+
+wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info_t *interface,
+    int link_id)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface_iter;
+
+    if (link_id < 0) {
+        return interface;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return interface;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+                i);
+            return interface;
+        }
+
+        hash_map_foreach(radio->interface_map, interface_iter) {
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            // TODO: multiple mld support
+            if (wifi_hal_get_mld_link_id(interface_iter) == link_id) {
+                return interface_iter;
+            }
+        }
+    }
+
+    return interface;
+}
+
+wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t *interface,
+    uint32_t freq)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface_iter;
+
+    if (freq == 0) {
+        return interface;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return interface;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+                i);
+            return interface;
+        }
+
+        hash_map_foreach(radio->interface_map, interface_iter) {
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            // TODO: multiple mld support
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            if (interface_iter->u.ap.iface.freq == freq) {
+                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+                return interface_iter;
+            }
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        }
+    }
+
+    return interface;
+}
+
+wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_info_t *interface,
+    mac_address_t mac)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface_iter;
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return memcmp(interface->mac, mac, sizeof(mac_address_t)) == 0 ? interface : NULL;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to get radio for index: %d\n", __func__, __LINE__,
+                i);
+            return NULL;
+        }
+
+        hash_map_foreach(radio->interface_map, interface_iter) {
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            if (memcmp(interface_iter->mac, mac, sizeof(mac_address_t)) == 0) {
+                return interface_iter;
+            }
+        }
+    }
+
+    return NULL;
+}
+
+int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac)
+{
+    int fd;
+    struct ifreq ifr;
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) {
+        wifi_hal_error_print("%s:%d Failed to create socket, error: %s", __func__, __LINE__,
+            strerror(errno));
+        return -1;
+    }
+
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+
+    if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
+        wifi_hal_error_print("%s:%d Failed to get MAC address, error: %s", __func__, __LINE__,
+            strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+
+    memcpy(mac, ifr.ifr_hwaddr.sa_data, sizeof(mac_address_t));
+
+    return 0;
+}
+
+int bw_enum_to_mhz(wifi_channelBandwidth_t chwid)
+{
+    switch (chwid) {
+    case WIFI_CHANNELBANDWIDTH_20MHZ:
+        return 20;
+    case WIFI_CHANNELBANDWIDTH_40MHZ:
+        return 40;
+    case WIFI_CHANNELBANDWIDTH_80MHZ:
+        return 80;
+    case WIFI_CHANNELBANDWIDTH_160MHZ:
+        return 160;
+    case WIFI_CHANNELBANDWIDTH_320MHZ:
+        return 320;
+    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
+    default:
+        return -1;
+    }
+}
+
+uint16_t freq_to_primary(uint16_t freq, wifi_channelBandwidth_t chwid)
+{
+    bool is_primary_freq = false;
+    bool is_centre_freq = false;
+    int bw = 0;
+
+    if (freq == 0) {
+        return 0;
+    }
+    bw = bw_enum_to_mhz(chwid);
+
+    if (bw <= 20) {
+        return freq;
+    }
+    is_primary_freq = (freq % 20 == 0);
+
+    is_centre_freq = ((freq - 10) % 20 == 0);
+
+    if (is_primary_freq && !is_centre_freq) {
+        return freq;
+    }
+    if (!is_primary_freq && is_centre_freq && bw > 20) {
+        return (freq - (bw / 2 - 10));
+    }
+
+    return freq;
+}
