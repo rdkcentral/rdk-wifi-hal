@@ -1478,7 +1478,6 @@ static void *dfs_event_thread(void *arg)
     return NULL;
 }
 
-
 static void process_event_to_onewifi(const char *ifname,
     wifi_channel_change_event_t radio_channel_param, const void *data, unsigned int len)
 {
@@ -1488,7 +1487,7 @@ static void process_event_to_onewifi(const char *ifname,
     int radio_index;
     const uint16_t *freq;
     uint8_t primary_channel = 0;
-    uint16_t primary_freq=0;
+    uint16_t primary_freq = 0;
 
     get_radio_interface_info_map(radio_map_t);
     callbacks = get_hal_device_callbacks();

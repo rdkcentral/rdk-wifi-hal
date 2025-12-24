@@ -5405,14 +5405,19 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac)
     return 0;
 }
 
- int bw_enum_to_mhz(wifi_channelBandwidth_t chwid)
+int bw_enum_to_mhz(wifi_channelBandwidth_t chwid)
 {
     switch (chwid) {
-    case WIFI_CHANNELBANDWIDTH_20MHZ:  return 20;
-    case WIFI_CHANNELBANDWIDTH_40MHZ:  return 40;
-    case WIFI_CHANNELBANDWIDTH_80MHZ:  return 80;
-    case WIFI_CHANNELBANDWIDTH_160MHZ: return 160;
-    case WIFI_CHANNELBANDWIDTH_320MHZ: return 320;
+    case WIFI_CHANNELBANDWIDTH_20MHZ:
+        return 20;
+    case WIFI_CHANNELBANDWIDTH_40MHZ:
+        return 40;
+    case WIFI_CHANNELBANDWIDTH_80MHZ:
+        return 80;
+    case WIFI_CHANNELBANDWIDTH_160MHZ:
+        return 160;
+    case WIFI_CHANNELBANDWIDTH_320MHZ:
+        return 320;
     case WIFI_CHANNELBANDWIDTH_80_80MHZ:
     default:
         return -1;
@@ -5423,27 +5428,26 @@ uint16_t freq_to_primary(uint16_t freq, wifi_channelBandwidth_t chwid)
 {
     bool is_primary_freq = false;
     bool is_centre_freq = false;
-    int bw=0;
+    int bw = 0;
 
-    if (freq ==0)
-	return 0;
+    if (freq == 0)
+        return 0;
 
     bw = bw_enum_to_mhz(chwid);
 
     if (bw <= 20)
-	return freq;
+        return freq;
 
     is_primary_freq = (freq % 20 == 0);
 
     is_centre_freq = ((freq - 10) % 20 == 0);
 
     if (is_primary_freq && !is_centre_freq)
-	return freq;
+        return freq;
 
-    if(!is_primary_freq && is_centre_freq && bw>20) {
-	    return (freq - (bw/2 - 10));
+    if (!is_primary_freq && is_centre_freq && bw > 20) {
+        return (freq - (bw / 2 - 10));
     }
 
     return freq;
-
 }
