@@ -5430,21 +5430,21 @@ uint16_t freq_to_primary(uint16_t freq, wifi_channelBandwidth_t chwid)
     bool is_centre_freq = false;
     int bw = 0;
 
-    if (freq == 0)
+    if (freq == 0) {
         return 0;
-
+    }
     bw = bw_enum_to_mhz(chwid);
 
-    if (bw <= 20)
+    if (bw <= 20) {
         return freq;
-
+    }
     is_primary_freq = (freq % 20 == 0);
 
     is_centre_freq = ((freq - 10) % 20 == 0);
 
-    if (is_primary_freq && !is_centre_freq)
+    if (is_primary_freq && !is_centre_freq) {
         return freq;
-
+    }
     if (!is_primary_freq && is_centre_freq && bw > 20) {
         return (freq - (bw / 2 - 10));
     }
