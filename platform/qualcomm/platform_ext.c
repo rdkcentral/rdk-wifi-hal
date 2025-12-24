@@ -1514,8 +1514,6 @@ static void process_event_to_onewifi(const char *ifname,
     primary_freq = freq_to_primary(*freq, radio_channel_param.channelWidth);
     ieee80211_freq_to_chan(primary_freq, &primary_channel);
 
-    wifi_hal_dbg_print("%s:%d Primary freq:%d Primary Channel:%d\n", __func__, __LINE__, primary_freq, primary_channel);
-
     radio_channel_param.channel = primary_channel;
     radio_channel_param.event = WIFI_EVENT_DFS_RADAR_DETECTED;
 
