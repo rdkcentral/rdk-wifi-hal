@@ -2962,8 +2962,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
                 wpa_sm_rx_eapol(interface->u.sta.wpa_sm, (unsigned char *)&sta, (unsigned char *)hdr, buflen - sizeof(struct ieee8023_hdr));
             }
 #endif
-        }
-        else if (interface->u.sta.state < WPA_ASSOCIATED) {
+        } else if (interface->u.sta.state < WPA_ASSOCIATED) {
             interface->u.sta.pending_rx_eapol = true;
             memcpy(interface->u.sta.rx_eapol_buff, buff, sizeof(buff));
             interface->u.sta.buff_len = buflen;
