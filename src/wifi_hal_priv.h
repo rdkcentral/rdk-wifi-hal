@@ -877,7 +877,7 @@ int wifi_hal_parse_rm_beacon_request(unsigned int apIndex, char* buff, size_t le
     wifi_hal_rrm_request_t *req);
 wifi_radio_info_t *get_radio_by_index(wifi_radio_index_t index);
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index);
-wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index, u8 link_id);
+wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index, int link_id);
 BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, size_t *ie_out_len);
 BOOL get_ie_ext_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len);
 const u8 * get_vendor_ie_by_type(const u8 *pos, size_t len, u32 vendor_type);
