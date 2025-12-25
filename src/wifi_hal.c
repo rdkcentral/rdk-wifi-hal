@@ -1054,6 +1054,31 @@ reload_config:
 
 }
 
+INT wifi_hal_sm_deinit(INT vap_index)
+{
+    wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Ravi interface for vap index:%d not found\n", __func__, __LINE__,
+            vap_index);
+        return RETURN_ERR;
+    }
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_sta) {
+        wifi_hal_error_print("%s:%d:interface for vap index:%d not found\n", __func__, __LINE__,
+            vap_index);
+        return RETURN_ERR;
+    }
+
+    if (interface->u.sta.wpa_sm != NULL) {
+        eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
+        interface->u.sta.wpa_sm->eapol = NULL;
+
+        wpa_sm_deinit(interface->u.sta.wpa_sm);
+        interface->u.sta.wpa_sm = NULL;
+    }
+    return RETURN_OK;
+}
+
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
 {
     wifi_interface_info_t *interface;
