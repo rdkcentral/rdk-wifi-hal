@@ -511,6 +511,7 @@ typedef struct wifi_interface_info_t {
     struct wpa_ssid current_ssid_info;
 #endif
     char mld_name[32];
+    bool in_reconf;
 } wifi_interface_info_t;
 
 #define MAX_RATES   16
@@ -1347,6 +1348,8 @@ extern u8_bitmap g_DialogToken[MAX_AP_INDEX];
 
 int wifi_freq_to_channel(int freq, uint *channel);
 int wifi_channel_to_freq(const char* country, UCHAR opclass, uint channel, uint *freq);
+int bw_enum_to_mhz(wifi_channelBandwidth_t chwid);
+uint16_t freq_to_primary(uint16_t freq, wifi_channelBandwidth_t chwid);
 enum nl80211_band wifi_freq_band_to_nl80211_band(wifi_freq_bands_t band);
 enum nl80211_band get_nl80211_band_from_rdk_radio_index(unsigned int rdk_radio_index);
 const char* get_chan_dfs_state(struct hostapd_channel_data *chan);
@@ -1404,6 +1407,7 @@ bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface);
 int wifi_hal_set_mld_enabled(wifi_interface_info_t *interface, bool enabled);
 int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface);
 int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id);
+wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *interface);
 uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface);
 int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t mac);
 wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info_t *interface,
