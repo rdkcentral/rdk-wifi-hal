@@ -2096,7 +2096,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             break;
         }
 #ifdef WIFI_EMULATOR_CHANGE
-        msg_ops_type = wlan_emu_frm80211_ops_type_action;
+        //msg_ops_type = wlan_emu_frm80211_ops_type_action;
         send_mgmt_to_char_dev = true;
 #endif
         break;
