@@ -7458,16 +7458,12 @@ static int nl80211_fill_chandef(struct nl_msg *msg, wifi_radio_info_t *radio, wi
     return 0;
 }
 
-int nl80211_switch_channel(wifi_radio_info_t *radio)
+static int fill_csa_params(wifi_radio_info_t *radio, struct csa_settings *csa_settings)
 {
-    wifi_interface_info_t *interface;
     wifi_radio_operationParam_t *param;
-    struct csa_settings csa_settings;
     int sec_chan_offset, freq, freq1, bandwidth;
     u8 seg0;
     char country[8];
-    int ret = 0;
-    bool is_first_interface;
 
     param = &radio->oper_param;
     get_coutry_str_from_code(param->countryCode, country);
@@ -7515,46 +7511,131 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
     ieee80211_freq_to_chan(freq1, &seg0);
 
     /* Setup CSA request */
-    os_memset(&csa_settings, 0, sizeof(csa_settings));
+    os_memset(csa_settings, 0, sizeof(struct csa_settings));
 
     if (radio->radar_detected) {
-        csa_settings.cs_count = 8;
-        csa_settings.block_tx = 1;
+        csa_settings->cs_count = 8;
+        csa_settings->block_tx = 1;
         radio->radar_detected = false;
     } else {
-        csa_settings.cs_count = 5;
-        csa_settings.block_tx = 0;
+        csa_settings->cs_count = 5;
+        csa_settings->block_tx = 0;
     }
 #if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
-    csa_settings.cs_count = CSA_COUNT;
+    csa_settings->cs_count = CSA_COUNT;
 #endif
-    os_memset(&csa_settings.freq_params, 0, sizeof(struct hostapd_freq_params));
+    os_memset(&csa_settings->freq_params, 0, sizeof(struct hostapd_freq_params));
 
-    csa_settings.freq_params.mode = radio->iconf.hw_mode;
-    csa_settings.freq_params.freq = ieee80211_chan_to_freq(country, param->operatingClass, param->channel);
-    csa_settings.freq_params.channel = param->channel;
-    csa_settings.freq_params.ht_enabled = radio->iconf.ieee80211n;
-    csa_settings.freq_params.vht_enabled = radio->iconf.ieee80211ac;
-    csa_settings.freq_params.he_enabled = radio->iconf.ieee80211ax;
+    csa_settings->freq_params.mode = radio->iconf.hw_mode;
+    csa_settings->freq_params.freq = ieee80211_chan_to_freq(country, param->operatingClass,
+        param->channel);
+    csa_settings->freq_params.channel = param->channel;
+    csa_settings->freq_params.ht_enabled = radio->iconf.ieee80211n;
+    csa_settings->freq_params.vht_enabled = radio->iconf.ieee80211ac;
+    csa_settings->freq_params.he_enabled = radio->iconf.ieee80211ax;
 #ifdef CONFIG_IEEE80211BE
-    csa_settings.freq_params.eht_enabled = radio->iconf.ieee80211be;
+    csa_settings->freq_params.eht_enabled = radio->iconf.ieee80211be;
 #endif /* CONFIG_IEEE80211BE */
-    csa_settings.freq_params.sec_channel_offset = sec_chan_offset;
-    csa_settings.freq_params.center_freq1 = freq1;
-    csa_settings.freq_params.center_freq2 = 0;
-    csa_settings.freq_params.bandwidth = bandwidth;
+    csa_settings->freq_params.sec_channel_offset = sec_chan_offset;
+    csa_settings->freq_params.center_freq1 = freq1;
+    csa_settings->freq_params.center_freq2 = 0;
+    csa_settings->freq_params.bandwidth = bandwidth;
 
     wifi_hal_dbg_print("%s:%d chan_freq: %d center_freq: %d bandwidth: %d sec_chan_offset: %d\n",
         __func__, __LINE__, freq, freq1, bandwidth, sec_chan_offset);
+    return 0;
+}
 
-    is_first_interface = true;
+static int notify_mld_partner_links(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
+{
+    wifi_interface_info_t *interface_it;
+    struct csa_settings csa_settings;
+    int ret = 0;
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return 0;
+    }
+
+    // For MLD related devices we have to notify all links in MLD groups
+    for (int i = 0; i < g_wifi_hal.num_radios; ++i) {
+        wifi_radio_info_t *radio_it = &g_wifi_hal.radio_info[i];
+        if (radio_it == radio) {
+            continue;
+        }
+
+        ret = fill_csa_params(radio_it, &csa_settings);
+        if (ret < 0) {
+            wifi_hal_error_print("%s:%d: Failed to fill csa_settings for radio %d\n", __func__,
+                __LINE__, radio->rdk_radio_index);
+            return ret;
+        }
+
+        hash_map_foreach(radio_it->interface_map, interface_it) {
+            if (!wifi_hal_is_mld_enabled(interface_it)) {
+                continue;
+            }
+
+            if (interface_it->index != interface->index) {
+                continue;
+            }
+
+            if (interface_it->u.ap.hapd.csa_in_progress) {
+                wifi_hal_dbg_print("%s:%d: CSA active - skip\n", __func__, __LINE__);
+                continue;
+            }
+
+            wifi_hal_dbg_print("%s:%d interface: %s switch channel to %d\n", __func__, __LINE__,
+                interface_it->name, radio_it->oper_param.channel);
+
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            ret = hostapd_switch_channel(&interface_it->u.ap.hapd, &csa_settings);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+            if (ret != 0) {
+                wifi_hal_error_print("%s:%d: Error notifying link %d on radio %d switching "
+                                     "channel, ret:%d, CSA active:%d\n",
+                    __func__, __LINE__, wifi_hal_get_mld_link_id(interface_it), i, ret,
+                    interface_it->u.ap.hapd.csa_in_progress);
+                return ret;
+            }
+        }
+    }
+    return 0;
+}
+
+int nl80211_switch_channel(wifi_radio_info_t *radio)
+{
+    int ret = 0;
+    wifi_interface_info_t *interface;
+    bool is_first_interface = true;
+
+    struct csa_settings csa_settings;
+    ret = fill_csa_params(radio, &csa_settings);
+    if (ret != 0) {
+        wifi_hal_error_print("%s:%d: Failed to fill CSA params for radio %d\n", __func__, __LINE__,
+            radio->rdk_radio_index);
+        return ret;
+    }
+
     hash_map_foreach(radio->interface_map, interface) {
         if (!interface->bss_started) {
             continue;
         }
 
+#if defined(CONFIG_GENERIC_MLO) && defined(_PLATFORM_BANANAPI_R4_)
+        if (interface->u.ap.hapd.csa_in_progress) {
+            // This can happen in case of multiple requests - clear CSA and
+            // try to change the channel
+            if (is_first_interface) {
+                wifi_hal_error_print("%s:%d: CSA active - force resending channel switch\n",
+                    __func__, __LINE__);
+                hostapd_cleanup_cs_params(&interface->u.ap.hapd);
+            }
+        }
+#endif
+
         wifi_hal_dbg_print("%s:%d interface: %s switch channel to %d\n", __func__, __LINE__,
-            interface->name, param->channel);
+            interface->name, radio->oper_param.channel);
 
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         ret = hostapd_switch_channel(&interface->u.ap.hapd, &csa_settings);
@@ -7564,10 +7645,19 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
            as CSA would be in progress after the first interface channel switch. */
         if (ret != 0 && is_first_interface == true) {
             wifi_hal_error_print("%s:%d interface: %s failed to switch channel to %d, error: %d\n",
-                __func__, __LINE__, interface->name, param->channel, ret);
+                __func__, __LINE__, interface->name, radio->oper_param.channel, ret);
             return ret;
         }
         is_first_interface = false;
+
+#if defined(CONFIG_GENERIC_MLO) && defined(_PLATFORM_BANANAPI_R4_)
+        ret = notify_mld_partner_links(radio, interface);
+        if (ret != 0) {
+            wifi_hal_error_print("%s:%d Error encountered during notifying partner links\n",
+                __func__, __LINE__);
+            return ret;
+        }
+#endif
     }
     return 0;
 }
