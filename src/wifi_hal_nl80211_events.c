@@ -979,7 +979,7 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     if(tb[NL80211_ATTR_CENTER_FREQ2]) {
         cf2 = nla_get_u32(tb[NL80211_ATTR_CENTER_FREQ2]);
     }
-    
+
     if (tb[NL80211_ATTR_RADAR_EVENT]) {
         event_type = nla_get_u32(tb[NL80211_ATTR_RADAR_EVENT]);
         radio_channel_param.sub_event = (wifi_radar_eventType_t)event_type;
@@ -1702,10 +1702,9 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     unsigned int ifidx = 0;
     int wiphy_idx_rx = -1;
-    //unsigned long wdev_id = 0;
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
-    unsigned int i;
+    int link_id = NL80211_DRV_LINK_ID_NA;
 
     gnlh = nlmsg_data(nlmsg_hdr(msg));
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
@@ -1718,54 +1717,65 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
     } else if (tb[NL80211_ATTR_WIPHY]) {
         wiphy_idx_rx = nla_get_u32(tb[NL80211_ATTR_WIPHY]);
     }
-    //else if (tb[NL80211_ATTR_WDEV]) {
-      //  wdev_id = nla_get_u64(tb[NL80211_ATTR_WDEV]);
-    //}
 
-    //wifi_hal_dbg_print("%s:%d:event %d for interface (ifindex %d wdev 0x%llx wiphy %d)\n",
-                //__func__, __LINE__, gnlh->cmd,
-                //ifidx, (long long unsigned int) wdev_id, wiphy_idx_rx);
+#if defined(CONFIG_GENERIC_MLO)
+    if (tb[NL80211_ATTR_MLO_LINK_ID])
+        link_id = nla_get_u8(tb[NL80211_ATTR_MLO_LINK_ID]);
+#endif
 
-    if (gnlh->cmd == NL80211_CMD_NEW_SCAN_RESULTS ||
-        gnlh->cmd == NL80211_CMD_TRIGGER_SCAN ||
-        gnlh->cmd == NL80211_CMD_SCAN_ABORTED)
-    {
-        /* Special case for SCAN events - don't drop these event even if the interface is not fully configured */
-        interface = get_interface_by_if_index(ifidx);
-        if (interface) {
-            do_process_drv_event(interface, gnlh->cmd, tb);
-            return NL_SKIP;
-        }
-    }
-
-    //To handle CAC Finish and CAC Abort for DFS. These event involve only the primary interface of the radio.
-    if(gnlh->cmd == NL80211_CMD_RADAR_DETECT) {
+    if (tb[NL80211_ATTR_RADAR_EVENT]) {
         event_type = nla_get_u32(tb[NL80211_ATTR_RADAR_EVENT]);
-        if( event_type == NL80211_RADAR_CAC_FINISHED || event_type == NL80211_RADAR_CAC_ABORTED ) {
-            interface = get_interface_by_if_index(ifidx);
-            if(interface) {
-                do_process_drv_event(interface, gnlh->cmd, tb);
-                return NL_SKIP;
-            }
-        }
     }
 
-    for (i = 0; i < priv->num_radios; i++) {
-        radio = &priv->radio_info[i];
-        interface = hash_map_get_first(radio->interface_map);
-        while (interface != NULL) {
-            if ((wiphy_idx_rx != -1) || ((ifidx == interface->index) && (interface->vap_configured == true)) ) {
-                do_process_drv_event(interface, gnlh->cmd, tb);
-            } else {
-                //wifi_hal_dbg_print("%s:%d: Skipping event %d for foreign interface (ifindex %d wdev 0x%llx)\n", 
-                    //__func__, __LINE__,
-                    //gnlh->cmd,
-                    //ifidx, (long long unsigned int) wdev_id);
-            }
+    interface = get_interface_by_if_index(ifidx, link_id);
+    switch (gnlh->cmd) {
+    case NL80211_CMD_RADAR_DETECT:
+        // To handle CAC Finish and CAC Abort for DFS. These event involve only the primary
+        // interface of the radio.
+        if (!(event_type == NL80211_RADAR_CAC_FINISHED || event_type == NL80211_RADAR_CAC_ABORTED))
+            break;
 
-            interface = hash_map_get_next(radio->interface_map, interface);
+        /* fall through */
+    case NL80211_CMD_NEW_SCAN_RESULTS:
+    case NL80211_CMD_TRIGGER_SCAN:
+    case NL80211_CMD_SCAN_ABORTED:
+        /* Special case for SCAN events - don't drop these event even if the interface is not fully
+         * configured */
+        if (interface != NULL) {
+            wifi_hal_dbg_print("%s:%d: event registered - processing for %s event %d\n", __func__,
+                __LINE__, interface->name, gnlh->cmd);
+            do_process_drv_event(interface, gnlh->cmd, tb);
+        } else {
+            wifi_hal_dbg_print("%s:%d: RADAR or SCAN event skipped, no interface found\n", __func__,
+                __LINE__);
         }
+        return NL_SKIP;
+        break;
+    default:
+        break;
+    }
 
+    if (wiphy_idx_rx != -1) {
+        for (unsigned int i = 0; i < priv->num_radios; i++) {
+            radio = &priv->radio_info[i];
+            hash_map_foreach(radio->interface_map, interface) {
+                wifi_hal_dbg_print("%s:%d: event registered - processing for %s event %d\n",
+                    __func__, __LINE__, interface->name, gnlh->cmd);
+                do_process_drv_event(interface, gnlh->cmd, tb);
+            }
+        }
+        return NL_SKIP;
+    }
+
+#if defined(CONFIG_GENERIC_MLO)
+    // TODO: Temporary disable vap_configured check for MLO
+    if (interface != NULL) {
+#else
+    if (interface != NULL && (interface->vap_configured == true)) {
+#endif
+        wifi_hal_dbg_print("%s:%d: event registered - processing for %s event %d\n", __func__,
+            __LINE__, interface->name, gnlh->cmd);
+        do_process_drv_event(interface, gnlh->cmd, tb);
     }
 
     return NL_SKIP;

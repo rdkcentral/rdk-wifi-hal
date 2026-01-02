@@ -1976,7 +1976,7 @@ wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index)
     return NULL;
 }
 
-wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index)
+wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index, int link_id)
 {
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
@@ -1988,15 +1988,23 @@ wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index)
 
         while (interface != NULL) {
             if (interface->index == if_index) {
+#if defined(CONFIG_GENERIC_MLO)
+                if (link_id == NL80211_DRV_LINK_ID_NA) {
+                    return interface;
+                }
+
+                if (wifi_hal_get_mld_link_id(interface) == link_id) {
+                    return interface;
+                }
+#else
                 return interface;
+#endif
             }
             interface = hash_map_get_next(radio->interface_map, interface);
         }
     }
-
     return NULL;
 }
-
 
 BOOL get_ie_ext_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len)
 {
