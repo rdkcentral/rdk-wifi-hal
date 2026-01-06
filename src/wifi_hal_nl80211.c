@@ -12597,29 +12597,39 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
     int ret;
     wifi_vap_info_t *vap;
     wifi_radio_info_t *radio;
-    char *mld_name = NULL;
     int link_id = -1;
     mac_address_t intf_mac = {};
+    char *vlan_name = NULL;
 
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
 
 #ifdef CONFIG_GENERIC_MLO
     link_id = wifi_hal_get_mld_link_id(interface);
-    mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
-#endif // CONFIG_GENERIC_MLO
-
-    if (mld_name != NULL) {
-        ret = os_snprintf(name, sizeof(name), "%s.sta%d", mld_name, aid);
-        if (wifi_hal_get_mac_address(mld_name, intf_mac) < 0) {
-            wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n", __func__,
-                __LINE__, mld_name);
-            return RETURN_ERR;
-        }
-    } else {
-        ret = os_snprintf(name, sizeof(name), "%s.sta%d", interface->name, aid);
-        memcpy(intf_mac, vap->u.bss_info.bssid, sizeof(mac_address_t));
+    if (link_id == -1) {
+        wifi_hal_error_print("%s:%d: Failed to get mld link id\n", __func__, __LINE__);
+        return RETURN_ERR;
     }
+
+    char *mld_name = NULL;
+    mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
+    if (mld_name == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get mld name by interface name\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    vlan_name = mld_name;
+
+    ret = os_snprintf(name, sizeof(name), "%s.sta%d", mld_name, aid);
+    if (wifi_hal_get_mac_address(mld_name, intf_mac) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n", __func__,
+        __LINE__, mld_name);
+        return RETURN_ERR;
+    }
+#else
+    ret = os_snprintf(name, sizeof(name), "%s.sta%d", interface->name, aid);
+    memcpy(intf_mac, vap->u.bss_info.bssid, sizeof(mac_address_t));
+    vlan_name = interface->name;
+#endif // CONFIG_GENERIC_MLO
 
     if (ret >= (int) sizeof(name)) {
         wifi_hal_info_print("%s:%d nl80211: WDS interface name:%s was truncated\r\n",
@@ -12683,11 +12693,7 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
             return RETURN_ERR;
         }
 
-        if (mld_name != NULL) {
-            nl80211_set_sta_vlan(radio, interface, addr, mld_name, 0, link_id);
-        } else {
-            nl80211_set_sta_vlan(radio, interface, addr, interface->name, 0, link_id);
-        }
+        nl80211_set_sta_vlan(radio, interface, addr, vlan_name, 0, link_id);
 
         nl80211_delete_interface(radio->index, name, if_nametoindex(name));
         memset(&event, 0, sizeof(event));
