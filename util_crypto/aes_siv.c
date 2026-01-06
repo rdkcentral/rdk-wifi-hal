@@ -442,6 +442,7 @@ siv_encrypt (siv_ctx *ctx, const unsigned char *p, unsigned char *c,
             s2v_update(ctx, ad, adlen);
             numad--;
         }
+        va_end(ap);
     }
     s2v_final(ctx, p, len, ctr);
     memcpy(counter, ctr, AES_BLOCK_SIZE);
@@ -483,6 +484,7 @@ siv_decrypt (siv_ctx *ctx, const unsigned char *c, unsigned char *p,
             s2v_update(ctx, ad, adlen);
             numad--;
         }
+        va_end(ap);
     }
     s2v_final(ctx, p, len, ctr);
 
