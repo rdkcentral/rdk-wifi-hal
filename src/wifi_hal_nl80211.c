@@ -17035,7 +17035,7 @@ int wifi_drv_set_acs_exclusion_list(unsigned int radioIndex, char* str)
     }
 }
 
-int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t chanlist, char* buff)
+int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, const wifi_channels_list_t *chanlist, char* buff)
 {
     wifi_hal_dbg_print("%s:%d Enter\n",__func__,__LINE__);
     platform_get_chanspec_list_t platform_get_chanspec_list_fn = get_platform_chanspec_list_fn();
