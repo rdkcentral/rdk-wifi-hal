@@ -2873,7 +2873,10 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
     }
 
     sta_list->macs = calloc(sta_list->num, sizeof(mac_address_t));
-
+    if (sta_list->macs == NULL) {
+        wifi_hal_stats_error_print("%s:%d Memory allocation failed\n", __func__, __LINE__);
+        goto error;
+    }
     if (tb_vendor[RDK_VENDOR_ATTR_STA_LIST] == NULL) {
         wifi_hal_stats_error_print("%s:%d STA list data is missing\n", __func__, __LINE__);
         goto error;
@@ -2904,8 +2907,10 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 
 error:
-    free(sta_list->macs);
-    sta_list->macs = NULL;
+    if (sta_list->macs != NULL) {
+        free(sta_list->macs);
+        sta_list->macs = NULL;
+    }
     sta_list->num = 0;
     return NL_SKIP;
 }
