@@ -2974,7 +2974,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
 int parsertattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
 {
 
-    if ((tb == NULL) && (rta == NULL)) {
+    if ((tb == NULL) || (rta == NULL)) {
         return -1;
     }
 
@@ -5641,7 +5641,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     }
 
     if (tb[NL80211_ATTR_WIPHY_NAME]) {
-        strcpy(radio->name, nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]));
+        snprintf(radio->name, sizeof(radio->name), "%s", nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]));
     }
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
