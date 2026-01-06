@@ -29,6 +29,7 @@
 #include <inttypes.h>
 #include <errno.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <net/if_arp.h>
 #include <arpa/inet.h>
 #include <linux/filter.h>
@@ -559,7 +560,10 @@ int dpp_build_connector(wifi_device_dpp_context_t *dpp_ctx, char* connector, boo
         x = recfg->x;
         y = recfg->y;
     } else {
-        EC_POINT_get_affine_coordinates_GFp(instance->group, instance->responder_proto_pt, instance->x, instance->y, instance->bnctx);
+        if (!EC_POINT_get_affine_coordinates_GFp(instance->group, instance->responder_proto_pt, instance->x, instance->y, instance->bnctx)) {
+            printf("%s:%d Could not get affine coordinates\n", __func__, __LINE__);
+            return -1;
+        }
         x = instance->x;
         y = instance->y;
     }
@@ -695,7 +699,7 @@ void dpp_build_config(wifi_device_dpp_context_t *ctx, char* str)
 
 	/*discovery: ssid*/
 	cJSON_AddItemToObject(root, "discovery", discovery = cJSON_CreateObject());
-	if(obj->discovery)
+	if (obj->discovery[0] != '\0')
 		cJSON_AddStringToObject(discovery, "ssid", obj->discovery);
 
 	/*cred*/
@@ -1207,7 +1211,10 @@ int compute_reconfig_encryption_key(wifi_dpp_instance_t *instance)
     unsigned int primelen, offset;
     unsigned char salt[SHA512_DIGEST_LENGTH];
 
-	EC_POINT_get_affine_coordinates_GFp(instance->group, instance->M, instance->m, instance->n, instance->bnctx);
+	if (!EC_POINT_get_affine_coordinates_GFp(instance->group, instance->M, instance->m, instance->n, instance->bnctx)) {
+		printf("%s:%d Could not get affine coordinates\n", __func__, __LINE__);
+        return -1;
+	}
     primelen = BN_num_bytes(instance->prime);
     
     memset(m, 0, primelen);
@@ -3058,16 +3065,18 @@ wifi_dppCancel(wifi_device_dpp_context_t *ctx)
 
 wifi_dpp_session_data_t *create_dpp_reconfig_session_instance(wifi_device_dpp_context_t *ctx)
 {
-        wifi_dpp_session_data_t    *data = NULL;
-	time_t t;
+    wifi_dpp_session_data_t    *data = NULL;
+	int fd;
 
 	data = &ctx->session_data;
 
-	srand((unsigned int) time(&t));
+    fd = open("/dev/urandom", O_RDONLY);
+    if (fd != -1) {
+        (void)read(fd, &data->u.reconfig_data.tran_id[0], sizeof(data->u.reconfig_data.tran_id[0]));
+        close(fd);
+    }
 
-	data->u.reconfig_data.tran_id[0] = rand();
-
-        return data;
+    return data;
 }
 
 int
@@ -3114,7 +3123,11 @@ wifi_dppReconfigInitiate(wifi_device_dpp_context_t *ctx)
 
     tlv = (wifi_tlv_t *)public_action_frame->public_action_body.attrib;
 
-	data->u.reconfig_data.tran_id[retry_cnt] = rand();
+    int fd = open("/dev/urandom", O_RDONLY);
+    if (fd != -1) {
+        (void)read(fd, &data->u.reconfig_data.tran_id[retry_cnt], sizeof(data->u.reconfig_data.tran_id[retry_cnt]));
+        close(fd);
+    }
 	wifi_dpp_dbg_print("%s:%d Building TLV transaction id: %d \n", __func__, __LINE__,data->u.reconfig_data.tran_id[retry_cnt]);
     tlv = set_tlv((unsigned char *)tlv, wifi_dpp_attrib_id_transaction_id, sizeof(unsigned char), &data->u.reconfig_data.tran_id[retry_cnt]);
     tlv_len += (sizeof(unsigned char) + 4);
