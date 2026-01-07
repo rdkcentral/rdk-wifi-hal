@@ -8020,7 +8020,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         return -1;
     }
 
-#if (defined(EASY_MESH_NODE) || defined(EASY_MESH_COLOCATED_NODE))
+#if defined(EASY_MESH_NODE)
     if (is_wifi_hal_vap_mesh_sta(vap->vap_index)) {
         // Enable multi_ap_backhaul_sta for mesh sta connection
         interface->wpa_s.current_ssid->multi_ap_backhaul_sta = 1;
@@ -8028,7 +8028,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             __func__, __LINE__, interface->wpa_s.current_ssid->multi_ap_backhaul_sta,
             interface->name);
     }
-#endif // EASY_MESH_NODE || EASY_MESH_COLOCATED_NODE
+#endif // EASY_MESH_NODE
 
     update_wpa_sm_params(interface);
     init_wpa_sm_param(interface);
