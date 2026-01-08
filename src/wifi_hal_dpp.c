@@ -56,6 +56,7 @@
 #include <wifi_hal_rdk_framework.h>
 #include <collection.h>
 #include <cJSON.h>
+#include <limits.h>
 
 #define printf wifi_dpp_dbg_print
 
@@ -435,7 +436,7 @@ EC_POINT *dpp_build_point_from_connector_string(wifi_device_dpp_context_t *ctx, 
 	}
 
 	ptr++;
-	strcpy(connector_encoded, ptr);
+	snprintf(connector_encoded, sizeof(connector_encoded), "%s", ptr);
 	if ((ptr = strchr(connector_encoded, '.')) == NULL) {
 		printf("%s:%d: Wrong connector format\n", __func__, __LINE__);
 		return NULL;	
@@ -1623,6 +1624,10 @@ void delete_dpp_session_instance(wifi_device_dpp_context_t *ctx)
 
 int delete_dpp_reconfig_context(unsigned int ap_index, wifi_dpp_reconfig_instance_t *instance)
 {
+	if (instance == NULL) {
+		printf("%s:%d:Invalid Argument\n", __func__, __LINE__);
+		return RETURN_ERR;
+	}
 	if (instance->bnctx != NULL) {
 		BN_CTX_free(instance->bnctx);
 	}
@@ -1647,9 +1652,7 @@ int delete_dpp_reconfig_context(unsigned int ap_index, wifi_dpp_reconfig_instanc
 		EC_POINT_free(instance->pt);
 	}
 	
-	if (instance != NULL) {
-		free(instance);
-	}
+	free(instance);
 
 	return RETURN_OK;
 }
@@ -1756,6 +1759,10 @@ int wifi_dppCreateReconfigContext(unsigned int ap_index, char *net_access_key, w
 
 int delete_dpp_csign_instance(unsigned int ap_index, wifi_dpp_csign_instance_t *instance)
 {
+	if (instance == NULL) {
+		printf("%s:%d:Invalid Argument\n", __func__, __LINE__);
+		return RETURN_ERR;
+	}
 	if (instance->bnctx != NULL) {
 		BN_CTX_free(instance->bnctx);
 	}
@@ -1784,9 +1791,7 @@ int delete_dpp_csign_instance(unsigned int ap_index, wifi_dpp_csign_instance_t *
 		free(instance->bn);
 	}
 	
-	if (instance != NULL) {
-		free(instance);
-	}
+	free(instance);
 	
 	return RETURN_OK;
 
@@ -2825,6 +2830,11 @@ INT wifi_dppSendConfigResponse(wifi_device_dpp_context_t *ctx)
     tlv_len += 5;
 
     wrapped_len = set_config_frame_wrapped_data(config_response_frame->rsp_body, tlv_len, instance, ctx);
+    if (wrapped_len == UINT_MAX) {
+        ctx->activation_status = ActStatus_Failed;
+        printf("%s:%d Invalid wrapped_len\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
     tlv_len += (wrapped_len + 4);
 
     config_response_frame->rsp_len = tlv_len;
