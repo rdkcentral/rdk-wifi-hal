@@ -10627,8 +10627,8 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
         [NL80211_BSS_PARENT_BSSID] = { .type = NLA_UNSPEC },
         [NL80211_BSS_LAST_SEEN_BOOTTIME] = { .type = NLA_U64 },
 #ifdef IGNITE_SCAN_PARAMS
-        [NL80211_BSS_NOISE] = { .type = NLA_U8 },
-        [NL80211_BSS_SNR] = { .type = NLA_U8 },
+        [NL80211_BSS_NOISE] = { .type = NLA_U32 },
+        [NL80211_BSS_SNR] = { .type = NLA_U32 },
         [NL80211_BSS_CU] = { .type = NLA_U8 },
 #endif
     };
@@ -10752,12 +10752,12 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     wifi_hal_stats_dbg_print(" SREESH noise attribute: %p snr attribute: %p cu attribute: %p\n", bss[NL80211_BSS_NOISE], bss[NL80211_BSS_SNR], bss[NL80211_BSS_CU]);
     // - noise
     if (bss[NL80211_BSS_NOISE]) {
-        int noise = nla_get_u8(bss[NL80211_BSS_NOISE]);
-        scan_info_ap->noise = noise - 256;
+        int noise = nla_get_u32(bss[NL80211_BSS_NOISE]);
+        scan_info_ap->noise = noise;
         wifi_hal_stats_dbg_print("SREESH noise: %d\n", scan_info_ap->noise);
     }
     if (bss[NL80211_BSS_SNR]) {
-        uint8_t snr = nla_get_u8(bss[NL80211_BSS_SNR]);
+        int snr = nla_get_u32(bss[NL80211_BSS_SNR]);
         scan_info_ap->snr = snr;
         wifi_hal_stats_dbg_print("SREESH snr: %d\n", scan_info_ap->snr);
     }
