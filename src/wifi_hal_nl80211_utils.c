@@ -41,13 +41,12 @@
 #include "wifi_hal_priv.h"
 #include <cjson/cJSON.h>
 
+static wifi_interface_name_idex_map_t *interface_index_map = NULL;
+
 #ifdef CONFIG_WIFI_EMULATOR
 #define MAX_CLIENTS 3
-static wifi_interface_name_idex_map_t *interface_index_map = NULL;
 #else
 #define INTERFACE_MAP_JSON "/nvram/InterfaceMap.json"
-
-static wifi_interface_name_idex_map_t *interface_index_map;
 static unsigned int interface_index_map_size;
 
 static wifi_interface_name_idex_map_t static_interface_index_map[] = {
