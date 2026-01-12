@@ -10749,22 +10749,22 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     }
 
 #ifdef IGNITE_SCAN_PARAMS
-    wifi_hal_stats_dbg_print(" SREESH noise attribute: %p snr attribute: %p cu attribute: %p\n", bss[NL80211_BSS_NOISE], bss[NL80211_BSS_SNR], bss[NL80211_BSS_CU]);
+    wifi_hal_stats_dbg_print(" noise attribute: %p snr attribute: %p cu attribute: %p\n", bss[NL80211_BSS_NOISE], bss[NL80211_BSS_SNR], bss[NL80211_BSS_CU]);
     // - noise
     if (bss[NL80211_BSS_NOISE]) {
         int noise = nla_get_u32(bss[NL80211_BSS_NOISE]);
         scan_info_ap->noise = noise;
-        wifi_hal_stats_dbg_print("SREESH noise: %d\n", scan_info_ap->noise);
+        wifi_hal_stats_dbg_print("noise: %d\n", scan_info_ap->noise);
     }
     if (bss[NL80211_BSS_SNR]) {
         int snr = nla_get_u32(bss[NL80211_BSS_SNR]);
         scan_info_ap->snr = snr;
-        wifi_hal_stats_dbg_print("SREESH snr: %d\n", scan_info_ap->snr);
+        wifi_hal_stats_dbg_print("snr: %d\n", scan_info_ap->snr);
     }
     if (bss[NL80211_BSS_CU]) {
         uint8_t cu = nla_get_u8(bss[NL80211_BSS_CU]);
         scan_info_ap->chan_utilization = cu;
-        wifi_hal_stats_dbg_print("SREESH chan_utilization: %d\n", scan_info_ap->chan_utilization);
+        wifi_hal_stats_dbg_print("chan_utilization: %d\n", scan_info_ap->chan_utilization);
     }
 #else
     // wifi_hal_dbg_print("WARNING: NL80211_BSS_NOISE is not defined! Need to update header nl80211.h\n");
@@ -10792,7 +10792,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
         // Wildcard STA VAP SSIDs cannot be used to set the backhaul BSSID
         if (strcmp(scan_info_ap->ssid, vap->u.sta_info.ssid) == 0 &&
             strlen(vap->u.sta_info.ssid) > 0) {
-            wifi_hal_stats_dbg_print("%s:%d: SREESH [SCAN] found backhaul bssid:%s rssi:%d snr = %d chan_utilization = %d noise = %d on freq:%d for ssid:%s\n", __func__, __LINE__,
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d snr = %d chan_utilization = %d noise = %d on freq:%d for ssid:%s\n", __func__, __LINE__,
                         to_mac_str(bssid, bssid_str), scan_info_ap->rssi, scan_info_ap->snr, scan_info_ap->chan_utilization, scan_info_ap->noise, scan_info_ap->freq, scan_info_ap->ssid);
             memcpy(vap->u.sta_info.bssid, bssid, sizeof(bssid_t));
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
@@ -10837,7 +10837,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
 
     // - create or update the scan info in 'scan_info_map'
     if (scan_info_ap->ssid[0] != '\0') {
-        wifi_hal_stats_dbg_print("%s:%d: SREESH [SCAN] found bss:%s rssi:%d snr = %d chan_utilization = %d noise = %d ssid:%s on freq:%d \n",
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] found bss:%s rssi:%d snr = %d chan_utilization = %d noise = %d ssid:%s on freq:%d \n",
             __func__, __LINE__, to_mac_str(bssid, bssid_str), scan_info_ap->rssi,
             scan_info_ap->snr, scan_info_ap->chan_utilization, scan_info_ap->noise, scan_info_ap->ssid, scan_info_ap->freq);
         wifi_bss_info_t *scan_info = NULL;
