@@ -37,17 +37,19 @@
 #include <string.h>
 #endif // defined (ENABLED_EDPD)
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
-#include <rdk_nl80211_hal.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
+    defined(RDKB_ONE_WIFI_PROD)
 #include <fcntl.h>
+#include <rdk_nl80211_hal.h>
 #include <semaphore.h>
 #include <stdint.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
-#elif defined(SCXER10_PORT)
+#elif defined(SCXER10_PORT) || defined(TCHCBRV2_PORT)
 #include <rdk_nl80211_hal.h>
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
+#endif /* TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXF10_PORT || TCHCBRV2_PORT ||
+          RDKB_ONE_WIFI_PROD */
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
     defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
@@ -68,7 +70,8 @@
 #else
 #include <wifi/wlioctl.h>
 #endif
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT ||
+       // SCXF10_PORT || RDKB_ONE_WIFI_PROD
 
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
 static bool l_eht_set = false;
@@ -1851,6 +1854,10 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
 }
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
+    defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT)
+// ToDo: Add Beacon rate NL support for HUB6
+
 int nl_set_beacon_rate_ioctl(int vap_index, int beacon_rate)
 {
     struct nlattr *nlattr_vendor;
@@ -1860,29 +1867,32 @@ int nl_set_beacon_rate_ioctl(int vap_index, int beacon_rate)
 
     interface = get_interface_by_vap_index(vap_index);
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: failed to get interface for vap index: %d\n",
-            __func__, __LINE__, vap_index);
+        wifi_hal_error_print("%s:%d: failed to get interface for vap index: %d\n", __func__,
+            __LINE__, vap_index);
         return RETURN_ERR;
     }
 
-    wifi_hal_dbg_print("%s:%d: Setting beacon rate %d for vap_index:%d\n", __func__,
-        __LINE__, beacon_rate, vap_index);
-    
+    wifi_hal_dbg_print("%s:%d: Setting beacon rate %d for vap_index:%d\n", __func__, __LINE__,
+        beacon_rate, vap_index);
+
     /* Per requirement on wifi_setApBeaconRate, user shall only select on of the following
      * rate as beacon rate
      * "1Mbps"; "5.5Mbps"; "6Mbps"; "2Mbps"; "11Mbps"; "12Mbps"; "24Mbps"*/
     if (beacon_rate == 1 || beacon_rate == 2 || beacon_rate == 5.5 || beacon_rate == 6 ||
         beacon_rate == 11 || beacon_rate == 12 || beacon_rate == 24) {
-            // BCM expects rate in 500 Kbps units (×2)
-            beacon_rate = beacon_rate * 2;
-            wifi_hal_dbg_print("%s:%d: Setting beacon rate to %d (in units of 500kbps) for vap_index:%d\n",
-                __func__, __LINE__, beacon_rate, vap_index);
+        // BCM expects rate in 500 Kbps units (×2)
+        beacon_rate = beacon_rate * 2;
+        wifi_hal_dbg_print(
+            "%s:%d: Setting beacon rate to %d (in units of 500kbps) for vap_index:%d\n", __func__,
+            __LINE__, beacon_rate, vap_index);
     } else {
-        wifi_hal_error_print("%s:%d: Invalid beacon rate:%d for vap_index:%d\n", __func__, __LINE__, beacon_rate, vap_index);
+        wifi_hal_error_print("%s:%d: Invalid beacon rate:%d for vap_index:%d\n", __func__, __LINE__,
+            beacon_rate, vap_index);
         return RETURN_ERR;
     }
 
-    msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST, RDK_VENDOR_NL80211_SUBCMD_SET_BEACON_RATE);
+    msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
+        RDK_VENDOR_NL80211_SUBCMD_SET_BEACON_RATE);
     if (msg == NULL) {
         wifi_hal_error_print("%s:%d: Failed to create NL command\n", __func__, __LINE__);
         return RETURN_ERR;
@@ -1900,13 +1910,15 @@ int nl_set_beacon_rate_ioctl(int vap_index, int beacon_rate)
 
     ret = nl80211_send_and_recv(msg, NULL, &beacon_rate, NULL, NULL);
     if (ret != RETURN_OK) {
-        wifi_hal_error_print("%s:%d: failed to set beacon_rate=%d for vap_index=%d, err: %d (%s)\n", __func__,
-            __LINE__, beacon_rate, vap_index, errno, strerror(errno));
+        wifi_hal_error_print("%s:%d: failed to set beacon_rate=%d for vap_index=%d, err: %d (%s)\n",
+            __func__, __LINE__, beacon_rate, vap_index, errno, strerror(errno));
         return RETURN_ERR;
     }
 
     return RETURN_OK;
 }
+#endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT)
+         || defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT) */
 
 int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 {
@@ -1962,18 +1974,24 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
                 map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl);
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
-            wifi_hal_dbg_print("%s:%d: beacon rate for vap_index:%d is %d\n", __func__,
-                __LINE__, map->vap_array[index].vap_index,
-                map->vap_array[index].u.bss_info.beaconRate);
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
+    defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT)
+            // ToDo: Add Beacon rate NL support for HUB6
+            wifi_hal_dbg_print("%s:%d: beacon rate for vap_index:%d is %d\n", __func__, __LINE__,
+                map->vap_array[index].vap_index, map->vap_array[index].u.bss_info.beaconRate);
             int beacon_rate = 0;
-            beacon_rate = convert_enum_beaconrate_to_int(map->vap_array[index].u.bss_info.beaconRate);
+            beacon_rate = convert_enum_beaconrate_to_int(
+                map->vap_array[index].u.bss_info.beaconRate);
             wifi_hal_dbg_print("%s:%d: converted beacon rate for vap_index:%d is %d\n", __func__,
                 __LINE__, map->vap_array[index].vap_index, beacon_rate);
-            if (nl_set_beacon_rate_ioctl(map->vap_array[index].vap_index, beacon_rate) != RETURN_OK) {
-                wifi_hal_error_print("%s:%d: Failed to set beacon rate %d for vap_index:%d\n", __func__,
-                    __LINE__, beacon_rate, map->vap_array[index].vap_index);
+            if (nl_set_beacon_rate_ioctl(map->vap_array[index].vap_index, beacon_rate) !=
+                RETURN_OK) {
+                wifi_hal_error_print("%s:%d: Failed to set beacon rate %d for vap_index:%d\n",
+                    __func__, __LINE__, beacon_rate, map->vap_array[index].vap_index);
                 return RETURN_ERR;
             }
+#endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) 
+         || defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT) */
 
             prepare_param_name(param_name, interface_name, "_akm");
             memset(temp_buff, 0 ,sizeof(temp_buff));
@@ -3798,7 +3816,7 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
     defined(SKYSR213_PORT) || defined(SCXF10_PORT)
     static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || SKYSR213_PORT
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || SKYSR213_PORT || SCXF10_PORT
 #if defined(TCHCBRV2_PORT)
     static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x01, 0x00, 0x08, 0x12, 0x00, 0x10 };
 #endif // TCHCBRV2_PORT
@@ -3806,7 +3824,8 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT) || defined(SCXF10_PORT)
     static const u8 he_mcs[HE_MAX_MCS_CAPAB_SIZE] = { 0xaa, 0xff, 0xaa, 0xff };
     static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x1b, 0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT ||
+       // SKYSR213_PORT || SCXF10_PORT
 #if defined(TCXB7_PORT) || defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT)
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x0f, 0x03, 0x95,
         0x18, 0x00, 0xcc, 0x00 };
@@ -4150,7 +4169,8 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 {
     return RETURN_OK;
 }
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT ||
+       // SCXF10_PORT || RDKB_ONE_WIFI_PROD
 
 int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
 {
