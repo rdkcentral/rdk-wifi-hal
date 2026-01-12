@@ -50,7 +50,7 @@ static wifi_interface_name_idex_map_t *interface_index_map = NULL;
 static wifi_interface_name_idex_map_t *interface_index_map;
 static unsigned int interface_index_map_size;
 
-wifi_interface_name_idex_map_t static_interface_index_map[] = {
+static wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #ifdef RASPBERRY_PI_PORT
 #if defined(PLATFORM_LINUX)
     {0, 0,  "wlan0",   "",  "brlan0",    0,    0,      "private_ssid_2g"},
