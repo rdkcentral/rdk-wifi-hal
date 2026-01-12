@@ -47,10 +47,10 @@ static wifi_interface_name_idex_map_t *interface_index_map = NULL;
 #else
 #define INTERFACE_MAP_JSON "/nvram/InterfaceMap.json"
 
-static const wifi_interface_name_idex_map_t *interface_index_map;
+static wifi_interface_name_idex_map_t *interface_index_map;
 static unsigned int interface_index_map_size;
 
-static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
+wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #ifdef RASPBERRY_PI_PORT
 #if defined(PLATFORM_LINUX)
     {0, 0,  "wlan0",   "",  "brlan0",    0,    0,      "private_ssid_2g"},
@@ -931,6 +931,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -2798,8 +2800,7 @@ void remap_wifi_interface_name_index_map() {
 
     fp = popen("iw list", "r");
     if (parse_wiphy_band_mapping(fp, pcie_index)) {
-        remap_phy_index(interface_index_map, sizeof(interface_index_map)/sizeof(interface_index_map[0]),
-            pcie_index, NUM_RADIOS);
+        remap_phy_index(interface_index_map, interface_index_map_size, pcie_index, NUM_RADIOS);
     }
     pclose(fp);
 }
