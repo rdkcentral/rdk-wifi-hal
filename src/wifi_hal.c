@@ -1058,7 +1058,7 @@ INT wifi_hal_sm_deinit(INT vap_index)
 {
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
     if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: Ravi interface for vap index:%d not found\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d: interface for vap index:%d not found\n", __func__, __LINE__,
             vap_index);
         return RETURN_ERR;
     }
