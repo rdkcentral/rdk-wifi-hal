@@ -1486,16 +1486,16 @@ static void process_event_to_onewifi(const char *ifname,
     wifi_radio_info_t *radio = NULL;
     int radio_index;
     const uint16_t *freq;
-    uint8_t channel = 0;
+    uint8_t primary_channel = 0;
+    uint16_t primary_freq = 0;
 
     get_radio_interface_info_map(radio_map_t);
     callbacks = get_hal_device_callbacks();
 
     if (data && (len == sizeof(*freq))) {
         freq = data;
-        ieee80211_freq_to_chan(*freq, &channel);
     } else {
-        wifi_hal_error_print("%s:%d Failed to process channel from parsed data\n", __func__,
+        wifi_hal_error_print("%s:%d Failed to process frequency from parsed data\n", __func__,
             __LINE__);
     }
 
@@ -1505,16 +1505,21 @@ static void process_event_to_onewifi(const char *ifname,
             radio_index = radio_map_t[i].radio_index;
             radio = get_radio_by_rdk_index(radio_index);
             radio_channel_param.radioIndex = radio_index;
-            radio_channel_param.channel = channel;
             radio_channel_param.channelWidth = radio->oper_param.channelWidth;
             radio_channel_param.op_class = radio->oper_param.operatingClass;
         }
-        wifi_hal_dbg_print("%s:%d RadioIndex:%d channel:%d chwid:%d opclass:%d sub-event:%d\n",
-            __func__, __LINE__, radio_index, radio_channel_param.channel,
-            radio_channel_param.channelWidth, radio_channel_param.op_class,
-            radio_channel_param.sub_event);
     }
+
+    primary_freq = freq_to_primary(*freq, radio_channel_param.channelWidth);
+    ieee80211_freq_to_chan(primary_freq, &primary_channel);
+
+    radio_channel_param.channel = primary_channel;
     radio_channel_param.event = WIFI_EVENT_DFS_RADAR_DETECTED;
+
+    wifi_hal_dbg_print("%s:%d RadioIndex:%d channel:%d chwid:%d opclass:%d sub-event:%d\n",
+        __func__, __LINE__, radio_index, radio_channel_param.channel,
+        radio_channel_param.channelWidth, radio_channel_param.op_class,
+        radio_channel_param.sub_event);
 
     if ((callbacks != NULL) && (callbacks->channel_change_event_callback) &&
         !(radio_channel_param.sub_event == WIFI_EVENT_RADAR_NOP_FINISHED) &&
