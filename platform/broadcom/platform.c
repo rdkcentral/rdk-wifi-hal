@@ -1950,6 +1950,65 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
 }
 #endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+static void platform_rnr_update(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
+{
+    wifi_radio_info_t *radio = get_radio_by_rdk_index(r_index);
+    if (radio == NULL || map == NULL) {
+        return;
+    }
+
+    for (unsigned int index = 0; index < map->num_vaps; index++) {
+        if (map->vap_array[index].vap_mode != wifi_vap_mode_ap) {
+            continue;
+        }
+
+#if defined(CONFIG_IEEE80211BE) && defined(MLO_ENAB)
+        wifi_mld_common_info_t *mld_cmn = &(map->vap_array[index].u.bss_info.mld_info.common_info);
+#endif /* CONFIG_IEEE80211BE */
+
+        if ((radio->oper_param.band == WIFI_FREQUENCY_6_BAND
+#if defined(CONFIG_IEEE80211BE) && defined(MLO_ENAB)
+            || (mld_cmn->mld_enable && mld_cmn->mld_id < MAX_MLD_UNITS)
+#endif /* CONFIG_IEEE80211BE */
+            )) {
+            for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+                wifi_interface_info_t *interface_iter = NULL;
+                wifi_radio_info_t *radio_iter = get_radio_by_rdk_index(radio_index);
+
+                if (radio_iter == NULL) {
+                    continue;
+                }
+
+                hash_map_foreach(radio_iter->interface_map, interface_iter) {
+                    if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap ||
+                        !interface_iter->vap_info.u.bss_info.enabled ||
+                        !interface_iter->vap_info.u.bss_info.hostap_mgt_frame_ctrl ||
+                        interface_iter->vap_info.vap_index == map->vap_array[index].vap_index) {
+                        continue;
+                    }
+
+                    bool update_beacon = radio->oper_param.band == WIFI_FREQUENCY_6_BAND &&
+                        radio_iter->oper_param.band != WIFI_FREQUENCY_6_BAND;
+
+#if defined(CONFIG_IEEE80211BE) && defined(MLO_ENAB)
+                    update_beacon |= mld_cmn->mld_enable &&
+                        interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_enable &&
+                        mld_cmn->mld_id == interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_id;
+#endif /* CONFIG_IEEE80211BE */
+
+                    if (!update_beacon) {
+                        continue;
+                    }
+
+                    ieee802_11_set_beacon(&interface_iter->u.ap.hapd);
+                }
+            }
+        }
+    }
+}
+#endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
+
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
     defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT)
 // ToDo: Add Beacon rate NL support for HUB6
@@ -2336,6 +2395,12 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
     if (_platform_init_done)
         platform_vap_enable_update(map, TRUE);		/* Bring all VAPs up, including MLDs */
 #endif /* CONFIG_IEEE80211BE && XB10_PORT */
+
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    /* Update beacon info of neighboring APs*/
+    platform_rnr_update(r_index, map);
+#endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
+
     return 0;
 }
 
