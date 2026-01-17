@@ -450,11 +450,15 @@ INT wifi_anqpSendResponse(UINT apIndex, mac_address_t sta, unsigned char token, 
                 //8179 +13(max gas frame size = 8192)
                 if (total_length > MAX_BUFF - sizeof(wifi_anqpResponseFrame_t))
                 {
-                    wifi_anqp_dbg_print(1, "%s:%d:%d: Anqp_info length buffer is too big to process returning:    \n", __func__, __LINE__);
+                    wifi_anqp_dbg_print(1, "%s:%d: Anqp_info length buffer is too big to process returning: %d\n", __func__, __LINE__, total_length);
                     break;
                 }
 
                 anqp_info = (wifi_anqp_element_format_t *)malloc(sizeof(wifi_anqp_element_format_t) + elem->len);
+                if (anqp_info == NULL) {
+                    wifi_anqp_dbg_print(1, "%s:%d: malloc failed\n", __func__, __LINE__);
+                    break;
+                }
                 memset((unsigned char *)anqp_info, 0, sizeof(wifi_anqp_element_format_t) + elem->len);
 
                 wifi_anqp_dbg_print(1, "%s:%d: Anqp Element type received:    \n", __func__, __LINE__);
@@ -471,7 +475,6 @@ INT wifi_anqpSendResponse(UINT apIndex, mac_address_t sta, unsigned char token, 
                 {
                     wifi_anqp_dbg_print(1, "%s:%d: freeing anqp_info:    \n", __func__, __LINE__);
                     free(anqp_info);
-                    anqp_info = NULL;
                 }
             }
         }
@@ -485,10 +488,14 @@ INT wifi_anqpSendResponse(UINT apIndex, mac_address_t sta, unsigned char token, 
                 //8179 +13(gas frame header = 8192)
                 if (total_length > MAX_BUFF - sizeof(wifi_anqpResponseFrame_t))
                 {
-                    wifi_anqp_dbg_print(1, "%s:%d:%d: Anqp buffer is too big to process returning:    \n", __func__, __LINE__);
+                    wifi_anqp_dbg_print(1, "%s:%d: Anqp buffer is too big to process returning: %d\n", __func__, __LINE__, total_length);
                     break;
                 }
                 anqp_hs_2_info = (wifi_hs_2_anqp_element_format_t *)malloc(sizeof(wifi_hs_2_anqp_element_format_t) + elem->len);
+                if (anqp_hs_2_info == NULL) {
+                    wifi_anqp_dbg_print(1, "%s:%d: malloc failed\n", __func__, __LINE__);
+                    break;
+                }
                 memset((unsigned char *)anqp_hs_2_info, 0, sizeof(wifi_hs_2_anqp_element_format_t) + elem->len);
                 anqp_hs_2_info->info_id = wifi_anqp_element_name_vendor_specific;
                 anqp_hs_2_info->len = elem->len + 6;
@@ -529,7 +536,6 @@ INT wifi_anqpSendResponse(UINT apIndex, mac_address_t sta, unsigned char token, 
                 {
                     wifi_anqp_dbg_print(1, "%s:%d: freeing anqp_hs_2_info elem-data:    \n", __func__, __LINE__);
                     free(anqp_hs_2_info);
-                    anqp_hs_2_info = NULL;
                 }
             }
         }
@@ -540,7 +546,6 @@ INT wifi_anqpSendResponse(UINT apIndex, mac_address_t sta, unsigned char token, 
             elem->data = NULL;
         }
         free(elem);
-        elem = NULL;
         tmp = head;
         head = head->next;
         free(tmp);
@@ -561,7 +566,6 @@ INT wifi_anqpSendResponse(UINT apIndex, mac_address_t sta, unsigned char token, 
                 elem->data = NULL;
             }
             free(elem);
-            elem = NULL;
         }
         tmp = head;
         head = head->next;
@@ -620,25 +624,25 @@ INT wifi_anqpSendResponse(UINT apIndex, mac_address_t sta, unsigned char token, 
 
     if (total_length == 0)
     {
-        wifi_anqp_dbg_print(1, "total Length is 0 from the list will send frame protocol not supported.\n", __func__, __LINE__);
+        wifi_anqp_dbg_print(1, "%s:%d: total Length is 0 from the list will send frame protocol not supported.\n", __func__, __LINE__);
         anqp_gas_initial_response_frame->gas_resp_body.status = wifi_gas_advertisement_protocol_not_supported;
     }
     else if (total_length > MAX_BUFF - sizeof(wifi_anqpResponseFrame_t))
     {
-        wifi_anqp_dbg_print(1, "%s:%d:%d: Anqp buffer is too big to process we are setting gas response length to zero.\n", __func__, __LINE__);
+        wifi_anqp_dbg_print(1, "%s:%d: Anqp buffer is too big to process: %d, we are setting gas response length to zero.\n", __func__, __LINE__, total_length);
         anqp_gas_initial_response_frame->gas_resp_body.status = wifi_gas_query_response_too_large;
         total_length = 0; //as per spec we need to set response length to zero
     }
     else
     {
-        wifi_anqp_dbg_print(1, "we have a gas query response to fill the buffer\n", __func__, __LINE__);
+        wifi_anqp_dbg_print(1, "%s:%d: we have a gas query response to fill the buffer\n", __func__, __LINE__);
         anqp_gas_initial_response_frame->gas_resp_body.status = wifi_gas_status_success;
     }
 
     anqp_gas_initial_response_frame->rsp_len = total_length;
     memcpy(anqp_gas_initial_response_frame->rsp_body, anqpBuffer, total_length);
 
-   wifi_anqp_dbg_print(1, "we have a gas query response to fill the buffer\n", __func__, __LINE__);
+    wifi_anqp_dbg_print(1, "%s:%d: we have a gas query response to fill the buffer\n", __func__, __LINE__);
 #if !defined (RDK_ONEWIFI) || defined(TCHCBRV2_PORT)
     ULONG hm_channel = 0;
     UINT radioIndex = apIndex % 2;
