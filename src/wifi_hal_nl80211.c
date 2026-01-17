@@ -2826,7 +2826,7 @@ int ovs_add_br(const char *brname)
 {
     wifi_hal_dbg_print("%s:%d ovs-vsctl add-br %s\n", __func__, __LINE__, brname);
     int rc = run_prog("/usr/bin/ovs-vsctl",
-#if !defined(_PLATFORM_RASPBERRYPI_)
+#if !defined(_PLATFORM_RASPBERRYPI_) && !defined(_PLATFORM_BANANAPI_R4_)
                       "--may-exist",
 #endif
                       "add-br", brname);
@@ -2877,7 +2877,7 @@ int ovs_br_add_if(const char *brname, const char *ifname)
 {
     wifi_hal_dbg_print("%s:%d ovs-vsctl add-port %s %s\n", __func__, __LINE__, brname, ifname);
     int rc = run_prog("/usr/bin/ovs-vsctl",
-#if !defined(_PLATFORM_RASPBERRYPI_)
+#if !defined(_PLATFORM_RASPBERRYPI_) && !defined(_PLATFORM_BANANAPI_R4_)
                       "--may-exist",
 #endif
                       "add-port", brname, ifname);
@@ -3302,6 +3302,7 @@ static int phy_info_rates(wifi_radio_info_t *radio, struct hostapd_hw_modes *mod
         return NL_OK;
     }
 
+    mode->num_rates = 0;
     nla_for_each_nested(nl_rate, tb, rem_rate) {
         nla_parse(tb_rate, NL80211_BITRATE_ATTR_MAX, nla_data(nl_rate), nla_len(nl_rate), rate_policy);
         if (!tb_rate[NL80211_BITRATE_ATTR_RATE])
@@ -3321,7 +3322,7 @@ static int phy_info_rates(wifi_radio_info_t *radio, struct hostapd_hw_modes *mod
             continue;
         }
         mode->rates[idx] = nla_get_u32(tb_rate[NL80211_BITRATE_ATTR_RATE]);
-        //wifi_hal_dbg_print("%d ", mode->rates[idx]);
+        //wifi_hal_dbg_print("%d\n", mode->rates[idx]);
         idx++;
     }
 
@@ -4560,11 +4561,15 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     defined(SCXER10_PORT) || defined(SCXF10_PORT)
     int existing_radio_found = 0;
 #endif
+#ifdef CONFIG_WIFI_EMULATOR
+  if (g_wifi_hal.num_radios > MAX_NUM_SIMULATED_CLIENT) {
+#else
 #ifndef FEATURE_SINGLE_PHY
     if (g_wifi_hal.num_radios > MAX_NUM_RADIOS) {
 #else //FEATURE_SINGLE_PHY
     if (g_wifi_hal.num_radios >= MAX_NUM_RADIOS) {
 #endif //FEATURE_SINGLE_PHY
+#endif //CONFIG_WIFI_EMULATOR
         wifi_hal_dbg_print("%s:%d: Returning num radios:%d exceeds MAX:%d\n",
             __func__, __LINE__, g_wifi_hal.num_radios, MAX_NUM_RADIOS);
         return NL_SKIP;
@@ -4631,7 +4636,11 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
     memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
 #else
+#ifdef CONFIG_WIFI_EMULATOR
+    for (int i = 0; i < MAX_NUM_SIMULATED_CLIENT; i++) {
+#else
     for (int i = 0; i < MAX_NUM_RADIOS; i++) {
+#endif
         if (g_wifi_hal.radio_info[i].index == phy_index) {
             radio = &g_wifi_hal.radio_info[i];
             existing_radio_found = 1;
@@ -5253,6 +5262,7 @@ static int phy_info_rates_get_hw_features(struct hostapd_hw_modes *mode, struct 
     if (tb == NULL)
         return NL_OK;
 
+    mode->num_rates = 0;
     nla_for_each_nested(nl_rate, tb, rem_rate) {
         nla_parse(tb_rate, NL80211_BITRATE_ATTR_MAX,
               nla_data(nl_rate), nla_len(nl_rate),
@@ -5285,14 +5295,14 @@ static int phy_info_rates_get_hw_features(struct hostapd_hw_modes *mode, struct 
 
 static int phy_info_handler(struct nl_msg *msg, void *arg)
 {
-    wifi_radio_info_t *radio = (wifi_radio_info_t *)arg;
+    wifi_radio_info_t *radio;
     struct nlattr *tb_msg[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     struct nlattr *nl_band;
     int rem_band;
     enum nl80211_band band = 0;
-#ifdef FEATURE_SINGLE_PHY
     enum nl80211_band radio_nl80211_band_type;
+#ifdef FEATURE_SINGLE_PHY
     int i;
 #endif //FEATURE_SINGLE_PHY
 
@@ -5324,13 +5334,42 @@ static int phy_info_handler(struct nl_msg *msg, void *arg)
     }
 #endif
 
-    wifi_hal_dbg_print("%s:%d: wiphy index:%d name:%s\n", __func__, __LINE__, radio->index,
-        radio->name);
     if (!tb_msg[NL80211_ATTR_WIPHY_BANDS])
         return NL_SKIP;
 
     nla_for_each_nested(nl_band, tb_msg[NL80211_ATTR_WIPHY_BANDS], rem_band) {
         nla_parse(tb_msg, NL80211_BAND_ATTR_MAX, nla_data(nl_band), nla_len(nl_band), NULL);
+
+        if (tb_msg[NL80211_BAND_ATTR_RATES]) {
+#ifdef FEATURE_SINGLE_PHY
+            // Update the right radio with the bit rates in case of single phy
+            for (i = 0; i < g_wifi_hal.num_radios; i++) {
+                radio = &g_wifi_hal.radio_info[i];
+#else //FEATURE_SINGLE_PHY
+            {
+#endif //FEATURE_SINGLE_PHY
+                radio_nl80211_band_type = get_nl80211_band_from_rdk_radio_index(
+                    radio->rdk_radio_index);
+                wifi_hal_dbg_print("%s:%d: wiphy index:%d name:%s rdk_radio_index:%d\n", __func__,
+                    __LINE__, radio->index, radio->name, radio->rdk_radio_index);
+                wifi_hal_dbg_print("%s:%d:band_type:%d radio_band_type:%d processing:%s\n",
+                    __func__, __LINE__, nl_band->nla_type, radio_nl80211_band_type,
+                    ((nl_band->nla_type == radio_nl80211_band_type) ? "yes" : "no"));
+                if (nl_band->nla_type == radio_nl80211_band_type) {
+                    wifi_hal_dbg_print("%s:%d:phy_info_rates being invoked from phy_info_handler\n",
+                        __func__, __LINE__);
+                    phy_info_ht_capa(&radio->hw_modes[radio_nl80211_band_type],
+                        tb_msg[NL80211_BAND_ATTR_HT_CAPA],
+                        tb_msg[NL80211_BAND_ATTR_HT_AMPDU_FACTOR],
+                        tb_msg[NL80211_BAND_ATTR_HT_AMPDU_DENSITY],
+                        tb_msg[NL80211_BAND_ATTR_HT_MCS_SET]);
+                    phy_info_vht_capa(&radio->hw_modes[radio_nl80211_band_type],
+                        tb_msg[NL80211_BAND_ATTR_VHT_CAPA], tb_msg[NL80211_BAND_ATTR_VHT_MCS_SET]);
+                    phy_info_rates(radio, &radio->hw_modes[radio_nl80211_band_type],
+                        radio_nl80211_band_type, tb_msg[NL80211_BAND_ATTR_RATES]);
+                }
+            }
+        }
 
         if (tb_msg[NL80211_BAND_ATTR_FREQS] == NULL) {
             wifi_hal_dbg_print("%s:%d: Frequency attributes not present\n", __func__, __LINE__);
@@ -5666,8 +5705,13 @@ int init_nl80211()
 
     // dump all phy info
     g_wifi_hal.num_radios = 0;
+#ifdef CONFIG_WIFI_EMULATOR
+    memset((unsigned char *)g_wifi_hal.radio_info, 0, MAX_NUM_SIMULATED_CLIENT*sizeof(wifi_radio_info_t));
+    for (int i = 0; i < MAX_NUM_SIMULATED_CLIENT; i++) {
+#else
     memset((unsigned char *)g_wifi_hal.radio_info, 0, MAX_NUM_RADIOS*sizeof(wifi_radio_info_t));
     for (int i = 0; i < MAX_NUM_RADIOS; i++) {
+#endif
         g_wifi_hal.radio_info[i].index = -1;
     }
     init_interface_map();
@@ -5991,7 +6035,26 @@ int nl80211_init_primary_interfaces()
         if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
             wifi_hal_error_print("%s:%d: Error updating %s interface on dev:%d error: %d (%s) \n",
                 __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
-            return -1;
+            if (ret != ENODEV) {
+                // Try updating the mode again after bringing the interface down
+                nl80211_interface_enable(interface->name, false);
+                wifi_hal_dbg_print(
+                    "%s:%d: Updating %s interface after bringing the interface down.\n", __func__,
+                    __LINE__, interface->name);
+                msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0,
+                    NL80211_CMD_SET_INTERFACE);
+                nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
+                ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL);
+                if (ret) {
+                    wifi_hal_error_print("%s:%d: Error updating %s interface even after interface "
+                                         "is down on dev:%d error: %d (%s) \n",
+                        __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
+                    return -1;
+                }
+            } else {
+                // If failure was ENODEV then no need of retrying as the device is not present
+                return -1;
+            }
         }
         nl80211_interface_enable(primary_interface->name, true);
     }
@@ -10521,7 +10584,7 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
 
     wifi_hal_dbg_print("%s:%d: Enter %s %d\n", __func__, __LINE__, to_mac_str(addr, mac_str), reason);
 
-#if defined(_PLATFORM_RASPBERRYPI_)
+#if defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
     wifi_device_callbacks_t *callbacks;
 
     callbacks = get_hal_device_callbacks();
@@ -10531,7 +10594,7 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
             callbacks->disassoc_cb[i](vap->vap_index, to_mac_str(addr, mac_str), to_mac_str(interface->mac, mac_str), WIFI_MGMT_FRAME_TYPE_DISASSOC, reason);
         }
     }
-#endif
+#endif // _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
     if (drv->device_ap_sme) {
         return wifi_sta_remove(interface, addr, 0, reason);
     }
@@ -14351,7 +14414,7 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_KEY);
 
     nla_put_u8(msg, NL80211_ATTR_KEY_IDX, params->key_idx);
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(RDKB_ONE_WIFI_PROD)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_) || defined(RDKB_ONE_WIFI_PROD)
     // NL80211_KEY_DEFAULT_BEACON enum is not defined in broadcom nl80211.h header
     nla_put_flag(msg, wpa_alg_bip(params->alg) ? NL80211_ATTR_KEY_DEFAULT_MGMT : NL80211_ATTR_KEY_DEFAULT);
 #else
@@ -16402,7 +16465,7 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .update_connect_params = wifi_drv_update_connection_params,
     .send_external_auth_status = wifi_drv_send_external_auth_status,
     .set_4addr_mode = wifi_drv_set_4addr_mode,
-#if !defined(PLATFORM_LINUX)
+#if !defined(PLATFORM_LINUX) && !defined(_PLATFORM_BANANAPI_R4_)
     .get_aid = wifi_drv_get_aid,
     .free_aid = wifi_drv_free_aid,
 #endif
