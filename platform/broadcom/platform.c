@@ -1963,12 +1963,12 @@ static void platform_rnr_update(wifi_radio_index_t r_index, wifi_vap_info_map_t 
             continue;
         }
 
-#if defined(CONFIG_IEEE80211BE) && defined(MLO_ENAB)
+#if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
         wifi_mld_common_info_t *mld_cmn = &(map->vap_array[index].u.bss_info.mld_info.common_info);
 #endif /* CONFIG_IEEE80211BE */
 
         if ((radio->oper_param.band == WIFI_FREQUENCY_6_BAND
-#if defined(CONFIG_IEEE80211BE) && defined(MLO_ENAB)
+#if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
             || (mld_cmn->mld_enable && mld_cmn->mld_id < MAX_MLD_UNITS)
 #endif /* CONFIG_IEEE80211BE */
             )) {
@@ -1991,7 +1991,7 @@ static void platform_rnr_update(wifi_radio_index_t r_index, wifi_vap_info_map_t 
                     bool update_beacon = radio->oper_param.band == WIFI_FREQUENCY_6_BAND &&
                         radio_iter->oper_param.band != WIFI_FREQUENCY_6_BAND;
 
-#if defined(CONFIG_IEEE80211BE) && defined(MLO_ENAB)
+#if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
                     update_beacon |= mld_cmn->mld_enable &&
                         interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_enable &&
                         mld_cmn->mld_id == interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_id;
