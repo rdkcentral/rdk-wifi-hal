@@ -7550,18 +7550,51 @@ static int wait_for_csa_completion(wifi_interface_info_t *interface)
 {
     int retry = 20;
     const unsigned int wait_usec = 100000;
+    bool is_mld_enabled = wifi_hal_is_mld_enabled(interface);
 
     while (retry-- > 0) {
-        bool csa_in_progress;
+        bool csa_in_progress = false;
 
-        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-        csa_in_progress = interface->u.ap.hapd.csa_in_progress;
-        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        // For MLD related devices we have to check all links in MLD group
+        if (is_mld_enabled) {
+            wifi_interface_info_t *interface_it;
+
+            for (unsigned int i = 0; i < g_wifi_hal.num_radios; ++i) {
+                wifi_radio_info_t *radio_it = &g_wifi_hal.radio_info[i];
+
+                hash_map_foreach(radio_it->interface_map, interface_it) {
+                    if (!wifi_hal_is_mld_enabled(interface_it)) {
+                        continue;
+                    }
+
+                    if (interface_it->index != interface->index) {
+                        continue;
+                    }
+
+                    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+                    csa_in_progress = interface_it->u.ap.hapd.csa_in_progress;
+                    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+                    if (csa_in_progress) {
+                        break;
+                    }
+                }
+
+                if (csa_in_progress) {
+                    break;
+                }
+            }
+        } else {
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            csa_in_progress = interface->u.ap.hapd.csa_in_progress;
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        }
+
         if (!csa_in_progress) {
             break;
         }
-        wifi_hal_dbg_print("%s:%d: CSA in progress on interface %s, waiting...\n",
-            __func__, __LINE__, interface->name);
+        wifi_hal_dbg_print("%s:%d: CSA in progress on interface %s, waiting...\n", __func__,
+            __LINE__, interface->name);
         usleep(wait_usec);
     }
     if (retry <= 0) {
@@ -7604,10 +7637,6 @@ static int notify_mld_partner_links(wifi_radio_info_t *radio, wifi_interface_inf
 
             if (interface_it->index != interface->index) {
                 continue;
-            }
-
-            if (wait_for_csa_completion(interface_it) < 0) {
-                return -1;
             }
 
             wifi_hal_dbg_print("%s:%d interface: %s switch channel to %d\n", __func__, __LINE__,
