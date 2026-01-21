@@ -1329,11 +1329,7 @@ static int reload_single_vap_configuration(wifi_interface_info_t *interface)
     interface->in_reconf = true;
 
     wifi_hal_info_print("%s:%d: interface:%s disable AP\n", __func__, __LINE__, interface_name);
-    if (nl80211_enable_ap(interface, false) < 0) {
-        wifi_hal_error_print("%s:%d: interface:%s failed to disable AP\n", __func__, __LINE__,
-            interface_name);
-        return -1;
-    }
+    nl80211_enable_ap(interface, false);
     interface->bss_started = false;
 
     wifi_hal_info_print("%s:%d: interface:%s free hostapd data\n", __func__, __LINE__,
@@ -1423,11 +1419,7 @@ static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
             interface_iter_link_id = wifi_hal_get_mld_link_id(interface_iter);
             wifi_hal_info_print("%s:%d: interface:%s link id:%d disable AP\n", __func__, __LINE__,
                 interface_iter_name, interface_iter_link_id);
-            if (nl80211_enable_ap(interface_iter, false) < 0) {
-                wifi_hal_error_print("%s:%d: interface:%s link id:%d failed to disable AP\n",
-                    __func__, __LINE__, interface_iter_name, interface_iter_link_id);
-                return -1;
-            }
+            nl80211_enable_ap(interface_iter, false);
             interface_iter->bss_started = false;
 
             wifi_hal_info_print("%s:%d: interface:%s link id:%d free hostapd data\n", __func__,
