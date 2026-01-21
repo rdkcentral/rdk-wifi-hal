@@ -471,6 +471,21 @@ void qca_getRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
 
 int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface;
+    char interface_name[32];
+    char cmd[DEFAULT_CMD_SIZE];
+    char mode[16];
+
+    radio = get_radio_by_rdk_index(index);
+    interface = wifi_hal_get_vap_interface_by_type(radio, "sta");
+    get_interface_name_from_vap_index(interface->vap->vap_index, interface_name);
+
+
+    qca_getRadioMode(index, operationParam, mode);
+    snprintf(cmd, sizeof(cmd), "cfg80211tool %s mode %s", interface_name, mode);
+    system(cmd);
+    wifi_hal_dbg_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
     return 0;
 }
