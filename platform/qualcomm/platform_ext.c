@@ -478,7 +478,7 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     char mode[16];
 
     radio = get_radio_by_rdk_index(index);
-    interface = wifi_hal_get_vap_interface_by_type(radio, "sta");
+    interface = wifi_hal_get_vap_interface_by_type(radio, "mesh_sta_");
     get_interface_name_from_vap_index(interface->vap_info.vap_index, interface_name);
 
 
