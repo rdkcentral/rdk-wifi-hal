@@ -479,7 +479,7 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
 
     radio = get_radio_by_rdk_index(index);
     interface = wifi_hal_get_vap_interface_by_type(radio, "sta");
-    get_interface_name_from_vap_index(interface->vap->vap_index, interface_name);
+    get_interface_name_from_vap_index(interface->vap_info.vap_index, interface_name);
 
 
     qca_getRadioMode(index, operationParam, mode);
