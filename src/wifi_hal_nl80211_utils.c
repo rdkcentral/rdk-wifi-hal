@@ -1553,18 +1553,18 @@ static const wifi_enum_to_str_map_t wifi_bandwidth_Map[] =
 static const wifi_enum_to_str_map_t wifi_bitrate_Map[] =
 {
     {WIFI_BITRATE_DEFAULT, "default" },
-    {WIFI_BITRATE_1MBPS,   "1.0"     },
-    {WIFI_BITRATE_2MBPS,   "2.0"     },
-    {WIFI_BITRATE_5_5MBPS, "5.5"     },
-    {WIFI_BITRATE_6MBPS,   "6.0"     },
-    {WIFI_BITRATE_9MBPS,   "9.0"     },
-    {WIFI_BITRATE_11MBPS,  "11.0"    },
-    {WIFI_BITRATE_12MBPS,  "12.0"    },
-    {WIFI_BITRATE_18MBPS,  "18.0"    },
-    {WIFI_BITRATE_24MBPS,  "24.0"    },
-    {WIFI_BITRATE_36MBPS,  "36.0"    },
-    {WIFI_BITRATE_48MBPS,  "48.0"    },
-    {WIFI_BITRATE_54MBPS,  "54.0"    },
+    {WIFI_BITRATE_1MBPS,   "1Mbps"     },
+    {WIFI_BITRATE_2MBPS,   "2Mbps"     },
+    {WIFI_BITRATE_5_5MBPS, "5.5Mbps"     },
+    {WIFI_BITRATE_6MBPS,   "6Mbps"     },
+    {WIFI_BITRATE_9MBPS,   "9Mbps"     },
+    {WIFI_BITRATE_11MBPS,  "11Mbps"    },
+    {WIFI_BITRATE_12MBPS,  "12Mbps"    },
+    {WIFI_BITRATE_18MBPS,  "18Mbps"    },
+    {WIFI_BITRATE_24MBPS,  "24Mbps"    },
+    {WIFI_BITRATE_36MBPS,  "36Mbps"    },
+    {WIFI_BITRATE_48MBPS,  "48Mbps"    },
+    {WIFI_BITRATE_54MBPS,  "54Mbps"    },
 };
 
 int get_interface_name_from_radio_index(uint8_t radio_index, char *interface_name)
