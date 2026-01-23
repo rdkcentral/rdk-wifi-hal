@@ -59,6 +59,8 @@
 
 #define MLD_PREFIX "mld"
 #define BACKHAUL_STA_SSID  "we.connect.yellowstone"
+#define BACKHAUL_STA_2G "bhaul-sta-24"
+#define BACKHAUL_STA_5G "bhaul-sta-50"
 #define BHAUL_CREDS_PATH   "/mnt/data/pstore/mesh_bhaul_creds"
 #define BHAUL_CREDS_LEN     50
 #define STATICCPGCFG_LEN    128
@@ -479,23 +481,24 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     radio_band = get_band_info_from_rdk_radio_index(index);
 
     switch (radio_band) {
-        case WIFI_FREQUENCY_2_4_BAND:
-            snprintf(interface_name, sizeof(interface_name), "bhaul-sta-24");
-            break;
+    case WIFI_FREQUENCY_2_4_BAND:
+        snprintf(interface_name, sizeof(interface_name), BACKHAUL_STA_2G);
+        break;
 
-        case WIFI_FREQUENCY_5L_BAND:
-        case WIFI_FREQUENCY_5H_BAND:
-        case WIFI_FREQUENCY_5_BAND:
-            snprintf(interface_name, sizeof(interface_name), "bhaul-sta-50");
-            break;
+    case WIFI_FREQUENCY_5L_BAND:
+    case WIFI_FREQUENCY_5H_BAND:
+    case WIFI_FREQUENCY_5_BAND:
+        snprintf(interface_name, sizeof(interface_name), BACKHAUL_STA_5G);
+        break;
 
-        case WIFI_FREQUENCY_6_BAND:
-            wifi_hal_error_print("%s:%d: 6 GHz band not mapped to a backhaul STA interface\n", __func__, __LINE__);
-            return -1;
+    case WIFI_FREQUENCY_6_BAND:
+        wifi_hal_error_print("%s:%d: 6 GHz band not mapped to a backhaul STA interface\n", __func__,
+            __LINE__);
+        return -1;
 
-        default:
-            wifi_hal_error_print("%s:%d: Unsupported band value: %u\n",__func__, __LINE__, radio_band);
-            return -1;
+    default:
+        wifi_hal_error_print("%s:%d: Unsupported band value: %u\n", __func__, __LINE__, radio_band);
+        return -1;
     }
 
     qca_getRadioMode(index, operationParam, mode);
