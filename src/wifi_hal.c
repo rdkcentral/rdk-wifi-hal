@@ -1054,6 +1054,31 @@ Exit:
         radio->configured = true;
     }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && (HOSTAPD_VERSION >= 210)
+    for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+        wifi_interface_info_t *interface_iter = NULL;
+
+        if (index == radio_index) {
+            continue;
+        }
+        wifi_radio_info_t *radio_iter = get_radio_by_rdk_index(radio_index);
+        if (radio_iter == NULL) {
+            continue;
+        }
+
+        hash_map_foreach(radio_iter->interface_map, interface_iter) {
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap ||
+                !interface_iter->vap_info.u.bss_info.enabled ||
+                !interface_iter->vap_info.u.bss_info.hostap_mgt_frame_ctrl) {
+                continue;
+            }
+
+            ieee802_11_set_beacon(&interface_iter->u.ap.hapd);
+        }
+    }
+
+#endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) &&  (HOSTAPD_VERSION >= 210)
+
     free(old_operationParam);
     old_operationParam = NULL;
     radio->configuration_in_progress = false;
