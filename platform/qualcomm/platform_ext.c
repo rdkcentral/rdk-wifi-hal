@@ -471,21 +471,37 @@ void qca_getRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
 
 int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
-    wifi_radio_info_t *radio;
-    wifi_interface_info_t *interface;
     char interface_name[32];
     char cmd[DEFAULT_CMD_SIZE];
     char mode[16];
+    unsigned int radio_band = 0;
 
-    radio = get_radio_by_rdk_index(index);
-    interface = wifi_hal_get_vap_interface_by_type(radio, "mesh_sta_");
-    if (interface != NULL) {
-        get_interface_name_from_vap_index(interface->vap_info.vap_index, interface_name);
-        qca_getRadioMode(index, operationParam, mode);
-        snprintf(cmd, sizeof(cmd), "cfg80211tool %s mode %s", interface_name, mode);
-        system(cmd);
-        wifi_hal_dbg_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
+    radio_band = get_band_info_from_rdk_radio_index(index);
+
+    switch (radio_band) {
+        case WIFI_FREQUENCY_2_4_BAND:
+            snprintf(interface_name, sizeof(interface_name), "bhaul-sta-24");
+            break;
+
+        case WIFI_FREQUENCY_5L_BAND:
+        case WIFI_FREQUENCY_5H_BAND:
+        case WIFI_FREQUENCY_5_BAND:
+            snprintf(interface_name, sizeof(interface_name), "bhaul-sta-50");
+            break;
+
+        case WIFI_FREQUENCY_6_BAND:
+            wifi_hal_error_print("%s:%d: 6 GHz band not mapped to a backhaul STA interface\n", __func__, __LINE__);
+            return -1;
+
+        default:
+            wifi_hal_error_print("%s:%d: Unsupported band value: %u\n",__func__, __LINE__, radio_band);
+            return -1;
     }
+
+    qca_getRadioMode(index, operationParam, mode);
+    snprintf(cmd, sizeof(cmd), "cfg80211tool %s mode %s", interface_name, mode);
+    system(cmd);
+    wifi_hal_dbg_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
     return 0;
 }
 
