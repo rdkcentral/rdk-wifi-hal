@@ -542,6 +542,7 @@ typedef struct {
     unsigned int  prev_channelWidth;
     bool radio_presence; //True for ECO mode Active radio, false for ECO mode power down sleeping radio
     bool radar_detected;
+    bool configuration_in_progress;
 } wifi_radio_info_t;
 
 typedef wifi_vap_name_t wifi_vap_type_t;

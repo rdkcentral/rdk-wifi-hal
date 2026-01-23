@@ -1013,6 +1013,9 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     }
 
 try_hostap_config_update:
+    if (radio->configured && is_channel_changed) {
+        radio->configuration_in_progress = true;
+    }
     if (radio->configured && radio->oper_param.enable) {
         update_hostap_radio_param(radio, operationParam);
     }
@@ -1053,6 +1056,7 @@ Exit:
 
     free(old_operationParam);
     old_operationParam = NULL;
+    radio->configuration_in_progress = false;
     return RETURN_OK;
 
 reload_config:
@@ -1063,13 +1067,17 @@ reload_config:
     old_operationParam = NULL;
     if (update_hostap_config_params(radio) != RETURN_OK ) {
         wifi_hal_error_print("%s:%d:Failed to update hostap config params, Got into a bad state radioindex : %d\n", __func__, __LINE__, index);
+        radio->configuration_in_progress = false;
         return RETURN_ERR;
     }
 
     if (nl80211_update_wiphy(radio) != 0) {
         wifi_hal_error_print("%s:%d:Failed to update radio : %d\n", __func__, __LINE__, index);
+        radio->configuration_in_progress = false;
         return RETURN_ERR;
     }
+
+    radio->configuration_in_progress = false;
     return RETURN_ERR;
 
 }
@@ -1341,11 +1349,7 @@ static int reload_single_vap_configuration(wifi_interface_info_t *interface)
     interface->in_reconf = true;
 
     wifi_hal_info_print("%s:%d: interface:%s disable AP\n", __func__, __LINE__, interface_name);
-    if (nl80211_enable_ap(interface, false) < 0) {
-        wifi_hal_error_print("%s:%d: interface:%s failed to disable AP\n", __func__, __LINE__,
-            interface_name);
-        return -1;
-    }
+    nl80211_enable_ap(interface, false);
     interface->bss_started = false;
 
     wifi_hal_info_print("%s:%d: interface:%s free hostapd data\n", __func__, __LINE__,
@@ -1435,11 +1439,7 @@ static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
             interface_iter_link_id = wifi_hal_get_mld_link_id(interface_iter);
             wifi_hal_info_print("%s:%d: interface:%s link id:%d disable AP\n", __func__, __LINE__,
                 interface_iter_name, interface_iter_link_id);
-            if (nl80211_enable_ap(interface_iter, false) < 0) {
-                wifi_hal_error_print("%s:%d: interface:%s link id:%d failed to disable AP\n",
-                    __func__, __LINE__, interface_iter_name, interface_iter_link_id);
-                return -1;
-            }
+            nl80211_enable_ap(interface_iter, false);
             interface_iter->bss_started = false;
 
             wifi_hal_info_print("%s:%d: interface:%s link id:%d free hostapd data\n", __func__,
