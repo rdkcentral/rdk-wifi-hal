@@ -917,6 +917,8 @@ void wifi_hal_nl80211_wps_cancel(unsigned int ap_index);
 int     update_channel_flags();
 int     handle_public_action_frame(INT ap_index, mac_address_t sta_mac, wifi_publicActionFrameHdr_t *ppublic_hdr, UINT len);
 int     nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wifi_interface_info_t **interface);
+int     nl80211_add_vlan(const char *if_name, int vid, const char *vlan_if_name);
+int     nl80211_remove_vlan(const char *if_name);
 int     nl80211_enable_ap(wifi_interface_info_t *interface, bool enable);
 int     nl80211_kick_device(wifi_interface_info_t *interface, mac_address_t mac);
 int     nl80211_create_bridge(const char *if_name, const char *br_name);
