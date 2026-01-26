@@ -2228,7 +2228,6 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             if (wl_iovar_getint(interface_name, "force_bcn_rspec", &current_beacon_rate) < 0) {
                 wifi_hal_error_print("%s:%d Failed to get current beacon rate for interface: %s\n", __func__, __LINE__,
                     interface_name);
-                return RETURN_ERR;
             }
 
             /* Deal with WL_RSPEC_RATE_MASK -> 0xff to be able to convert into int value (backward compativility)
@@ -2243,7 +2242,9 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
                         __func__, __LINE__, beacon_rate, map->vap_array[index].vap_index);
                     return RETURN_ERR;
                 }
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
                 need_down = TRUE;
+#endif
             }
 #endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) 
          || defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT) */
