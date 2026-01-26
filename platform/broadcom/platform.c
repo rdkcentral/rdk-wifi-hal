@@ -867,10 +867,10 @@ void platform_mlo_post_init(void)
 {
     wifi_hal_info_print("### %s: mlo_init_map=%d mlo_radio_map=%d ###\n", __func__, mlo_init_map,
         mlo_radio_map);
+    platform_radio_up(-1, TRUE); /* Bring all radios up */
     if (mlo_init_map != mlo_radio_map) {
         return;
     }
-    platform_radio_up(-1, TRUE);
     platform_mlo_up();
 }
 #endif /* CONFIG_IEEE80211BE && XB10_PORT && MLO_ENAB */
