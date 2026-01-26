@@ -41,16 +41,15 @@
 #include "wifi_hal_priv.h"
 #include <cjson/cJSON.h>
 
+static wifi_interface_name_idex_map_t *interface_index_map = NULL;
+
 #ifdef CONFIG_WIFI_EMULATOR
 #define MAX_CLIENTS 3
-static wifi_interface_name_idex_map_t *interface_index_map = NULL;
 #else
 #define INTERFACE_MAP_JSON "/nvram/InterfaceMap.json"
-
-static const wifi_interface_name_idex_map_t *interface_index_map;
 static unsigned int interface_index_map_size;
 
-static const wifi_interface_name_idex_map_t static_interface_index_map[] = {
+static wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #ifdef RASPBERRY_PI_PORT
 #if defined(PLATFORM_LINUX)
     {0, 0,  "wlan0",   "",  "brlan0",    0,    0,      "private_ssid_2g"},
@@ -931,6 +930,8 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
@@ -2718,7 +2719,6 @@ static int find_country_code_match(const char *const cc[], const char *const cou
     return RETURN_ERR;
 }
 #ifdef RDKB_ONE_WIFI_PROD
-#define NUM_RADIOS 3
 
 static bool parse_wiphy_band_mapping(FILE *fp, int *pcie_index) {
     char line[LINE_MAX];
@@ -2746,13 +2746,13 @@ static bool parse_wiphy_band_mapping(FILE *fp, int *pcie_index) {
                 int band_num;
                 if (sscanf(trimmed, "Band %d:", &band_num) == 1) {
                     --band_num; /* The iw tool prints nl_band->nla_type + 1 */
-                    if (curr_phy_idx < NUM_RADIOS &&
+                    if (curr_phy_idx < MAX_NUM_RADIOS &&
                         ((band_num < NUM_NL80211_BANDS) && (band_num >= 0)))
                         pcie_index[curr_phy_idx] = ((band_num == NL80211_BAND_6GHZ) ? 2 : band_num);
                     else {
                         wifi_hal_error_print("%s:%d: Recieved phy_index:%d Num Radios:%d \
                             band_num:%d NUM_NL80211_BANDS:%d\n", __func__, __LINE__, \
-                            curr_phy_idx, NUM_RADIOS, band_num, NUM_NL80211_BANDS);
+                            curr_phy_idx, MAX_NUM_RADIOS, band_num, NUM_NL80211_BANDS);
                         return false;
                     }
                 } else {
@@ -2794,12 +2794,11 @@ static void remap_phy_index(wifi_interface_name_idex_map_t *map, int map_size, c
 
 void remap_wifi_interface_name_index_map() {
     FILE *fp;
-    int pcie_index[NUM_RADIOS] = {-1, -1, -1};
+    int pcie_index[MAX_NUM_RADIOS] = {-1, -1, -1};
 
     fp = popen("iw list", "r");
     if (parse_wiphy_band_mapping(fp, pcie_index)) {
-        remap_phy_index(interface_index_map, sizeof(interface_index_map)/sizeof(interface_index_map[0]),
-            pcie_index, NUM_RADIOS);
+        remap_phy_index(interface_index_map, interface_index_map_size, pcie_index, MAX_NUM_RADIOS);
     }
     pclose(fp);
 }
