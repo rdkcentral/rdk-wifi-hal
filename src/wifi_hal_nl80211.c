@@ -6971,6 +6971,12 @@ int init_nl80211()
     }
     init_interface_map();
 
+    #ifdef RDKB_ONE_WIFI_PROD
+    /* Remap the interfaces depending on the Wiphy enumeration
+    * in the kernel */
+    remap_wifi_interface_name_index_map();
+    #endif /* RDKB_ONE_WIFI_PROD */
+
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
     if (msg == NULL) {
         return -1;
@@ -17180,7 +17186,7 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
 {
 #if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     wifi_radio_info_t *radio;
-    wifi_radio_operationParam_t radio_param;
+    wifi_radio_operationParam_t *radio_param = NULL;
     u8 oper_centr_freq_seg0_idx = 0;
     u8 oper_centr_freq_seg1_idx = 0;
     int dfs_start = 52, dfs_end = 144;
@@ -17207,9 +17213,14 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
 
     radio->radar_detected = true;
 
-    radio_param = radio->oper_param;
+    radio_param = (wifi_radio_operationParam_t *)malloc(sizeof(wifi_radio_operationParam_t));;
+    if (radio_param == NULL) {
+        wifi_hal_error_print("%s:%d: malloc failed\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    memcpy((unsigned char *)radio_param, (unsigned char *)&radio->oper_param, sizeof(wifi_radio_operationParam_t));
     // downgrade bandwidth since 160MHz may not be available
     if (bandwidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
         orig_chan_width = hostapd_get_oper_chwidth(interface->u.ap.hapd.iconf);
@@ -17218,23 +17229,23 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
         interface->u.ap.iface.conf->secondary_channel = get_sec_channel_offset(radio, freq);
     }
 
-    radio_param.channel = get_non_dfs_chan(interface, &oper_centr_freq_seg0_idx,
+    radio_param->channel = get_non_dfs_chan(interface, &oper_centr_freq_seg0_idx,
         &oper_centr_freq_seg1_idx, &sec_chan_offset);
-    radio_param.channelWidth = bandwidth;
+    radio_param->channelWidth = bandwidth;
 
     if (bandwidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
         wifi_channelBandwidth_t Chan_width_80MHz = WIFI_CHANNELBANDWIDTH_80MHZ;
         wifi_hal_info_print("%s:%d Setting bandwidth to 80MHz\n", __func__, __LINE__);
-        radio_param.channelWidth = Chan_width_80MHz;
+        radio_param->channelWidth = Chan_width_80MHz;
         // restore original bandwidth to avoid beacon change before channel switch
         hostapd_set_oper_chwidth(interface->u.ap.hapd.iconf, orig_chan_width);
         interface->u.ap.iface.conf->secondary_channel = orig_secondary_chan;
     }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-    wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d \n", radio_param.channel, oper_centr_freq_seg0_idx, oper_centr_freq_seg1_idx, sec_chan_offset);
+    wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d \n", radio_param->channel, oper_centr_freq_seg0_idx, oper_centr_freq_seg1_idx, sec_chan_offset);
 
-    if ( wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, &radio_param) ) {
+    if ( wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, radio_param) ) {
         wifi_hal_error_print("%s %d wifi_hal_setRadioOperatingParameters failed \n", __FUNCTION__, __LINE__);
     }
 
@@ -17243,6 +17254,8 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
     }
 
     dfs_chan_change_event(interface->vap_info.radio_index, radio->oper_param.channel, radio->oper_param.channelWidth, radio->oper_param.operatingClass);
+    free(radio_param);
+    radio_param = NULL;
 #endif /* defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) */  
 
     return RETURN_OK;
