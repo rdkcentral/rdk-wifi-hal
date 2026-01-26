@@ -37,6 +37,7 @@
 #include <string.h>
 #endif // defined (ENABLED_EDPD)
 
+#include <sys/stat.h>
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
     defined(RDKB_ONE_WIFI_PROD)
 #include <fcntl.h>
@@ -44,7 +45,6 @@
 #include <semaphore.h>
 #include <stdint.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #elif defined(SCXER10_PORT) || defined(TCHCBRV2_PORT)
 #include <rdk_nl80211_hal.h>
