@@ -2171,7 +2171,8 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 
 #if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
     if (_platform_init_done == FALSE) {
-        mlo_init_map |= (1 << r_index);
+        if (is_mlo_radio(r_index))
+            mlo_init_map |= (1 << r_index);
         if (mlo_init_map == mlo_radio_map) {
             nl80211_send_mld_apply(NULL);
         }
