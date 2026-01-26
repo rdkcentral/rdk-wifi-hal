@@ -1503,10 +1503,12 @@ int platform_get_radius_key_default(char *radius_key)
     return 0;
 }
 
+#if !defined(SKYSR300_PORT) && !defined(SKYSR213_PORT)
 static int file_exists(const char *filename) {
     struct stat buffer;
     return (stat(filename, &buffer) == 0);
 }
+#endif
 
 int platform_get_ssid_default(char *ssid, int vap_index){
     char value[BUFFER_LENGTH_WIFIDB] = {0};
