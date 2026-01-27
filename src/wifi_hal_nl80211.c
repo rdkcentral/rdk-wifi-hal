@@ -18699,6 +18699,36 @@ static u8 *wifi_drv_get_mbssid_config(void *priv, u8 *eid)
     return eid;
 }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+u8 *wifi_drv_get_ap_channel_report_ie(void *priv, u8 *eid)
+{
+    wifi_radio_info_t *radio;
+    wifi_radio_info_t *temp_radio;
+    size_t i;
+
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
+
+    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+            interface->vap_info.radio_index);
+        return eid;
+    }
+
+    for (i = 0; i < g_wifi_hal.num_radios; i++) {
+        temp_radio = get_radio_by_rdk_index(i);
+        if (temp_radio && (temp_radio->oper_param.enable == true) &&
+            (temp_radio->rdk_radio_index != radio->rdk_radio_index)) {
+            *eid++ = WLAN_EID_AP_CHANNEL_REPORT;
+            *eid++ = 2;
+            *eid++ = temp_radio->oper_param.operatingClass;
+            *eid++ = temp_radio->oper_param.channel;
+        }
+    }
+
+    return eid;
+}
+#endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 #endif /* HOSTAPD_VERSION >= 210 */
 
 static int get_radio_txpwr_handler(struct nl_msg *msg, void *arg)
@@ -19158,6 +19188,9 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .get_mbssid_ie = wifi_drv_get_mbssid_ie,
     .get_mbssid_config = wifi_drv_get_mbssid_config,
     .get_sta_auth_type = wifi_drv_get_sta_auth_type,
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    .get_ap_channel_report_ie = wifi_drv_get_ap_channel_report_ie,
+#endif //defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 #endif /* HOSTAPD_VERSION >= 210 */
 #if HOSTAPD_VERSION >= 211 // 2.11
     .link_add = wifi_drv_link_add,
