@@ -397,6 +397,221 @@ INT wifi_hal_setApWpsPin(INT ap_index, char *wps_pin)
     return (wifi_hal_nl80211_wps_pin(ap_index, wps_pin));
 }
 
+INT wifi_getRadioCapabilityData(wifi_radio_index_t index, wifi_freq_bands_t band, wifi_radio_capability_data_t *capability)
+{
+    wifi_radio_info_t *radio;
+    enum nl80211_band nl_band = NUM_NL80211_BANDS;
+    struct hostapd_hw_modes *hw_mode;
+
+    RADIO_INDEX_ASSERT(index);
+
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: Could not find radio index:%d\n", __func__, __LINE__, index);
+        return RETURN_ERR;
+    }
+
+    /* Map wifi_freq_bands_t to enum nl80211_band */
+    switch (band) {
+        case WIFI_FREQUENCY_2_4_BAND:
+            nl_band = NL80211_BAND_2GHZ;
+            break;
+        case WIFI_FREQUENCY_5_BAND:
+        case WIFI_FREQUENCY_5L_BAND:
+        case WIFI_FREQUENCY_5H_BAND:
+            nl_band = NL80211_BAND_5GHZ;
+            break;
+#if HOSTAPD_VERSION >= 210
+        case WIFI_FREQUENCY_6_BAND:
+            nl_band = NL80211_BAND_6GHZ;
+            break;
+#endif
+        default:
+            wifi_hal_error_print("%s:%d: Invalid band: %d\n", __func__, __LINE__, band);
+            return RETURN_ERR;
+    }
+
+    if (nl_band >= NUM_NL80211_BANDS) {
+        wifi_hal_error_print("%s:%d: Invalid nl_band: %d\n", __func__, __LINE__, nl_band);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d radio_index:%d band:%d nl_band:%d\n", __func__, __LINE__, index, band, nl_band);
+    hw_mode = &radio->hw_modes[nl_band];
+    
+    /* Check if hw_mode is valid */
+    if (hw_mode->mode == 0) {
+        wifi_hal_dbg_print("%s:%d: hw_mode not populated for band %d\n", __func__, __LINE__, nl_band);
+        //return RETURN_OK;
+    }
+
+#ifdef CONFIG_IEEE80211AX
+    /* Extract HE (WiFi6) capabilities for AP mode */
+    struct he_capabilities *he_cap = &hw_mode->he_capab[IEEE80211_MODE_AP];
+    
+    if ( he_cap && he_cap->he_supported) {
+        capability->wifi6_supported = true;
+        if ((sizeof(he_cap->phy_cap) <= sizeof(capability->he_phy_cap)) && he_cap->phy_cap) {
+            memcpy(capability->he_phy_cap, he_cap->phy_cap, sizeof(he_cap->phy_cap));
+        }
+        if (sizeof(he_cap->mac_cap) <= sizeof(capability->he_mac_cap) && he_cap->mac_cap) {
+            memcpy(capability->he_mac_cap, he_cap->mac_cap, sizeof(he_cap->mac_cap));
+        }
+        if (sizeof(he_cap->mcs) <= sizeof(capability->he_mcs_nss_set) && he_cap->mac_cap) {
+            memcpy(capability->he_mcs_nss_set, he_cap->mcs, sizeof(he_cap->mcs));
+        }
+        if (sizeof(he_cap->ppet) <= sizeof(capability->he_ppet) && he_cap->mac_cap) {
+            memcpy(capability->he_ppet, he_cap->ppet, sizeof(he_cap->ppet));
+        }
+#if HOSTAPD_VERSION >= 210
+        capability->he_6ghz_capa = he_cap->he_6ghz_capa;
+#endif
+    }
+#endif /* CONFIG_IEEE80211AX */
+
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    /* Extract EHT (WiFi7) capabilities for AP mode */
+    struct eht_capabilities *eht_cap = &hw_mode->eht_capab[IEEE80211_MODE_AP];
+
+    if (eht_cap && eht_cap->eht_supported) {
+        capability->wifi7_supported = true;
+        if ((sizeof(eht_cap->mac_cap) <= sizeof(capability->eht_mac_cap)) && eht_cap->mac_cap) {
+	    capability->eht_mac_cap = eht_cap->mac_cap;
+        }
+        if ((sizeof(eht_cap->phy_cap) <= sizeof(capability->eht_phy_cap)) && eht_cap->phy_cap) {
+            memcpy(capability->eht_phy_cap, eht_cap->phy_cap, sizeof(eht_cap->phy_cap));
+        }
+        if ((sizeof(eht_cap->mcs) <= sizeof(capability->eht_mcs)) && eht_cap->mcs) {
+            memcpy(capability->eht_mcs, eht_cap->mcs, sizeof(eht_cap->mcs));
+        }
+        if ((sizeof(eht_cap->ppet) <= sizeof(capability->eht_ppet)) && eht_cap->ppet) {
+            memcpy(capability->eht_ppet, eht_cap->ppet, sizeof(eht_cap->ppet));
+        }
+    }
+#endif /* HOSTAPD_VERSION >= 211 */
+#endif /* CONFIG_IEEE80211BE */
+
+    return RETURN_OK;
+}
+
+int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_iface *iface)
+{
+    unsigned int freq = 0;
+    enum nl80211_band band = NUM_NL80211_BANDS;
+    enum nl80211_band freq_band = NUM_NL80211_BANDS;
+    bool band_determined = false;
+
+    if (radio == NULL || iface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL pointer: radio=%p, iface=%p\n", 
+                             __func__, __LINE__, radio, iface);
+        return RETURN_ERR;
+    }
+    
+    if (iface->num_hw_features == 0 || iface->hw_features == NULL) {
+        wifi_hal_dbg_print("%s:%d: No hw_features to copy (num_hw_features=%u)\n",
+                           __func__, __LINE__, iface->num_hw_features);
+        return RETURN_ERR;
+    }
+
+    if (band >= NUM_NL80211_BANDS) {
+        if (radio->rdk_radio_index < NUM_NL80211_BANDS) {
+            band = (enum nl80211_band)radio->rdk_radio_index;
+            wifi_hal_dbg_print("%s:%d: Radio %u band from rdk_radio_index -> nl80211_band=%d (fallback)\n",
+                               __func__, __LINE__, radio->rdk_radio_index, band);
+        }
+    }
+
+    struct hostapd_hw_modes *hw_feat_mode = &iface->hw_features[band];
+    /*get band from first channel frequency*/
+    freq = hw_feat_mode->channels[0].freq;
+
+    /* Determine band from frequency */
+    if ((freq != 0) && (freq >= MIN_FREQ_MHZ_2G) && (freq <= MAX_FREQ_MHZ_2G)) {
+        freq_band = NL80211_BAND_2GHZ;
+    } else if ((freq != 0) && (freq >= MIN_FREQ_MHZ_5G) && (freq <= MAX_FREQ_MHZ_5G)) {
+        freq_band = NL80211_BAND_5GHZ;
+#if HOSTAPD_VERSION >= 210
+    } else if ((freq != 0) && (freq >= MIN_FREQ_MHZ_6G) && (freq <= MAX_FREQ_MHZ_6G)) {
+        freq_band = NL80211_BAND_6GHZ;
+#endif
+    }
+    
+    /* Validate array index with frequency-based determination */
+    if (freq_band < NUM_NL80211_BANDS) {
+        if (band < NUM_NL80211_BANDS && band == freq_band) {
+            band_determined = true;
+            wifi_hal_dbg_print("%s:%d:   hw_features: Array index band=%d validated by frequency=%u MHz (band=%d)\n",
+                               __func__, __LINE__, band, freq, freq_band);
+        } else {
+            band = freq_band;
+            band_determined = true;
+            wifi_hal_dbg_print("%s:%d:   hw_features: Array index out of bounds, using frequency-based band=%d (freq=%u MHz)\n",
+                               __func__, __LINE__, band, freq);
+        }
+    } else if (band < NUM_NL80211_BANDS && hw_feat_mode->num_channels > 0) {
+        /* Frequency couldn't determine band, but array index is valid and has channels - use array index */
+        band_determined = true;
+        wifi_hal_dbg_print("%s:%d:   hw_features: Frequency validation failed, but array index band=%d has channels, using it\n",
+                           __func__, __LINE__, band);
+    }
+
+    /* If we still couldn't determine band, skip this mode */
+    if (!band_determined) {
+        wifi_hal_dbg_print("%s:%d:   hw_features: Cannot determine band (mode=%d, num_channels=%u, freq=%u), skipping\n",
+                           __func__, __LINE__, hw_feat_mode->mode, 
+                           hw_feat_mode->num_channels, freq);
+        return RETURN_ERR;
+    }
+    
+    for (enum ieee80211_op_mode opmode = 0; opmode < IEEE80211_MODE_NUM; opmode++) {
+        struct he_capabilities *src_he = &hw_feat_mode->he_capab[opmode];
+        struct he_capabilities *dst_he = &radio->hw_modes[band].he_capab[opmode];
+        
+        if (src_he && src_he->he_supported) {
+	    dst_he->he_supported = true;
+            if (src_he->phy_cap) {
+                memcpy(dst_he->phy_cap, src_he->phy_cap, sizeof(src_he->phy_cap));
+            }
+            if (src_he->mac_cap) {
+                memcpy(dst_he->mac_cap, src_he->mac_cap, sizeof(src_he->mac_cap));
+            }
+            if (src_he->mcs) {
+                memcpy(dst_he->mcs, src_he->mcs, sizeof(src_he->mcs));
+            }
+            if (src_he->ppet) {
+                memcpy(dst_he->ppet, src_he->ppet, sizeof(src_he->ppet));
+            }
+#if HOSTAPD_VERSION >= 210
+            dst_he->he_6ghz_capa = src_he->he_6ghz_capa;
+#endif
+        }
+
+#ifdef CONFIG_IEEE80211BE
+        struct eht_capabilities *src_eht = &hw_feat_mode->eht_capab[opmode];
+        struct eht_capabilities *dst_eht = &radio->hw_modes[band].eht_capab[opmode];
+        
+        if (src_eht && src_eht->eht_supported) {
+	    dst_eht->eht_supported = true;
+            if (src_eht->mac_cap != NULL) {
+		dst_eht->mac_cap = src_eht->mac_cap;
+            }
+            if (src_eht->phy_cap) {
+                memcpy(dst_eht->phy_cap, src_eht->phy_cap, sizeof(src_eht->phy_cap));
+            }
+            if (src_eht->mcs) {
+                memcpy(dst_eht->mcs, src_eht->mcs, sizeof(src_eht->mcs));
+            }
+            if (src_eht->ppet) {
+                memcpy(dst_eht->ppet, src_eht->ppet, sizeof(src_eht->ppet));
+            }
+        }
+#endif /* CONFIG_IEEE80211BE */
+    }
+
+    return RETURN_OK;
+}
+
 INT wifi_hal_init()
 {
 #ifndef CONFIG_WIFI_EMULATOR
@@ -412,6 +627,7 @@ INT wifi_hal_init()
     int ret = 0;
 #endif
     char *drv_name;
+    wifi_interface_info_t *first_ap_interface = NULL;
 
     wifi_hal_info_print("%s:%d: start\n", __func__, __LINE__);
     if ((drv_name = get_wifi_drv_name()) == NULL) {
@@ -510,8 +726,26 @@ INT wifi_hal_init()
                 update_hostap_iface(interface);
                 update_hostap_iface_flags(interface);
                 init_hostap_hw_features(interface);
+		if (first_ap_interface == NULL) {
+                    first_ap_interface = interface;
+                    wifi_hal_dbg_print("%s:%d: Saved first AP interface %s for radio %u\n",
+                                       __func__, __LINE__, interface->name, i);
+                }
             }
             interface = hash_map_get_next(radio->interface_map, interface);
+        }
+        if (first_ap_interface != NULL) {
+            struct hostapd_iface *iface = &first_ap_interface->u.ap.iface;
+            if (iface->num_hw_features > 0) {
+                wifi_hal_dbg_print("%s:%d: Copying hw_features to radio->hw_modes for radio %u\n",
+                                   __func__, __LINE__, i);
+                copy_hw_features_to_radio_hw_modes(radio, iface);
+            } else {
+                wifi_hal_dbg_print("%s:%d: No hw_features found for radio %u (num_hw_features=%u)\n",
+                                   __func__, __LINE__, i, iface->num_hw_features);
+            }
+        } else {
+            wifi_hal_dbg_print("%s:%d: No AP interface found for radio %u\n", __func__, __LINE__, i);
         }
     }
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
