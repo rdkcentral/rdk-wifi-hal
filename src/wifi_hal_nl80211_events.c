@@ -995,11 +995,11 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     }
 
     wifi_radio_operationParam_t *radio_param;
-    wifi_radio_operationParam_t tmp_radio_param;
+    wifi_radio_operationParam_t *tmp_radio_param = NULL;
     radio_param = &radio->oper_param;
 
     if (is_channel_supported_on_radio(radio_param->band, freq) != true) {
-        wifi_hal_error_print("%s:%d: channel:%d and radio index:%d radio_band:%d not Compatible\n", __func__, __LINE__,
+        wifi_hal_info_print("%s:%d: channel:%d and radio index:%d radio_band:%d not Compatible\n", __func__, __LINE__,
                                     channel, interface->vap_info.radio_index, radio_param->band);
         return;
     }
@@ -1038,16 +1038,26 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         break;
     }
 
-    memcpy(&tmp_radio_param, radio_param, sizeof(wifi_radio_operationParam_t));
-    tmp_radio_param.channelWidth = l_channel_width;
-    tmp_radio_param.channel = channel;
-
-    if ((op_class = get_op_class_from_radio_params(&tmp_radio_param)) == -1) {
-        wifi_hal_error_print("%s:%d: failed to get op class for channel: %d, width: %d,"
-            "country: %d\n", __func__, __LINE__, tmp_radio_param.channel,
-            tmp_radio_param.channelWidth, tmp_radio_param.countryCode);
+    tmp_radio_param = (wifi_radio_operationParam_t *)malloc(sizeof(wifi_radio_operationParam_t));
+    if (tmp_radio_param == NULL) {
+        wifi_hal_error_print("%s:%d: malloc failed\n", __func__, __LINE__);
         return;
     }
+    memcpy(tmp_radio_param, radio_param, sizeof(wifi_radio_operationParam_t));
+
+    tmp_radio_param->channelWidth = l_channel_width;
+    tmp_radio_param->channel = channel;
+
+    if ((op_class = get_op_class_from_radio_params(tmp_radio_param)) == -1) {
+        wifi_hal_error_print("%s:%d: failed to get op class for channel: %d, width: %d,"
+            "country: %d\n", __func__, __LINE__, tmp_radio_param->channel,
+            tmp_radio_param->channelWidth, tmp_radio_param->countryCode);
+        free(tmp_radio_param);
+        tmp_radio_param = NULL;
+        return;
+    }
+    free(tmp_radio_param);
+    tmp_radio_param = NULL;
 
     wifi_hal_dbg_print("%s:%d: ifidx: %d vap_name: %s radio: %d channel: %d freq: %d bandwidth: %d "
         "cf1: %d cf2: %d op class: %d channel type: %d radar event type: %d\n", __func__, __LINE__,
@@ -1055,6 +1065,19 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         cf1, cf2, op_class, ch_type, event_type);
 
     if (wifi_chan_event_type == WIFI_EVENT_CHANNELS_CHANGED) {
+        if (radio->configuration_in_progress == true) {
+            wifi_hal_info_print(
+                "%s:%d: drop channel change event, radio configuration in progress\n", __func__,
+                __LINE__);
+            wifi_hal_info_print(
+                "%s:%d: Event dropped - ifidx: %d vap_name: %s radio: %d channel: %d freq: %d "
+                "bandwidth: %d "
+                "cf1: %d cf2: %d op class: %d channel type: %d radar event type: %d\n",
+                __func__, __LINE__, ifidx, interface->vap_info.vap_name,
+                interface->vap_info.radio_index, channel, freq, bw, cf1, cf2, op_class, ch_type,
+                event_type);
+            return;
+        }
 #if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
         hash_map_foreach(radio->interface_map, sta_interface) {
             if (sta_interface->vap_info.vap_mode == wifi_vap_mode_sta) {
