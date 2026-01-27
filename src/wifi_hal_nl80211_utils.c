@@ -1734,13 +1734,11 @@ int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifn
         suffix = "50";
         break;
     case WIFI_FREQUENCY_5L_BAND:
-        wifi_hal_error_print("%s:%d: 5L GHz band not mapped to a backhaul STA interface\n",
-            __func__, __LINE__);
-        return -1;
+        suffix = "5gl";
+        break;
     case WIFI_FREQUENCY_5H_BAND:
-        wifi_hal_error_print("%s:%d: 5H GHz band not mapped to a backhaul STA interface\n",
-            __func__, __LINE__);
-        return -1;
+        suffix = "5gh";
+        break;
 
     case WIFI_FREQUENCY_6_BAND:
         wifi_hal_error_print("%s:%d: 6 GHz band not mapped to a backhaul STA interface\n", __func__,

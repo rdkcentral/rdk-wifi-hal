@@ -59,8 +59,6 @@
 
 #define MLD_PREFIX "mld"
 #define BACKHAUL_STA_SSID  "we.connect.yellowstone"
-#define BACKHAUL_STA_2G "bhaul-sta-24"
-#define BACKHAUL_STA_5G "bhaul-sta-50"
 #define BHAUL_CREDS_PATH   "/mnt/data/pstore/mesh_bhaul_creds"
 #define BHAUL_CREDS_LEN     50
 #define STATICCPGCFG_LEN    128
