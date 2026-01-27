@@ -511,6 +511,7 @@ typedef struct wifi_interface_info_t {
     struct wpa_ssid current_ssid_info;
 #endif
     char mld_name[32];
+    bool in_reconf;
 } wifi_interface_info_t;
 
 #define MAX_RATES   16
@@ -541,6 +542,7 @@ typedef struct {
     unsigned int  prev_channelWidth;
     bool radio_presence; //True for ECO mode Active radio, false for ECO mode power down sleeping radio
     bool radar_detected;
+    bool configuration_in_progress;
 } wifi_radio_info_t;
 
 typedef wifi_vap_name_t wifi_vap_type_t;
@@ -631,7 +633,7 @@ typedef struct {
     unsigned int port_bitmap[32];
     unsigned int num_radios;
 #ifdef CONFIG_WIFI_EMULATOR
-     wifi_radio_info_t radio_info[MAX_NUM_SIMULATED_CLIENT];
+    wifi_radio_info_t radio_info[MAX_NUM_SIMULATED_CLIENT];
 #else
     wifi_radio_info_t radio_info[MAX_NUM_RADIOS];
 #endif
@@ -876,7 +878,7 @@ int wifi_hal_parse_rm_beacon_request(unsigned int apIndex, char* buff, size_t le
     wifi_hal_rrm_request_t *req);
 wifi_radio_info_t *get_radio_by_index(wifi_radio_index_t index);
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index);
-wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index);
+wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index, int link_id);
 BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, size_t *ie_out_len);
 BOOL get_ie_ext_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len);
 const u8 * get_vendor_ie_by_type(const u8 *pos, size_t len, u32 vendor_type);
@@ -1035,6 +1037,7 @@ int     wifi_sta_get_seqnum(const char *ifname, void *priv, const u8 *addr, int 
 int     wifi_commit(void *priv);
 wifi_radio_info_t *get_radio_by_rdk_index(wifi_radio_index_t index);
 int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *interface);
+int convert_enum_beaconrate_to_int(wifi_bitrate_t rates);
 int get_op_class_from_radio_params(wifi_radio_operationParam_t *param);
 void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len);
 int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int status_code, int rssi);
@@ -1044,6 +1047,15 @@ int wifi_hal_purgeScanResult(unsigned int vap_index, unsigned char *sta_mac);
 void get_wifi_interface_info_map(wifi_interface_name_idex_map_t *interface_map);
 void get_radio_interface_info_map(radio_interface_mapping_t *radio_interface_map);
 unsigned int get_sizeof_interfaces_index_map(void);
+u32 get_wpa_version(wifi_security_modes_t mode);
+bool is_wpa3_192bit_mode(const struct wpa_auth_config *wpa_conf);
+void get_cipher_suites(wifi_security_modes_t mode, wifi_encryption_method_t encr,
+    const struct wpa_auth_config *wpa_conf, u32 *pairwise, u32 *group);
+enum nl80211_mfp get_mfp_mode(wifi_security_modes_t mode, int configured_mfp);
+u32 get_akm_suite(int wpa_key_mgmt, wifi_security_modes_t mode);
+enum nl80211_auth_type get_auth_type(wifi_security_modes_t mode, u32 akm_suite);
+int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *security,
+    const struct wpa_auth_config *wpa_conf);
 int validate_radio_operation_param(wifi_radio_operationParam_t *param);
 int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg, int len);
 int is_backhaul_interface(wifi_interface_info_t *interface);
@@ -1153,6 +1165,10 @@ bool get_ifname_from_mac(const mac_address_t *mac, char *ifname);
 int wifi_hal_configure_sta_4addr_to_bridge(wifi_interface_info_t *interface, int add);
 int wifi_convert_freq_band_to_radio_index(int band, int *radio_index);
 struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface);
+
+#ifndef NL80211_DRV_LINK_ID_NA
+#define NL80211_DRV_LINK_ID_NA (-1)
+#endif
 
 #ifdef CONFIG_IEEE80211BE
 int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
@@ -1337,6 +1353,8 @@ extern u8_bitmap g_DialogToken[MAX_AP_INDEX];
 
 int wifi_freq_to_channel(int freq, uint *channel);
 int wifi_channel_to_freq(const char* country, UCHAR opclass, uint channel, uint *freq);
+int bw_enum_to_mhz(wifi_channelBandwidth_t chwid);
+uint16_t freq_to_primary(uint16_t freq, wifi_channelBandwidth_t chwid);
 enum nl80211_band wifi_freq_band_to_nl80211_band(wifi_freq_bands_t band);
 enum nl80211_band get_nl80211_band_from_rdk_radio_index(unsigned int rdk_radio_index);
 const char* get_chan_dfs_state(struct hostapd_channel_data *chan);
@@ -1394,6 +1412,7 @@ bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface);
 int wifi_hal_set_mld_enabled(wifi_interface_info_t *interface, bool enabled);
 int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface);
 int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id);
+wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *interface);
 uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface);
 int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t mac);
 wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info_t *interface,

@@ -156,6 +156,7 @@ static int move_radio_capability(wifi_radio_capabilities_t *tmp_cap, wifi_radio_
     tmp_cap->cipherSupported = cap->cipherSupported;
     tmp_cap->numcountrySupported = cap->numcountrySupported;
     tmp_cap->maxNumberVAPs = cap->maxNumberVAPs;
+    tmp_cap->mldOperationalCap = cap->mldOperationalCap;
     for (j=0 ; j<tmp_cap->numcountrySupported ; j++) {
         tmp_cap->countrySupported[j] = cap->countrySupported[j];
     }
@@ -361,12 +362,12 @@ int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg
         ret = RETURN_ERR;
         snprintf(msg + strlen(msg), len - strlen(msg), " showSsid: %d", bss_info->showSsid);
     }
-
+#ifndef TARGET_GEMINI7_2
     if (strncmp(vap_info->bridge_name, "", strlen(vap_info->bridge_name)) == 0) {
         ret = RETURN_ERR;
         snprintf(msg + strlen(msg), len - strlen(msg), " Bridge name is null for vap index %u", vap_info->vap_index);
     }
-
+#endif
     // security parameter values
     if (bss_info->security.mode <= 0 || bss_info->security.mode >  wifi_security_mode_wpa3_compatibility ||
             (bss_info->security.mode &(bss_info->security.mode - 1)) != 0) {
