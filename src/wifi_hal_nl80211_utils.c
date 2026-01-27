@@ -4841,17 +4841,26 @@ static inline int json_parse_interface_map(cJSON *json)
     tmp_intf_idx_map = NULL;
     tmp_radio_interface_map = NULL;
 
-    if (!((tmp_intf_idx_map = calloc(1, sizeof(*tmp_intf_idx_map) * interface_idx_map_size)) &&
-            (tmp_radio_interface_map = calloc(1,
-                 sizeof(*tmp_radio_interface_map) * radio_interface_map_size)))) {
-        wifi_hal_error_print("%s:%d: Failed to allocate interface_idx_map(%d - %u "
-                             "bytes) or radio_interface_map_size(%d - %u bytes)\n",
-            __func__, __LINE__, !!tmp_intf_idx_map, interface_idx_map_size,
-            !!tmp_radio_interface_map, radio_interface_map_size);
+    if (interface_idx_map_size == 0 || radio_interface_map_size == 0) {
+        wifi_hal_error_print("%s:%d: No interfaces or radios present\n", __func__, __LINE__);
+        return -1;
+    }
 
-        free(tmp_radio_interface_map);
+    tmp_intf_idx_map = calloc(1, sizeof(*tmp_intf_idx_map) * interface_idx_map_size);
+    if (tmp_intf_idx_map == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate interface_idx_map(%d - %u bytes)\n",
+            __func__, __LINE__, !!tmp_intf_idx_map, interface_idx_map_size);
+
+        return -1;
+    }
+
+    tmp_radio_interface_map = calloc(1,
+                 sizeof(*tmp_radio_interface_map) * radio_interface_map_size);
+    if (tmp_radio_interface_map == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate radio_interface_map_size(%d - %u bytes)\n",
+            __func__, __LINE__, !!tmp_radio_interface_map, radio_interface_map_size);
+
         free(tmp_intf_idx_map);
-
         return -1;
     }
 

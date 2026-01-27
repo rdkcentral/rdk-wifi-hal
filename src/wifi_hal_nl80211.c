@@ -6172,7 +6172,7 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
             }
 
             if (tb[NL80211_ATTR_IFNAME]) {
-                strcpy(interface->name, nla_get_string(tb[NL80211_ATTR_IFNAME]));
+                snprintf(interface->name, sizeof(interface->name), "%s", nla_get_string(tb[NL80211_ATTR_IFNAME]));
             }
 
             if (tb[NL80211_ATTR_MAC]) {
