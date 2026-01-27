@@ -466,7 +466,6 @@ void set_string_nvram_param(char *param_name, char *value)
 #define MLO_ENAB 1
 #if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
 #define MAX_MLO_RADIOS (4)
-#define MAX_MLD_UNITS (8)
 
 static int _platform_init_done = FALSE;
 static int mlo_MAP = -1; /* Main AP index */
@@ -474,8 +473,8 @@ static int mlo_config[MAX_MLO_RADIOS] = { -1, -1, -1, -1 }; /* wl_mlo_config val
 static int mlo_radio_cnt = 0; /* Number of MLO radios */
 static int mlo_radio_map = 0; /* Bitmap, set if a radio is MLO enabled */
 static int mlo_init_map = -1; /* Bitmap, set if creatVAP is called to init this radio */
-static int mld_vapidx[MAX_MLD_UNITS][MAX_MLO_RADIOS];
-static int _mld_enable[MAX_MLD_UNITS] = { 0 };
+static int mld_vapidx[MLD_UNIT_COUNT][MAX_MLO_RADIOS];
+static int _mld_enable[MLD_UNIT_COUNT] = { 0 };
 static int _vap_enable[MAX_VAP] = { 0 };
 static int _vap_mld_unit[MAX_VAP];
 extern int wl_iovar_get(char *ifname, char *iovar, void *bufptr, int buflen);
@@ -723,7 +722,7 @@ void platform_mld_update(wifi_vap_info_t *vap)
     wifi_hal_info_print("### %s: %s radio=%d vap_index=%d mld: enable=%d unit=%d linkid=%d apply=%d ###\n",
         __func__, vap->vap_name, vap->radio_index, vap->vap_index, mld_cmn->mld_enable,
         mld_cmn->mld_id, mld_cmn->mld_link_id, mld_cmn->mld_apply);
-    if (mld_cmn->mld_enable && mld_cmn->mld_id < MAX_MLD_UNITS) {
+    if (mld_cmn->mld_enable && mld_cmn->mld_id < MLD_UNIT_COUNT) {
         mld_unit = mld_cmn->mld_id;
         vapidx = mld_vapidx[mld_unit][vap->radio_index];
         if (vapidx != vap->vap_index) {
@@ -734,7 +733,7 @@ void platform_mld_update(wifi_vap_info_t *vap)
         }
     } else {
         /* Clean up the vap_index of this radio */
-        for (i = 0; i < MAX_MLD_UNITS; i++) {
+        for (i = 0; i < MLD_UNIT_COUNT; i++) {
             if (mld_vapidx[i][vap->radio_index] == vap->vap_index) {
                 mld_vapidx[i][vap->radio_index] = -1;
                 _vap_mld_unit[vap->vap_index] = -1;
@@ -810,7 +809,7 @@ int platform_vap_enable_update(wifi_vap_info_map_t *vap_map, bool handle_mld)
                         radio_index, vap_index);
                     return -2;
                 }
-                for (k = 0; k < MAX_MLD_UNITS; k++) {
+                for (k = 0; k < MLD_UNIT_COUNT; k++) {
                     if (mld_vapidx[k][radio_index] == vap_index) {
                         is_mlo = TRUE;
                         mld_unit = k;
@@ -853,7 +852,7 @@ int platform_vap_enable_update(wifi_vap_info_map_t *vap_map, bool handle_mld)
         return 0;
 
     /* Bring up all MLDs */
-    for (k = 0; k < MAX_MLD_UNITS; k++) {
+    for (k = 0; k < MLD_UNIT_COUNT; k++) {
         if (_mld_enable[k] == FALSE)
             continue;
         wifi_hal_info_print("### %s: calling platform_mld_up(%d, %d) ###\n",
@@ -2046,7 +2045,7 @@ static void platform_rnr_update(wifi_radio_index_t r_index, wifi_vap_info_map_t 
 
         if ((radio->oper_param.band == WIFI_FREQUENCY_6_BAND
 #if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
-            || (mld_cmn->mld_enable && mld_cmn->mld_id < MAX_MLD_UNITS)
+            || (mld_cmn->mld_enable && mld_cmn->mld_id < MLD_UNIT_COUNT)
 #endif /* CONFIG_IEEE80211BE */
             )) {
             for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
@@ -4885,7 +4884,7 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
     }
 
     apply = (_platform_init_done) ? TRUE : FALSE;
-    mld_enable = (params->mld_ap && get_mld_unit(conf) < MAX_MLD_UNITS) ? 1 : 0;
+    mld_enable = (params->mld_ap && get_mld_unit(conf) < MLD_UNIT_COUNT) ? 1 : 0;
 
     /*
      * The mld mac address, if given, must be either
