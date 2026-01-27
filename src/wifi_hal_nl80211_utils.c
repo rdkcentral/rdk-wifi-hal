@@ -1711,6 +1711,58 @@ unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index)
     return 0;
 }
 
+int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
+    size_t ifname_out_len)
+{
+    static const char *staPrefix = "bhaul-sta-";
+    const char *suffix = NULL;
+
+    if (!ifname_out || ifname_out_len == 0) {
+        wifi_hal_error_print("%s:%d: invalid output buffer for interface name\n", __func__,
+            __LINE__);
+        return -1;
+    }
+
+    unsigned int radio_band = get_band_info_from_rdk_radio_index(index);
+
+    switch (radio_band) {
+    case WIFI_FREQUENCY_2_4_BAND:
+        suffix = "24";
+        break;
+
+    case WIFI_FREQUENCY_5_BAND:
+        suffix = "50";
+        break;
+    case WIFI_FREQUENCY_5L_BAND:
+        wifi_hal_error_print("%s:%d: 5L GHz band not mapped to a backhaul STA interface\n",
+            __func__, __LINE__);
+        return -1;
+    case WIFI_FREQUENCY_5H_BAND:
+        wifi_hal_error_print("%s:%d: 5H GHz band not mapped to a backhaul STA interface\n",
+            __func__, __LINE__);
+        return -1;
+
+    case WIFI_FREQUENCY_6_BAND:
+        wifi_hal_error_print("%s:%d: 6 GHz band not mapped to a backhaul STA interface\n", __func__,
+            __LINE__);
+        return -1;
+
+    default:
+        wifi_hal_error_print("%s:%d: Unsupported band value: %u (index=%d)\n", __func__, __LINE__,
+            radio_band, (int)index);
+        return -1;
+    }
+
+    int n = snprintf(ifname_out, ifname_out_len, "%s%s", staPrefix, suffix);
+    if (n < 0 || (size_t)n >= ifname_out_len) {
+        wifi_hal_error_print("%s:%d: interface name truncated (need %d bytes, have %zu)\n",
+            __func__, __LINE__, n + 1, ifname_out_len);
+        return -1;
+    }
+
+    return 0;
+}
+
 void update_vap_mode(wifi_interface_info_t *interface)
 {
     wifi_vap_info_t *vap = &interface->vap_info;

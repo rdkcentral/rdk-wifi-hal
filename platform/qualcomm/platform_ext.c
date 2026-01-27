@@ -473,37 +473,30 @@ void qca_getRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
 
 int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
-    char interface_name[32];
+    char interface_name[32] = { 0 };
     char cmd[DEFAULT_CMD_SIZE];
     char mode[16];
-    unsigned int radio_band = 0;
 
-    radio_band = get_band_info_from_rdk_radio_index(index);
-
-    switch (radio_band) {
-    case WIFI_FREQUENCY_2_4_BAND:
-        snprintf(interface_name, sizeof(interface_name), BACKHAUL_STA_2G);
-        break;
-
-    case WIFI_FREQUENCY_5L_BAND:
-    case WIFI_FREQUENCY_5H_BAND:
-    case WIFI_FREQUENCY_5_BAND:
-        snprintf(interface_name, sizeof(interface_name), BACKHAUL_STA_5G);
-        break;
-
-    case WIFI_FREQUENCY_6_BAND:
-        wifi_hal_error_print("%s:%d: 6 GHz band not mapped to a backhaul STA interface\n", __func__,
-            __LINE__);
-        return -1;
-
-    default:
-        wifi_hal_error_print("%s:%d: Unsupported band value: %u\n", __func__, __LINE__, radio_band);
+    if (get_backhaul_sta_ifname_from_radio_index(index, interface_name, sizeof(interface_name)) !=
+        0) {
         return -1;
     }
 
     qca_getRadioMode(index, operationParam, mode);
-    snprintf(cmd, sizeof(cmd), "cfg80211tool %s mode %s", interface_name, mode);
-    system(cmd);
+
+    if (snprintf(cmd, sizeof(cmd), "cfg80211tool %s mode %s", interface_name, mode) >=
+        (int)sizeof(cmd)) {
+        wifi_hal_error_print("%s:%d: command truncated; buffer too small\n", __func__, __LINE__);
+        return -1;
+    }
+
+    int rc = system(cmd);
+    if (rc != 0) {
+        wifi_hal_error_print("%s:%d: system(\"%s\") failed with rc=%d\n", __func__, __LINE__, cmd,
+            rc);
+        return -1;
+    }
+
     wifi_hal_dbg_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
     return 0;
 }
