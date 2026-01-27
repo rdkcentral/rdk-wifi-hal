@@ -117,11 +117,7 @@ static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
 #define RADIO_INDEX_6G 2
 
 #ifdef CONFIG_IEEE80211BE
-#ifdef CONFIG_NO_MLD_ONLY_PRIVATE
 #define MLD_UNIT_COUNT 8
-#else
-#define MLD_UNIT_COUNT 1
-#endif /* CONFIG_NO_MLD_ONLY_PRIVATE */
 #endif
 
 typedef struct wl_runtime_params {
@@ -4978,20 +4974,10 @@ static unsigned char platform_get_mld_unit_for_ap(int ap_index)
 }
 #endif
 
-/* TODO: temporary solution, link_id should come from vap configuration
- * 2. link_id is already arriving from vap configuration, but the driver still requires a valid NVRAM configuration. */
 static unsigned char platform_get_link_id_for_radio_index(unsigned int radio_index, unsigned int ap_index)
 {
     int mlo_config[4];
     unsigned char res = NL80211_DRV_LINK_ID_NA;
-
-#ifndef CONFIG_NO_MLD_ONLY_PRIVATE
-    if (!is_wifi_hal_vap_private(ap_index)) {
-        wifi_hal_dbg_print("%s:%d skip MLO for Non-Private VAP radio_index:%u ap_index:%u\n",
-            __func__, __LINE__, radio_index, ap_index);
-        radio_index = -1;
-    }
-#endif /* CONFIG_NO_MLD_ONLY_PRIVATE */
 
     if (radio_index < (sizeof(mlo_config) / sizeof(*mlo_config))) {
         char *wl_mlo_config;
@@ -5036,11 +5022,6 @@ static void nvram_update_wl_mlo_apply(const char *iface, unsigned char mlo_apply
     const char *last_mld_vap = "wl2.4";
     const char *wl_mlo_apply;
     unsigned char res;
-    unsigned char is_last_radio = 0;
-
-    is_last_radio = is_wifi_hal_6g_radio_from_interfacename(iface);
-    if (!is_last_radio)
-        return;
 
     (void)snprintf(name, sizeof(name), "%s_mlo_apply", last_mld_vap);
     wl_mlo_apply = nvram_get(name);
@@ -5236,17 +5217,21 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     hapd = &interface->u.ap.hapd;
     vap = &interface->vap_info;
 
+    if (vap->vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d: iface:%s is not AP\n", __func__, __LINE__, conf->iface);
+        return RETURN_OK;
+    }
     set_mld_unit(conf, -1);
     conf->okc = 0;
 
-#ifndef CONFIG_NO_MLD_ONLY_PRIVATE
-    if (!is_wifi_hal_vap_private(vap->vap_index)) {
+    if (!is_wifi_hal_vap_private(vap->vap_index) && !is_wifi_hal_vap_mesh_backhaul(vap->vap_index)) {
         hapd->mld_link_id = -1;
+        wifi_hal_info_print("%s:%d: iface:%s MLO is not allowed for this AP\n", __func__, __LINE__, conf->iface);
         return RETURN_OK;
     }
-#endif
+
     mld_conf = &vap->u.bss_info.mld_info.common_info;
-    nvram_update_wl_mlo_apply(conf->iface, mld_conf->mld_apply, &nvram_changed);
+    nvram_update_wl_mlo_apply(conf->iface, 1, &nvram_changed);
 
     nvram_update_wl_mlo_config(vap->radio_index,
         mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
