@@ -2008,7 +2008,11 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
     memcpy(acl_map->mac_addr_str, key, sizeof(mac_addr_str_t));
     memcpy(acl_map->mac_addr, DeviceMacAddress, sizeof(mac_address_t));
 
-    hash_map_put(interface->acl_map, strdup(key), acl_map);
+    if (hash_map_put(interface->acl_map, key, acl_map) == -1) {
+        free(acl_map);
+        wifi_hal_error_print("%s:%d: MAC %s map failure for ap_index:%d\n", __func__, __LINE__, key, apIndex);
+        return RETURN_ERR;
+    }
 
     if (nl80211_set_acl(interface) != 0) {
         wifi_hal_error_print("%s:%d: MAC %s nl80211_set_acl failure for ap_index:%d\n", __func__, __LINE__, key, apIndex);
@@ -2067,7 +2071,11 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
     memcpy(acl_map->mac_addr_str, DeviceMacAddress, sizeof(mac_addr_str_t));
     to_mac_bytes(acl_map->mac_addr_str, acl_map->mac_addr);
 
-    hash_map_put(interface->acl_map, strdup(DeviceMacAddress), acl_map);
+    if (hash_map_put(interface->acl_map, DeviceMacAddress, acl_map) == -1) {
+        free(acl_map);
+        wifi_hal_error_print("%s:%d: MAC %s map failure for ap_index:%d\n", __func__, __LINE__, DeviceMacAddress, apIndex);
+        return RETURN_ERR;
+    }
 
     if (nl80211_set_acl(interface) != 0) {
         wifi_hal_error_print("%s:%d: MAC %s nl80211_set_acl failure for ap_index:%d\n", __func__, __LINE__, DeviceMacAddress, apIndex);
@@ -2134,7 +2142,9 @@ INT wifi_hal_delApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
         memcpy(acl_map->mac_addr_str, key, sizeof(mac_addr_str_t));
         memcpy(acl_map->mac_addr, DeviceMacAddress, sizeof(mac_addr_str_t));
 
-        hash_map_put(interface->acl_map, strdup(key), acl_map);
+        if (hash_map_put(interface->acl_map, key, acl_map) == -1) {
+            free(acl_map);
+        }
 
         return -1;
     }
@@ -2185,7 +2195,9 @@ INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
         memcpy(acl_map->mac_addr_str, DeviceMacAddress, sizeof(mac_addr_str_t));
         to_mac_bytes(acl_map->mac_addr_str, acl_map->mac_addr);
 
-        hash_map_put(interface->acl_map, strdup(DeviceMacAddress), acl_map);
+        if (hash_map_put(interface->acl_map, DeviceMacAddress, acl_map) == -1) {
+            free(acl_map);
+        }
 
         return -1;
     }
