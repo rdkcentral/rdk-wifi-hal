@@ -1050,6 +1050,31 @@ Exit:
         radio->configured = true;
     }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && (HOSTAPD_VERSION >= 210)
+    for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+        wifi_interface_info_t *interface_iter = NULL;
+
+        if (index == radio_index) {
+            continue;
+        }
+        wifi_radio_info_t *radio_iter = get_radio_by_rdk_index(radio_index);
+        if (radio_iter == NULL) {
+            continue;
+        }
+
+        hash_map_foreach(radio_iter->interface_map, interface_iter) {
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap ||
+                !interface_iter->vap_info.u.bss_info.enabled ||
+                !interface_iter->vap_info.u.bss_info.hostap_mgt_frame_ctrl) {
+                continue;
+            }
+
+            ieee802_11_set_beacon(&interface_iter->u.ap.hapd);
+        }
+    }
+
+#endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) &&  (HOSTAPD_VERSION >= 210)
+
     free(old_operationParam);
     old_operationParam = NULL;
     radio->configuration_in_progress = false;
@@ -2192,7 +2217,11 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
     memcpy(acl_map->mac_addr_str, key, sizeof(mac_addr_str_t));
     memcpy(acl_map->mac_addr, DeviceMacAddress, sizeof(mac_address_t));
 
-    hash_map_put(interface->acl_map, strdup(key), acl_map);
+    if (hash_map_put(interface->acl_map, key, acl_map) == -1) {
+        free(acl_map);
+        wifi_hal_error_print("%s:%d: MAC %s map failure for ap_index:%d\n", __func__, __LINE__, key, apIndex);
+        return RETURN_ERR;
+    }
 
     if (nl80211_set_acl(interface) != 0) {
         wifi_hal_error_print("%s:%d: MAC %s nl80211_set_acl failure for ap_index:%d\n", __func__, __LINE__, key, apIndex);
@@ -2251,7 +2280,11 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
     memcpy(acl_map->mac_addr_str, DeviceMacAddress, sizeof(mac_addr_str_t));
     to_mac_bytes(acl_map->mac_addr_str, acl_map->mac_addr);
 
-    hash_map_put(interface->acl_map, strdup(DeviceMacAddress), acl_map);
+    if (hash_map_put(interface->acl_map, DeviceMacAddress, acl_map) == -1) {
+        free(acl_map);
+        wifi_hal_error_print("%s:%d: MAC %s map failure for ap_index:%d\n", __func__, __LINE__, DeviceMacAddress, apIndex);
+        return RETURN_ERR;
+    }
 
     if (nl80211_set_acl(interface) != 0) {
         wifi_hal_error_print("%s:%d: MAC %s nl80211_set_acl failure for ap_index:%d\n", __func__, __LINE__, DeviceMacAddress, apIndex);
@@ -2318,7 +2351,9 @@ INT wifi_hal_delApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
         memcpy(acl_map->mac_addr_str, key, sizeof(mac_addr_str_t));
         memcpy(acl_map->mac_addr, DeviceMacAddress, sizeof(mac_addr_str_t));
 
-        hash_map_put(interface->acl_map, strdup(key), acl_map);
+        if (hash_map_put(interface->acl_map, key, acl_map) == -1) {
+            free(acl_map);
+        }
 
         return -1;
     }
@@ -2369,7 +2404,9 @@ INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
         memcpy(acl_map->mac_addr_str, DeviceMacAddress, sizeof(mac_addr_str_t));
         to_mac_bytes(acl_map->mac_addr_str, acl_map->mac_addr);
 
-        hash_map_put(interface->acl_map, strdup(DeviceMacAddress), acl_map);
+        if (hash_map_put(interface->acl_map, DeviceMacAddress, acl_map) == -1) {
+            free(acl_map);
+        }
 
         return -1;
     }

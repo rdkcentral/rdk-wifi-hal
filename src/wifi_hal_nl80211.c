@@ -1004,7 +1004,11 @@ bm_sta_list_t *steering_add_stalist(wifi_interface_info_t *interface, char *ssid
         bm_client_info->vap_index = interface->vap_info.vap_index;
         memcpy(bm_client_info->mac_addr, client_mac, sizeof(mac_address_t));
 
-        hash_map_put(interface->bm_sta_map, strdup(key), bm_client_info);
+        if (hash_map_put(interface->bm_sta_map, key, bm_client_info) == -1) {
+            free(bm_client_info);
+            wifi_hal_error_print("%s:%d: has map failed\n", __func__, __LINE__);
+            return NULL;
+        }
     }
     if (ssid) {
         strncpy(bm_client_info->ssid, ssid, sizeof(bm_client_info->ssid));
@@ -1805,7 +1809,11 @@ static rate_limit_entry_t *wifi_hal_rate_limit_entry_get(mac_address_t mac)
     memcpy(entry->mac, mac, sizeof(mac_address_t));
     entry->window_start = time_now;
     entry->last_activity = time_now;
-    hash_map_put(g_wifi_hal.mgt_frame_rate_limit_hashmap, strdup(mac_str), entry);
+    if (hash_map_put(g_wifi_hal.mgt_frame_rate_limit_hashmap, mac_str, entry) == -1) {
+        free(entry);
+        wifi_hal_error_print("%s:%d: failed to map rate limit entry\n", __func__, __LINE__);
+        return NULL;
+    }
 
     return entry;
 }
@@ -3623,7 +3631,13 @@ int nl80211_send_and_recv(struct nl_msg *msg,
     nl_info = hash_map_get(g_wifi_hal.netlink_socket_map, thread_id);
     if (!nl_info) {
         if ((nl_info = create_nl80211_socket())) {
-            hash_map_put(g_wifi_hal.netlink_socket_map, strdup(thread_id), nl_info);
+            if (hash_map_put(g_wifi_hal.netlink_socket_map, thread_id, nl_info) == -1) {
+                nl_destroy_handles(&nl_info->nl);
+                nl_cb_put(nl_info->nl_cb);
+                free(nl_info);
+                pthread_mutex_unlock(&g_wifi_hal.nl_create_socket_lock);
+                return -1;
+            }
         }
     }
     pthread_mutex_unlock(&g_wifi_hal.nl_create_socket_lock);
@@ -6191,7 +6205,7 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
             }
 
             if (tb[NL80211_ATTR_IFNAME]) {
-                strcpy(interface->name, nla_get_string(tb[NL80211_ATTR_IFNAME]));
+                snprintf(interface->name, sizeof(interface->name), "%s", nla_get_string(tb[NL80211_ATTR_IFNAME]));
             }
 
             if (tb[NL80211_ATTR_MAC]) {
@@ -6248,7 +6262,12 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                 interface->scan_state = WIFI_SCAN_STATE_NONE;
             }
 
-            hash_map_put(radio->interface_map, strdup(interface->name), interface);
+            if (hash_map_put(radio->interface_map, interface->name, interface) == -1) {
+                wifi_hal_error_print("%s:%d: failed to hash map interface, returning\n",
+                    __func__, __LINE__);
+                interface_free(interface);
+                return NL_SKIP;
+            }
 
             if (is_backhaul_interface(interface)) {
                 interface_set_mtu(interface, 1600);
@@ -6906,20 +6925,29 @@ int init_nl80211()
     }
 
     snprintf(thread_id, sizeof(thread_id), "%lu", pthread_self());
-    hash_map_put(g_wifi_hal.netlink_socket_map, strdup(thread_id), core_thread_socket);
 
     g_wifi_hal.nl_cb = core_thread_socket->nl_cb;
     g_wifi_hal.nl = core_thread_socket->nl;
 
+    if (hash_map_put(g_wifi_hal.netlink_socket_map, thread_id, core_thread_socket) == -1) {
+        wifi_hal_error_print("%s:%d: failed to has map sock\n", __func__, __LINE__);
+        nl_destroy_handles(&g_wifi_hal.nl);
+        nl_cb_put(g_wifi_hal.nl_cb);
+        free(core_thread_socket);
+        return -1;
+    }
+
     g_wifi_hal.nl80211_id = genl_ctrl_resolve((struct nl_sock *)g_wifi_hal.nl, "nl80211");
     if (g_wifi_hal.nl80211_id < 0) {
         wifi_hal_error_print("%s:%d: generic netlink not found\n", __func__, __LINE__);
+        nl_destroy_handles(&g_wifi_hal.nl);
         nl_cb_put(g_wifi_hal.nl_cb);
         return -1;
     }
 
     g_wifi_hal.nl_event = nl_create_handle(g_wifi_hal.nl_cb, "event");
     if (g_wifi_hal.nl_event == NULL) {
+        nl_destroy_handles(&g_wifi_hal.nl);
         nl_cb_put(g_wifi_hal.nl_cb);
         return -1;
     }
@@ -11027,7 +11055,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
                 return NL_SKIP;
             }
 
-            if (hash_map_put(interface->scan_info_map, strdup(key), scan_info)) {
+            if (hash_map_put(interface->scan_info_map, key, scan_info) == -1) {
                 pthread_mutex_unlock(&interface->scan_info_mutex);
                 free(scan_info);
                 free(scan_info_ap);
@@ -11042,7 +11070,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
 
     // - add AP info into AP map under AP mutex
     pthread_mutex_lock(&interface->scan_info_ap_mutex);
-    if (hash_map_put(interface->scan_info_ap_map[0], strdup(key), scan_info_ap)) {
+    if (hash_map_put(interface->scan_info_ap_map[0], key, scan_info_ap) == -1) {
         pthread_mutex_unlock(&interface->scan_info_ap_mutex);
         wifi_hal_stats_error_print("%s:%d: map adding error!\n", __func__, __LINE__);
         free(scan_info_ap);
@@ -18786,6 +18814,36 @@ static u8 *wifi_drv_get_mbssid_config(void *priv, u8 *eid)
     return eid;
 }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+u8 *wifi_drv_get_ap_channel_report_ie(void *priv, u8 *eid)
+{
+    wifi_radio_info_t *radio;
+    wifi_radio_info_t *temp_radio;
+    size_t i;
+
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
+
+    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+            interface->vap_info.radio_index);
+        return eid;
+    }
+
+    for (i = 0; i < g_wifi_hal.num_radios; i++) {
+        temp_radio = get_radio_by_rdk_index(i);
+        if (temp_radio && (temp_radio->oper_param.enable == true) &&
+            (temp_radio->rdk_radio_index != radio->rdk_radio_index)) {
+            *eid++ = WLAN_EID_AP_CHANNEL_REPORT;
+            *eid++ = 2;
+            *eid++ = temp_radio->oper_param.operatingClass;
+            *eid++ = temp_radio->oper_param.channel;
+        }
+    }
+
+    return eid;
+}
+#endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 #endif /* HOSTAPD_VERSION >= 210 */
 
 static int get_radio_txpwr_handler(struct nl_msg *msg, void *arg)
@@ -19245,6 +19303,9 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .get_mbssid_ie = wifi_drv_get_mbssid_ie,
     .get_mbssid_config = wifi_drv_get_mbssid_config,
     .get_sta_auth_type = wifi_drv_get_sta_auth_type,
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    .get_ap_channel_report_ie = wifi_drv_get_ap_channel_report_ie,
+#endif //defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 #endif /* HOSTAPD_VERSION >= 210 */
 #if HOSTAPD_VERSION >= 211 // 2.11
     .link_add = wifi_drv_link_add,

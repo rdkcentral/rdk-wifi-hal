@@ -37,6 +37,7 @@
 #include <string.h>
 #endif // defined (ENABLED_EDPD)
 
+#include <sys/stat.h>
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
     defined(RDKB_ONE_WIFI_PROD)
 #include <fcntl.h>
@@ -44,7 +45,6 @@
 #include <semaphore.h>
 #include <stdint.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #elif defined(SCXER10_PORT) || defined(TCHCBRV2_PORT)
 #include <rdk_nl80211_hal.h>
@@ -867,10 +867,10 @@ void platform_mlo_post_init(void)
 {
     wifi_hal_info_print("### %s: mlo_init_map=%d mlo_radio_map=%d ###\n", __func__, mlo_init_map,
         mlo_radio_map);
+    platform_radio_up(-1, TRUE); /* Bring all radios up */
     if (mlo_init_map != mlo_radio_map) {
         return;
     }
-    platform_radio_up(-1, TRUE);
     platform_mlo_up();
 }
 #endif /* CONFIG_IEEE80211BE && XB10_PORT && MLO_ENAB */
@@ -1503,10 +1503,12 @@ int platform_get_radius_key_default(char *radius_key)
     return 0;
 }
 
+#if !defined(SKYSR300_PORT) && !defined(SKYSR213_PORT)
 static int file_exists(const char *filename) {
     struct stat buffer;
     return (stat(filename, &buffer) == 0);
 }
+#endif
 
 int platform_get_ssid_default(char *ssid, int vap_index){
     char value[BUFFER_LENGTH_WIFIDB] = {0};
@@ -2171,7 +2173,8 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 
 #if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
     if (_platform_init_done == FALSE) {
-        mlo_init_map |= (1 << r_index);
+        if (is_mlo_radio(r_index))
+            mlo_init_map |= (1 << r_index);
         if (mlo_init_map == mlo_radio_map) {
             nl80211_send_mld_apply(NULL);
         }
@@ -2219,15 +2222,31 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             wifi_hal_dbg_print("%s:%d: beacon rate for vap_index:%d is %d\n", __func__, __LINE__,
                 map->vap_array[index].vap_index, map->vap_array[index].u.bss_info.beaconRate);
             int beacon_rate = 0;
+            int current_beacon_rate = 0;
             beacon_rate = convert_enum_beaconrate_to_int(
                 map->vap_array[index].u.bss_info.beaconRate);
             wifi_hal_dbg_print("%s:%d: converted beacon rate for vap_index:%d is %d\n", __func__,
                 __LINE__, map->vap_array[index].vap_index, beacon_rate);
-            if (nl_set_beacon_rate_ioctl(map->vap_array[index].vap_index, beacon_rate) !=
-                RETURN_OK) {
-                wifi_hal_error_print("%s:%d: Failed to set beacon rate %d for vap_index:%d\n",
-                    __func__, __LINE__, beacon_rate, map->vap_array[index].vap_index);
-                return RETURN_ERR;
+            if (wl_iovar_getint(interface_name, "force_bcn_rspec", &current_beacon_rate) < 0) {
+                wifi_hal_error_print("%s:%d Failed to get current beacon rate for interface: %s\n", __func__, __LINE__,
+                    interface_name);
+            }
+
+            /* Deal with WL_RSPEC_RATE_MASK -> 0xff to be able to convert into int value (backward compativility)
+             * also divide by 2 since BCM stores rate in 500 Kbps units (×2) */
+            current_beacon_rate &= 0xff;
+            wifi_hal_dbg_print("%s:%d: current beacon rate for vap_index:%d is %d\n", __func__, __LINE__,
+                map->vap_array[index].vap_index, current_beacon_rate / 2);
+            if (beacon_rate != (current_beacon_rate / 2)) {
+                if (nl_set_beacon_rate_ioctl(map->vap_array[index].vap_index, beacon_rate) !=
+                    RETURN_OK) {
+                    wifi_hal_error_print("%s:%d: Failed to set beacon rate %d for vap_index:%d\n",
+                        __func__, __LINE__, beacon_rate, map->vap_array[index].vap_index);
+                    return RETURN_ERR;
+                }
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
+                need_down = TRUE;
+#endif
             }
 #endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) 
          || defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT) */

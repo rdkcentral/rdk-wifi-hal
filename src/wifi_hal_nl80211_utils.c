@@ -1236,47 +1236,192 @@ static const char *const cn_op_class_cc[] = {
 wifi_country_radio_op_class_t us_op_class = {
     wifi_countrycode_US,
     {
-        { 1, 115, 4, {36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 2, 118, 4, {52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 4, 121, 12, {100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 0, 0, 0, 0} },
-        { 5, 125, 5, {149, 153, 157, 161, 165, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 12, 81, 11, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0, 0, 0, 0} }
+      { 1, 115, 4,
+            { 36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-1 */
+        { 2, 118, 4,
+            { 52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-2A */
+        { 4, 121, 12,
+            { 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140,
+                144 } }, /* 20MHz: 5GHz UNII-2C */
+        { 5, 125, 5,
+            { 149, 153, 157, 161, 165, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-3 */
+        { 12, 81, 11, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0, 0, 0, 0 } }, /* 20MHz: 2.4GHz */
+        { 22, 116, 2,
+            { 36, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-1 (primary lower) */
+        { 23, 119, 2,
+            { 52, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2A (primary lower) */
+        { 24, 122, 6,
+            { 100, 108, 116, 124, 132, 140, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2C (primary lower) */
+        { 25, 126, 2,
+            { 149, 157, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-3 (primary lower) */
+        { 27, 117, 2,
+            { 40, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-1 (primary upper) */
+        { 28, 120, 2,
+            { 56, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2A (primary upper) */
+        { 29, 123, 6,
+            { 104, 112, 120, 128, 136, 144, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2C (primary upper) */
+        { 30, 127, 2,
+            { 153, 161, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-3 (primary upper, Nomadic) */
+        { 31, 127, 2,
+            { 153, 161, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-3 (primary upper, LicenseExempt) */
+        { 32, 83, 7,
+            { 1, 2, 3, 4, 5, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 2.4GHz ch 1-7 (primary lower) */
+        { 33, 84, 7,
+            { 5, 6, 7, 8, 9, 10, 11, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 2.4GHz ch 5-11 (primary upper) */
+        { 128, 128, 12,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 149, 153, 157, 161, 0, 0, 0,
+                0 } }, /* 80MHz: centers 42, 58, 155 */
+        { 129, 129, 8,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 160MHz: center 50 */
+        { 130, 130, 12,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 149, 153, 157, 161, 0, 0, 0,
+                0 } } /* 80MHz+: centers 42, 58, 155 (80+80) */
     }
 };
 
 wifi_country_radio_op_class_t eu_op_class = {
     wifi_countrycode_AT,
     {
-        { 1, 115, 4, {36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 2, 118, 4, {52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 3, 121, 11, {100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 0, 0, 0, 0, 0} },
-        { 4, 81, 13, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0} },
-        { 5, 116, 2, {36, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 6, 119, 2, {52, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }
+      { 1, 115, 4,
+            { 36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-1 */
+        { 2, 118, 4,
+            { 52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-2A */
+        { 3, 121, 11,
+            { 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 0, 0, 0, 0,
+                0 } }, /* 20MHz: 5GHz UNII-2C */
+        { 4, 81, 13, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0 } }, /* 20MHz: 2.4GHz */
+        { 5, 116, 2,
+            { 36, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-1 (primary lower) */
+        { 6, 119, 2,
+            { 52, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2A (primary lower) */
+        { 7, 122, 5,
+            { 100, 108, 116, 124, 132, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2C (primary lower) */
+        { 8, 117, 2,
+            { 40, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-1 (primary upper) */
+        { 9, 120, 2,
+            { 56, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2A (primary upper) */
+        { 10, 123, 5,
+            { 104, 112, 120, 128, 136, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2C (primary upper) */
+        { 11, 83, 9,
+            { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 2.4GHz (primary lower) */
+        { 12, 84, 9,
+            { 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 2.4GHz (primary upper) */
+        { 17, 125, 6,
+            { 149, 153, 157, 161, 165, 169, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 20MHz: 5GHz UNII-3 extended */
+        { 128, 128, 13,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 0, 0,
+                0 } }, /* 80MHz: centers 42, 58, 106, 122 */
+        { 129, 129, 13,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 0, 0,
+                0 } }, /* 160MHz: centers 50, 114 */
+        { 130, 130, 13,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 0, 0,
+                0 } } /* 80MHz+: centers 42, 58, 106, 122 (80+80) */
     }
 };
 
 wifi_country_radio_op_class_t jp_op_class = {
     wifi_countrycode_JP,
     {
-        { 30, 81, 13, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0} },
-        { 31, 82, 1, {14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 32, 118, 4, {52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 34, 121, 11, {100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 0, 0, 0, 0, 0} },
-        { 1, 115, 4, {36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 58, 121, 11, {100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 0, 0, 0, 0, 0} }
+      { 30, 81, 13, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0 } }, /* 20MHz: 2.4GHz */
+        { 31, 82, 1,
+            { 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 2.4GHz channel 14 */
+        { 32, 118, 4,
+            { 52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-2A */
+        { 34, 121, 11,
+            { 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 0, 0, 0, 0,
+                0 } }, /* 20MHz: 5GHz UNII-2C */
+        { 1, 115, 4,
+            { 36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-1 */
+        { 58, 121, 11,
+            { 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 0, 0, 0, 0,
+                0 } }, /* 20MHz: 5GHz UNII-2C (W56) */
+        { 36, 116, 2,
+            { 36, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-1 (primary lower) */
+        { 37, 119, 2,
+            { 52, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2A (primary lower) */
+        { 39, 122, 5,
+            { 100, 108, 116, 124, 132, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2C (primary lower) */
+        { 41, 117, 2,
+            { 40, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-1 (primary upper) */
+        { 42, 120, 2,
+            { 56, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2A (primary upper) */
+        { 44, 123, 5,
+            { 104, 112, 120, 128, 136, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2C (primary upper) */
+        { 56, 83, 9,
+            { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 2.4GHz ch 1-9 (primary lower) */
+        { 57, 84, 9,
+            { 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 2.4GHz ch 5-13 (primary upper) */
+        { 128, 128, 13,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 0, 0,
+                0 } }, /* 80MHz: centers 42, 58, 106, 122 */
+        { 129, 129, 13,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 0, 0,
+                0 } }, /* 160MHz: centers 50, 114 */
+        { 130, 130, 13,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 0, 0,
+                0 } } /* 80MHz+: centers 42, 58, 106, 122 (80+80) */
     }
 };
 
 wifi_country_radio_op_class_t cn_op_class = {
     wifi_countrycode_CN,
     {
-        { 1, 115, 4, {36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 2, 118, 4, {52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 3, 125, 5, {149, 153, 157, 161, 165, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 4, 116, 2, {36, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 5, 119, 2, {52, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 7, 81, 13, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0} }
+      { 1, 115, 4,
+            { 36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-1 */
+        { 2, 118, 4,
+            { 52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-2A */
+        { 3, 125, 5,
+            { 149, 153, 157, 161, 165, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-3 */
+        { 4, 116, 2,
+            { 36, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-1 (primary lower) */
+        { 5, 119, 2,
+            { 52, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2A (primary lower) */
+        { 7, 81, 13, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0 } }, /* 20MHz: 2.4GHz */
+        { 8, 83, 9,
+            { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 2.4GHz ch 1-9 (primary lower) */
+        { 9, 84, 9,
+            { 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 2.4GHz ch 5-13 (primary upper) */
+        { 128, 128, 12,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 149, 153, 157, 161, 0, 0, 0,
+                0 } }, /* 80MHz: centers 42, 58, 155 */
+        { 129, 129, 8,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 160MHz: center 50 */
+        { 130, 130, 12,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 149, 153, 157, 161, 0, 0, 0,
+                0 } } /* 80MHz+: centers 42, 58, 155 (80+80) */
     }
 };
 
@@ -1284,12 +1429,60 @@ wifi_country_radio_op_class_t cn_op_class = {
 wifi_country_radio_op_class_t other_op_class = {
     wifi_countrycode_IN,
     {
-        { 81, 0, 13, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0} },
-        { 82, 0, 1, {14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 115, 0, 4, {36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 121, 0, 12, {100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 0, 0, 0, 0} },
-        { 124, 0, 4, {149, 153, 157, 161, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { 125, 0, 6, {149, 153, 157, 161, 165, 169, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} }
+      { 81, 81, 13, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0 } }, /* 20MHz: 2.4GHz */
+        { 82, 82, 1,
+            { 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 2.4GHz channel 14 */
+        { 83, 83, 9,
+            { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 2.4GHz (primary lower) */
+        { 84, 84, 9,
+            { 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 2.4GHz (primary upper) */
+        { 115, 115, 4,
+            { 36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-1 */
+        { 116, 116, 2,
+            { 36, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-1 (primary lower) */
+        { 117, 117, 2,
+            { 40, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-1 (primary upper) */
+        { 118, 118, 4,
+            { 52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-2A */
+        { 119, 119, 2,
+            { 52, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2A (primary lower) */
+        { 120, 120, 2,
+            { 56, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2A (primary upper) */
+        { 121, 121, 12,
+            { 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 0, 0, 0,
+                0 } }, /* 20MHz: 5GHz UNII-2C */
+        { 122, 122, 6,
+            { 100, 108, 116, 124, 132, 140, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2C (primary lower) */
+        { 123, 123, 6,
+            { 104, 112, 120, 128, 136, 144, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-2C (primary upper) */
+        { 124, 124, 4,
+            { 149, 153, 157, 161, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-3 */
+        { 125, 125, 6,
+            { 149, 153, 157, 161, 165, 169, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 20MHz: 5GHz UNII-3 extended */
+        { 126, 126, 2,
+            { 149, 157, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-3 (primary lower) */
+        { 127, 127, 2,
+            { 153, 161, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0 } }, /* 40MHz: 5GHz UNII-3 (primary upper) */
+        { 128, 128, 16,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124,
+                128 } }, /* 80MHz: centers 42, 58, 106, 122 (no 138, 155) */
+        { 129, 129, 16,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124,
+                128 } }, /* 160MHz: centers 50, 114 */
+        { 130, 130, 16,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124,
+                128 } } /* 80MHz+: centers 42, 58, 106, 122 (80+80, no 138, 155) */
     }
 };
 
@@ -2872,6 +3065,181 @@ int convert_enum_beaconrate_to_int(wifi_bitrate_t rates)
     }
 }
 
+/* US/CA: Check if global operating class matches bandwidth */
+static bool matches_bandwidth_us(unsigned int global_op_class, wifi_channelBandwidth_t bw)
+{
+    switch (bw) {
+    case WIFI_CHANNELBANDWIDTH_20MHZ:
+        /* 2.4GHz: 81 (ch 1-11), 5GHz: 115, 118, 121, 124, 125 */
+        return (global_op_class == 81 || global_op_class == 115 || global_op_class == 118 ||
+            global_op_class == 121 || global_op_class == 124 || global_op_class == 125);
+    case WIFI_CHANNELBANDWIDTH_40MHZ:
+        /* 2.4GHz: 83, 84 | 5GHz: 116, 117, 119, 120, 122, 123, 126, 127 */
+        return (global_op_class == 83 || global_op_class == 84 || global_op_class == 116 ||
+            global_op_class == 117 || global_op_class == 119 || global_op_class == 120 ||
+            global_op_class == 122 || global_op_class == 123 || global_op_class == 126 ||
+            global_op_class == 127);
+    case WIFI_CHANNELBANDWIDTH_80MHZ:
+        /* 5GHz: 128 (centers 42, 58, 155) */
+        return (global_op_class == 128);
+    case WIFI_CHANNELBANDWIDTH_160MHZ:
+        /* 5GHz: 129 */
+        return (global_op_class == 129);
+    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
+        /* 5GHz: 130 (80+80MHz) */
+        return (global_op_class == 130);
+    default:
+        return false;
+    }
+}
+
+/* EU: Check if global operating class matches bandwidth */
+static bool matches_bandwidth_eu(unsigned int global_op_class, wifi_channelBandwidth_t bw)
+{
+    switch (bw) {
+    case WIFI_CHANNELBANDWIDTH_20MHZ:
+        /* 2.4GHz: 81 (ch 1-13), 5GHz: 115, 118, 121, 125 (extended UNII-3) */
+        return (global_op_class == 81 || global_op_class == 115 || global_op_class == 118 ||
+            global_op_class == 121 || global_op_class == 125);
+    case WIFI_CHANNELBANDWIDTH_40MHZ:
+        /* 2.4GHz: 83, 84 | 5GHz: 116, 117, 119, 120, 122, 123 (NO UNII-3: 126, 127) */
+        return (global_op_class == 83 || global_op_class == 84 || global_op_class == 116 ||
+            global_op_class == 117 || global_op_class == 119 || global_op_class == 120 ||
+            global_op_class == 122 || global_op_class == 123);
+    case WIFI_CHANNELBANDWIDTH_80MHZ:
+        /* 5GHz: 128 (centers 42, 58, 106, 122) */
+        return (global_op_class == 128);
+    case WIFI_CHANNELBANDWIDTH_160MHZ:
+        /* 5GHz: 129 */
+        return (global_op_class == 129);
+    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
+        /* 5GHz: 130 (80+80MHz) */
+        return (global_op_class == 130);
+    default:
+        return false;
+    }
+}
+
+/* JP: Check if global operating class matches bandwidth */
+static bool matches_bandwidth_jp(unsigned int global_op_class, wifi_channelBandwidth_t bw)
+{
+    switch (bw) {
+    case WIFI_CHANNELBANDWIDTH_20MHZ:
+        /* 2.4GHz: 81 (ch 1-13), 82 (ch 14 - JP ONLY), 5GHz: 115, 118, 121 */
+        return (global_op_class == 81 || global_op_class == 82 || global_op_class == 115 ||
+            global_op_class == 118 || global_op_class == 121);
+    case WIFI_CHANNELBANDWIDTH_40MHZ:
+        /* 2.4GHz: 83, 84 | 5GHz: 116, 117, 119, 120, 122, 123 (NO UNII-3: 126, 127) */
+        return (global_op_class == 83 || global_op_class == 84 || global_op_class == 116 ||
+            global_op_class == 117 || global_op_class == 119 || global_op_class == 120 ||
+            global_op_class == 122 || global_op_class == 123);
+    case WIFI_CHANNELBANDWIDTH_80MHZ:
+        /* 5GHz: 128 (centers 42, 58, 106, 122) */
+        return (global_op_class == 128);
+    case WIFI_CHANNELBANDWIDTH_160MHZ:
+        /* 5GHz: 129 */
+        return (global_op_class == 129);
+    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
+        /* 5GHz: 130 (80+80MHz) */
+        return (global_op_class == 130);
+    default:
+        return false;
+    }
+}
+
+/* CN: Check if global operating class matches bandwidth */
+static bool matches_bandwidth_cn(unsigned int global_op_class, wifi_channelBandwidth_t bw)
+{
+    switch (bw) {
+    case WIFI_CHANNELBANDWIDTH_20MHZ:
+        /* 2.4GHz: 81 (ch 1-13), 5GHz: 115, 118, 125 */
+        return (global_op_class == 81 || global_op_class == 115 || global_op_class == 118 ||
+            global_op_class == 125);
+    case WIFI_CHANNELBANDWIDTH_40MHZ:
+        /* 2.4GHz: 83, 84 | 5GHz: 116, 119 */
+        return (global_op_class == 83 || global_op_class == 84 || global_op_class == 116 ||
+            global_op_class == 119);
+    case WIFI_CHANNELBANDWIDTH_80MHZ:
+        /* 5GHz: 128 (centers 42, 58, 155) */
+        return (global_op_class == 128);
+    case WIFI_CHANNELBANDWIDTH_160MHZ:
+        /* 5GHz: 129 (limited support) */
+        return (global_op_class == 129);
+    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
+        /* 5GHz: 130 (80+80MHz) */
+        return (global_op_class == 130);
+    default:
+        return false;
+    }
+}
+
+/* Global/Other: Check if global operating class matches bandwidth */
+static bool matches_bandwidth_global(unsigned int global_op_class, wifi_channelBandwidth_t bw)
+{
+    switch (bw) {
+    case WIFI_CHANNELBANDWIDTH_20MHZ:
+        /* All standard 20MHz operating classes */
+        return (global_op_class == 81 || global_op_class == 82 || global_op_class == 115 ||
+            global_op_class == 118 || global_op_class == 121 || global_op_class == 124 ||
+            global_op_class == 125);
+    case WIFI_CHANNELBANDWIDTH_40MHZ:
+        /* All standard 40MHz operating classes */
+        return (global_op_class == 83 || global_op_class == 84 || global_op_class == 116 ||
+            global_op_class == 117 || global_op_class == 119 || global_op_class == 120 ||
+            global_op_class == 122 || global_op_class == 123 || global_op_class == 126 ||
+            global_op_class == 127);
+    case WIFI_CHANNELBANDWIDTH_80MHZ:
+        /* All standard 80MHz operating classes: 128 only */
+        return (global_op_class == 128);
+    case WIFI_CHANNELBANDWIDTH_160MHZ:
+        /* 5GHz: 129 */
+        return (global_op_class == 129);
+    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
+        /* 5GHz: 130 (80+80MHz) */
+        return (global_op_class == 130);
+    default:
+        return false;
+    }
+}
+
+/*
+ * Select appropriate bandwidth matching function based on country.
+ * Each country has specific allowed operating classes based on regulatory domain.
+ * Uses the country code from cc_op_class to determine which table was loaded.
+ *
+ * Country-specific restrictions:
+ * - US/CA: Full support (ch 1-11, UNII-1/2/3, 20/40/80/160 MHz)
+ * - EU: No UNII-3 channels (149-165), ch 1-13
+ * - JP: Channel 14 only in Japan, no UNII-3, ch 1-14
+ * - CN: Limited 5GHz, no 160MHz support
+ */
+static bool matches_bandwidth_for_country(unsigned int global_op_class, wifi_channelBandwidth_t bw,
+    wifi_countrycode_type_t cc)
+{
+    /* US table */
+    if (cc == us_op_class.cc) {
+        return matches_bandwidth_us(global_op_class, bw);
+    }
+
+    /* EU table */
+    if (cc == eu_op_class.cc) {
+        return matches_bandwidth_eu(global_op_class, bw);
+    }
+
+    /* Japan table */
+    if (cc == jp_op_class.cc) {
+        return matches_bandwidth_jp(global_op_class, bw);
+    }
+
+    /* China table */
+    if (cc == cn_op_class.cc) {
+        return matches_bandwidth_cn(global_op_class, bw);
+    }
+
+    /* Default to global for all other countries */
+    return matches_bandwidth_global(global_op_class, bw);
+}
+
 int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
 {
     unsigned int i, j;
@@ -2909,29 +3277,73 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
         return RETURN_ERR;
     }
 
-    // channel match with country op class
+    /*
+     * Operating class is determined by BOTH channel AND bandwidth:
+     * - Same channel with different bandwidths maps to different op_class values
+     * - e.g., channel 36: 20MHz→op_class 1/115, 40MHz→op_class 22/116, 80MHz→op_class 128
+     *
+     * cc_op_class already contains the country-specific table, so we use country-specific
+     * bandwidth matching to filter by both country regulations and bandwidth
+     */
+
+    // Search country-specific op_class table: match channel AND bandwidth
     for (i = 0; i < ARRAY_SZ(cc_op_class.op_class); i++) {
         op_class = &cc_op_class.op_class[i];
+
+        // Skip invalid/empty entries (not all countries use all 19 slots)
+        if (op_class->op_class == 0 || op_class->global_op_class == 0) {
+            continue;
+        }
+
+        // Skip if this op_class doesn't match the requested bandwidth for this country
+        if (!matches_bandwidth_for_country(op_class->global_op_class, param->channelWidth,
+                cc_op_class.cc)) {
+            continue;
+        }
+
+        // Check if requested channel is in this op_class
         for (j = 0; j < op_class->num; j++) {
             if (op_class->ch_list[j] == param->channel) {
+                wifi_hal_dbg_print(
+                    "%s:%d:Selected country op_class=%u (global=%u) for ch=%u bw=%d\n", __func__,
+                    __LINE__, op_class->op_class, op_class->global_op_class, param->channel,
+                    param->channelWidth);
                 return op_class->op_class;
             }
         }
     }
 
-    // channel match with global op class
+    // Fallback: search global op_class table: match channel AND bandwidth
     for (i = 0; i < ARRAY_SZ(other_op_class.op_class); i++) {
         op_class = &other_op_class.op_class[i];
+
+        // Skip invalid/empty entries
+        if (op_class->op_class == 0 || op_class->global_op_class == 0) {
+            continue;
+        }
+
+        // Skip if this op_class doesn't match the requested bandwidth for this country
+        if (!matches_bandwidth_for_country(op_class->op_class, param->channelWidth,
+                param->countryCode)) {
+            continue;
+        }
+
+        // Check if requested channel is in this op_class
         for (j = 0; j < op_class->num; j++) {
             if (op_class->ch_list[j] == param->channel) {
+                wifi_hal_dbg_print("%s:%d:Selected global op_class=%u for ch=%u bw=%d\n", __func__,
+                    __LINE__, op_class->op_class, param->channel, param->channelWidth);
                 return op_class->op_class;
             }
         }
     }
 
-    wifi_hal_error_print("%s:%d:Could not find channel is list for country op class / global op class : %d\n", __func__, __LINE__, param->countryCode);
+    wifi_hal_error_print(
+        "%s:%d:Could not find channel is list for country op class / global op class : %d\n",
+        __func__, __LINE__, param->countryCode);
     return RETURN_ERR;
 }
+
 
 int get_sec_channel_offset(wifi_radio_info_t *radio, int freq)
 {
@@ -4841,17 +5253,26 @@ static inline int json_parse_interface_map(cJSON *json)
     tmp_intf_idx_map = NULL;
     tmp_radio_interface_map = NULL;
 
-    if (!((tmp_intf_idx_map = calloc(1, sizeof(*tmp_intf_idx_map) * interface_idx_map_size)) &&
-            (tmp_radio_interface_map = calloc(1,
-                 sizeof(*tmp_radio_interface_map) * radio_interface_map_size)))) {
-        wifi_hal_error_print("%s:%d: Failed to allocate interface_idx_map(%d - %u "
-                             "bytes) or radio_interface_map_size(%d - %u bytes)\n",
-            __func__, __LINE__, !!tmp_intf_idx_map, interface_idx_map_size,
-            !!tmp_radio_interface_map, radio_interface_map_size);
+    if (interface_idx_map_size == 0 || radio_interface_map_size == 0) {
+        wifi_hal_error_print("%s:%d: No interfaces or radios present\n", __func__, __LINE__);
+        return -1;
+    }
 
-        free(tmp_radio_interface_map);
+    tmp_intf_idx_map = calloc(1, sizeof(*tmp_intf_idx_map) * interface_idx_map_size);
+    if (tmp_intf_idx_map == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate interface_idx_map(%d - %u bytes)\n",
+            __func__, __LINE__, !!tmp_intf_idx_map, interface_idx_map_size);
+
+        return -1;
+    }
+
+    tmp_radio_interface_map = calloc(1,
+                 sizeof(*tmp_radio_interface_map) * radio_interface_map_size);
+    if (tmp_radio_interface_map == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate radio_interface_map_size(%d - %u bytes)\n",
+            __func__, __LINE__, !!tmp_radio_interface_map, radio_interface_map_size);
+
         free(tmp_intf_idx_map);
-
         return -1;
     }
 
