@@ -5723,7 +5723,10 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info
                 continue;
             }
 
-            // TODO: multiple mld support
+            if (interface_iter->index != interface->index) {
+                continue;
+            }
+
             if (wifi_hal_get_mld_link_id(interface_iter) == link_id) {
                 return interface_iter;
             }
@@ -5760,7 +5763,10 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t 
                 continue;
             }
 
-            // TODO: multiple mld support
+            if (interface_iter->index != interface->index) {
+                continue;
+            }
+
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             if (interface_iter->u.ap.iface.freq == freq) {
                 pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
