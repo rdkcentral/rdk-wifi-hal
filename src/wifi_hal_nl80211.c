@@ -6108,6 +6108,7 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
     struct genlmsghdr *gnlh;
 #ifdef CONFIG_GENERIC_MLO
     char *mld_name;
+    static unsigned int link_id = 0;
 #endif // CONFIG_GENERIC_MLO
 #ifdef FEATURE_SINGLE_PHY
     int rdk_radio_index_of_intf = -1;
@@ -6206,7 +6207,9 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                 // TODO: get MLD configuration from DB
                 wifi_hal_set_mld_enabled(interface, true);
                 wifi_hal_set_mld_mac_address(interface, mld_mac);
-                wifi_hal_set_mld_link_id(interface, radio->rdk_radio_index);
+                wifi_hal_set_mld_link_id(interface, interface->rdk_radio_index);
+                wifi_hal_set_mld_link_id(interface, link_id);
+                link_id++;
             }
 #endif // CONFIG_GENERIC_MLO
 

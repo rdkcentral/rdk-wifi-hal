@@ -650,6 +650,10 @@ typedef struct {
     wifi_bm_steering_group_t  bm_steer_groups[MAX_STEERING_GROUP_NUM];
     hash_map_t *mgt_frame_rate_limit_hashmap;
     wifi_hal_mgt_frame_rate_limit_t mgt_frame_rate_limit;
+#ifdef CONFIG_GENERIC_MLO
+    unsigned int mld_count;
+    struct hostapd_mld **mld_array;
+#endif
 } wifi_hal_priv_t;
 
 extern wifi_hal_priv_t g_wifi_hal;
