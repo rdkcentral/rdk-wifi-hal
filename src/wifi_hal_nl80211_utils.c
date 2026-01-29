@@ -1745,6 +1745,7 @@ static const wifi_enum_to_str_map_t wifi_bandwidth_Map[] =
 #endif /* CONFIG_IEEE80211BE */
 };
 
+// Map of bitrate enum to string in Mbps format
 static const wifi_enum_to_str_map_t wifi_bitrate_Map[] =
 {
     {WIFI_BITRATE_DEFAULT, "default" },
