@@ -288,7 +288,7 @@ struct wifiEnvironmentEnumStrMap {
 
 typedef struct {
     wifi_countrycode_type_t    cc;
-    wifi_radio_op_class_t   op_class[6];
+    wifi_radio_op_class_t   op_class[20];
 } wifi_country_radio_op_class_t;
 
 typedef struct {
@@ -485,6 +485,7 @@ typedef struct wifi_interface_info_t {
     int mgmt_frames_registered;
     int spurious_frames_registered;
     int bss_frames_registered;
+    int data_frames_registered;
     hash_map_t  *acl_map;
 
     /* Scan support */
@@ -651,6 +652,10 @@ typedef struct {
     wifi_bm_steering_group_t  bm_steer_groups[MAX_STEERING_GROUP_NUM];
     hash_map_t *mgt_frame_rate_limit_hashmap;
     wifi_hal_mgt_frame_rate_limit_t mgt_frame_rate_limit;
+#ifdef CONFIG_GENERIC_MLO
+    unsigned int mld_count;
+    struct hostapd_mld **mld_array;
+#endif
 } wifi_hal_priv_t;
 
 extern wifi_hal_priv_t g_wifi_hal;

@@ -1790,12 +1790,7 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
         return NL_SKIP;
     }
 
-#if defined(CONFIG_GENERIC_MLO)
-    // TODO: Temporary disable vap_configured check for MLO
-    if (interface != NULL) {
-#else
     if (interface != NULL && interface->vap_configured) {
-#endif // CONFIG_GENERIC_MLO
         wifi_hal_dbg_print("%s:%d: event registered - processing for %s event %d\n", __func__,
             __LINE__, interface->name, gnlh->cmd);
         do_process_drv_event(interface, gnlh->cmd, tb);
