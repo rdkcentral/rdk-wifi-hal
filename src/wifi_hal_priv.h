@@ -288,7 +288,7 @@ struct wifiEnvironmentEnumStrMap {
 
 typedef struct {
     wifi_countrycode_type_t    cc;
-    wifi_radio_op_class_t   op_class[6];
+    wifi_radio_op_class_t   op_class[20];
 } wifi_country_radio_op_class_t;
 
 typedef struct {
@@ -485,6 +485,7 @@ typedef struct wifi_interface_info_t {
     int mgmt_frames_registered;
     int spurious_frames_registered;
     int bss_frames_registered;
+    int data_frames_registered;
     hash_map_t  *acl_map;
 
     /* Scan support */
@@ -542,6 +543,7 @@ typedef struct {
     unsigned int  prev_channelWidth;
     bool radio_presence; //True for ECO mode Active radio, false for ECO mode power down sleeping radio
     bool radar_detected;
+    bool configuration_in_progress;
 } wifi_radio_info_t;
 
 typedef wifi_vap_name_t wifi_vap_type_t;
@@ -650,6 +652,10 @@ typedef struct {
     wifi_bm_steering_group_t  bm_steer_groups[MAX_STEERING_GROUP_NUM];
     hash_map_t *mgt_frame_rate_limit_hashmap;
     wifi_hal_mgt_frame_rate_limit_t mgt_frame_rate_limit;
+#ifdef CONFIG_GENERIC_MLO
+    unsigned int mld_count;
+    struct hostapd_mld **mld_array;
+#endif
 } wifi_hal_priv_t;
 
 extern wifi_hal_priv_t g_wifi_hal;
@@ -1423,4 +1429,6 @@ wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_inf
     mac_address_t mac);
 int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
+int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
+    size_t ifname_out_len);
 #endif // WIFI_HAL_PRIV_H
