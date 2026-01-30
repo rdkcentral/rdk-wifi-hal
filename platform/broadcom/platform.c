@@ -73,11 +73,6 @@
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT ||
        // SCXF10_PORT || RDKB_ONE_WIFI_PROD
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
-static bool l_eht_set = false;
-static int l_eht_interface_count = 0;
-bool (*g_eht_event_notify)(wifi_interface_info_t *interface) = NULL;
-
 /*
 If include secure_wrapper.h, will need to convert other system calls with v_secure_system calls
 #include <secure_wrapper.h>
@@ -85,6 +80,11 @@ If include secure_wrapper.h, will need to convert other system calls with v_secu
 int v_secure_system(const char *command, ...);
 FILE *v_secure_popen(const char *direction, const char *command, ...);
 int v_secure_pclose(FILE *);
+
+#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
+static bool l_eht_set = false;
+static int l_eht_interface_count = 0;
+bool (*g_eht_event_notify)(wifi_interface_info_t *interface) = NULL;
 
 static bool platform_radio_state(wifi_radio_index_t index);
 static bool platform_is_eht_enabled(wifi_radio_index_t index);
@@ -2160,6 +2160,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
     char param_name[NVRAM_NAME_SIZE];
     char interface_name[8];
     wifi_radio_info_t *radio;
+    struct hostapd_config  *iconf;
     char das_ipaddr[45];
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && defined(CONFIG_IEEE80211BE) && defined(XB10_PORT) && defined(MLO_ENAB)
     bool need_down = platform_down_reqd(r_index, map);
@@ -2189,6 +2190,11 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             return RETURN_ERR;
         }
 
+        iconf = &radio->iconf;
+        if (iconf == NULL) {
+            wifi_hal_error_print("%s:%d: hostapd conf is empty for radio %d\n", __func__, __LINE__, r_index);
+            return RETURN_ERR;
+        }
         memset(interface_name, 0, sizeof(interface_name));
 #if defined(NEWPLATFORM_PORT) || defined(_SR213_PRODUCT_REQ_)
         get_interface_name_from_vap_index(map->vap_array[index].vap_index, interface_name);
@@ -2372,6 +2378,8 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             prepare_param_name(param_name, interface_name, "_bcnprs_txpwr_offset");
             set_decimal_nvram_param(param_name, abs(map->vap_array[index].u.bss_info.mgmtPowerControl));
             wifi_setApManagementFramePowerControl(map->vap_array[index].vap_index, map->vap_array[index].u.bss_info.mgmtPowerControl);
+
+            wifi_setApBSSColorValue(map->vap_array[index].vap_index, iconf->he_op.he_bss_color_disabled ? 0 : iconf->he_op.he_bss_color);
         } else if (map->vap_array[index].vap_mode == wifi_vap_mode_sta) {
 
             prepare_param_name(param_name, interface_name, "_akm");
@@ -4006,6 +4014,85 @@ INT wifi_getRadioTransmitPower(INT radioIndex, ULONG *tx_power)
 }
 
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
+
+static int set_ap_bss_color_value(const char *ifname, UINT bssColor)
+{
+    wifi_hal_dbg_print("%s:%d: Running following command: wl -i %s he bsscolor %u\n", __func__,
+        __LINE__, ifname, bssColor);
+    v_secure_system("wl -i %s he bsscolor %u", ifname, bssColor);
+
+    return RETURN_OK;
+}
+
+INT wifi_setApBSSColorValue(INT apIndex, UINT bssColor)
+{
+    wifi_interface_info_t *interface;
+
+    wifi_hal_dbg_print("%s:%d: Set AP BSS Color %x for index: %d\n", __func__, __LINE__,
+        bssColor, apIndex);
+
+    interface = get_interface_by_vap_index(apIndex);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get interface for ap index: %d\n", __func__,
+            __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+
+    if (set_ap_bss_color_value(interface->name, bssColor)) {
+        wifi_hal_error_print("%s:%d: Failed to set ap power for ap index: %d\n", __func__,
+            __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+
+    return RETURN_OK;
+}
+
+static UINT get_ap_bss_color_value(const char *ifname)
+{
+    FILE *fp;
+    char line[256];
+    UINT color = 0;
+    bool disabled = false;
+
+    fp = (FILE *)v_secure_popen("r", "wl -i %s he bsscolor", ifname);
+    if (fp) {
+        while (fgets(line, sizeof(line), fp)) {
+            UINT tmp;
+            char disabledText[6]; //TRUE or FALSE and null terminator
+            if (sscanf(line, "Color: %u", &tmp) == 1) {
+                color = tmp;
+                continue;
+            }
+
+            if (sscanf(line, "Disabled: %5s", disabledText) == 1) {
+                disabled = (strcmp(disabledText, "TRUE") == 0) ? true : false;
+                continue;
+            }
+        }
+        v_secure_pclose(fp);
+    }
+
+    return disabled ? 0 : color;
+}
+
+INT wifi_getApBSSColorValue(INT apIndex, UINT *output_bssColor)
+{
+    wifi_interface_info_t *interface;
+
+    wifi_hal_dbg_print("%s:%d: Get AP BSS Color value for index: %d\n", __func__, __LINE__,
+        apIndex);
+
+    interface = get_interface_by_vap_index(apIndex);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get interface for ap index: %d\n", __func__,
+            __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+
+    *output_bssColor = get_ap_bss_color_value(interface->name);
+
+    return RETURN_OK;
+}
 
 int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
