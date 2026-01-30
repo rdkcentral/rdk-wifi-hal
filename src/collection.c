@@ -158,33 +158,29 @@ void    queue_destroy   (queue_t *q)
 int8_t hash_map_put    (hash_map_t *map, char *key, void *data)
 {
     hash_element_t *e;
-    char *dup_key = NULL;
     
-    if (map == NULL || map->queue == NULL || key == NULL || data == NULL) {
+    if (map == NULL) {
         return -1;
     }
-
-    dup_key = strndup(key, HASH_MAP_MAX_KEY_SIZE);
-    if (dup_key == NULL) {
-        return -1;
-    }
-
     map->itr = NULL;
     e = (hash_element_t *)malloc(sizeof(hash_element_t));
     if (e == NULL) {
-        free(dup_key);
         return -1;
     }
     memset(e, 0, sizeof(hash_element_t));
-    e->key = dup_key;
+    e->key = key;
     e->data = data;
     
     if (queue_push(map->queue, e) < 0) {
-        free(dup_key);
+        free(key);
+        if ( e->data != NULL) {
+            free(e->data);
+            e->data = NULL;
+        }
         free(e);
         return -1;
     }
-    return 0;
+    return 0;    
 }
 
 void *hash_map_get   (hash_map_t *map, const char *key)
