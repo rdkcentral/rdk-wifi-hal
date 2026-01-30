@@ -2,6 +2,8 @@
 
 This guide helps you configure Git to work with the rdk-wifi-hal repository, especially when managing multiple GitHub accounts (e.g., personal and enterprise accounts).
 
+> **🚀 Need a quick fix?** See the [Quick Reference Guide](.github/GIT_CREDENTIAL_QUICK_REFERENCE.md) for common commands.
+
 ## Table of Contents
 - [Quick Start](#quick-start)
 - [Managing Multiple GitHub Accounts](#managing-multiple-github-accounts)
