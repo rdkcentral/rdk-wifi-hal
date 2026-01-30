@@ -1055,7 +1055,7 @@ int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
 
 int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
-    if ((index < 0) || (operationParam == NULL)) {
+    if (operationParam == NULL) {
         wifi_hal_dbg_print("%s:%d Invalid Argument \n", __FUNCTION__, __LINE__);
         return -1;
     }
@@ -3143,7 +3143,10 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
     }
 
     sta_list->macs = calloc(sta_list->num, sizeof(mac_address_t));
-
+    if (sta_list->macs == NULL) {
+        wifi_hal_stats_error_print("%s:%d Memory allocation failed\n", __func__, __LINE__);
+        goto error;
+    }
     if (tb_vendor[RDK_VENDOR_ATTR_STA_LIST] == NULL) {
         wifi_hal_stats_error_print("%s:%d STA list data is missing\n", __func__, __LINE__);
         goto error;
@@ -3174,8 +3177,10 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 
 error:
-    free(sta_list->macs);
-    sta_list->macs = NULL;
+    if (sta_list->macs != NULL) {
+        free(sta_list->macs);
+        sta_list->macs = NULL;
+    }
     sta_list->num = 0;
     return NL_SKIP;
 }
