@@ -1072,7 +1072,6 @@ INT wifi_hal_sm_deinit(INT vap_index)
     if (interface->u.sta.wpa_sm != NULL) {
         eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
         interface->u.sta.wpa_sm->eapol = NULL;
-
         wpa_sm_deinit(interface->u.sta.wpa_sm);
         interface->u.sta.wpa_sm = NULL;
     }

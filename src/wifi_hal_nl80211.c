@@ -9261,7 +9261,6 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             (list->next != list || list->prev != list)) {
             wifi_hal_error_print("%s:%d: Removing current_bss from list before memset\n", __func__,
                 __LINE__);
-
             /* Remove from the BSS linked list */
             dl_list_del(list);
         }
