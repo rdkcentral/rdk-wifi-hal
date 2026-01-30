@@ -240,11 +240,11 @@ unsigned int convert_radioindex_to_bcmband(unsigned int radioIndex)
     return UINT_MAX;
 }
 
-void convert_from_channellist_to_chspeclist(unsigned int bw, unsigned int band,wifi_channels_list_t chanlist, char* output_chanlist)
+void convert_from_channellist_to_chspeclist(unsigned int bw, unsigned int band, const wifi_channels_list_t *chanlist, char* output_chanlist)
 {
-    int channel_list[chanlist.num_channels];
-    memcpy(channel_list,chanlist.channels_list,sizeof(channel_list));
-    for(int i=0;i<chanlist.num_channels;i++)
+    int channel_list[chanlist->num_channels];
+    memcpy(channel_list,chanlist->channels_list,sizeof(channel_list));
+    for(int i=0;i<chanlist->num_channels;i++)
     {
         char buff[8];
         chanspec_t chspec = wf_channel2chspec(channel_list[i],bw,band);
@@ -963,7 +963,7 @@ static int disable_dfs_auto_channel_change(int radio_index, int disable)
     return 0;
 }
 
-int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t chanlist, char* buff)
+int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, const wifi_channels_list_t *chanlist, char* buff)
 {
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     unsigned int bw = convert_channelBandwidth_to_bcmwifibandwidth(bandwidth);
