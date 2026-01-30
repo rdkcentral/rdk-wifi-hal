@@ -1060,7 +1060,10 @@ int wifi_rrm_send_beacon_resp(unsigned int ap_index, wifi_neighbor_ap2_t *bss,
     wifi_radio_operationParam_t *radio_param = NULL;
     radio_param = &radio->oper_param;
     int op_class = 0;
-    op_class = get_op_class_from_radio_params(radio_param);
+    if ((op_class = get_op_class_from_radio_params(radio_param)) == -1) {
+        wifi_hal_error_print("%s:%d: Could not find op_class for radio\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
 
     for (itr = 0; itr < num_report; itr++) {
         ssid_len = strlen(bss->ap_SSID);

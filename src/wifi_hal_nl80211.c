@@ -2065,7 +2065,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
 int parsertattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
 {
 
-    if ((tb == NULL) && (rta == NULL)) {
+    if ((tb == NULL) || (rta == NULL)) {
         return -1;
     }
 
@@ -4772,7 +4772,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     }
 
     if (tb[NL80211_ATTR_WIPHY_NAME]) {
-        strcpy(radio->name, nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]));
+        snprintf(radio->name, sizeof(radio->name), "%s", nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]));
     }
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     capa = &radio->driver_data.capa;
@@ -15923,6 +15923,10 @@ static size_t add_eid_rnr_len(void *priv, size_t *current_len)
 
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__, i);
+            return 0;
+        }
         if (radio && radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
             break;
         }
@@ -16164,6 +16168,10 @@ static u8 *add_eid_rnr(void *priv, u8 *eid, size_t *current_len)
 
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__, i);
+            return 0;
+        }
         if (radio && radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
             break;
         }
