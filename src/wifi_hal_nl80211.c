@@ -9408,14 +9408,27 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     }
     if (interface->wpa_s.current_bss == NULL) {
         interface->wpa_s.current_bss = (struct wpa_bss *)malloc(
-                sizeof(struct wpa_bss) + bss_ie->buff_len);
+            sizeof(struct wpa_bss) + bss_ie->buff_len);
         if (interface->wpa_s.current_bss == NULL) {
             wifi_hal_error_print("%s:%d NULL Pointer\n", __func__, __LINE__);
             return -1;
         }
+    } else {
+        struct dl_list *list = &interface->wpa_s.current_bss->list;
+
+        /* Check if node is already in a dl_list */
+        if (list->next != NULL && list->prev != NULL &&
+            (list->next != list || list->prev != list)) {
+            wifi_hal_error_print("%s:%d: Removing current_bss from list before memset\n", __func__,
+                __LINE__);
+            /* Remove from the BSS linked list */
+            dl_list_del(list);
+        }
     }
     // Fill in current bss struct where we are going to connect.
     memset(interface->wpa_s.current_bss, 0, sizeof(struct wpa_bss) + bss_ie->buff_len);
+    /* Initialize the list node AFTER memset */
+    dl_list_init(&interface->wpa_s.current_bss->list);
     strcpy(interface->wpa_s.current_bss->ssid, backhaul->ssid);
     interface->wpa_s.current_bss->ssid_len = strlen(backhaul->ssid);
     memcpy(interface->wpa_s.current_bss->bssid, backhaul->bssid, ETH_ALEN);
