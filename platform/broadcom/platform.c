@@ -2088,7 +2088,7 @@ static void platform_rnr_update(wifi_radio_index_t r_index, wifi_vap_info_map_t 
     defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT)
 // ToDo: Add Beacon rate NL support for HUB6
 
-int nl_set_beacon_rate_ioctl(int vap_index, int beacon_rate)
+int nl_set_beacon_rate(int vap_index, int beacon_rate)
 {
     struct nlattr *nlattr_vendor;
     struct nl_msg *msg;
@@ -2219,6 +2219,19 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             // ToDo: Add Beacon rate NL support for HUB6
             wifi_hal_dbg_print("%s:%d: beacon rate for vap_index:%d is %d\n", __func__, __LINE__,
                 map->vap_array[index].vap_index, map->vap_array[index].u.bss_info.beaconRate);
+#if defined(SCXER10_PORT)
+            // XER10 uses kernel 4.19 which doesn't have NL support
+            char beacon_rate_str[8];
+            memset(beacon_rate_str, 0 ,sizeof(beacon_rate_str));
+            if (wifi_bitrate_to_str(beacon_rate_str, sizeof(beacon_rate_str),
+                map->vap_array[index].u.bss_info.beaconRate)) {
+                wifi_hal_error_print("%s:%d: Failed to convert beacon rate for vap_index:%d\n",
+                    __func__, __LINE__, map->vap_array[index].vap_index);
+                return RETURN_ERR;
+            }
+            wifi_hal_dbg_print("%s:%d: converted beacon rate str for vap_index:%d is %s\n", __func__,
+                __LINE__, map->vap_array[index].vap_index, beacon_rate_str);
+#endif /* defined(SCXER10_PORT) */
             int beacon_rate = 0;
             int current_beacon_rate = 0;
             beacon_rate = convert_enum_beaconrate_to_int(
@@ -2236,12 +2249,21 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             wifi_hal_dbg_print("%s:%d: current beacon rate for vap_index:%d is %d\n", __func__, __LINE__,
                 map->vap_array[index].vap_index, current_beacon_rate / 2);
             if (beacon_rate != (current_beacon_rate / 2)) {
-                if (nl_set_beacon_rate_ioctl(map->vap_array[index].vap_index, beacon_rate) !=
+#if defined(SCXER10_PORT)
+                // XER10 uses kernel 4.19 which doesn't have NL support
+                if (wifi_setApBeaconRate(map->vap_array[index].vap_index, beacon_rate_str) != RETURN_OK) {
+                    wifi_hal_error_print("%s:%d: Failed to set beacon rate %s for vap_index:%d\n",
+                        __func__, __LINE__, beacon_rate_str, map->vap_array[index].vap_index);
+                    return RETURN_ERR;
+                }
+#else
+                if (nl_set_beacon_rate(map->vap_array[index].vap_index, beacon_rate) !=
                     RETURN_OK) {
                     wifi_hal_error_print("%s:%d: Failed to set beacon rate %d for vap_index:%d\n",
                         __func__, __LINE__, beacon_rate, map->vap_array[index].vap_index);
                     return RETURN_ERR;
                 }
+#endif /* defined(SCXER10_PORT) */
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && defined(MLO_ENAB)
                 need_down = TRUE;
 #endif /* MLO_ENAB */
