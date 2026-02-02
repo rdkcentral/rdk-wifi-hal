@@ -17147,7 +17147,7 @@ int nl80211_dfs_cac_started(wifi_interface_info_t *interface, int freq, int ht_e
     memset(&radio_channel_param, 0, sizeof(radio_channel_param));
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d failed to get radio for index: %zu\n", __func__, __LINE__,
             interface->vap_info.radio_index);
         return 0;
     }
@@ -17811,7 +17811,7 @@ static size_t add_eid_rnr_len(void *priv, size_t *current_len)
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d failed to get radio for index: %zu\n", __func__, __LINE__,
             interface->vap_info.radio_index);
         return 0;
     }
@@ -17853,7 +17853,7 @@ static size_t add_eid_rnr_mlo_len(void *priv, size_t *current_len)
 
     reporting_radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (reporting_radio == NULL) {
-        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d failed to get radio for index: %zu\n", __func__, __LINE__,
             interface->vap_info.radio_index);
         return 0;
     }
@@ -18056,7 +18056,7 @@ static u8 *add_eid_rnr(void *priv, u8 *eid, size_t *current_len)
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d failed to get radio for index: %zu\n", __func__, __LINE__,
             interface->vap_info.radio_index);
         return eid_start;
     }
@@ -18098,7 +18098,7 @@ static u8 *add_eid_rnr_mlo(void *priv, u8 *eid, size_t *current_len)
 
     reporting_radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (reporting_radio == NULL) {
-        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d failed to get radio for index: %zu\n", __func__, __LINE__,
             interface->vap_info.radio_index);
         return eid_start;
     }
@@ -18675,7 +18675,7 @@ static struct hostapd_data *wifi_drv_get_mbssid_tx_bss(void *priv)
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d failed to get radio for index: %zu\n", __func__, __LINE__,
             interface->vap_info.radio_index);
         return &interface->u.ap.hapd;
     }
@@ -18705,7 +18705,7 @@ static int wifi_drv_mbssid_get_bss_index(void *priv)
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d failed to get radio for index: %zu\n", __func__, __LINE__,
             interface->vap_info.radio_index);
         return 0;
     }
@@ -18796,7 +18796,7 @@ static u8 *wifi_drv_get_mbssid_config(void *priv, u8 *eid)
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d failed to get radio for index: %zu\n", __func__, __LINE__,
             interface->vap_info.radio_index);
         return eid;
     }
@@ -18821,7 +18821,7 @@ u8 *wifi_drv_get_ap_channel_report_ie(void *priv, u8 *eid)
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d failed to get radio for index: %zu\n", __func__, __LINE__,
             interface->vap_info.radio_index);
         return eid;
     }
