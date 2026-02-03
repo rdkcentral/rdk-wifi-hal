@@ -471,7 +471,31 @@ void qca_getRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
 
 int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    char interface_name[32] = { 0 };
+    char cmd[DEFAULT_CMD_SIZE];
+    char mode[16];
+
+    if (get_backhaul_sta_ifname_from_radio_index(index, interface_name, sizeof(interface_name)) !=
+        0) {
+        return -1;
+    }
+
+    qca_getRadioMode(index, operationParam, mode);
+
+    if (snprintf(cmd, sizeof(cmd), "cfg80211tool %s mode %s", interface_name, mode) >=
+        (int)sizeof(cmd)) {
+        wifi_hal_error_print("%s:%d: command truncated; buffer too small\n", __func__, __LINE__);
+        return -1;
+    }
+
+    int rc = system(cmd);
+    if (rc != 0) {
+        wifi_hal_error_print("%s:%d: system(\"%s\") failed with rc=%d\n", __func__, __LINE__, cmd,
+            rc);
+        return -1;
+    }
+
+    wifi_hal_dbg_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
     return 0;
 }
 
@@ -1486,16 +1510,16 @@ static void process_event_to_onewifi(const char *ifname,
     wifi_radio_info_t *radio = NULL;
     int radio_index;
     const uint16_t *freq;
-    uint8_t channel = 0;
+    uint8_t primary_channel = 0;
+    uint16_t primary_freq = 0;
 
     get_radio_interface_info_map(radio_map_t);
     callbacks = get_hal_device_callbacks();
 
     if (data && (len == sizeof(*freq))) {
         freq = data;
-        ieee80211_freq_to_chan(*freq, &channel);
     } else {
-        wifi_hal_error_print("%s:%d Failed to process channel from parsed data\n", __func__,
+        wifi_hal_error_print("%s:%d Failed to process frequency from parsed data\n", __func__,
             __LINE__);
     }
 
@@ -1505,16 +1529,21 @@ static void process_event_to_onewifi(const char *ifname,
             radio_index = radio_map_t[i].radio_index;
             radio = get_radio_by_rdk_index(radio_index);
             radio_channel_param.radioIndex = radio_index;
-            radio_channel_param.channel = channel;
             radio_channel_param.channelWidth = radio->oper_param.channelWidth;
             radio_channel_param.op_class = radio->oper_param.operatingClass;
         }
-        wifi_hal_dbg_print("%s:%d RadioIndex:%d channel:%d chwid:%d opclass:%d sub-event:%d\n",
-            __func__, __LINE__, radio_index, radio_channel_param.channel,
-            radio_channel_param.channelWidth, radio_channel_param.op_class,
-            radio_channel_param.sub_event);
     }
+
+    primary_freq = freq_to_primary(*freq, radio_channel_param.channelWidth);
+    ieee80211_freq_to_chan(primary_freq, &primary_channel);
+
+    radio_channel_param.channel = primary_channel;
     radio_channel_param.event = WIFI_EVENT_DFS_RADAR_DETECTED;
+
+    wifi_hal_dbg_print("%s:%d RadioIndex:%d channel:%d chwid:%d opclass:%d sub-event:%d\n",
+        __func__, __LINE__, radio_index, radio_channel_param.channel,
+        radio_channel_param.channelWidth, radio_channel_param.op_class,
+        radio_channel_param.sub_event);
 
     if ((callbacks != NULL) && (callbacks->channel_change_event_callback) &&
         !(radio_channel_param.sub_event == WIFI_EVENT_RADAR_NOP_FINISHED) &&
