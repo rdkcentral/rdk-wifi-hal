@@ -995,7 +995,7 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     }
 
     wifi_radio_operationParam_t *radio_param;
-    wifi_radio_operationParam_t tmp_radio_param;
+    wifi_radio_operationParam_t *tmp_radio_param = NULL;
     radio_param = &radio->oper_param;
 
     if (is_channel_supported_on_radio(radio_param->band, freq) != true) {
@@ -1038,16 +1038,26 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         break;
     }
 
-    memcpy(&tmp_radio_param, radio_param, sizeof(wifi_radio_operationParam_t));
-    tmp_radio_param.channelWidth = l_channel_width;
-    tmp_radio_param.channel = channel;
-
-    if ((op_class = get_op_class_from_radio_params(&tmp_radio_param)) == -1) {
-        wifi_hal_error_print("%s:%d: failed to get op class for channel: %d, width: %d,"
-            "country: %d\n", __func__, __LINE__, tmp_radio_param.channel,
-            tmp_radio_param.channelWidth, tmp_radio_param.countryCode);
+    tmp_radio_param = (wifi_radio_operationParam_t *)malloc(sizeof(wifi_radio_operationParam_t));
+    if (tmp_radio_param == NULL) {
+        wifi_hal_error_print("%s:%d: malloc failed\n", __func__, __LINE__);
         return;
     }
+    memcpy(tmp_radio_param, radio_param, sizeof(wifi_radio_operationParam_t));
+
+    tmp_radio_param->channelWidth = l_channel_width;
+    tmp_radio_param->channel = channel;
+
+    if ((op_class = get_op_class_from_radio_params(tmp_radio_param)) == -1) {
+        wifi_hal_error_print("%s:%d: failed to get op class for channel: %d, width: %d,"
+            "country: %d\n", __func__, __LINE__, tmp_radio_param->channel,
+            tmp_radio_param->channelWidth, tmp_radio_param->countryCode);
+        free(tmp_radio_param);
+        tmp_radio_param = NULL;
+        return;
+    }
+    free(tmp_radio_param);
+    tmp_radio_param = NULL;
 
     wifi_hal_dbg_print("%s:%d: ifidx: %d vap_name: %s radio: %d channel: %d freq: %d bandwidth: %d "
         "cf1: %d cf2: %d op class: %d channel type: %d radar event type: %d\n", __func__, __LINE__,
@@ -1780,12 +1790,7 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
         return NL_SKIP;
     }
 
-#if defined(CONFIG_GENERIC_MLO)
-    // TODO: Temporary disable vap_configured check for MLO
-    if (interface != NULL) {
-#else
     if (interface != NULL && interface->vap_configured) {
-#endif // CONFIG_GENERIC_MLO
         wifi_hal_dbg_print("%s:%d: event registered - processing for %s event %d\n", __func__,
             __LINE__, interface->name, gnlh->cmd);
         do_process_drv_event(interface, gnlh->cmd, tb);
