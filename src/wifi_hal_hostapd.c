@@ -542,6 +542,12 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->auth_algs = WPA_AUTH_ALG_SAE;
 #if HOSTAPD_VERSION >= 210 //2.10
             if (is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
+                /* For 6GHz, Wi-Fi 7 AP must advertise both AKM 8 (SAE) and AKM 24 (SAE-EXT-KEY) */
+#if defined(CONFIG_IEEE80211BE)
+                conf->wpa_key_mgmt |= WPA_KEY_MGMT_SAE_EXT_KEY;
+                wifi_hal_info_print("%s:%d: 6GHz interface:%s - Added SAE_EXT_KEY (AKM 24) for Wi-Fi 7\n",
+                       __func__, __LINE__, conf->iface);
+#endif /* CONFIG_IEEE80211BE */				
                 conf->sae_pwe = 1;  /* 0 = Hunt-and-Peck, 1 = Hash-to-Element, 2 = both */
                 wifi_hal_info_print("%s:%d: interface_name:%s sae_pwe:%d\n",
                        __func__, __LINE__, conf->iface, conf->sae_pwe);
