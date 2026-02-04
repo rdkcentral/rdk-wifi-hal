@@ -12831,6 +12831,26 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
         os_strlcpy(ifname_wds, name, IFNAMSIZ + 1);
     }
 
+#ifdef CONFIG_VENDOR_MXL
+    /* For WDS STA creation (val=1), send multi_ap mode to Wave driver BEFORE creating interface.
+     * The Wave driver needs multi_ap_mode set in its PDB before it can create WDS interfaces.
+     * This fixes the "Wrong multi_ap_mode: 0" error when backhaul STA connects.
+     */
+    if (val && interface->u.ap.conf.multi_ap) {
+        wifi_hal_info_print("%s:%d: Sending multi_ap=%d to driver before WDS STA creation for %s\r\n",
+            __func__, __LINE__, interface->u.ap.conf.multi_ap, interface->name);
+
+        ret = wifi_drv_vendor_cmd(interface, OUI_LTQ, LTQ_NL80211_VENDOR_SUBCMD_SET_MESH_MODE,
+                                 (u8 *)&interface->u.ap.conf.multi_ap,
+                                 sizeof(interface->u.ap.conf.multi_ap),
+                                 NESTED_ATTR_NOT_USED, NULL);
+        if (ret < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set multi_ap mode before WDS STA creation: %d\r\n",
+                __func__, __LINE__, ret);
+        }
+    }
+#endif /* CONFIG_VENDOR_MXL */
+
     wifi_hal_info_print("%s:%d:nl80211: Set WDS STA addr=" MACSTR " aid=%d val=%d name=%s ifindex:%d\r\n",
         __func__, __LINE__, MAC2STR(addr), aid, val, name, if_nametoindex(name));
     if (val) {
@@ -12876,7 +12896,7 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
         }
         return nl80211_set_sta_vlan(radio, interface, addr, name, 0, link_id);
     } else {
-        if (bridge_ifname && (nl80211_remove_from_bridge(bridge_ifname) != RETURN_OK)) {
+        if (bridge_ifname && (nl80211_remove_from_bridge(name) != RETURN_OK)) {
             wifi_hal_error_print("%s:%d: nl80211: Failed to remove interface %s "
                 " from bridge %s: %s", __func__, __LINE__, name, bridge_ifname, strerror(errno));
             return RETURN_ERR;
