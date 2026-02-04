@@ -2150,7 +2150,7 @@ int nl_set_beacon_rate(int vap_index, int beacon_rate)
 #endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT)
          || defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT) */
 
-static void set_ap_bss_color_value(int apIndex, uint32_t bssColor)
+static int set_ap_bss_color_value(int apIndex, uint32_t bssColor)
 {
     wifi_interface_info_t *interface;
 
@@ -2165,8 +2165,9 @@ static void set_ap_bss_color_value(int apIndex, uint32_t bssColor)
     }
 
     wifi_hal_dbg_print("%s:%d: Running following command: wl -i %s he bsscolor %u\n", __func__,
-        __LINE__, ifname, bssColor);
-    v_secure_system("wl -i %s he bsscolor %u", ifname, bssColor);
+        __LINE__,  interface->name, bssColor);
+    v_secure_system("wl -i %s he bsscolor %u", interface->name, bssColor);
+    return 0;
 }
 
 int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
@@ -2418,7 +2419,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             set_decimal_nvram_param(param_name, abs(map->vap_array[index].u.bss_info.mgmtPowerControl));
             wifi_setApManagementFramePowerControl(map->vap_array[index].vap_index, map->vap_array[index].u.bss_info.mgmtPowerControl);
 
-            wifi_setApBSSColorValue(map->vap_array[index].vap_index, iconf->he_op.he_bss_color_disabled ? 0 : iconf->he_op.he_bss_color);
+            set_ap_bss_color_value(map->vap_array[index].vap_index, iconf->he_op.he_bss_color_disabled ? 0 : iconf->he_op.he_bss_color);
         } else if (map->vap_array[index].vap_mode == wifi_vap_mode_sta) {
 
             prepare_param_name(param_name, interface_name, "_akm");
