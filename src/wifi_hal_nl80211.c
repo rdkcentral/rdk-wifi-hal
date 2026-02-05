@@ -12896,7 +12896,7 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
         }
         return nl80211_set_sta_vlan(radio, interface, addr, name, 0, link_id);
     } else {
-        if (bridge_ifname && (nl80211_remove_from_bridge(name) != RETURN_OK)) {
+        if (strlen(interface->name) && (nl80211_remove_from_bridge(name) != RETURN_OK)) {
             wifi_hal_error_print("%s:%d: nl80211: Failed to remove interface %s "
                 " from bridge %s: %s", __func__, __LINE__, name, bridge_ifname, strerror(errno));
             return RETURN_ERR;
