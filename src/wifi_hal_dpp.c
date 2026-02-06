@@ -489,7 +489,7 @@ EC_POINT *dpp_build_point_from_connector_string(wifi_device_dpp_context_t *ctx, 
 	}
 	printf("%s:%d: base64 decoded x\n", __func__, __LINE__);
 
-	BN_bin2bn(x, len, instance->x);
+	instance->x = BN_bin2bn(x, len, instance->x);
 	printf("%s:%d: Built big num x\n", __func__, __LINE__);
 
 	len = base64urldecode(y, y_json->valuestring, strlen(y_json->valuestring));
@@ -500,7 +500,7 @@ EC_POINT *dpp_build_point_from_connector_string(wifi_device_dpp_context_t *ctx, 
 	}
 	printf("%s:%d: base64 decoded y\n", __func__, __LINE__);
 
-	BN_bin2bn(y, len, instance->y);
+	instance->y = BN_bin2bn(y, len, instance->y);
 	printf("%s:%d: Built big num y\n", __func__, __LINE__);
 
 	EC_POINT_set_affine_coordinates_GFp(instance->group, instance->responder_connector, instance->x, instance->y, instance->bnctx);
@@ -853,6 +853,9 @@ hkdf (const EVP_MD *h, int skip,
 
     digestlen = prklen = EVP_MD_size(h);
     if (digestlen == UINT_MAX) {
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        HMAC_CTX_free(ctx);
+#endif
         return 0;
     }
 
@@ -2237,8 +2240,8 @@ wifi_dppProcessReconfigAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
     primelen = BN_num_bytes(instance->prime);
     printf("primelen: %d\n", primelen);
 
-    BN_bin2bn(tlv->value, primelen, instance->x);
-    BN_bin2bn(tlv->value + primelen, primelen, instance->y);
+    instance->x = BN_bin2bn(tlv->value, primelen, instance->x);
+    instance->y = BN_bin2bn(tlv->value + primelen, primelen, instance->y);
     printf("X: ");
     print_bignum(instance->x);
     printf("Y: ");
@@ -2608,8 +2611,8 @@ INT wifi_dppProcessAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
     primelen = BN_num_bytes(instance->prime);
     printf("primelen: %d\n", primelen);
 
-    BN_bin2bn(tlv->value, primelen, instance->x);
-    BN_bin2bn(tlv->value + primelen, primelen, instance->y);
+    instance->x = BN_bin2bn(tlv->value, primelen, instance->x);
+    instance->y = BN_bin2bn(tlv->value + primelen, primelen, instance->y);
     printf("X: ");
     print_bignum(instance->x);
     printf("Y: ");
