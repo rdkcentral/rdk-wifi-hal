@@ -2921,6 +2921,9 @@ int pick_akm_suite(int sel)
     } else if (sel & WPA_KEY_MGMT_PSK) {
         wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT WPA-PSK\n", __func__, __LINE__);
         return WPA_KEY_MGMT_PSK;
+    } else if (sel & WPA_KEY_MGMT_OWE) {
+        wifi_hal_dbg_print("%s:%d: WPA: using OWE key mgmt\n", __func__, __LINE__);
+        return WPA_KEY_MGMT_OWE;
     } else {
         wifi_hal_dbg_print("%s:%d: WPA: Failed to select authenticated key management type\n", __func__, __LINE__);
         return -1;
