@@ -261,7 +261,7 @@ struct wifiEnvironmentEnumStrMap {
 
 typedef struct {
     wifi_countrycode_type_t    cc;
-    wifi_radio_op_class_t   op_class[6];
+    wifi_radio_op_class_t   op_class[20];
 } wifi_country_radio_op_class_t;
 
 typedef struct {
