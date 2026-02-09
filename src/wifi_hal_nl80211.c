@@ -186,10 +186,12 @@ void prepare_interface_fdset(wifi_hal_priv_t *priv)
         while (interface != NULL) {
             if (interface->vap_configured == true && interface->bridge_configured == true) {
 #ifndef EAPOL_OVER_NL
-                vap = &interface->vap_info;
-    		sock_fd = (vap->vap_mode == wifi_vap_mode_ap) ?
-                                    interface->u.ap.br_sock_fd:interface->u.sta.sta_sock_fd;
-                FD_SET(sock_fd, &priv->drv_rfds);
+                if (interface->data_frames_registered == 1) {
+                    vap = &interface->vap_info;
+                    sock_fd = (vap->vap_mode == wifi_vap_mode_ap) ? interface->u.ap.br_sock_fd :
+                                                                    interface->u.sta.sta_sock_fd;
+                    FD_SET(sock_fd, &priv->drv_rfds);
+                }
 #endif
                 if (interface->vap_info.vap_mode != wifi_vap_mode_monitor) {
 #ifdef EAPOL_OVER_NL
@@ -230,11 +232,15 @@ int get_biggest_in_fdset(wifi_hal_priv_t *priv)
 
         while (interface != NULL) {
             if (interface->vap_configured == true && interface->bridge_configured == true) {
-                vap = &interface->vap_info;
-                if (sock_fd < ((vap->vap_mode == wifi_vap_mode_ap) ?
-                        interface->u.ap.br_sock_fd:interface->u.sta.sta_sock_fd)) {
-                    sock_fd = (vap->vap_mode == wifi_vap_mode_ap) ?
-                                    interface->u.ap.br_sock_fd:interface->u.sta.sta_sock_fd;
+                if (interface->data_frames_registered == 1) {
+                    vap = &interface->vap_info;
+                    if (sock_fd < ((vap->vap_mode == wifi_vap_mode_ap) ?
+                                          interface->u.ap.br_sock_fd :
+                                          interface->u.sta.sta_sock_fd)) {
+                        sock_fd = (vap->vap_mode == wifi_vap_mode_ap) ?
+                            interface->u.ap.br_sock_fd :
+                            interface->u.sta.sta_sock_fd;
+                    }
                 }
 #ifdef EAPOL_OVER_NL
                     if (sock_fd < interface->bss_nl_connect_event_fd) {
@@ -383,8 +389,10 @@ bool bridge_fd_isset(wifi_hal_priv_t *priv, wifi_interface_info_t **intf)
         while (interface != NULL) {
             vap = &interface->vap_info;
             if ((interface->vap_configured == true) && (interface->bridge_configured == true) &&
-                    FD_ISSET(((vap->vap_mode == wifi_vap_mode_ap)?
-                            interface->u.ap.br_sock_fd:interface->u.sta.sta_sock_fd), &priv->drv_rfds)) {
+                (interface->data_frames_registered == 1) &&
+                FD_ISSET(((vap->vap_mode == wifi_vap_mode_ap) ? interface->u.ap.br_sock_fd :
+                                                                interface->u.sta.sta_sock_fd),
+                    &priv->drv_rfds)) {
                 found = true;
                 *intf = interface;
                 break;
@@ -826,9 +834,14 @@ static void remove_station_from_other_interfaces(wifi_interface_info_t *interfac
 
     to_mac_str(sta, sta_mac_str);
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    iter = hash_map_get_first(radio->interface_map);
-    while (iter != NULL) {
+    hash_map_foreach(radio->interface_map, iter) {
         if (iter->index != interface->index && iter->vap_info.vap_mode == wifi_vap_mode_ap) {
+#if (HOSTAPD_VERSION >= 211) && defined(CONFIG_GENERIC_MLO)
+            if (hostapd_is_mld_ap(&iter->u.ap.hapd)) {
+                continue;
+            }
+#endif // (HOSTAPD_VERSION >= 211) && defined(CONFIG_GENERIC_MLO)
+
             struct sta_info *station = ap_get_sta(&iter->u.ap.hapd, sta);
             if (station) {
                 wifi_hal_dbg_print("%s:%d: {phy %s (index %d), interface %s (ifindex %d)} stale sta %s on interface %s (ifindex %d)\n", __func__, __LINE__,
@@ -836,7 +849,6 @@ static void remove_station_from_other_interfaces(wifi_interface_info_t *interfac
                 ap_free_sta(&iter->u.ap.hapd, station);
             }
         }
-        iter = hash_map_get_next(radio->interface_map, iter);
     }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
@@ -2112,7 +2124,9 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                 reason = station->disconnect_reason_code;
             }
 #endif
+#if !defined(CONFIG_GENERIC_MLO)
             ap_free_sta(&interface->u.ap.hapd, station);
+#endif // !defined(CONFIG_GENERIC_MLO)
         } else {
             wifi_hal_dbg_print("%s:%d: interface:%s sta %s not found\n", __func__, __LINE__,
                 interface->name, to_mac_str(sta, sta_mac_str));
@@ -2184,7 +2198,9 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                     reason = station->disconnect_reason_code;
                 }
 #endif
+#if !defined(CONFIG_GENERIC_MLO)
             ap_free_sta(&interface->u.ap.hapd, station);
+#endif // !defined(CONFIG_GENERIC_MLO)
         }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
@@ -2931,11 +2947,10 @@ void recv_data_frame(wifi_interface_info_t *interface)
 #endif //defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
 
         buflen -= sizeof(struct ieee8023_hdr);
-        wifi_hal_info_print("%s:%d: interface:%s received eapol m%d from:%s to:%s "
+        wifi_hal_info_print("%s:%d: from:%s to:%s interface:%s received eapol m%d "
                             "reply counter:%d\n",
-            __func__, __LINE__, interface->name, is_eapol_m4((uint8_t *)hdr, buflen) ? 4 : 2,
-            to_mac_str(eth_hdr->src, src_mac_str), to_mac_str(eth_hdr->dest, dst_mac_str),
-            get_eapol_reply_counter((uint8_t *)hdr, buflen));
+            __func__, __LINE__, to_mac_str(eth_hdr->src, src_mac_str), to_mac_str(eth_hdr->dest, dst_mac_str), interface->name,
+            is_eapol_m4((uint8_t *)hdr, buflen) ? 4 : 2, get_eapol_reply_counter((uint8_t *)hdr, buflen));
 
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
@@ -2951,7 +2966,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
         //Capture the EAPOL frames.
         push_eapol_to_char_dev(buff, buflen, eth_hdr);
 #endif //defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
-        if (interface->u.sta.wpa_sm) {
+        if (interface->u.sta.wpa_sm && interface->u.sta.state >= WPA_ASSOCIATED) {
 #if HOSTAPD_VERSION >= 211 //2.11
             if (!interface->u.sta.wpa_sm->eapol || !eapol_sm_rx_eapol(interface->u.sta.wpa_sm->eapol,(unsigned char *)&sta,
                 (unsigned char *)hdr, buflen - sizeof(struct ieee8023_hdr), FRAME_ENCRYPTION_UNKNOWN)) {
@@ -2963,8 +2978,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
                 wpa_sm_rx_eapol(interface->u.sta.wpa_sm, (unsigned char *)&sta, (unsigned char *)hdr, buflen - sizeof(struct ieee8023_hdr));
             }
 #endif
-        }
-        else if (interface->u.sta.state < WPA_ASSOCIATED) {
+        } else if (interface->u.sta.state < WPA_ASSOCIATED) {
             interface->u.sta.pending_rx_eapol = true;
             memcpy(interface->u.sta.rx_eapol_buff, buff, sizeof(buff));
             interface->u.sta.buff_len = buflen;
@@ -2976,7 +2990,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
 int parsertattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
 {
 
-    if ((tb == NULL) && (rta == NULL)) {
+    if ((tb == NULL) || (rta == NULL)) {
         return -1;
     }
 
@@ -3086,26 +3100,37 @@ void recv_link_status()
                     radio = get_radio_by_rdk_index(i);
                     if (radio == NULL) continue;
                     if (radio->interface_map == NULL) continue;
-                    interface = hash_map_get_first(radio->interface_map);
-                    while (interface != NULL) {
+
+                    hash_map_foreach(radio->interface_map, interface) {
+#if defined(CONFIG_GENERIC_MLO)
+                        wifi_interface_info_t *first_interface = wifi_hal_get_first_mld_interface(
+                            interface);
+                        if (interface != first_interface) {
+                            continue;
+                        }
+#endif // CONFIG_GENERIC_MLO
+
                         if(strncmp(interface->vap_info.bridge_name, ifName, strlen(interface->vap_info.bridge_name)+1) == 0) {
                             if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
                                 switch (nlmsgHdr->nlmsg_type)
                                 {
                                 case RTM_DELLINK:
-                                    if (interface->u.ap.br_sock_fd != 0) {
+                                    if (interface->data_frames_registered == 1) {
                                         wifi_hal_info_print("%s:%d: %s BRIDGE IS DELETED\n", __func__, __LINE__, interface->vap_info.bridge_name);
                                         close(interface->u.ap.br_sock_fd);
                                         interface->u.ap.br_sock_fd = 0;
                                         interface->bridge_configured = false;
+                                        interface->data_frames_registered = 0;
                                     }
                                     break;
                                 case RTM_NEWLINK:
-                                    if (interface->u.ap.br_sock_fd != 0) {
+                                    if (interface->data_frames_registered == 1) {
                                         close(interface->u.ap.br_sock_fd);
                                         interface->u.ap.br_sock_fd = 0;
+                                        interface->bridge_configured = false;
+                                        interface->data_frames_registered = 0;
                                     }
-                                    if (interface->u.ap.br_sock_fd == 0) {
+                                    if (interface->data_frames_registered == 0) {
                                         wifi_hal_info_print("%s:%d: %s BRIDGE IS CREATED\n", __func__, __LINE__, interface->vap_info.bridge_name);
                                         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 
@@ -3128,6 +3153,7 @@ void recv_link_status()
                                             } else { 
                                                 interface->u.ap.br_sock_fd = sock_fd;
                                                 interface->bridge_configured = true;
+                                                interface->data_frames_registered = 1;
                                             }
                                         }
                                     }
@@ -3142,7 +3168,6 @@ void recv_link_status()
                             found = true;
                             break;
                         }
-                        interface = hash_map_get_next(radio->interface_map, interface);
                     }
                 }
             }
@@ -5305,7 +5330,7 @@ static void wiphy_info_extended_capab(wifi_driver_data_t *drv,
         capa = &drv->iface_ext_capa[drv->num_iface_ext_capa];
         capa->iftype = nla_get_u32(tb1[NL80211_ATTR_IFTYPE]);
         wifi_hal_dbg_print(
-            "%s:%d: nl80211: Driver-advertised extended capabilities for interface type %s",
+            "%s:%d: nl80211: Driver-advertised extended capabilities for interface type %s\n",
             __func__, __LINE__, nl80211_iftype_str(capa->iftype));
 
         len = nla_len(tb1[NL80211_ATTR_EXT_CAPA]);
@@ -5336,7 +5361,7 @@ static void wiphy_info_extended_capab(wifi_driver_data_t *drv,
                 nla_get_u16(tb1[NL80211_ATTR_MLD_CAPA_AND_OPS]);
         }
 
-        wifi_hal_dbg_print("%s:%d: nl80211: EML Capability: 0x%x MLD Capability: 0x%x", __func__,
+        wifi_hal_dbg_print("%s:%d: nl80211: EML Capability: 0x%x MLD Capability: 0x%x\n", __func__,
             __LINE__, capa->eml_capa, capa->mld_capa_and_ops);
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
@@ -5569,125 +5594,89 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh;
-    //unsigned int *cmd;
-    unsigned int phy_index = 0;
-#ifndef FEATURE_SINGLE_PHY
-    int rdk_radio_index;
-#else //FEATURE_SINGLE_PHY
-    int rdk_radio_indices[MAX_NUM_RADIOS];
-    int num_radios_mapped = MAX_NUM_RADIOS;
-    int ret = 0;
-#endif //FEATURE_SINGLE_PHY
+    const u32 nl_split_wiphy = (*(u32 *)arg & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP);
+    unsigned int max_radio_count;
+    unsigned int phy_index;
 
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined(SCXER10_PORT) || defined(SCXF10_PORT)
-    int existing_radio_found = 0;
-#endif
 #ifdef CONFIG_WIFI_EMULATOR
-  if (g_wifi_hal.num_radios > MAX_NUM_SIMULATED_CLIENT) {
+    max_radio_count = MAX_NUM_SIMULATED_CLIENT;
 #else
-#ifndef FEATURE_SINGLE_PHY
-    if (g_wifi_hal.num_radios > MAX_NUM_RADIOS) {
-#else //FEATURE_SINGLE_PHY
-    if (g_wifi_hal.num_radios >= MAX_NUM_RADIOS) {
-#endif //FEATURE_SINGLE_PHY
-#endif //CONFIG_WIFI_EMULATOR
-        wifi_hal_dbg_print("%s:%d: Returning num radios:%d exceeds MAX:%d\n",
-            __func__, __LINE__, g_wifi_hal.num_radios, MAX_NUM_RADIOS);
+    max_radio_count = MAX_NUM_RADIOS;
+#endif
+
+    if (g_wifi_hal.num_radios > max_radio_count) {
+        wifi_hal_dbg_print("%s:%d: Returning num radios:%d exceeds MAX:%d\n", __func__, __LINE__,
+            g_wifi_hal.num_radios, max_radio_count);
         return NL_SKIP;
     }
 
     gnlh = nlmsg_data(nlmsg_hdr(msg));
-
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
-#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
-    !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
-    for (unsigned int j = 0; j < g_wifi_hal.num_radios; j++)
-    {
-        if (strcmp(g_wifi_hal.radio_info[j].name, nla_get_string(tb[NL80211_ATTR_WIPHY_NAME])) == 0) {
-            wifi_hal_dbg_print("%s:%d: Returning phy:%s already configured earlier\n",
-                __func__, __LINE__, g_wifi_hal.radio_info[j].name);
-            return NL_SKIP;
+    if (!nl_split_wiphy) {
+        for (unsigned int j = 0; j < g_wifi_hal.num_radios; j++) {
+            if (strcmp(g_wifi_hal.radio_info[j].name,
+                    nla_get_string(tb[NL80211_ATTR_WIPHY_NAME])) == 0) {
+                wifi_hal_dbg_print("%s:%d: Returning phy:%s already configured earlier\n", __func__,
+                    __LINE__, g_wifi_hal.radio_info[j].name);
+                return NL_SKIP;
+            }
         }
     }
-#endif
 
+    phy_index = nla_get_u32(tb[NL80211_ATTR_WIPHY]);
 #ifdef CONFIG_WIFI_EMULATOR
     static unsigned int interface_radio_index = 0;
     static unsigned int prev_tidx = UINT_MAX;
     unsigned int tidx = 0, check = 0;
     sscanf(nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]), "wsim%d%n", &tidx, &check);
     if (check > 0 && prev_tidx != tidx) {
-        phy_index = nla_get_u32(tb[NL80211_ATTR_WIPHY]);
         update_interfaces_map(phy_index, interface_radio_index);
         interface_radio_index++;
         prev_tidx = tidx;
     }
     wifi_hal_info_print("%s:%d phy_index received is %d\n", __func__, __LINE__, phy_index);
-#else
-    phy_index = nla_get_u32(tb[NL80211_ATTR_WIPHY]);
 #endif //CONFIG_WIFI_EMULATOR
 
-#ifndef FEATURE_SINGLE_PHY
-    rdk_radio_index = get_rdk_radio_index(phy_index);
-
-    if ( rdk_radio_index == -1 ) {
-#else //FEATURE_SINGLE_PHY
-    // Get the array of rdk_radio_indexes associated with this phy
-    memset(rdk_radio_indices, 0, sizeof(rdk_radio_indices));
-    ret = get_rdk_radio_indices(phy_index, rdk_radio_indices, &num_radios_mapped);
-    wifi_hal_dbg_print("%s:%d: For phy_index:%u, num_radios_mapped:%d, g_wifi_hal.num_radios:%d\n",
-                __func__, __LINE__, phy_index, num_radios_mapped, g_wifi_hal.num_radios);
-    if (ret != 0) {
-#endif //FEATURE_SINGLE_PHY
-        wifi_hal_error_print("%s:%d: Skipping for phy_index = %u, "
-                   "since it is not present in the interface table\n",
-                   __func__,__LINE__, phy_index);
-        return NL_SKIP;
-    }
-
     //print_attributes(__func__, tb);
-#ifdef FEATURE_SINGLE_PHY
-    /* In case of BananaPi due to single phy architecture, multiple radios have to be
-       processed in a single wiphy_dump_handler, thus the loop */
-    for (unsigned int j=0; (j < num_radios_mapped && g_wifi_hal.num_radios < MAX_NUM_RADIOS); j++) {
-#endif //FEATURE_SINGLE_PHY
-#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
-    !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
-    radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
-    memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
-#else
-#ifdef CONFIG_WIFI_EMULATOR
-    for (int i = 0; i < MAX_NUM_SIMULATED_CLIENT; i++) {
-#else
-    for (int i = 0; i < MAX_NUM_RADIOS; i++) {
-#endif
+    bool existing_radio_found = 0;
+    for (int i = 0; i < max_radio_count; i++) {
         if (g_wifi_hal.radio_info[i].index == phy_index) {
             radio = &g_wifi_hal.radio_info[i];
             existing_radio_found = 1;
             break;
         }
     }
+
     if (!existing_radio_found) {
+        if (max_radio_count == g_wifi_hal.num_radios) {
+            wifi_hal_error_print("%s:%d: Maximum radio count=%u reached, skipping phy_index = %u\n",
+                __func__, __LINE__, max_radio_count, phy_index);
+            return NL_SKIP;
+        }
+
+#ifndef FEATURE_SINGLE_PHY
+        if (get_rdk_radio_index(phy_index) == -1) {
+            wifi_hal_error_print("%s:%d: Skipping for phy_index = %u, "
+                                 "since it is not present in the interface table\n",
+                __func__, __LINE__, phy_index);
+            return NL_SKIP;
+        }
+#endif
         radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
+        memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
         g_wifi_hal.num_radios++;
     }
-#endif
 
     if (tb[NL80211_ATTR_WIPHY]) {
         radio->index = phy_index;
-#ifndef FEATURE_SINGLE_PHY
-        radio->rdk_radio_index = rdk_radio_index;
-#else //FEATURE_SINGLE_PHY
-        radio->rdk_radio_index = rdk_radio_indices[j];
-#endif //FEATURE_SINGLE_PHY
         radio->capab.index = radio->index;
     }
 
     if (tb[NL80211_ATTR_WIPHY_NAME]) {
-        strcpy(radio->name, nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]));
+        snprintf(radio->name, sizeof(radio->name), "%s", nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]));
     }
+
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     capa = &radio->driver_data.capa;
 
@@ -5967,15 +5956,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
         radio->dev_id = nla_get_u64(tb[NL80211_ATTR_WDEV]);
     }
 
-#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
-    !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
-    g_wifi_hal.num_radios++;
-#endif
-#ifdef FEATURE_SINGLE_PHY
-    }
-#endif //Braces corresponding to the for loop, for (j=0; (j < num_radios_mapped
     return NL_SKIP;
-
 }
 
 static int wiphy_get_info_handler(struct nl_msg *msg, void *arg)
@@ -6160,6 +6141,7 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
     struct genlmsghdr *gnlh;
 #ifdef CONFIG_GENERIC_MLO
     char *mld_name;
+    static unsigned int link_id = 0;
 #endif // CONFIG_GENERIC_MLO
 #ifdef FEATURE_SINGLE_PHY
     int rdk_radio_index_of_intf = -1;
@@ -6224,7 +6206,7 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
             }
 
             if (tb[NL80211_ATTR_IFNAME]) {
-                strcpy(interface->name, nla_get_string(tb[NL80211_ATTR_IFNAME]));
+                snprintf(interface->name, sizeof(interface->name), "%s", nla_get_string(tb[NL80211_ATTR_IFNAME]));
             }
 
             if (tb[NL80211_ATTR_MAC]) {
@@ -6258,7 +6240,9 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                 // TODO: get MLD configuration from DB
                 wifi_hal_set_mld_enabled(interface, true);
                 wifi_hal_set_mld_mac_address(interface, mld_mac);
-                wifi_hal_set_mld_link_id(interface, radio->rdk_radio_index);
+                wifi_hal_set_mld_link_id(interface, interface->rdk_radio_index);
+                wifi_hal_set_mld_link_id(interface, link_id);
+                link_id++;
             }
 #endif // CONFIG_GENERIC_MLO
 
@@ -6458,29 +6442,99 @@ static int kick_device_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 }
 
+static int notify_sta_listeners(wifi_interface_info_t *interface, mac_address_t sta_mac, int rssi)
+{
+    mac_addr_str_t sta_mac_str;
+    wifi_device_callbacks_t *callbacks;
+    wifi_associated_dev_t associated_dev;
+    wifi_vap_info_t *vap = &interface->vap_info;
+
+    memset(&associated_dev, 0, sizeof(associated_dev));
+    memcpy(associated_dev.cli_MACAddress, sta_mac, sizeof(mac_address_t));
+    associated_dev.cli_RSSI = rssi;
+    associated_dev.cli_Active = true;
+
+    wifi_hal_dbg_print("%s:%d: Notifying STA listeners for %s on VAP index %d\n", __func__,
+        __LINE__, to_mac_str(sta_mac, sta_mac_str), vap->vap_index);
+
+    callbacks = get_hal_device_callbacks();
+    if (callbacks == NULL) {
+        return 0;
+    }
+
+    for (unsigned int i = 0; i < callbacks->num_assoc_cbs; i++) {
+        if (callbacks->assoc_cb[i] != NULL) {
+            wifi_hal_info_print("%s:%d: Client " MACSTR " associated\n", __func__, __LINE__,
+                MAC2STR(associated_dev.cli_MACAddress));
+            callbacks->assoc_cb[i](vap->vap_index, &associated_dev);
+        }
+    }
+
+    if (callbacks->steering_event_callback != NULL &&
+        vap->u.bss_info.security.mode != wifi_security_mode_none) {
+        wifi_steering_event_t steering_evt = {};
+        struct sta_info *station = NULL;
+        uint32_t g_idx = 0;
+        wifi_steering_evConnect_t connect_steering_event = {};
+
+        station = ap_get_sta(&interface->u.ap.hapd, sta_mac);
+        if (station == NULL) {
+            wifi_hal_error_print("%s:%d: No station for Client Connect steering event", __func__,
+                __LINE__);
+            return -1;
+        }
+
+        pthread_mutex_lock(&g_wifi_hal.steering_data_lock);
+        /* always call add_stalist to update info (type, assoc_time etc.) */
+        bm_sta_list_t *l_sta_info = steering_add_stalist(interface, NULL, sta_mac,
+            BM_STA_TYPE_ASSOC);
+        if (l_sta_info == NULL) {
+            wifi_hal_error_print("Fail to get the sta MAC=%s after adding it to list.\n",
+                to_mac_str(sta_mac, sta_mac_str));
+        }
+
+        if (steering_find_ap_cfg(vap->vap_index, &g_idx) == NULL) {
+            wifi_hal_error_print("%s:%d AP Config for vap:%d is not found\n", __func__, __LINE__,
+                vap->vap_index);
+        }
+        create_connect_steering_event(interface, &connect_steering_event,
+            (struct ieee80211_mgmt *)station->assoc_req, station->assoc_req_len);
+
+        fill_steering_event_general(&steering_evt, WIFI_STEERING_EVENT_CLIENT_CONNECT, vap);
+        steering_evt.data.connect = connect_steering_event;
+        memcpy(steering_evt.data.connect.client_mac, sta_mac, sizeof(mac_address_t));
+
+        wifi_hal_dbg_print("%s:%d: Send Client Connect steering event\n", __func__, __LINE__);
+
+        callbacks->steering_event_callback(g_idx, &steering_evt);
+        if (l_sta_info != NULL) {
+            l_sta_info->event_sent |= BM_SENT_E_ASSOC;
+        }
+        pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
+    }
+
+    return 0;
+}
+
 static int get_sta_handler(struct nl_msg *msg, void *arg)
 {
     wifi_interface_info_t *interface;
-    wifi_vap_info_t *vap;
-    struct nlattr *tb[NL80211_ATTR_MAX + 1];
+    struct nlattr *tb[NL80211_ATTR_MAX + 1] = {};
     struct nlattr *nl;
-    struct nlattr *stats[NL80211_STA_INFO_MAX + 1];
+    struct nlattr *stats[NL80211_STA_INFO_MAX + 1] = {};
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     static struct nla_policy stats_policy[NL80211_STA_INFO_MAX + 1] = {
         [NL80211_STA_INFO_CHAIN_SIGNAL] = { .type = NLA_NESTED },
     };
     int rem, signals_cnt = 0;
-    int8_t rssi = 0;
+    int rssi = 0;
     mac_address_t sta_mac;
     mac_addr_str_t sta_mac_str;
-    wifi_device_callbacks_t *callbacks;
-    wifi_associated_dev_t associated_dev;
+    bool has_link_stats = false;
 
     interface = (wifi_interface_info_t *)arg;
-    vap = &interface->vap_info;
 
-    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
-        genlmsg_attrlen(gnlh, 0), NULL);
+    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
     if (!tb[NL80211_ATTR_IFINDEX]) {
         wifi_hal_error_print("%s:%d: Interface index missing\n", __func__, __LINE__);
@@ -6504,80 +6558,97 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
         return NL_SKIP;
     }
 
-    wifi_hal_dbg_print("%s:%d: Received stats for %s\n", __func__, __LINE__, to_mac_str(sta_mac, sta_mac_str));
+    wifi_hal_dbg_print("%s:%d: Received stats for %s\n", __func__, __LINE__,
+        to_mac_str(sta_mac, sta_mac_str));
 
     if (nla_parse_nested(stats, NL80211_STA_INFO_MAX, tb[NL80211_ATTR_STA_INFO], stats_policy)) {
         wifi_hal_info_print("%s:%d: Failed to parse nested attributes\n", __func__, __LINE__);
         return NL_SKIP;
     }
 
-    if (stats[NL80211_STA_INFO_CHAIN_SIGNAL]) {
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE)
+    if (tb[NL80211_ATTR_MLO_LINKS] != NULL) {
+        struct nlattr *link_nest;
+        int rem_links;
+        uint8_t link_id;
+
+        nla_for_each_nested(link_nest, tb[NL80211_ATTR_MLO_LINKS], rem_links) {
+            struct nlattr *link_tb[NL80211_ATTR_MAX + 1] = {};
+            struct nlattr *link_stats[NL80211_STA_INFO_MAX + 1] = {};
+            struct nlattr *chain_nl;
+            int rem_chain;
+            int link_signals_cnt = 0;
+            int link_rssi = 0;
+
+            if (nla_parse(link_tb, NL80211_ATTR_MAX, nla_data(link_nest), nla_len(link_nest),
+                    NULL)) {
+                wifi_hal_error_print("%s:%d: Failed to parse link attributes\n", __func__,
+                    __LINE__);
+                continue;
+            }
+
+            if (link_tb[NL80211_ATTR_MLO_LINK_ID] != NULL) {
+                link_id = nla_get_u8(link_tb[NL80211_ATTR_MLO_LINK_ID]);
+            } else {
+                wifi_hal_error_print("%s:%d: Link ID missing, skipping link\n", __func__, __LINE__);
+                continue;
+            }
+
+            if (link_tb[NL80211_ATTR_STA_INFO] != NULL) {
+                if (nla_parse_nested(link_stats, NL80211_STA_INFO_MAX,
+                        link_tb[NL80211_ATTR_STA_INFO], stats_policy)) {
+                    wifi_hal_error_print("%s:%d: Failed to parse link STA_INFO\n", __func__,
+                        __LINE__);
+                    continue;
+                }
+
+                if (link_stats[NL80211_STA_INFO_CHAIN_SIGNAL] != NULL) {
+                    wifi_interface_info_t *link_interface;
+
+                    nla_for_each_nested(chain_nl, link_stats[NL80211_STA_INFO_CHAIN_SIGNAL],
+                        rem_chain) {
+                        int8_t chain_signal = (int8_t)nla_get_u8(chain_nl);
+                        link_rssi += chain_signal;
+                        link_signals_cnt++;
+                        wifi_hal_dbg_print("%s:%d: Link %u chain signal: %d dBm\n", __func__,
+                            __LINE__, link_id, chain_signal);
+                    }
+
+                    if (link_signals_cnt != 0) {
+                        link_rssi = link_rssi / link_signals_cnt;
+                        wifi_hal_dbg_print("%s:%d: Link %u average RSSI: %d dBm\n", __func__,
+                            __LINE__, link_id, link_rssi);
+                    }
+                    has_link_stats = true;
+
+                    link_interface = wifi_hal_get_mld_interface_by_link_id(interface, link_id);
+                    if (link_interface != NULL) {
+                        notify_sta_listeners(link_interface, sta_mac, link_rssi);
+                    }
+                }
+            }
+        }
+    }
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE
+
+    if (has_link_stats) {
+        return NL_SKIP;
+    }
+
+    if (stats[NL80211_STA_INFO_CHAIN_SIGNAL] != NULL) {
         nla_for_each_nested(nl, stats[NL80211_STA_INFO_CHAIN_SIGNAL], rem) {
-            rssi = (int8_t)nla_get_u8(nl);
+            rssi += (int8_t)nla_get_u8(nl);
             signals_cnt++;
         }
     }
 
-    if (signals_cnt != 0)
-        rssi = rssi/signals_cnt;
+    if (signals_cnt != 0) {
+        rssi = rssi / signals_cnt;
+    }
 
     wifi_hal_dbg_print("%s:%d: RSSI %d\n", __func__, __LINE__, rssi);
 
-    callbacks = get_hal_device_callbacks();
-    if (callbacks->num_assoc_cbs == 0) {
-        return NL_SKIP;
-    }
-
-    memset(&associated_dev, 0, sizeof(associated_dev));
-    memcpy(associated_dev.cli_MACAddress, &sta_mac, sizeof(mac_address_t));
-    associated_dev.cli_RSSI = rssi;
-    associated_dev.cli_Active = true;
-
-    for (int i = 0; i < callbacks->num_assoc_cbs; i++) {
-        if (callbacks->assoc_cb[i] != NULL) {
-            callbacks->assoc_cb[i](vap->vap_index, &associated_dev);
-        }
-    }
-
-    if (callbacks->steering_event_callback != 0 &&
-        vap->u.bss_info.security.mode != wifi_security_mode_none) {
-        wifi_steering_event_t steering_evt;
-        struct sta_info *station = NULL;
-        uint32_t g_idx = 0;
-
-        wifi_steering_evConnect_t connect_steering_event = {0};
-        station = ap_get_sta(&interface->u.ap.hapd, sta_mac);
-
-        if (station == NULL) {
-            wifi_hal_error_print("%s:%d: No station for Client Connect steering event", __func__, __LINE__);
-            return NL_SKIP;
-        }
-
-        pthread_mutex_lock(&g_wifi_hal.steering_data_lock);
-        /* always call add_stalist to update info (type, assoc_time etc.) */
-        bm_sta_list_t *l_sta_info = steering_add_stalist(interface, NULL, sta_mac, BM_STA_TYPE_ASSOC);
-        if (l_sta_info == NULL) {
-            wifi_hal_error_print("Fail to get the sta MAC=%s after adding it to list.\n", to_mac_str(sta_mac, sta_mac_str));
-        }
-
-        if (steering_find_ap_cfg(vap->vap_index, &g_idx) == NULL) {
-            wifi_hal_error_print("%s:%d AP Config for vap:%d is not found\n", __func__, __LINE__, vap->vap_index);
-        }
-        create_connect_steering_event(interface, &connect_steering_event,
-            (struct ieee80211_mgmt *)station->assoc_req, station->assoc_req_len);
-
-        fill_steering_event_general(&steering_evt, WIFI_STEERING_EVENT_CLIENT_CONNECT, vap);
-        steering_evt.data.connect = connect_steering_event;
-        memcpy(steering_evt.data.connect.client_mac, sta_mac, sizeof(mac_address_t));
-
-        wifi_hal_dbg_print("%s:%d: Send Client Connect steering event\n", __func__, __LINE__);
-
-        callbacks->steering_event_callback(g_idx, &steering_evt);
-        if (l_sta_info != NULL) {
-            l_sta_info->event_sent |= BM_SENT_E_ASSOC;
-        }
-        pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
-    }
+    notify_sta_listeners(interface, sta_mac, rssi);
 
     return NL_SKIP;
 }
@@ -6638,8 +6709,12 @@ int update_channel_flags()
     return 0;
 }
 
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined(SCXER10_PORT) || defined(SCXF10_PORT)
+#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) ||                  \
+    defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || \
+    defined(_PLATFORM_BANANAPI_R4_)
+// wiphy split dump support is not "selectable" -
+// NL80211_ATTR_SPLIT_WIPHY_DUMP is never fetched from the driver, see
+// kernel's nl80211_get_protocol_features()
 static int protocol_feature_handler(struct nl_msg *msg, void *arg)
 {
     u32 *feat = arg;
@@ -6650,40 +6725,195 @@ static int protocol_feature_handler(struct nl_msg *msg, void *arg)
             genlmsg_attrlen(gnlh, 0), NULL);
 
     if (tb_msg[NL80211_ATTR_PROTOCOL_FEATURES]) {
-
         *feat = nla_get_u32(tb_msg[NL80211_ATTR_PROTOCOL_FEATURES]);
+    } else {
+        wifi_hal_error_print("%s:%d: Failed to get nl80211 protocol features attribute\n", __func__,
+            __LINE__);
+        *feat = 0;
     }
 
     return NL_SKIP;
 }
 
-static u32 get_nl80211_protocol_features(int nl_id)
+static u32 fetch_nl80211_protocol_features(int nl_id, u32 *feat)
 {
-    u32 feat = 0;
     struct nl_msg *msg;
 
     msg = nl80211_drv_cmd_msg(nl_id, NULL, 0, NL80211_CMD_GET_PROTOCOL_FEATURES);
     if (!msg) {
         nlmsg_free(msg);
+        *feat = 0;
+        return -1;
+    }
+
+    if (nl80211_send_and_recv(msg, protocol_feature_handler, feat, NULL, NULL) == 0) {
         return 0;
     }
 
-    if (nl80211_send_and_recv(msg, protocol_feature_handler, &feat, NULL, NULL) == 0) {
-        return feat;
-    }
-
+    *feat = 0;
+    return -1;
+}
+#else
+static int fetch_nl80211_protocol_features(int nl_id, u32 *feat)
+{
+    (void)nl_id;
+    (void)feat;
     return 0;
 }
 #endif // VNTXER5_PORT || TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TARGET_GEMINI7_2 || SCXF10_PORT
 
+#ifdef FEATURE_SINGLE_PHY
+static int copy_radio_struct(wifi_radio_info_t *src, wifi_radio_info_t *dst)
+{
+#if HOSTAPD_VERSION >= 211 // 2.11
+    struct drv_nl80211_iface_capa *src_iface_ext_capa = src->driver_data.iface_ext_capa;
+    struct drv_nl80211_iface_capa *dst_iface_ext_capa = dst->driver_data.iface_ext_capa;
+#else
+    struct drv_nl80211_ext_capa *src_iface_ext_capa = src->driver_data.iface_ext_capa;
+    struct drv_nl80211_ext_capa *dst_iface_ext_capa = dst->driver_data.iface_ext_capa;
+#endif // 2.11
+
+    memcpy(dst, src, sizeof(wifi_radio_info_t));
+
+    dst->driver_data.extended_capa = NULL;
+    dst->driver_data.extended_capa_mask = NULL;
+    dst->driver_data.extended_capa_len = 0;
+    for (unsigned int i = 0; i < NL80211_IFTYPE_MAX; ++i) {
+        dst_iface_ext_capa[i].ext_capa = NULL;
+        dst_iface_ext_capa[i].ext_capa_mask = NULL;
+        dst_iface_ext_capa[i].ext_capa_len = 0;
+    }
+    dst->driver_data.num_iface_ext_capa = 0;
+
+    dst->driver_data.extended_capa = malloc(src->driver_data.extended_capa_len);
+    if (dst->driver_data.extended_capa == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate memory for radio extended caps\n", __func__,
+            __LINE__);
+        return -1;
+    }
+    memcpy(dst->driver_data.extended_capa, src->driver_data.extended_capa,
+        src->driver_data.extended_capa_len);
+
+    dst->driver_data.extended_capa_mask = malloc(src->driver_data.extended_capa_len);
+    if (dst->driver_data.extended_capa_mask == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate memory for radio extended caps mask\n",
+            __func__, __LINE__);
+        goto error;
+    }
+    memcpy(dst->driver_data.extended_capa_mask, src->driver_data.extended_capa_mask,
+        src->driver_data.extended_capa_len);
+
+    dst->driver_data.extended_capa_len = src->driver_data.extended_capa_len;
+
+    for (unsigned int i = 0; i < src->driver_data.num_iface_ext_capa; ++i) {
+        dst_iface_ext_capa[i].ext_capa = malloc(src_iface_ext_capa[i].ext_capa_len);
+        if (dst_iface_ext_capa[i].ext_capa == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to allocate memory for ext_capa\n", __func__,
+                __LINE__);
+            goto error;
+        }
+        memcpy(dst_iface_ext_capa[i].ext_capa, src_iface_ext_capa[i].ext_capa,
+            src_iface_ext_capa[i].ext_capa_len);
+
+        dst_iface_ext_capa[i].ext_capa_mask = malloc(src_iface_ext_capa[i].ext_capa_len);
+        if (dst_iface_ext_capa[i].ext_capa_mask == NULL) {
+            wifi_hal_error_print("%s:%d: Failure to allocate memory for ext_capa_mask\n", __func__,
+                __LINE__);
+            goto error;
+        }
+        memcpy(dst_iface_ext_capa[i].ext_capa_mask, src_iface_ext_capa[i].ext_capa_mask,
+            src_iface_ext_capa[i].ext_capa_len);
+
+        dst_iface_ext_capa[i].ext_capa_len = src_iface_ext_capa[i].ext_capa_len;
+    }
+    dst->driver_data.num_iface_ext_capa = src->driver_data.num_iface_ext_capa;
+
+    return 0;
+
+error:
+    free(dst->driver_data.extended_capa);
+    dst->driver_data.extended_capa = NULL;
+    free(dst->driver_data.extended_capa_mask);
+    dst->driver_data.extended_capa_mask = NULL;
+    dst->driver_data.extended_capa_len = 0;
+    for (unsigned int i = 0; i < NL80211_IFTYPE_MAX; i++) {
+        free(dst_iface_ext_capa[i].ext_capa);
+        dst_iface_ext_capa[i].ext_capa = NULL;
+        free(dst_iface_ext_capa[i].ext_capa_mask);
+        dst_iface_ext_capa[i].ext_capa_mask = NULL;
+        dst_iface_ext_capa[i].ext_capa_len = 0;
+    }
+    dst->driver_data.num_iface_ext_capa = 0;
+    return -1;
+}
+#endif // FEATURE_SINGLE_PHY
+
+static int map_rdk_radios_and_indexes(void)
+{
+#ifdef FEATURE_SINGLE_PHY
+    int rdk_radio_indices[MAX_NUM_RADIOS];
+    int num_radios_mapped = MAX_NUM_RADIOS;
+    int ret = 0;
+    unsigned int max_radio_count;
+#ifdef CONFIG_WIFI_EMULATOR
+    max_radio_count = MAX_NUM_SIMULATED_CLIENT;
+#else
+    max_radio_count = MAX_NUM_RADIOS;
+#endif
+#endif // FEATURE_SINGLE_PHY
+    wifi_radio_info_t *radio;
+
+#ifdef FEATURE_SINGLE_PHY
+    // Get the array of rdk_radio_indexes associated with the phy
+    memset(rdk_radio_indices, 0, sizeof(rdk_radio_indices));
+    ret = get_rdk_radio_indices(g_wifi_hal.radio_info[0].index, rdk_radio_indices,
+        &num_radios_mapped);
+    if (ret != 0) {
+        wifi_hal_error_print("%s:%d: Failure to fetch radio map for the phy !\n", __func__,
+            __LINE__);
+        return ret;
+    }
+
+    wifi_hal_dbg_print("%s:%d: For phy_index:%u, num_radios_mapped:%d, g_wifi_hal.num_radios:%d\n",
+        __func__, __LINE__, g_wifi_hal.radio_info[0].index, num_radios_mapped,
+        g_wifi_hal.num_radios);
+
+    // We are going to copy the caps received to other radio structs
+    // since they all share a singly phy
+    for (unsigned int i = 1; i < num_radios_mapped && i < max_radio_count; ++i) {
+        radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
+        if (copy_radio_struct(&g_wifi_hal.radio_info[0], radio) != 0) {
+            wifi_hal_error_print(
+                "%s:%d: Failure encountered while copying extended capabilites for radio %d\n",
+                __func__, __LINE__, i);
+            return -1;
+        }
+        g_wifi_hal.num_radios++;
+    }
+#endif
+
+    for (unsigned int j = 0; (j < g_wifi_hal.num_radios); j++) {
+        radio = &g_wifi_hal.radio_info[j];
+#ifdef FEATURE_SINGLE_PHY
+        radio->rdk_radio_index = rdk_radio_indices[j];
+#else
+        int rdk_radio_index = get_rdk_radio_index(g_wifi_hal.radio_info[j].index);
+        if (rdk_radio_index == -1) {
+            wifi_hal_error_print("%s:%d: Skipping for phy_index = %u, "
+                                 "since it is not present in the interface table\n",
+                __func__, __LINE__, g_wifi_hal.radio_info[j].index);
+            return -1;
+        }
+        radio->rdk_radio_index = rdk_radio_index;
+#endif
+    }
+    return 0;
+}
+
 int init_nl80211()
 {
     int ret;
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined(SCXER10_PORT) || defined(SCXF10_PORT)
     u32 feat;
-    int flags = 0;
-#endif
     unsigned int i;
     struct nl_msg *msg;
     wifi_radio_info_t *radio;
@@ -6790,25 +7020,32 @@ int init_nl80211()
         g_wifi_hal.radio_info[i].index = -1;
     }
     init_interface_map();
-#if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
-    !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
+
+    #ifdef RDKB_ONE_WIFI_PROD
+    /* Remap the interfaces depending on the Wiphy enumeration
+    * in the kernel */
+    remap_wifi_interface_name_index_map();
+    #endif /* RDKB_ONE_WIFI_PROD */
+
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
     if (msg == NULL) {
-#else
-    feat = get_nl80211_protocol_features(g_wifi_hal.nl80211_id);
-
-    if (feat & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP)
-        flags = NLM_F_DUMP;
-
-    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, flags, NL80211_CMD_GET_WIPHY);
-
-    if (!msg || nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP)) {
-#endif
-        nlmsg_free(msg);
         return -1;
     }
 
-    if (nl80211_send_and_recv(msg, wiphy_dump_handler, &g_wifi_hal, NULL, NULL)) {
+    if (fetch_nl80211_protocol_features(g_wifi_hal.nl80211_id, &feat)) {
+        wifi_hal_error_print("%s:%d: Failed to get protocol features - treating them as disabled\n",
+            __func__, __LINE__);
+    }
+
+    if (feat & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP) {
+        nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
+    }
+
+    if (nl80211_send_and_recv(msg, wiphy_dump_handler, &feat, NULL, NULL)) {
+        return -1;
+    }
+
+    if (map_rdk_radios_and_indexes() != RETURN_OK) {
         return -1;
     }
 
@@ -7363,16 +7600,12 @@ static int nl80211_fill_chandef(struct nl_msg *msg, wifi_radio_info_t *radio, wi
     return 0;
 }
 
-int nl80211_switch_channel(wifi_radio_info_t *radio)
+static int fill_csa_params(wifi_radio_info_t *radio, struct csa_settings *csa_settings)
 {
-    wifi_interface_info_t *interface;
     wifi_radio_operationParam_t *param;
-    struct csa_settings csa_settings;
     int sec_chan_offset, freq, freq1, bandwidth;
     u8 seg0;
     char country[8];
-    int ret = 0;
-    bool is_first_interface;
 
     param = &radio->oper_param;
     get_coutry_str_from_code(param->countryCode, country);
@@ -7420,46 +7653,182 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
     ieee80211_freq_to_chan(freq1, &seg0);
 
     /* Setup CSA request */
-    os_memset(&csa_settings, 0, sizeof(csa_settings));
+    os_memset(csa_settings, 0, sizeof(struct csa_settings));
 
     if (radio->radar_detected) {
-        csa_settings.cs_count = 8;
-        csa_settings.block_tx = 1;
+        csa_settings->cs_count = 8;
+        csa_settings->block_tx = 1;
         radio->radar_detected = false;
     } else {
-        csa_settings.cs_count = 5;
-        csa_settings.block_tx = 0;
+        csa_settings->cs_count = 5;
+        csa_settings->block_tx = 0;
     }
 #if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
-    csa_settings.cs_count = CSA_COUNT;
+    csa_settings->cs_count = CSA_COUNT;
 #endif
-    os_memset(&csa_settings.freq_params, 0, sizeof(struct hostapd_freq_params));
+    os_memset(&csa_settings->freq_params, 0, sizeof(struct hostapd_freq_params));
 
-    csa_settings.freq_params.mode = radio->iconf.hw_mode;
-    csa_settings.freq_params.freq = ieee80211_chan_to_freq(country, param->operatingClass, param->channel);
-    csa_settings.freq_params.channel = param->channel;
-    csa_settings.freq_params.ht_enabled = radio->iconf.ieee80211n;
-    csa_settings.freq_params.vht_enabled = radio->iconf.ieee80211ac;
-    csa_settings.freq_params.he_enabled = radio->iconf.ieee80211ax;
+    csa_settings->freq_params.mode = radio->iconf.hw_mode;
+    csa_settings->freq_params.freq = ieee80211_chan_to_freq(country, param->operatingClass,
+        param->channel);
+    csa_settings->freq_params.channel = param->channel;
+    csa_settings->freq_params.ht_enabled = radio->iconf.ieee80211n;
+    csa_settings->freq_params.vht_enabled = radio->iconf.ieee80211ac;
+    csa_settings->freq_params.he_enabled = radio->iconf.ieee80211ax;
 #ifdef CONFIG_IEEE80211BE
-    csa_settings.freq_params.eht_enabled = radio->iconf.ieee80211be;
+    csa_settings->freq_params.eht_enabled = radio->iconf.ieee80211be;
 #endif /* CONFIG_IEEE80211BE */
-    csa_settings.freq_params.sec_channel_offset = sec_chan_offset;
-    csa_settings.freq_params.center_freq1 = freq1;
-    csa_settings.freq_params.center_freq2 = 0;
-    csa_settings.freq_params.bandwidth = bandwidth;
+    csa_settings->freq_params.sec_channel_offset = sec_chan_offset;
+    csa_settings->freq_params.center_freq1 = freq1;
+    csa_settings->freq_params.center_freq2 = 0;
+    csa_settings->freq_params.bandwidth = bandwidth;
 
     wifi_hal_dbg_print("%s:%d chan_freq: %d center_freq: %d bandwidth: %d sec_chan_offset: %d\n",
         __func__, __LINE__, freq, freq1, bandwidth, sec_chan_offset);
+    return 0;
+}
 
-    is_first_interface = true;
+#if defined(CONFIG_GENERIC_MLO)
+static int wait_for_csa_completion(wifi_interface_info_t *interface)
+{
+    int retry = 20;
+    const unsigned int wait_usec = 100000;
+    bool is_mld_enabled = wifi_hal_is_mld_enabled(interface);
+
+    while (retry-- > 0) {
+        bool csa_in_progress = false;
+
+        // For MLD related devices we have to check all links in MLD group
+        if (is_mld_enabled) {
+            wifi_interface_info_t *interface_it;
+
+            for (unsigned int i = 0; i < g_wifi_hal.num_radios; ++i) {
+                wifi_radio_info_t *radio_it = &g_wifi_hal.radio_info[i];
+
+                hash_map_foreach(radio_it->interface_map, interface_it) {
+                    if (!wifi_hal_is_mld_enabled(interface_it)) {
+                        continue;
+                    }
+
+                    if (interface_it->index != interface->index) {
+                        continue;
+                    }
+
+                    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+                    csa_in_progress = interface_it->u.ap.hapd.csa_in_progress;
+                    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+                    if (csa_in_progress) {
+                        break;
+                    }
+                }
+
+                if (csa_in_progress) {
+                    break;
+                }
+            }
+        } else {
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            csa_in_progress = interface->u.ap.hapd.csa_in_progress;
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        }
+
+        if (!csa_in_progress) {
+            break;
+        }
+        wifi_hal_dbg_print("%s:%d: CSA in progress on interface %s, waiting...\n", __func__,
+            __LINE__, interface->name);
+        usleep(wait_usec);
+    }
+    if (retry <= 0) {
+        wifi_hal_error_print("%s:%d: Timeout waiting for CSA to complete on interface %s\n",
+            __func__, __LINE__, interface->name);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int notify_mld_partner_links(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
+{
+    wifi_interface_info_t *interface_it;
+    struct csa_settings csa_settings;
+    int ret = 0;
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return 0;
+    }
+
+    // For MLD related devices we have to notify all links in MLD groups
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; ++i) {
+        wifi_radio_info_t *radio_it = &g_wifi_hal.radio_info[i];
+        if (radio_it == radio) {
+            continue;
+        }
+
+        ret = fill_csa_params(radio_it, &csa_settings);
+        if (ret < 0) {
+            wifi_hal_error_print("%s:%d: Error filling csa_settings for radio idx %d\n", __func__,
+                __LINE__, i);
+            return ret;
+        }
+
+        hash_map_foreach(radio_it->interface_map, interface_it) {
+            if (!wifi_hal_is_mld_enabled(interface_it)) {
+                continue;
+            }
+
+            if (interface_it->index != interface->index) {
+                continue;
+            }
+
+            wifi_hal_dbg_print("%s:%d interface: %s switch channel to %d\n", __func__, __LINE__,
+                interface_it->name, radio_it->oper_param.channel);
+
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            ret = hostapd_switch_channel(&interface_it->u.ap.hapd, &csa_settings);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+            if (ret != 0) {
+                wifi_hal_error_print("%s:%d: Error notifying link %d on radio %d switching "
+                                     "channel, ret:%d\n",
+                    __func__, __LINE__, wifi_hal_get_mld_link_id(interface_it), i, ret);
+                return ret;
+            }
+        }
+    }
+
+    return 0;
+}
+#endif // CONFIG_GENERIC_MLO
+
+int nl80211_switch_channel(wifi_radio_info_t *radio)
+{
+    int ret = 0;
+    wifi_interface_info_t *interface;
+    bool is_first_interface = true;
+    struct csa_settings csa_settings;
+
+    ret = fill_csa_params(radio, &csa_settings);
+    if (ret != 0) {
+        wifi_hal_error_print("%s:%d: Failed to fill CSA params for radio %d\n", __func__, __LINE__,
+            radio->rdk_radio_index);
+        return ret;
+    }
+
     hash_map_foreach(radio->interface_map, interface) {
         if (!interface->bss_started) {
             continue;
         }
 
+#if defined(CONFIG_GENERIC_MLO)
+        if (wait_for_csa_completion(interface) < 0) {
+            return -1;
+        }
+#endif // CONFIG_GENERIC_MLO
+
         wifi_hal_dbg_print("%s:%d interface: %s switch channel to %d\n", __func__, __LINE__,
-            interface->name, param->channel);
+            interface->name, radio->oper_param.channel);
 
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         ret = hostapd_switch_channel(&interface->u.ap.hapd, &csa_settings);
@@ -7469,10 +7838,19 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
            as CSA would be in progress after the first interface channel switch. */
         if (ret != 0 && is_first_interface == true) {
             wifi_hal_error_print("%s:%d interface: %s failed to switch channel to %d, error: %d\n",
-                __func__, __LINE__, interface->name, param->channel, ret);
+                __func__, __LINE__, interface->name, radio->oper_param.channel, ret);
             return ret;
         }
         is_first_interface = false;
+
+#if defined(CONFIG_GENERIC_MLO)
+        ret = notify_mld_partner_links(radio, interface);
+        if (ret != 0) {
+            wifi_hal_error_print("%s:%d Error encountered during notifying partner links\n",
+                __func__, __LINE__);
+            return ret;
+        }
+#endif // CONFIG_GENERIC_MLO
     }
     return 0;
 }
@@ -7542,14 +7920,22 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
         return -1;
     }
 
-    nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
+    if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to add interface index\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
     if (nl80211_fill_chandef(msg, radio, interface) == -1) {
+        wifi_hal_error_print("%s:%d: Failed to fill channel definition\n", __func__, __LINE__);
+        nlmsg_free(msg);
         return -1;
     }
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
     if (link_id != NL80211_DRV_LINK_ID_NA &&
         nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to add MLO link ID\n", __func__, __LINE__);
+        nlmsg_free(msg);
         return -1;
     }
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
@@ -7592,14 +7978,21 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
                return -1;
            }
 
-           nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
+           if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index) < 0) {
+               wifi_hal_error_print("%s:%d: Failed to add interface index\n", __func__, __LINE__);
+               nlmsg_free(msg);
+               return -1;
+           }
            if (nl80211_fill_chandef(msg, radio, interface) == -1) {
+                wifi_hal_error_print("%s:%d: Failed to fill channel definition\n", __func__, __LINE__);
+                nlmsg_free(msg);
                 return -1;
             }
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
             if (link_id != NL80211_DRV_LINK_ID_NA &&
                 nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0) {
+                wifi_hal_error_print("%s:%d: Failed to add MLO link ID\n", __func__, __LINE__);
                 nlmsg_free(msg);
                 return -1;
             }
@@ -7802,6 +8195,14 @@ int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
 
     unsigned short frame_type;
 
+#if defined(CONFIG_GENERIC_MLO)
+    interface = wifi_hal_get_first_mld_interface(interface);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get first MLD interface\n", __func__, __LINE__);
+        return -1;
+    }
+#endif // CONFIG_GENERIC_MLO
+
     if (interface->mgmt_frames_registered == 1) {
         wifi_hal_dbg_print("%s:%d: Mgmt frames already registered for %s\n", __func__, __LINE__,
             wifi_hal_get_interface_name(interface));
@@ -7882,14 +8283,22 @@ int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
 
 static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface)
 {
+#if defined(CONFIG_GENERIC_MLO)
+    interface = wifi_hal_get_first_mld_interface(interface);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get first MLD interface\n", __func__, __LINE__);
+        return;
+    }
+#endif // CONFIG_GENERIC_MLO
+
     if (interface->mgmt_frames_registered == 0) {
         wifi_hal_dbg_print("%s:%d: interface:%s mgmt frames not registered\n", __func__, __LINE__,
-            interface->name);
+            wifi_hal_get_interface_name(interface));
         return;
     }
 
     wifi_hal_info_print("%s:%d: interface:%s ifindex:%d nl sock:%d\n", __func__, __LINE__,
-        interface->name, interface->index, interface->nl_event_fd);
+        wifi_hal_get_interface_name(interface), interface->index, interface->nl_event_fd);
 
     nl_destroy_handles(&interface->nl_event);
     interface->nl_event = NULL;
@@ -8985,7 +9394,6 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     mac_addr_str_t bssid_str;
     //unsigned int rsn_ie_len;
 #if !defined(CONFIG_WIFI_EMULATOR) && !defined(BANANA_PI_PORT)
-    u32 ver = 0;
     u8 *pos, rsn_ie[128];
     ieee80211_tlv_t *bh_rsn = NULL;
     struct wpa_auth_config wpa_conf = {0};
@@ -9028,14 +9436,27 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     }
     if (interface->wpa_s.current_bss == NULL) {
         interface->wpa_s.current_bss = (struct wpa_bss *)malloc(
-                sizeof(struct wpa_bss) + bss_ie->buff_len);
+            sizeof(struct wpa_bss) + bss_ie->buff_len);
         if (interface->wpa_s.current_bss == NULL) {
             wifi_hal_error_print("%s:%d NULL Pointer\n", __func__, __LINE__);
             return -1;
         }
+    } else {
+        struct dl_list *list = &interface->wpa_s.current_bss->list;
+
+        /* Check if node is already in a dl_list */
+        if (list->next != NULL && list->prev != NULL &&
+            (list->next != list || list->prev != list)) {
+            wifi_hal_error_print("%s:%d: Removing current_bss from list before memset\n", __func__,
+                __LINE__);
+            /* Remove from the BSS linked list */
+            dl_list_del(list);
+        }
     }
     // Fill in current bss struct where we are going to connect.
     memset(interface->wpa_s.current_bss, 0, sizeof(struct wpa_bss) + bss_ie->buff_len);
+    /* Initialize the list node AFTER memset */
+    dl_list_init(&interface->wpa_s.current_bss->list);
     strcpy(interface->wpa_s.current_bss->ssid, backhaul->ssid);
     interface->wpa_s.current_bss->ssid_len = strlen(backhaul->ssid);
     memcpy(interface->wpa_s.current_bss->bssid, backhaul->bssid, ETH_ALEN);
@@ -9058,6 +9479,16 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         return -1;
     }
 
+#if defined(EASY_MESH_NODE)
+    if (is_wifi_hal_vap_mesh_sta(vap->vap_index)) {
+        // Enable multi_ap_backhaul_sta for mesh sta connection
+        interface->wpa_s.current_ssid->multi_ap_backhaul_sta = 1;
+        wifi_hal_info_print("%s:%d: Enabled multi_ap_backhaul_sta:%d for interface:%s\n",
+            __func__, __LINE__, interface->wpa_s.current_ssid->multi_ap_backhaul_sta,
+            interface->name);
+    }
+#endif // EASY_MESH_NODE
+
     update_wpa_sm_params(interface);
     init_wpa_sm_param(interface);
     interface->wpa_s.current_ssid->proto = WPA_PROTO_RSN;
@@ -9073,7 +9504,6 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 #endif
 #endif
     interface->wpa_s.current_ssid->ieee80211w = security->mfp;
-
     interface->wpa_s.current_ssid->key_mgmt = interface->u.sta.wpa_sm->key_mgmt;
     if ((security->mode == wifi_security_mode_wpa3_personal) ||
         (security->mode == wifi_security_mode_wpa3_transition) ||
@@ -9243,9 +9673,23 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     wifi_hal_dbg_print("%s:%d:bssid:%s frequency:%d ssid:%s\n", __func__, __LINE__,
             to_mac_str(backhaul->bssid, bssid_str), backhaul->freq, backhaul->ssid);
 
-    nla_put(msg, NL80211_ATTR_SSID, strlen(backhaul->ssid), backhaul->ssid);
-    nla_put(msg, NL80211_ATTR_MAC, sizeof(backhaul->bssid), backhaul->bssid);
-    nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ, backhaul->freq);
+    if (nla_put(msg, NL80211_ATTR_SSID, strlen(backhaul->ssid), backhaul->ssid) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set ssid\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    if (nla_put(msg, NL80211_ATTR_MAC, sizeof(backhaul->bssid), backhaul->bssid) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set bssid\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    if (nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ, backhaul->freq) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set frequency\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
 
     pos = rsn_ie;
 
@@ -9259,7 +9703,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_NONE;
         } else {
             sel = (WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_PSK |
-                WPA_KEY_MGMT_PSK_SHA256 ) & data.key_mgmt;
+                      WPA_KEY_MGMT_IEEE8021X_SHA256 | WPA_KEY_MGMT_PSK_SHA256) &
+                data.key_mgmt;
             key_mgmt = pick_akm_suite(sel);
 
             if (key_mgmt == -1) {
@@ -9304,8 +9749,11 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                     wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_IEEE8021X;
                     break;
                 case wifi_security_mode_wpa3_personal:
-                case wifi_security_mode_wpa3_enterprise:
                     wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_SAE;
+                    break;
+
+                case wifi_security_mode_wpa3_enterprise:
+                    wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_IEEE8021X_SHA256;
                     break;
                 case wifi_security_mode_wpa3_transition:
                     wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE;
@@ -9324,11 +9772,21 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         }
     }
 
-    wpa_conf.ieee80211w = 0;
+#ifdef CONFIG_IEEE80211W
+    if (security->mode == wifi_security_mode_wpa3_personal ||
+        security->mode == wifi_security_mode_wpa3_enterprise ||
+        security->mode == wifi_security_mode_wpa3_transition || 
+        security->mode == wifi_security_mode_wpa3_compatibility) {
+        // WPA3 REQUIRES MFP
+        wpa_conf.ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
+        wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
+    }
+#endif
 
     if (security->mode != wifi_security_mode_none) {
         if ((ret = wpa_write_rsn_ie(&wpa_conf, pos, rsn_ie + sizeof(rsn_ie) - pos, NULL)) < 0) {
             wifi_hal_error_print("%s:%d Failed to build RSN %d\r\n", __func__, __LINE__, ret);
+            nlmsg_free(msg);
             return ret;
         }
         else {
@@ -9341,28 +9799,19 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                 pos += interface->u.sta.wpa_sm->assoc_rsnxe_len;
             }
 #endif
-            nla_put(msg, NL80211_ATTR_IE, pos - rsn_ie, rsn_ie);
+            if (nla_put(msg, NL80211_ATTR_IE, pos - rsn_ie, rsn_ie) < 0) {
+                wifi_hal_error_print("%s:%d: Failed to set RSN IE\n", __func__, __LINE__);
+                nlmsg_free(msg);
+                return -1;
+            }
         }
+    }
 
-        if (security->mode == wifi_security_mode_wpa2_enterprise || security->mode == wifi_security_mode_wpa2_personal)
-            ver |= NL80211_WPA_VERSION_2;
-        else
-            ver |= NL80211_WPA_VERSION_1;
-        nla_put_u32(msg, NL80211_ATTR_WPA_VERSIONS, ver);
-
-        nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITES_PAIRWISE, RSN_CIPHER_SUITE_CCMP);
-        nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITE_GROUP, RSN_CIPHER_SUITE_CCMP);
-
-        if (security->mode == wifi_security_mode_wpa2_enterprise)
-            nla_put_u32(msg, NL80211_ATTR_AKM_SUITES, RSN_AUTH_KEY_MGMT_UNSPEC_802_1X);
-        else if (security->mode == wifi_security_mode_wpa2_personal)
-            nla_put_u32(msg, NL80211_ATTR_AKM_SUITES, RSN_AUTH_KEY_MGMT_PSK_OVER_802_1X);
-
-        nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
-        nla_put_flag(msg, NL80211_ATTR_PRIVACY);
-    } else {
-        nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
-        wifi_hal_dbg_print("security mode open:%d encr:%d\n", security->mode, security->encr);
+    if ((ret = configure_nl80211_security(msg, security, &wpa_conf)) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to configure security: %d\n",
+                      __func__, __LINE__, ret);
+        nlmsg_free(msg);
+        return ret;
     }
 #ifdef EAPOL_OVER_NL
     if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_CONTROL_PORT_FRAME &&
@@ -9600,9 +10049,6 @@ static int bss_info_handler(struct nl_msg *msg, void *arg)
 #endif
 
 //  ========= scan results parser ===============
-
-// MXL vendor-specific attribute
-#define NO_NL80211_BSS_NOISE
 
 struct parse_ies_data {
     unsigned char *ie;
@@ -10399,8 +10845,10 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
         [NL80211_BSS_PARENT_TSF] = { .type = NLA_U64 },
         [NL80211_BSS_PARENT_BSSID] = { .type = NLA_UNSPEC },
         [NL80211_BSS_LAST_SEEN_BOOTTIME] = { .type = NLA_U64 },
-#ifndef NO_NL80211_BSS_NOISE
-        [NL80211_BSS_NOISE] = { .type = NLA_U8 },
+#ifdef IGNITE_SCAN_PARAMS
+        [NL80211_BSS_NOISE] = { .type = NLA_U32 },
+        [NL80211_BSS_SNR] = { .type = NLA_U32 },
+        [NL80211_BSS_CU] = { .type = NLA_U8 },
 #endif
     };
 
@@ -10519,13 +10967,23 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
         scan_info_ap->rssi = rssi;
     }
 
-#ifndef NO_NL80211_BSS_NOISE
-    wifi_hal_stats_dbg_print("noise attribute: %p\n", bss[NL80211_BSS_NOISE]);
+#ifdef IGNITE_SCAN_PARAMS
+    wifi_hal_stats_dbg_print(" noise attribute: %p snr attribute: %p cu attribute: %p\n", bss[NL80211_BSS_NOISE], bss[NL80211_BSS_SNR], bss[NL80211_BSS_CU]);
     // - noise
     if (bss[NL80211_BSS_NOISE]) {
-        uint8_t noise = nla_get_u8(bss[NL80211_BSS_NOISE]);
+        int noise = nla_get_u32(bss[NL80211_BSS_NOISE]);
         scan_info_ap->noise = noise;
-        wifi_hal_stats_dbg_print("noise: %d\n", noise);
+        wifi_hal_stats_dbg_print("noise: %d\n", scan_info_ap->noise);
+    }
+    if (bss[NL80211_BSS_SNR]) {
+        int snr = nla_get_u32(bss[NL80211_BSS_SNR]);
+        scan_info_ap->snr = snr;
+        wifi_hal_stats_dbg_print("snr: %d\n", scan_info_ap->snr);
+    }
+    if (bss[NL80211_BSS_CU]) {
+        uint8_t cu = nla_get_u8(bss[NL80211_BSS_CU]);
+        scan_info_ap->chan_utilization = cu;
+        wifi_hal_stats_dbg_print("chan_utilization: %d\n", scan_info_ap->chan_utilization);
     }
 #else
     // wifi_hal_dbg_print("WARNING: NL80211_BSS_NOISE is not defined! Need to update header nl80211.h\n");
@@ -10553,11 +11011,10 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
         // Wildcard STA VAP SSIDs cannot be used to set the backhaul BSSID
         if (strcmp(scan_info_ap->ssid, vap->u.sta_info.ssid) == 0 &&
             strlen(vap->u.sta_info.ssid) > 0) {
-            wifi_hal_stats_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d on freq:%d for ssid:%s\n", __func__, __LINE__,
-                        to_mac_str(bssid, bssid_str), scan_info_ap->rssi, scan_info_ap->freq, scan_info_ap->ssid);
+            wifi_hal_stats_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d snr = %d chan_utilization = %d noise = %d on freq:%d for ssid:%s\n", __func__, __LINE__,
+                        to_mac_str(bssid, bssid_str), scan_info_ap->rssi, scan_info_ap->snr, scan_info_ap->chan_utilization, scan_info_ap->noise, scan_info_ap->freq, scan_info_ap->ssid);
             memcpy(vap->u.sta_info.bssid, bssid, sizeof(bssid_t));
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
-
             wifi_ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
             wifi_ie_info_t *beacon_ie = &interface->beacon_elem_ie[radio_index];
 
@@ -10599,9 +11056,9 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
 
     // - create or update the scan info in 'scan_info_map'
     if (scan_info_ap->ssid[0] != '\0') {
-        wifi_hal_stats_dbg_print("%s:%d: [SCAN] found bss:%s rssi:%d ssid:%s on freq:%d \n",
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] found bss:%s rssi:%d snr = %d chan_utilization = %d noise = %d ssid:%s on freq:%d \n",
             __func__, __LINE__, to_mac_str(bssid, bssid_str), scan_info_ap->rssi,
-            scan_info_ap->ssid, scan_info_ap->freq);
+            scan_info_ap->snr, scan_info_ap->chan_utilization, scan_info_ap->noise, scan_info_ap->ssid, scan_info_ap->freq);
         wifi_bss_info_t *scan_info = NULL;
         pthread_mutex_lock(&interface->scan_info_mutex);
         scan_info = hash_map_get(interface->scan_info_map, key);
@@ -10773,6 +11230,16 @@ int wifi_drv_update_connection_params(
     return 0;
 }
 
+#ifdef TARGET_GEMINI7_2
+int wifi_drv_add_sta_node(void *priv, const u8 *addr, u16 auth_alg, bool is_ml)
+#else
+int wifi_drv_add_sta_node(void *priv, const u8 *addr, u16 auth_alg)
+#endif
+{
+    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
+    return 0;
+}
+
 #if defined(CONFIG_HW_CAPABILITIES) || defined(CMXB7_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
 int wifi_drv_get_ext_capab(void *priv, enum wpa_driver_if_type type,
                  const u8 **ext_capa, const u8 **ext_capa_mask,
@@ -10849,12 +11316,6 @@ static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
             break;
         }
     }
-
-#ifdef CONFIG_GENERIC_MLO
-    // TODO: remove hardcoded values
-    *eml_capa = 0x01;
-    *mld_capa_and_ops = 0x23;
-#endif // CONFIG_GENERIC_MLO
 
     wifi_hal_dbg_print("%s:%d: eml_capa: 0x%x, mld_capa_and_ops: 0x%x\n", __func__, __LINE__,
         *eml_capa, *mld_capa_and_ops);
@@ -12273,7 +12734,7 @@ int wlan_nl80211_create_interface(char *ifname, uint32_t if_type, int wds, uint8
 }
 
 static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t *interface,
-    const u8 *addr, const char *ifname, int vlan_id)
+    const u8 *addr, const char *ifname, int vlan_id, int link_id)
 {
     struct nl_msg *msg;
     int ret;
@@ -12283,8 +12744,8 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
 #endif
 
     wifi_hal_dbg_print("%s:%d nl80211: %s[%d]: set_sta_vlan(" MACSTR
-        ", ifname=%s[%d], vlan_id=%d)\r\n", __func__, __LINE__, interface->name,
-        if_nametoindex(interface->name), MAC2STR(addr), ifname, if_nametoindex(ifname), vlan_id);
+        ", ifname=%s[%d], vlan_id=%d link_id:%d)\r\n", __func__, __LINE__, interface->name,
+        if_nametoindex(interface->name), MAC2STR(addr), ifname, if_nametoindex(ifname), vlan_id, link_id);
 
     if (!(msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_STATION)) ||
         nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr)) {
@@ -12303,6 +12764,15 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
     }
 #endif
 
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+    if (link_id != NL80211_DRV_LINK_ID_NA &&
+        nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0) {
+        wifi_hal_error_print("%s:%d netlink command mlo link_id:%d set failed\r\n", __func__,
+            __LINE__, link_id);
+        goto fail;
+    }
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+
     if (nla_put_u32(msg, NL80211_ATTR_STA_VLAN, if_nametoindex(ifname)) < 0) {
         wifi_hal_error_print("%s:%d netlink command sta vlan[%s]:%d set failed\r\n",
             __func__, __LINE__, ifname, if_nametoindex(ifname));
@@ -12314,6 +12784,7 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
         wifi_hal_error_print("%s:%d nl80211: NL80211_ATTR_STA_VLAN (addr="
             MACSTR " ifname=%s vlan_id=%d) failed: %d (%s)\r\n", __func__, __LINE__,
             MAC2STR(addr), ifname, vlan_id, ret, strerror(-ret));
+        return ret;
     }
     wifi_hal_info_print("%s:%d nl80211: NL80211_ATTR_STA_VLAN (addr="
             MACSTR " ifname=%s vlan_id=%d) success\r\n", __func__, __LINE__,
@@ -12353,11 +12824,30 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
     int ret;
     wifi_vap_info_t *vap;
     wifi_radio_info_t *radio;
+    char *mld_name = NULL;
+    int link_id = -1;
+    mac_address_t intf_mac = {};
 
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
 
-    ret = os_snprintf(name, sizeof(name), "%s.sta%d", interface->name, aid);
+#ifdef CONFIG_GENERIC_MLO
+    link_id = wifi_hal_get_mld_link_id(interface);
+    mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
+#endif // CONFIG_GENERIC_MLO
+
+    if (mld_name != NULL) {
+        ret = os_snprintf(name, sizeof(name), "%s.sta%d", mld_name, aid);
+        if (wifi_hal_get_mac_address(mld_name, intf_mac) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n", __func__,
+                __LINE__, mld_name);
+            return RETURN_ERR;
+        }
+    } else {
+        ret = os_snprintf(name, sizeof(name), "%s.sta%d", interface->name, aid);
+        memcpy(intf_mac, vap->u.bss_info.bssid, sizeof(mac_address_t));
+    }
+
     if (ret >= (int) sizeof(name)) {
         wifi_hal_info_print("%s:%d nl80211: WDS interface name:%s was truncated\r\n",
             __func__, __LINE__, name);
@@ -12369,12 +12859,32 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
         os_strlcpy(ifname_wds, name, IFNAMSIZ + 1);
     }
 
+#ifdef CONFIG_VENDOR_MXL
+    /* For WDS STA creation (val=1), send multi_ap mode to Wave driver BEFORE creating interface.
+     * The Wave driver needs multi_ap_mode set in its PDB before it can create WDS interfaces.
+     * This fixes the "Wrong multi_ap_mode: 0" error when backhaul STA connects.
+     */
+    if (val && interface->u.ap.conf.multi_ap) {
+        wifi_hal_info_print("%s:%d: Sending multi_ap=%d to driver before WDS STA creation for %s\r\n",
+            __func__, __LINE__, interface->u.ap.conf.multi_ap, interface->name);
+
+        ret = wifi_drv_vendor_cmd(interface, OUI_LTQ, LTQ_NL80211_VENDOR_SUBCMD_SET_MESH_MODE,
+                                 (u8 *)&interface->u.ap.conf.multi_ap,
+                                 sizeof(interface->u.ap.conf.multi_ap),
+                                 NESTED_ATTR_NOT_USED, NULL);
+        if (ret < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set multi_ap mode before WDS STA creation: %d\r\n",
+                __func__, __LINE__, ret);
+        }
+    }
+#endif /* CONFIG_VENDOR_MXL */
+
     wifi_hal_info_print("%s:%d:nl80211: Set WDS STA addr=" MACSTR " aid=%d val=%d name=%s ifindex:%d\r\n",
         __func__, __LINE__, MAC2STR(addr), aid, val, name, if_nametoindex(name));
     if (val) {
         if (!if_nametoindex(name)) {
             if (wlan_nl80211_create_interface(name, NL80211_IFTYPE_AP_VLAN,
-                interface->u.ap.conf.wds_sta, vap->u.bss_info.bssid, radio) != RETURN_OK) {
+                interface->u.ap.conf.wds_sta, intf_mac, radio) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d new interface create failed for "
                     "interface name:%s vap_index:%d\r\n", __func__, __LINE__, name, vap->vap_index);
                 return RETURN_ERR;
@@ -12412,14 +12922,19 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
                 __func__, __LINE__, name, interface->u.ap.conf.wds_sta);
             nl80211_interface_enable(name, true);
         }
-        return nl80211_set_sta_vlan(radio, interface, addr, name, 0);
+        return nl80211_set_sta_vlan(radio, interface, addr, name, 0, link_id);
     } else {
-        if (bridge_ifname && (nl80211_remove_from_bridge(bridge_ifname) != RETURN_OK)) {
+        if (strlen(interface->name) && (nl80211_remove_from_bridge(name) != RETURN_OK)) {
             wifi_hal_error_print("%s:%d: nl80211: Failed to remove interface %s "
                 " from bridge %s: %s", __func__, __LINE__, name, bridge_ifname, strerror(errno));
             return RETURN_ERR;
         }
-        nl80211_set_sta_vlan(radio, interface, addr, interface->name, 0);
+
+        if (mld_name != NULL) {
+            nl80211_set_sta_vlan(radio, interface, addr, mld_name, 0, link_id);
+        } else {
+            nl80211_set_sta_vlan(radio, interface, addr, interface->name, 0, link_id);
+        }
 
         nl80211_delete_interface(radio->index, name, if_nametoindex(name));
         memset(&event, 0, sizeof(event));
@@ -12573,9 +13088,9 @@ int wifi_drv_hapd_send_eapol(
 #endif // HOSTAPD_VERSION < 211
 
     wifi_hal_info_print(
-        "%s:%d: interface:%s sending eapol m%d from:%s to:%s replay counter:%d link id:%d\n",
-        __func__, __LINE__, interface->name, is_eapol_m3(data, data_len) ? 3 : 1,
-        to_mac_str(own_addr, src_mac_str), to_mac_str(addr, dst_mac_str),
+        "%s:%d: from:%s to:%s interface:%s sending eapol m%d replay counter:%d link id:%d\n",
+        __func__, __LINE__, to_mac_str(own_addr, src_mac_str), to_mac_str(addr, dst_mac_str),
+        interface->name, is_eapol_m3(data, data_len) ? 3 : 1,
         get_eapol_reply_counter(data, data_len), link_id);
 
     if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_CONTROL_PORT_FRAME) {
@@ -12642,21 +13157,29 @@ int wifi_drv_hapd_send_eapol(
     }
 #endif
 
+#if defined(CONFIG_GENERIC_MLO)
+    interface = wifi_hal_get_first_mld_interface(interface);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get first MLD interface\n", __func__, __LINE__);
+        return -1;
+    }
+    vap = &interface->vap_info;
+#endif // CONFIG_GENERIC_MLO
+
     //my_print_hex_dump(data_len + sizeof(struct ieee8023_hdr), buff);
     if ((ret = send((vap->vap_mode == wifi_vap_mode_ap) ? interface->u.ap.br_sock_fd:interface->u.sta.sta_sock_fd,
             buff, data_len + sizeof(struct ieee8023_hdr), flags)) < 0) {
         wifi_hal_error_print("%s:%d: eapol send failed ret=%d\n", __func__, __LINE__,ret);
 
-        if (vap->vap_mode == wifi_vap_mode_ap) {
-            if (interface->u.ap.br_sock_fd != 0) {
+        if (interface->data_frames_registered == 1) {
+            if (vap->vap_mode == wifi_vap_mode_ap) {
                 close(interface->u.ap.br_sock_fd);
                 interface->u.ap.br_sock_fd = 0;
-            }
-        } else {
-            if (interface->u.sta.sta_sock_fd != 0) {
+            } else {
                 close(interface->u.sta.sta_sock_fd);
                 interface->u.sta.sta_sock_fd = 0;
             }
+            interface->data_frames_registered = 0;
         }
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
 
@@ -12681,6 +13204,7 @@ int wifi_drv_hapd_send_eapol(
                     interface->u.sta.sta_sock_fd = sock_fd;
                 }
             }
+            interface->data_frames_registered = 1;
             wifi_hal_info_print("%s:%d: Socket for interface %s reopened successfully.\n", __func__, __LINE__, interface->name);
         }
         return -1;
@@ -13911,7 +14435,10 @@ wifi_drv_get_hw_feature_data(void *priv, u16 *num_modes, u16 *flags, u8 *dfs_dom
     if (msg == NULL) {
 #else
     u32 feat;
-    feat = get_nl80211_protocol_features(g_wifi_hal.nl80211_id);
+    if (fetch_nl80211_protocol_features(g_wifi_hal.nl80211_id, &feat)) {
+        wifi_hal_error_print("%s:%d: Failed to get protocol features - treating them as disabled\n",
+            __func__, __LINE__);
+    }
 
     if (feat & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP)
         *flags = NLM_F_DUMP;
@@ -13963,16 +14490,19 @@ int wifi_drv_if_remove(void *priv, enum wpa_driver_if_type type, const char *ifn
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
     if ((interface->vap_configured == true)) {
-        if (vap->vap_mode == wifi_vap_mode_ap) {
-            close(interface->u.ap.br_sock_fd);
-            interface->u.ap.br_sock_fd = 0;
-        } else if (vap->vap_mode == wifi_vap_mode_sta) {
-            close(interface->u.sta.sta_sock_fd);
-            interface->u.sta.sta_sock_fd = 0;
+        if (interface->data_frames_registered == 1) {
+            if (vap->vap_mode == wifi_vap_mode_ap) {
+                close(interface->u.ap.br_sock_fd);
+                interface->u.ap.br_sock_fd = 0;
+            } else if (vap->vap_mode == wifi_vap_mode_sta) {
+                close(interface->u.sta.sta_sock_fd);
+                interface->u.sta.sta_sock_fd = 0;
+            }
         }
 
         interface->vap_configured = false;
         interface->bridge_configured = false;
+        interface->data_frames_registered = 0;
     }
 
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
@@ -14085,21 +14615,27 @@ int nl80211_set_acl(wifi_interface_info_t *interface)
             policy = NL80211_ACL_POLICY_DENY_UNLESS_LISTED;
         }
 
-
-        nla_put_u32(msg, NL80211_ATTR_ACL_POLICY, policy);
+        if (nla_put_u32(msg, NL80211_ATTR_ACL_POLICY, policy) < 0) {
+            wifi_hal_dbg_print("%s %d: nl80211: Failed to set ACL policy\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -ENOMEM;
+        }
 
         acl = nla_nest_start(msg, NL80211_ATTR_MAC_ADDRS);
 
         if (acl == NULL) {
-            wifi_hal_dbg_print("nl80211: Failed to to add ACL list to msg\n");
+            wifi_hal_dbg_print("%s %d:nl80211: Failed to to add ACL list to msg\n", __func__, __LINE__);
+            nlmsg_free(msg);
             return -ENOMEM;
         }
 
         if (interface->acl_map != NULL) {
             acl_map = hash_map_get_first(interface->acl_map);
             while (acl_map != NULL) {
-                if (nla_put(msg, i, ETH_ALEN, acl_map->mac_addr)) {
-                    wifi_hal_dbg_print("nl80211: Failed to add MAC to ACL list\n");
+                if (nla_put(msg, i, ETH_ALEN, acl_map->mac_addr) < 0) {
+                    wifi_hal_dbg_print("%s %d: nl80211: Failed to add MAC to ACL list\n", __func__, __LINE__);
+                    nla_nest_cancel(msg, acl);
+                    nlmsg_free(msg);
                     return -ENOMEM;
                 }
                 acl_map = hash_map_get_next(interface->acl_map, acl_map);
@@ -14107,8 +14643,10 @@ int nl80211_set_acl(wifi_interface_info_t *interface)
             }
         }
         if (i == 0) {
-            if (nla_put(msg, i, ETH_ALEN, null_mac)) {
-                wifi_hal_dbg_print("nl80211: Failed to add MAC to ACL list\n");
+            if (nla_put(msg, i, ETH_ALEN, null_mac) < 0) {
+                wifi_hal_dbg_print("%s %d: nl80211: Failed to add MAC to ACL list\n", __func__, __LINE__);
+                nla_nest_cancel(msg, acl);
+                nlmsg_free(msg);
                 return -ENOMEM;
             }
         }
@@ -14118,8 +14656,16 @@ int nl80211_set_acl(wifi_interface_info_t *interface)
             vap->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_black_list ? "Blacklist" : "Whitelist");
 
     } else {
-        nla_put_u32(msg, NL80211_ATTR_ACL_POLICY, NL80211_ACL_POLICY_ACCEPT_UNLESS_LISTED);
-        nla_put_u32(msg, NL80211_ATTR_MAC_ADDRS, 0);
+        if (nla_put_u32(msg, NL80211_ATTR_ACL_POLICY, NL80211_ACL_POLICY_ACCEPT_UNLESS_LISTED) < 0 ){
+            wifi_hal_dbg_print("%s:%d: nl80211: Failed to set ACL policy\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -ENOMEM;
+        }
+        if (nla_put_u32(msg, NL80211_ATTR_MAC_ADDRS, 0) < 0) {
+            wifi_hal_dbg_print("%s:%d: nl80211: Failed to accept ACL Policy\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -ENOMEM;
+        }
         wifi_hal_dbg_print("%s:%d: Disable ACL\n", __func__, __LINE__);
     }
 
@@ -14749,6 +15295,12 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     int link_id = -1;
 
     interface = (wifi_interface_info_t *)priv;
+    if (interface->in_reconf) {
+        wifi_hal_dbg_print("%s:%d: Interface %s is in reconfiguration, skip set_ap\n", __func__,
+            __LINE__, interface->name);
+        return 0;
+    }
+
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
     radio_param = &radio->oper_param;
@@ -14780,10 +15332,22 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     //wifi_hal_dbg_print("%s:%d: beacon tail\n", __func__, __LINE__);
     //my_print_hex_dump(params->tail_len, params->tail);
 
-    nla_put(msg, NL80211_ATTR_BEACON_HEAD, params->head_len, params->head);
-    nla_put(msg, NL80211_ATTR_BEACON_TAIL, params->tail_len, params->tail);
+    if (nla_put(msg, NL80211_ATTR_BEACON_HEAD, params->head_len, params->head) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set beacon head\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
+    if (nla_put(msg, NL80211_ATTR_BEACON_TAIL, params->tail_len, params->tail) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set beacon tail\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
     if (params->beacon_int > 0) {
-        nla_put_u32(msg, NL80211_ATTR_BEACON_INTERVAL, params->beacon_int);
+        if (nla_put_u32(msg, NL80211_ATTR_BEACON_INTERVAL, params->beacon_int) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set beacon interval\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 #if HOSTAPD_VERSION < 210
     nl80211_put_beacon_rate(msg, drv->capa.flags, params);
@@ -14791,47 +15355,87 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     nl80211_put_beacon_rate(msg, drv->capa.flags, drv->capa.flags2, params);
 #endif
     if (params->dtim_period > 0) {
-        nla_put_u32(msg, NL80211_ATTR_DTIM_PERIOD, params->dtim_period);
+        if (nla_put_u32(msg, NL80211_ATTR_DTIM_PERIOD, params->dtim_period) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set DTIM period\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
-    nla_put(msg, NL80211_ATTR_SSID, params->ssid_len, params->ssid);
+    if (nla_put(msg, NL80211_ATTR_SSID, params->ssid_len, params->ssid) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to set SSID\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
     if (params->mld_ap) {
-        nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, params->mld_link_id);
+        if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, params->mld_link_id) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set MLO link ID\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
     if (params->proberesp && params->proberesp_len) {
         //wifi_hal_dbg_print("%s:%d: probe response (offload)\n", __func__, __LINE__);
         //my_print_hex_dump(params->proberesp_len, params->proberesp);
-        nla_put(msg, NL80211_ATTR_PROBE_RESP, params->proberesp_len, params->proberesp);
+        if (nla_put(msg, NL80211_ATTR_PROBE_RESP, params->proberesp_len, params->proberesp) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set probe response\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 
     switch (params->hide_ssid) {
         case NO_SSID_HIDING:
-            nla_put_u32(msg, NL80211_ATTR_HIDDEN_SSID, NL80211_HIDDEN_SSID_NOT_IN_USE);
+            if (nla_put_u32(msg, NL80211_ATTR_HIDDEN_SSID, NL80211_HIDDEN_SSID_NOT_IN_USE) < 0) {
+                wifi_hal_error_print("%s:%d: Failed to set hidden SSID not in use\n", __func__, __LINE__);
+                nlmsg_free(msg);
+                return -1;
+            }
             break;
 
         case HIDDEN_SSID_ZERO_LEN:
-            nla_put_u32(msg, NL80211_ATTR_HIDDEN_SSID, NL80211_HIDDEN_SSID_ZERO_LEN);
+            if (nla_put_u32(msg, NL80211_ATTR_HIDDEN_SSID, NL80211_HIDDEN_SSID_ZERO_LEN) < 0) {
+                wifi_hal_error_print("%s:%d: Failed to set hidden SSID zero len\n", __func__, __LINE__);
+                nlmsg_free(msg);
+                return -1;
+            }
             break;
 
         case HIDDEN_SSID_ZERO_CONTENTS:
-            nla_put_u32(msg, NL80211_ATTR_HIDDEN_SSID, NL80211_HIDDEN_SSID_ZERO_CONTENTS);
+            if (nla_put_u32(msg, NL80211_ATTR_HIDDEN_SSID, NL80211_HIDDEN_SSID_ZERO_CONTENTS) < 0) {
+                wifi_hal_error_print("%s:%d: Failed to set hidden SSID zero contents\n", __func__, __LINE__);
+                nlmsg_free(msg);
+                return -1;
+            }
             break;
     }
 
     if (params->privacy) {
-        nla_put_flag(msg, NL80211_ATTR_PRIVACY);
+        if (nla_put_flag(msg, NL80211_ATTR_PRIVACY) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set privacy flag\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 
     if ((params->auth_algs & (WPA_AUTH_ALG_OPEN | WPA_AUTH_ALG_SHARED)) ==
         (WPA_AUTH_ALG_OPEN | WPA_AUTH_ALG_SHARED)) {
         /* Leave out the attribute */
     } else if (params->auth_algs & WPA_AUTH_ALG_SHARED) {
-        nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_SHARED_KEY);
+        if (nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_SHARED_KEY) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set auth type\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     } else {
-        nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
+        if (nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set auth type\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 
     ver = 0;
@@ -14840,7 +15444,11 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     if (params->wpa_version & WPA_PROTO_RSN)
         ver |= NL80211_WPA_VERSION_2;
     if (ver) {
-        nla_put_u32(msg, NL80211_ATTR_WPA_VERSIONS, ver);
+        if (nla_put_u32(msg, NL80211_ATTR_WPA_VERSIONS, ver) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set WPA versions\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 
     num_suites = 0;
@@ -14852,29 +15460,51 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
         suites[num_suites++] = RSN_AUTH_KEY_MGMT_SAE;
 
     if (num_suites) {
-        nla_put(msg, NL80211_ATTR_AKM_SUITES, num_suites * sizeof(u32), suites);
+        if (nla_put(msg, NL80211_ATTR_AKM_SUITES, num_suites * sizeof(u32), suites) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set AKM suites\n", __func__, __LINE__);
+        }
     }
 
     if (params->key_mgmt_suites & WPA_KEY_MGMT_IEEE8021X_NO_WPA &&
         (!params->pairwise_ciphers ||
          params->pairwise_ciphers & (WPA_CIPHER_WEP104 | WPA_CIPHER_WEP40))) {
-        nla_put_u16(msg, NL80211_ATTR_CONTROL_PORT_ETHERTYPE, ETH_P_PAE);
-        nla_put_flag(msg, NL80211_ATTR_CONTROL_PORT_NO_ENCRYPT);
+        if (nla_put_u16(msg, NL80211_ATTR_CONTROL_PORT_ETHERTYPE, ETH_P_PAE) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set control port ethertype\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
+        if (nla_put_flag(msg, NL80211_ATTR_CONTROL_PORT_NO_ENCRYPT) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set control port settings\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 
     if (drv->device_ap_sme && (params->key_mgmt_suites & WPA_KEY_MGMT_SAE)) {
-        nla_put_flag(msg, NL80211_ATTR_EXTERNAL_AUTH_SUPPORT);
+        if (nla_put_flag(msg, NL80211_ATTR_EXTERNAL_AUTH_SUPPORT) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set external auth support\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 
     num_suites = wpa_cipher_to_cipher_suites(params->pairwise_ciphers,
                          suites, ARRAY_SIZE(suites));
     if (num_suites) {
-        nla_put(msg, NL80211_ATTR_CIPHER_SUITES_PAIRWISE, num_suites * sizeof(u32), suites);
+        if (nla_put(msg, NL80211_ATTR_CIPHER_SUITES_PAIRWISE, num_suites * sizeof(u32), suites) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set pairwise cipher suites\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 
     suite = wpa_cipher_to_cipher_suite(params->group_cipher);
     if (suite) {
-       nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITE_GROUP, suite);
+        if (nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITE_GROUP, suite) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set cipher suite group\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 
 #if HOSTAPD_VERSION < 210 //2.10
@@ -14894,23 +15524,43 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
                 smps_mode = NL80211_SMPS_OFF;
                 break;
         }
-        nla_put_u8(msg, NL80211_ATTR_SMPS_MODE, smps_mode);
+        if (nla_put_u8(msg, NL80211_ATTR_SMPS_MODE, smps_mode) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set SMPS mode\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 #endif
 
     if (params->beacon_ies) {
-        nla_put(msg, NL80211_ATTR_IE, wpabuf_len(params->beacon_ies), wpabuf_head(params->beacon_ies));
+        if (nla_put(msg, NL80211_ATTR_IE, wpabuf_len(params->beacon_ies), wpabuf_head(params->beacon_ies)) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set beacon IEs\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
     if (params->proberesp_ies) {
-        nla_put(msg, NL80211_ATTR_IE_PROBE_RESP, wpabuf_len(params->proberesp_ies), wpabuf_head(params->proberesp_ies));
+        if (nla_put(msg, NL80211_ATTR_IE_PROBE_RESP, wpabuf_len(params->proberesp_ies), wpabuf_head(params->proberesp_ies)) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set probe response IEs\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 
     if (params->assocresp_ies) {
-        nla_put(msg, NL80211_ATTR_IE_ASSOC_RESP, wpabuf_len(params->assocresp_ies), wpabuf_head(params->assocresp_ies));
+        if (nla_put(msg, NL80211_ATTR_IE_ASSOC_RESP, wpabuf_len(params->assocresp_ies), wpabuf_head(params->assocresp_ies)) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set association response \n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 
     if (drv->capa.flags & WPA_DRIVER_FLAGS_INACTIVITY_TIMER)  {
-        nla_put_u16(msg, NL80211_ATTR_INACTIVITY_TIMEOUT, params->ap_max_inactivity);
+        if (nla_put_u16(msg, NL80211_ATTR_INACTIVITY_TIMEOUT, params->ap_max_inactivity) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set inactivity timeout\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
     }
 
 #if (HOSTAPD_VERSION >= 210) 
@@ -14925,9 +15575,12 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
         } else if (params->sae_pwe == 2) {
             sae_pwe = NL80211_SAE_PWE_BOTH;
         } else {
+            nlmsg_free(msg);
             return -1;
         }
-        if (nla_put_u8(msg, NL80211_ATTR_SAE_PWE, sae_pwe)) {
+        if (nla_put_u8(msg, NL80211_ATTR_SAE_PWE, sae_pwe) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set SAE PWE\n", __func__, __LINE__);
+            nlmsg_free(msg);
             return -1;
         }
     }
@@ -14954,6 +15607,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     if (beacon_set == 0) {
         if (nl80211_fill_chandef(msg, radio, interface) == -1) {
             wifi_hal_error_print("%s:%d: Failed nl80211_fill_chandef\n", __func__, __LINE__);
+            nlmsg_free(msg);
             return -1;
         }
     }
@@ -15217,19 +15871,27 @@ int nl80211_register_spurious_frames(wifi_interface_info_t *interface)
     struct nl_msg *msg = NULL;
     int ret = 0;
 
+#if defined(CONFIG_GENERIC_MLO)
+    interface = wifi_hal_get_first_mld_interface(interface);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get first MLD interface\n", __func__, __LINE__);
+        return -1;
+    }
+#endif // CONFIG_GENERIC_MLO
+
     if (interface->spurious_frames_registered == 1) {
         wifi_hal_info_print("%s:%d: spurious frames handler already registered for %s\n", __func__,
-            __LINE__, interface->name);
+            __LINE__, wifi_hal_get_interface_name(interface));
         return 0;
     }
 
     wifi_hal_info_print("%s:%d: register spurious frames handler for %s\n", __func__, __LINE__,
-        interface->name);
+        wifi_hal_get_interface_name(interface));
 
     interface->spurious_nl_cb = nl_cb_alloc(NL_CB_DEFAULT);
     if (interface->spurious_nl_cb == NULL) {
         wifi_hal_error_print("%s:%d: failed to alloc nl_cb for %s interface\n", __func__, __LINE__,
-            interface->name);
+            wifi_hal_get_interface_name(interface));
         return -1;
     }
 
@@ -15239,20 +15901,20 @@ int nl80211_register_spurious_frames(wifi_interface_info_t *interface)
     interface->spurious_nl_event = nl_create_handle(g_wifi_hal.nl_cb, "spurious");
     if (interface->spurious_nl_event == NULL) {
         wifi_hal_error_print("%s:%d: failed to create nl handle for %s interface\n", __func__,
-            __LINE__, interface->name);
+            __LINE__, wifi_hal_get_interface_name(interface));
         goto error;
     }
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_UNEXPECTED_FRAME);
     if (msg == NULL) {
         wifi_hal_error_print("%s:%d: failed to create message for %s interface\n", __func__,
-            __LINE__, interface->name);
+            __LINE__, wifi_hal_get_interface_name(interface));
         goto error;
     }
 
     if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index) < 0) {
         wifi_hal_error_print("%s:%d: failed set interface index in message for %s interface\n",
-            __func__, __LINE__, interface->name);
+            __func__, __LINE__, wifi_hal_get_interface_name(interface));
         goto error;
     }
 
@@ -15260,7 +15922,8 @@ int nl80211_register_spurious_frames(wifi_interface_info_t *interface)
         spurious_frame_register_handler, interface, NULL, NULL);
     if (ret) {
         wifi_hal_error_print("%s:%d: failed to register for spurious frames on interface %s, "
-            "error: %d (%s)\n", __func__, __LINE__, interface->name, ret, strerror(-ret));
+                             "error: %d (%s)\n",
+            __func__, __LINE__, wifi_hal_get_interface_name(interface), ret, strerror(-ret));
         goto error;
     }
 
@@ -15285,16 +15948,111 @@ error:
     return -1;
 }
 
+static int register_data_frame_socket(wifi_interface_info_t *interface)
+{
+    wifi_vap_info_t *vap;
+    struct sockaddr_ll sockaddr;
+    const char *ifname;
+    int sock_fd;
+
+#if defined(CONFIG_GENERIC_MLO)
+    interface = wifi_hal_get_first_mld_interface(interface);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get first MLD interface\n", __func__, __LINE__);
+        return -1;
+    }
+#endif // CONFIG_GENERIC_MLO
+
+    if (interface->data_frames_registered == 1) {
+        wifi_hal_dbg_print("%s:%d: data frame socket already registered for %s\n", __func__,
+            __LINE__, wifi_hal_get_interface_name(interface));
+        return 0;
+    }
+
+    vap = &interface->vap_info;
+
+#ifndef CONFIG_WIFI_EMULATOR
+    if (vap->vap_mode == wifi_vap_mode_ap) {
+        sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+        if (sock_fd < 0) {
+            wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__,
+                __LINE__, vap->bridge_name);
+            return -1;
+        }
+    } else {
+        sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
+        if (sock_fd < 0) {
+            wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__,
+                __LINE__, vap->bridge_name);
+            return -1;
+        }
+    }
+#else
+    if ((interface->vap_configured == true) && (vap->vap_mode == wifi_vap_mode_sta)) {
+        if (interface->u.sta.sta_sock_fd != 0) {
+            close(interface->u.sta.sta_sock_fd);
+            interface->u.sta.sta_sock_fd = 0;
+        }
+    }
+    sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if (sock_fd < 0) {
+        wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__,
+            vap->bridge_name);
+        return -1;
+    }
+#endif
+
+#ifdef CONFIG_WIFI_EMULATOR
+    ifname = vap->bridge_name;
+#else
+    ifname = (vap->vap_mode == wifi_vap_mode_ap || vap->u.sta_info.ignite_enabled) ?
+        vap->bridge_name :
+        interface->name;
+#endif
+    memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
+    sockaddr.sll_family = AF_PACKET;
+    sockaddr.sll_ifindex = if_nametoindex(ifname);
+
+    if (vap->vap_mode == wifi_vap_mode_ap) {
+        sockaddr.sll_protocol = htons(ETH_P_ALL);
+        if (setsockopt(sock_fd, SOL_SOCKET, SO_ATTACH_FILTER, &bpf, sizeof(bpf)) < 0) {
+            wifi_hal_error_print("%s:%d: Error in setting sockopt err:%d\n", __func__, __LINE__,
+                errno);
+            close(sock_fd);
+            return -1;
+        }
+    } else {
+#ifndef CONFIG_WIFI_EMULATOR
+        sockaddr.sll_protocol = htons(ETH_P_EAPOL);
+#else
+        sockaddr.sll_protocol = htons(ETH_P_ALL);
+#endif
+    }
+
+    if (bind(sock_fd, (struct sockaddr *)&sockaddr, sizeof(sockaddr)) < 0) {
+        wifi_hal_error_print("%s:%d: Error binding to interface, err:%d\n", __func__, __LINE__,
+            errno);
+        close(sock_fd);
+        return -1;
+    }
+
+    if (vap->vap_mode == wifi_vap_mode_ap) {
+        interface->u.ap.br_sock_fd = sock_fd;
+    } else if (vap->vap_mode == wifi_vap_mode_sta) {
+        interface->u.sta.sta_sock_fd = sock_fd;
+    } else {
+        close(sock_fd);
+    }
+
+    interface->data_frames_registered = 1;
+
+    return 0;
+}
 
 int wifi_drv_set_operstate(void *priv, int state)
 {
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
-#ifndef EAPOL_OVER_NL
-    struct sockaddr_ll sockaddr;    
-    int sock_fd;
-    const char *ifname;
-#endif
 
     interface = (wifi_interface_info_t *)priv;
     vap = &interface->vap_info;
@@ -15345,74 +16103,10 @@ int wifi_drv_set_operstate(void *priv, int state)
         }
     }
 #ifndef EAPOL_OVER_NL
-#ifndef CONFIG_WIFI_EMULATOR
-    if (vap->vap_mode == wifi_vap_mode_ap) {
-        sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-        if (sock_fd < 0) {
-            wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
-            return -1;
-        }
-    } else {
-        sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
-        if (sock_fd < 0) {
-            wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
-            return -1;
-        }
-    }
-#else
-    if ((interface->vap_configured == true)  && (vap->vap_mode == wifi_vap_mode_sta)) {
-	 if (interface->u.sta.sta_sock_fd != 0) {
-             close(interface->u.sta.sta_sock_fd);
-             interface->u.sta.sta_sock_fd = 0;
-         }
-    }
-    sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if (sock_fd < 0) {
-        wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, vap->bridge_name);
+    if (register_data_frame_socket(interface) != 0) {
+        wifi_hal_error_print("%s:%d: Failed to register packet socket\n", __func__, __LINE__);
         return -1;
     }
-#endif
-
-#ifdef CONFIG_WIFI_EMULATOR
-    ifname = vap->bridge_name;
-#else
-    ifname = (vap->vap_mode == wifi_vap_mode_ap || vap->u.sta_info.ignite_enabled) ?
-        vap->bridge_name :
-        interface->name;
-#endif
-    memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
-    sockaddr.sll_family   = AF_PACKET;
-    sockaddr.sll_ifindex  = if_nametoindex(ifname);
-
-    if (vap->vap_mode == wifi_vap_mode_ap) {
-        sockaddr.sll_protocol = htons(ETH_P_ALL);
-        if (setsockopt(sock_fd, SOL_SOCKET, SO_ATTACH_FILTER, &bpf, sizeof(bpf)) < 0) {
-            wifi_hal_error_print("%s:%d: Error in setting sockopt err:%d\n", __func__, __LINE__, errno);
-            close(sock_fd);
-            return -1;
-        }
-    } else {
-#ifndef CONFIG_WIFI_EMULATOR
-        sockaddr.sll_protocol = htons(ETH_P_EAPOL);
-#else
-        sockaddr.sll_protocol = htons(ETH_P_ALL);
-#endif
-    }
-
-    if (bind(sock_fd, (struct sockaddr *)&sockaddr, sizeof(sockaddr)) < 0) {
-        wifi_hal_error_print("%s:%d: Error binding to interface, err:%d\n", __func__, __LINE__, errno);
-        close(sock_fd);
-        return -1;
-    }
-
-    if (vap->vap_mode == wifi_vap_mode_ap) {
-        interface->u.ap.br_sock_fd = sock_fd;
-    } else if (vap->vap_mode == wifi_vap_mode_sta) {
-        interface->u.sta.sta_sock_fd = sock_fd;
-    } else {
-        close(sock_fd);
-    }
-
 #else
     if (vap->vap_mode == wifi_vap_mode_sta) {
         if (nl80211_register_bss_frames(interface) != 0) {
@@ -15625,8 +16319,18 @@ int wifi_supplicant_drv_authenticate(void *priv, struct wpa_driver_auth_params *
     if ((security->mode == wifi_security_mode_wpa3_personal) ||
         (security->mode == wifi_security_mode_wpa3_transition) ||
         (security->mode == wifi_security_mode_wpa3_compatibility)) {
+#ifndef _PLATFORM_BANANAPI_R4_
         nla_put(msg, NL80211_ATTR_SAE_DATA, params->auth_data_len, params->auth_data);
         nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_SAE);
+#else
+        if (params->auth_data_len > 0) {
+            nla_put(msg, NL80211_ATTR_SAE_DATA, params->auth_data_len, params->auth_data);
+            nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_SAE);
+        } else {
+            wifi_hal_dbg_print("%s:%d: Empty SAE data: using open system authentication\n", __func__, __LINE__);
+            nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
+        }
+#endif // _PLATFORM_BANANAPI_R4_
     } else {
         nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
     }
@@ -16633,7 +17337,7 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
 {
 #if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     wifi_radio_info_t *radio;
-    wifi_radio_operationParam_t radio_param;
+    wifi_radio_operationParam_t *radio_param = NULL;
     u8 oper_centr_freq_seg0_idx = 0;
     u8 oper_centr_freq_seg1_idx = 0;
     int dfs_start = 52, dfs_end = 144;
@@ -16660,9 +17364,14 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
 
     radio->radar_detected = true;
 
-    radio_param = radio->oper_param;
+    radio_param = (wifi_radio_operationParam_t *)malloc(sizeof(wifi_radio_operationParam_t));;
+    if (radio_param == NULL) {
+        wifi_hal_error_print("%s:%d: malloc failed\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    memcpy((unsigned char *)radio_param, (unsigned char *)&radio->oper_param, sizeof(wifi_radio_operationParam_t));
     // downgrade bandwidth since 160MHz may not be available
     if (bandwidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
         orig_chan_width = hostapd_get_oper_chwidth(interface->u.ap.hapd.iconf);
@@ -16671,23 +17380,23 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
         interface->u.ap.iface.conf->secondary_channel = get_sec_channel_offset(radio, freq);
     }
 
-    radio_param.channel = get_non_dfs_chan(interface, &oper_centr_freq_seg0_idx,
+    radio_param->channel = get_non_dfs_chan(interface, &oper_centr_freq_seg0_idx,
         &oper_centr_freq_seg1_idx, &sec_chan_offset);
-    radio_param.channelWidth = bandwidth;
+    radio_param->channelWidth = bandwidth;
 
     if (bandwidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
         wifi_channelBandwidth_t Chan_width_80MHz = WIFI_CHANNELBANDWIDTH_80MHZ;
         wifi_hal_info_print("%s:%d Setting bandwidth to 80MHz\n", __func__, __LINE__);
-        radio_param.channelWidth = Chan_width_80MHz;
+        radio_param->channelWidth = Chan_width_80MHz;
         // restore original bandwidth to avoid beacon change before channel switch
         hostapd_set_oper_chwidth(interface->u.ap.hapd.iconf, orig_chan_width);
         interface->u.ap.iface.conf->secondary_channel = orig_secondary_chan;
     }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-    wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d \n", radio_param.channel, oper_centr_freq_seg0_idx, oper_centr_freq_seg1_idx, sec_chan_offset);
+    wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d \n", radio_param->channel, oper_centr_freq_seg0_idx, oper_centr_freq_seg1_idx, sec_chan_offset);
 
-    if ( wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, &radio_param) ) {
+    if ( wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, radio_param) ) {
         wifi_hal_error_print("%s %d wifi_hal_setRadioOperatingParameters failed \n", __FUNCTION__, __LINE__);
     }
 
@@ -16696,6 +17405,8 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
     }
 
     dfs_chan_change_event(interface->vap_info.radio_index, radio->oper_param.channel, radio->oper_param.channelWidth, radio->oper_param.operatingClass);
+    free(radio_param);
+    radio_param = NULL;
 #endif /* defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) */  
 
     return RETURN_OK;
@@ -16866,36 +17577,241 @@ static int nl80211_set_channel_dfs_state(void *priv,
 #endif
 
 #if HOSTAPD_VERSION >= 210 // 2.10
-static size_t wifi_drv_get_rnr_colocation_len(void *priv, size_t *current_len)
+
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
+
+bool skip_rnr(bool ap_mld, u8 tbtt_info_len, bool mld_update, struct hostapd_data *reporting_hapd,
+    struct hostapd_data *bss)
+{
+    /* No need to report if length is for normal TBTT and the BSS is
+     * affiliated with an AP MLD. MLD TBTT will include this. */
+    if (tbtt_info_len == RNR_TBTT_INFO_LEN && ap_mld)
+        return true;
+
+    /* No need to report if length is for MLD TBTT and the BSS is not
+     * affiliated with an aP MLD. Normal TBTT will include this. */
+    if (tbtt_info_len == RNR_TBTT_INFO_MLD_LEN && !ap_mld)
+        return true;
+
+#ifdef CONFIG_IEEE80211BE
+    /* If building for co-location and they are ML partners, no need to
+     * include since the ML RNR will carry this. */
+    if (!mld_update && hostapd_is_ml_partner(reporting_hapd, bss))
+        return true;
+
+    /* If building for ML RNR and they are not ML partners, don't include.
+     */
+    if (mld_update && !hostapd_is_ml_partner(reporting_hapd, bss))
+        return true;
+#endif /* CONFIG_IEEE80211BE */
+
+    return false;
+}
+
+static bool add_eid_rnr_bss(struct hostapd_data *hapd, struct hostapd_data *reporting_hapd,
+    u8 *tbtt_count, size_t *len, u8 **pos, u8 **tbtt_count_pos, u8 tbtt_info_len, u8 op_class,
+    bool mld_update, int is_bss_tx_interface)
+{
+    struct hostapd_iface *iface = hapd->iface;
+    struct hostapd_data *bss = iface->bss[0];
+    u8 bss_param = 0;
+    bool ap_mld = false;
+    u8 *eid = *pos;
+    bool ignore_broadcast_ssid;
+
+    if (!bss || !bss->conf || !bss->started)
+        return false;
+
+    ignore_broadcast_ssid = bss->conf->ignore_broadcast_ssid;
+#ifdef CONFIG_IEEE80211BE
+    ap_mld = !!hapd->conf->mld_ap;
+#ifdef CONFIG_GENERIC_MLO
+    /* FIXME How to exclude the hidden link in beacon? */
+    ignore_broadcast_ssid &= !hostapd_is_ml_partner(bss, reporting_hapd);
+#endif
+#endif /* CONFIG_IEEE80211BE */
+
+    if (bss == reporting_hapd || ignore_broadcast_ssid)
+        return false;
+
+    if (skip_rnr(ap_mld, tbtt_info_len, mld_update, reporting_hapd, bss))
+        return false;
+
+    if (*len + RNR_TBTT_INFO_LEN > 255 || *tbtt_count >= RNR_TBTT_INFO_COUNT_MAX)
+        return true;
+
+    if (!(*tbtt_count)) {
+        *tbtt_count_pos = eid++;
+        *eid++ = tbtt_info_len;
+#ifdef CONFIG_GENERIC_MLO
+        *eid++ = (op_class == 137 ? 134 : op_class);
+#else
+        *eid++ = op_class;
+#endif
+        *eid++ = bss->iconf->channel;
+        *len += RNR_TBTT_HEADER_LEN;
+    }
+
+    *eid++ = RNR_NEIGHBOR_AP_OFFSET_UNKNOWN;
+    os_memcpy(eid, bss->own_addr, ETH_ALEN);
+    eid += ETH_ALEN;
+    os_memcpy(eid, &bss->conf->ssid.short_ssid, 4);
+    eid += 4;
+    if (bss->conf->ssid.short_ssid == reporting_hapd->conf->ssid.short_ssid)
+        bss_param |= RNR_BSS_PARAM_SAME_SSID;
+
+    if (iface->conf->mbssid != MBSSID_DISABLED) {
+        bss_param |= RNR_BSS_PARAM_MULTIPLE_BSSID;
+        if (is_bss_tx_interface)
+            bss_param |= RNR_BSS_PARAM_TRANSMITTED_BSSID;
+    }
+
+    if (is_6ghz_op_class(hapd->iconf->op_class) && bss->conf->unsol_bcast_probe_resp_interval)
+        bss_param |= RNR_BSS_PARAM_UNSOLIC_PROBE_RESP_ACTIVE;
+
+    bss_param |= RNR_BSS_PARAM_CO_LOCATED | RNR_BSS_PARAM_MEMBER_CO_LOCATED_ESS;
+
+    *eid++ = bss_param;
+    *eid++ = RNR_20_MHZ_PSD_MAX_TXPOWER;
+
+#ifdef CONFIG_IEEE80211BE
+    if (ap_mld) {
+        u8 param_ch = bss->eht_mld_bss_param_change;
+        bool is_partner;
+
+        /* If BSS is not a partner of the reporting_hapd
+         *  a) MLD ID advertised shall be 255.
+         *  b) Link ID advertised shall be 15.
+         *  c) BPCC advertised shall be 255 */
+        is_partner = hostapd_is_ml_partner(bss, reporting_hapd);
+        /* MLD ID */
+        *eid++ = is_partner ? hostapd_get_mld_id(bss) : 0xFF;
+        /* Link ID (Bit 3 to Bit 0)
+         * BPCC (Bit 4 to Bit 7) */
+        *eid++ = is_partner ? bss->mld_link_id | ((param_ch & 0xF) << 4) :
+                              (MAX_NUM_MLD_LINKS | 0xF0);
+        /* BPCC (Bit 3 to Bit 0) */
+        *eid = is_partner ? ((param_ch & 0xF0) >> 4) : 0x0F;
+#ifdef CONFIG_GENERIC_MLO
+        if (bss->eht_mld_bss_critical_update == BSS_CRIT_UPDATE_ALL)
+            *eid |= RNR_TBTT_INFO_MLD_PARAM2_ALL_UPDATE_INC;
+#endif
+#ifdef CONFIG_TESTING_OPTIONS
+        if (bss->conf->mld_indicate_disabled)
+            *eid |= RNR_TBTT_INFO_MLD_PARAM2_LINK_DISABLED;
+#endif /* CONFIG_TESTING_OPTIONS */
+        eid++;
+    }
+#endif /* CONFIG_IEEE80211BE */
+
+    *len += tbtt_info_len;
+    (*tbtt_count)++;
+    *pos = eid;
+
+    return false;
+}
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
+/****************************************************************/
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
+
+static size_t add_eid_rnr_iface_len(wifi_radio_info_t *radio,
+    wifi_interface_info_t *reporting_interface, size_t *current_len, bool mld_update)
+{
+    int tbtt_count, total_tbtt_count = 0;
+    size_t total_len = 0, len = *current_len;
+    wifi_interface_info_t *interface_iter;
+    struct hostapd_data *reporting_hapd = &reporting_interface->u.ap.hapd;
+    u8 tbtt_info_len = mld_update ? RNR_TBTT_INFO_MLD_LEN : RNR_TBTT_INFO_LEN;
+
+repeat_rnr_len:
+    interface_iter = hash_map_get_first(radio->interface_map);
+    tbtt_count = 0;
+
+    while (interface_iter != NULL) {
+        if (!len || len + RNR_TBTT_HEADER_LEN + tbtt_info_len > 255) {
+            len = RNR_HEADER_LEN;
+            total_len += RNR_HEADER_LEN;
+            tbtt_count = 0;
+        }
+        len += RNR_TBTT_HEADER_LEN;
+        total_len += RNR_TBTT_HEADER_LEN;
+
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        for (; interface_iter != NULL;
+            interface_iter = hash_map_get_next(radio->interface_map, interface_iter)) {
+            struct hostapd_data *bss = &interface_iter->u.ap.hapd;
+            bool ap_mld = false;
+            bool ignore_broadcast_ssid;
+
+            if (!bss || !bss->conf || !bss->started)
+                continue;
+
+            ignore_broadcast_ssid = bss->conf->ignore_broadcast_ssid;
+#ifdef CONFIG_IEEE80211BE
+            ap_mld = bss->conf->mld_ap;
+#ifdef CONFIG_GENERIC_MLO
+            /* FIXME How to exclude the hidden link in beacon? */
+            ignore_broadcast_ssid &= !hostapd_is_ml_partner(bss, reporting_hapd);
+#endif /* CONFIG_GENERIC_MLO */
+#endif /* CONFIG_IEEE80211BE */
+
+            if (bss == reporting_hapd || ignore_broadcast_ssid)
+                continue;
+
+            if (skip_rnr(ap_mld, tbtt_info_len, mld_update, reporting_hapd, bss))
+                continue;
+
+            if (len + tbtt_info_len > 255 || tbtt_count >= RNR_TBTT_INFO_COUNT_MAX)
+                break;
+
+            len += tbtt_info_len;
+            total_len += tbtt_info_len;
+            tbtt_count++;
+        }
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+    }
+    total_tbtt_count += tbtt_count;
+
+    /* If building for co-location, re-build again but this time include
+     * ML TBTTs.
+     */
+    if (!mld_update && tbtt_info_len == RNR_TBTT_INFO_LEN) {
+        tbtt_info_len = RNR_TBTT_INFO_MLD_LEN;
+
+        /* If no TBTT was found, adjust the len and total_len since it
+         * would have incremented before we checked all BSSs. */
+        if (!tbtt_count) {
+            len -= RNR_TBTT_HEADER_LEN;
+            total_len -= RNR_TBTT_HEADER_LEN;
+        }
+
+        goto repeat_rnr_len;
+    }
+
+    /* This is possible when in the re-built case and no suitable TBTT was
+     * found. Adjust the length accordingly. */
+    if (!tbtt_count && total_tbtt_count) {
+        len -= RNR_TBTT_HEADER_LEN;
+        total_len -= RNR_TBTT_HEADER_LEN;
+    }
+
+    if (!total_tbtt_count)
+        total_len = 0;
+    else
+        *current_len = len;
+
+    return total_len;
+}
+#else
+static size_t add_eid_rnr_iface_len(wifi_radio_info_t *radio,
+    wifi_interface_info_t *reporting_interface, size_t *current_len, bool mld_update)
 {
     int tbtt_count = 0;
-    wifi_radio_info_t *radio;
     struct hostapd_data *hapd;
-    size_t i, total_len = 0, len = *current_len;
-    wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
+    size_t total_len = 0, len = *current_len;
+    wifi_interface_info_t *interface;
 
-    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
-    if (radio == NULL) {
-        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
-            interface->vap_info.radio_index);
-        return 0;
-    }
-
-    if (radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
-        return 0;
-    }
-
-    for (i = 0; i < g_wifi_hal.num_radios; i++) {
-        radio = get_radio_by_rdk_index(i);
-        if (radio && radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
-            break;
-        }
-    }
-
-    if (i == g_wifi_hal.num_radios) {
-        return 0;
-    }
-
+    (void)reporting_interface;
     interface = hash_map_get_first(radio->interface_map);
     while (interface) {
         if (!len || len + RNR_TBTT_HEADER_LEN + RNR_TBTT_INFO_LEN > 255) {
@@ -16907,7 +17823,7 @@ static size_t wifi_drv_get_rnr_colocation_len(void *priv, size_t *current_len)
         total_len += RNR_TBTT_HEADER_LEN;
 
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-        for (;interface; interface = hash_map_get_next(radio->interface_map, interface)) {
+        for (; interface; interface = hash_map_get_next(radio->interface_map, interface)) {
 
             hapd = &interface->u.ap.hapd;
             if (!hapd->conf || !hapd->started) {
@@ -16934,42 +17850,178 @@ static size_t wifi_drv_get_rnr_colocation_len(void *priv, size_t *current_len)
     return total_len;
 }
 
-static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_len)
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
+static size_t add_eid_rnr_len(void *priv, size_t *current_len)
 {
     wifi_radio_info_t *radio;
-    struct hostapd_data *hapd;
-    size_t i, len = *current_len;
-    u8 bss_param, tbtt_count = 0;
-    u8 *tbtt_count_pos, *eid_start = eid, *size_offset = eid - len + 1;
-    wifi_interface_info_t *interface_iter, *tx_interface;
+    size_t i, total_len = 0;
     wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (radio == NULL) {
         wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
             interface->vap_info.radio_index);
-        return eid_start;
+        return 0;
     }
 
     if (radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
-        return eid_start;
+        return 0;
     }
 
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d failed to get radio for index: %zu\n", __func__, __LINE__, i);
+            return 0;
+        }
         if (radio && radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
             break;
         }
     }
 
     if (i == g_wifi_hal.num_radios) {
-        return eid_start;
+        return 0;
     }
+
+    total_len = add_eid_rnr_iface_len(radio, interface, current_len, false);
+    return total_len;
+}
+
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
+static size_t add_eid_rnr_mlo_len(void *priv, size_t *current_len)
+{
+    wifi_radio_info_t *radio, *reporting_radio;
+    size_t i;
+    size_t len = 0;
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
+    struct hostapd_data *hapd = &interface->u.ap.hapd;
+
+    if (!hapd->iface || !hapd->iface->interfaces || !hapd->conf->mld_ap || !hapd->mld)
+        return 0;
+
+    reporting_radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    if (reporting_radio == NULL) {
+        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+            interface->vap_info.radio_index);
+        return 0;
+    }
+
+    for (i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d failed to get radio for idx: %lu\n", __func__, __LINE__, i);
+            continue;
+        }
+        if (radio == reporting_radio /*|| !(hapd->mld->active_links & BIT(hapd->mld_link_id))*/)
+            continue;
+        len += add_eid_rnr_iface_len(radio, interface, current_len, true);
+    }
+    return len;
+}
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
+
+static size_t wifi_drv_get_rnr_colocation_len(void *priv, size_t *current_len)
+{
+    size_t total_len = 0;
+
+    total_len += add_eid_rnr_len(priv, current_len);
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
+    total_len += add_eid_rnr_mlo_len(priv, current_len);
+#endif
+    return total_len;
+}
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
+static u8 *add_eid_rnr_iface(wifi_radio_info_t *radio, wifi_interface_info_t *reporting_interface,
+    u8 *eid, size_t *current_len, bool mld_update)
+{
+    wifi_interface_info_t *interface_iter, *tx_interface;
+    size_t len = *current_len;
+    u8 *eid_start = eid, *size_offset = eid - len + 1;
+    u8 *tbtt_count_pos = size_offset + 1;
+    u8 tbtt_count = 0, total_tbtt_count = 0;
+    u8 tbtt_info_len = mld_update ? RNR_TBTT_INFO_MLD_LEN : RNR_TBTT_INFO_LEN;
+
+    tx_interface = wifi_hal_get_mbssid_tx_interface(radio);
+repeat_rnr:
+    interface_iter = hash_map_get_first(radio->interface_map);
+    tbtt_count = 0;
+    while (interface_iter != NULL) {
+        if (!len || len + RNR_TBTT_HEADER_LEN + tbtt_info_len > 255) {
+            eid_start = eid;
+            *eid++ = WLAN_EID_REDUCED_NEIGHBOR_REPORT;
+            size_offset = eid++;
+            len = RNR_HEADER_LEN;
+            tbtt_count = 0;
+        }
+
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        for (; interface_iter != NULL;
+            interface_iter = hash_map_get_next(radio->interface_map, interface_iter)) {
+            u8 op_class, channel;
+            struct hostapd_data *hapd = &interface_iter->u.ap.hapd;
+
+            if (hapd->iface == NULL || hapd->iconf == NULL ||
+                ieee80211_freq_to_channel_ext(hapd->iface->freq, hapd->iconf->secondary_channel,
+                    hostapd_get_oper_chwidth(hapd->iconf), &op_class,
+                    &channel) == NUM_HOSTAPD_MODES) {
+                continue;
+            }
+
+            if (add_eid_rnr_bss(hapd, &reporting_interface->u.ap.hapd,
+                    &tbtt_count, &len, &eid, &tbtt_count_pos, tbtt_info_len,
+                    op_class, mld_update, interface_iter == tx_interface))
+                break;
+        }
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+        if (tbtt_count) {
+            *tbtt_count_pos = RNR_TBTT_INFO_COUNT(tbtt_count - 1);
+            *size_offset = (eid - size_offset) - 1;
+        }
+    }
+
+    total_tbtt_count += tbtt_count;
+
+    /* If building for co-location, re-build again but this time include
+     * ML TBTTs.
+     */
+    if (!mld_update && tbtt_info_len == RNR_TBTT_INFO_LEN) {
+        tbtt_info_len = RNR_TBTT_INFO_MLD_LEN;
+        goto repeat_rnr;
+    }
+
+    if (!total_tbtt_count)
+        return eid_start;
+
+    *current_len = len;
+    return eid;
+}
+#else /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
+/* non mlo implementation */
+static u8 *add_eid_rnr_iface(wifi_radio_info_t *radio, wifi_interface_info_t *reporting_interface,
+    u8 *eid, size_t *current_len, bool mld_update)
+{
+    struct hostapd_data *hapd;
+    size_t len = *current_len;
+    u8 bss_param, tbtt_count = 0;
+    u8 *tbtt_count_pos, *eid_start = eid, *size_offset = eid - len + 1;
+    wifi_interface_info_t *interface_iter, *tx_interface;
 
     tx_interface = wifi_hal_get_mbssid_tx_interface(radio);
 
     interface_iter = hash_map_get_first(radio->interface_map);
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     while (interface_iter != NULL) {
+        u8 op_class, channel;
+        hapd = &interface_iter->u.ap.hapd;
+
+        if (hapd->iface == NULL || hapd->iconf == NULL ||
+            ieee80211_freq_to_channel_ext(hapd->iface->freq, hapd->iconf->secondary_channel,
+                hostapd_get_oper_chwidth(hapd->iconf), &op_class, &channel) == NUM_HOSTAPD_MODES) {
+            interface_iter = hash_map_get_next(radio->interface_map, interface_iter);
+            continue;
+        }
+
         if (!len || len + RNR_TBTT_HEADER_LEN + RNR_TBTT_INFO_LEN > 255) {
             eid_start = eid;
             *eid++ = WLAN_EID_REDUCED_NEIGHBOR_REPORT;
@@ -16980,11 +18032,10 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
 
         tbtt_count_pos = eid++;
         *eid++ = RNR_TBTT_INFO_LEN;
-        *eid++ = radio->oper_param.operatingClass;
-        *eid++ = radio->oper_param.channel;
+        *eid++ = op_class;
+        *eid++ = channel;
         len += RNR_TBTT_HEADER_LEN;
 
-        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         for (; interface_iter != NULL;
             interface_iter = hash_map_get_next(radio->interface_map, interface_iter)) {
 
@@ -17016,8 +18067,8 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
                 bss_param |= RNR_BSS_PARAM_UNSOLIC_PROBE_RESP_ACTIVE;
             }
 
-            if (interface->u.ap.hapd.conf != NULL &&
-                strncmp(interface->u.ap.hapd.conf->ssid.ssid, hapd->conf->ssid.ssid,
+            if (reporting_interface->u.ap.hapd.conf != NULL &&
+                strncmp(reporting_interface->u.ap.hapd.conf->ssid.ssid, hapd->conf->ssid.ssid,
                     sizeof(hapd->conf->ssid.ssid)) == 0) {
                 bss_param |= RNR_BSS_PARAM_SAME_SSID;
             }
@@ -17029,11 +18080,11 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
             len += RNR_TBTT_INFO_LEN;
             tbtt_count += 1;
         }
-        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
         *tbtt_count_pos = RNR_TBTT_INFO_COUNT(tbtt_count - 1);
         *size_offset = (eid - size_offset) - 1;
     }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     if (tbtt_count == 0) {
         return eid_start;
@@ -17041,6 +18092,85 @@ static u8* wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_l
 
     *current_len = len;
 
+    return eid;
+}
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
+static u8 *add_eid_rnr(void *priv, u8 *eid, size_t *current_len)
+{
+    wifi_radio_info_t *radio;
+    size_t i;
+    u8 *eid_start = eid;
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
+
+    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+            interface->vap_info.radio_index);
+        return eid_start;
+    }
+
+    if (radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
+        return eid_start;
+    }
+
+    for (i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d failed to get radio for index: %zu\n", __func__, __LINE__, i);
+            return 0;
+        }
+        if (radio && radio->oper_param.band == WIFI_FREQUENCY_6_BAND) {
+            break;
+        }
+    }
+
+    if (i == g_wifi_hal.num_radios) {
+        return eid_start;
+    }
+
+    eid = add_eid_rnr_iface(radio, interface, eid, current_len, false);
+    return eid;
+}
+
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
+static u8 *add_eid_rnr_mlo(void *priv, u8 *eid, size_t *current_len)
+{
+    wifi_radio_info_t *radio, *reporting_radio;
+    size_t i;
+    u8 *eid_start = eid;
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
+    struct hostapd_data *hapd = &interface->u.ap.hapd;
+
+    if (!hapd->iface || !hapd->iface->interfaces || !hapd->conf->mld_ap || !hapd->mld)
+        return eid;
+
+    reporting_radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    if (reporting_radio == NULL) {
+        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+            interface->vap_info.radio_index);
+        return eid_start;
+    }
+
+    for (i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d failed to get radio for idx: %lu\n", __func__, __LINE__, i);
+            return eid_start;
+        }
+        if (radio == reporting_radio /*|| !(hapd->mld->active_links & BIT(hapd->mld_link_id))*/)
+            continue;
+        eid = add_eid_rnr_iface(radio, interface, eid, current_len, true);
+    }
+    return eid;
+}
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
+
+static u8 *wifi_drv_get_rnr_colocation_ie(void *priv, u8 *eid, size_t *current_len)
+{
+    eid = add_eid_rnr(priv, eid, current_len);
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
+    eid = add_eid_rnr_mlo(priv, eid, current_len);
+#endif
     return eid;
 }
 
@@ -17728,6 +18858,36 @@ static u8 *wifi_drv_get_mbssid_config(void *priv, u8 *eid)
     return eid;
 }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+u8 *wifi_drv_get_ap_channel_report_ie(void *priv, u8 *eid)
+{
+    wifi_radio_info_t *radio;
+    wifi_radio_info_t *temp_radio;
+    size_t i;
+
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
+
+    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d failed to get radio for index: %d\n", __func__, __LINE__,
+            interface->vap_info.radio_index);
+        return eid;
+    }
+
+    for (i = 0; i < g_wifi_hal.num_radios; i++) {
+        temp_radio = get_radio_by_rdk_index(i);
+        if (temp_radio && (temp_radio->oper_param.enable == true) &&
+            (temp_radio->rdk_radio_index != radio->rdk_radio_index)) {
+            *eid++ = WLAN_EID_AP_CHANNEL_REPORT;
+            *eid++ = 2;
+            *eid++ = temp_radio->oper_param.operatingClass;
+            *eid++ = temp_radio->oper_param.channel;
+        }
+    }
+
+    return eid;
+}
+#endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 #endif /* HOSTAPD_VERSION >= 210 */
 
 static int get_radio_txpwr_handler(struct nl_msg *msg, void *arg)
@@ -17874,6 +19034,7 @@ int wifi_drv_get_sta_auth_type(void *priv, const u8 *addr, int auth_key,int fram
 #if HOSTAPD_VERSION >= 211 // 2.11
 int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx)
 {
+    wifi_hal_dbg_print("%s:%d Entering - link_id %d\n", __func__, __LINE__, link_id);
     int ret;
     struct nl_msg *msg;
     wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
@@ -17908,9 +19069,101 @@ int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx)
             strerror(-ret));
         return ret;
     }
+    return 0;
+}
+
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
+static int del_beacon(wifi_interface_info_t *interface, int link_id)
+{
+    struct nl_msg *msg;
+
+    if (!interface || !interface->beacon_set) {
+        wifi_hal_dbg_print("%s:%d nl80211: Beacon for link=%u already unset\n", __func__, __LINE__,
+            link_id);
+        return 0;
+    }
+
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_DEL_BEACON);
+    if (msg == NULL) {
+        wifi_hal_dbg_print("%s:%d nl80211: failed to create msg\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    if (interface != NULL) {
+        nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
+        nla_put_u32(msg, NL80211_ATTR_WIPHY, interface->phy_index);
+    }
+
+    if (link_id != NL80211_DRV_LINK_ID_NA) {
+
+        wifi_hal_dbg_print("%s:%d nl80211: Stop beaconing on link=%u\n", __func__, __LINE__,
+            link_id);
+        if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id)) {
+            nlmsg_free(msg);
+            return -1;
+        }
+    }
+
+    interface->beacon_set = 0;
+
+    return nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
+}
+
+static int remove_link(wifi_interface_info_t *interface, int link_id)
+{
+    struct nl_msg *msg;
+
+    wifi_hal_dbg_print("%s:%d nl80211: Remove link (ifindex=%d link_id=%u)\n", __func__, __LINE__,
+        interface->index, link_id);
+
+    del_beacon(interface, link_id);
+
+    /* Remove the link from the kernel */
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_REMOVE_LINK);
+    if (msg == NULL) {
+        wifi_hal_dbg_print("%s:%d nl80211: failed to create msg\n", __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    if (interface != NULL) {
+        nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index);
+        nla_put_u32(msg, NL80211_ATTR_WIPHY, interface->phy_index);
+    }
+
+    if (!msg || nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id)) {
+        nlmsg_free(msg);
+        wifi_hal_error_print("%s:%d nl80211: remove link (%d) failed\n", __func__, __LINE__,
+            link_id);
+        return -1;
+    }
+
+    return nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
+}
+
+int wifi_drv_link_remove(void *priv, enum wpa_driver_if_type type, const char *ifname, u8 link_id)
+{
+    wifi_hal_dbg_print("%s:%d Entering\n", __func__, __LINE__);
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        wifi_hal_error_print("%s:%d Invalid removal - MLO for interface %s is disabled\n", __func__,
+            __LINE__, interface->name);
+        return -EOPNOTSUPP;
+    }
+
+    if (link_id >= MAX_NUM_MLD_LINKS || link_id < 0) {
+        wifi_hal_error_print("%s:%d Invalid link_id: %u\n", __func__, __LINE__, link_id);
+        return -1;
+    }
+
+    remove_link(interface, link_id);
 
     return 0;
 }
+#endif // BANANA_PI_PORT && CONFIG_GENERIC_MLO
+
 #endif // HOSTAPD_VERSION >= 211
 
 const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
@@ -18035,6 +19288,7 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .add_tx_ts = wifi_drv_add_ts,
     .del_tx_ts = wifi_drv_del_ts,
     .get_ifindex = wifi_drv_get_ifindex,
+    .add_sta_node = wifi_drv_add_sta_node,
 #ifdef CONFIG_DRIVER_NL80211_QCA
     .roaming = wifi_drv_roaming,
     .disable_fils = wifi_drv_disable_fils,
@@ -18093,9 +19347,15 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .get_mbssid_ie = wifi_drv_get_mbssid_ie,
     .get_mbssid_config = wifi_drv_get_mbssid_config,
     .get_sta_auth_type = wifi_drv_get_sta_auth_type,
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    .get_ap_channel_report_ie = wifi_drv_get_ap_channel_report_ie,
+#endif //defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 #endif /* HOSTAPD_VERSION >= 210 */
 #if HOSTAPD_VERSION >= 211 // 2.11
     .link_add = wifi_drv_link_add,
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
+    .link_remove = wifi_drv_link_remove,
+#endif
 #endif // HOSTAPD_VERSION >= 211
 };
 
