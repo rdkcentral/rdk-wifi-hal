@@ -77,11 +77,6 @@
 #define MLO_ENAB 1
 #endif
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
-static bool l_eht_set = false;
-static int l_eht_interface_count = 0;
-bool (*g_eht_event_notify)(wifi_interface_info_t *interface) = NULL;
-
 /*
 If include secure_wrapper.h, will need to convert other system calls with v_secure_system calls
 #include <secure_wrapper.h>
@@ -89,6 +84,11 @@ If include secure_wrapper.h, will need to convert other system calls with v_secu
 int v_secure_system(const char *command, ...);
 FILE *v_secure_popen(const char *direction, const char *command, ...);
 int v_secure_pclose(FILE *);
+
+#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
+static bool l_eht_set = false;
+static int l_eht_interface_count = 0;
+bool (*g_eht_event_notify)(wifi_interface_info_t *interface) = NULL;
 
 static bool platform_radio_state(wifi_radio_index_t index);
 static bool platform_is_eht_enabled(wifi_radio_index_t index);
@@ -2150,6 +2150,26 @@ int nl_set_beacon_rate(int vap_index, int beacon_rate)
 #endif /* defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT)
          || defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT) */
 
+static int set_ap_bss_color_value(int apIndex, uint32_t bssColor)
+{
+    wifi_interface_info_t *interface;
+
+    wifi_hal_dbg_print("%s:%d: Set AP BSS Color %x for AP index: %d\n", __func__, __LINE__,
+        bssColor, apIndex);
+
+    interface = get_interface_by_vap_index(apIndex);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get interface for ap index: %d\n", __func__,
+            __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_dbg_print("%s:%d: Running following command: wl -i %s he bsscolor %u\n", __func__,
+        __LINE__,  interface->name, bssColor);
+    v_secure_system("wl -i %s he bsscolor %u", interface->name, bssColor);
+    return 0;
+}
+
 int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 {
     wifi_hal_dbg_print("%s:%d: Enter radio index:%d\n", __func__, __LINE__, r_index);
@@ -2158,6 +2178,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
     char param_name[NVRAM_NAME_SIZE];
     char interface_name[8];
     wifi_radio_info_t *radio;
+    struct hostapd_config  *iconf;
     char das_ipaddr[45];
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && defined(MLO_ENAB)
     bool need_down = platform_down_reqd(r_index, map);
@@ -2187,6 +2208,11 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             return RETURN_ERR;
         }
 
+        iconf = &radio->iconf;
+        if (iconf == NULL) {
+            wifi_hal_error_print("%s:%d: hostapd conf is empty for radio %d\n", __func__, __LINE__, r_index);
+            return RETURN_ERR;
+        }
         memset(interface_name, 0, sizeof(interface_name));
 #if defined(NEWPLATFORM_PORT) || defined(_SR213_PRODUCT_REQ_)
         get_interface_name_from_vap_index(map->vap_array[index].vap_index, interface_name);
@@ -2392,6 +2418,8 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             prepare_param_name(param_name, interface_name, "_bcnprs_txpwr_offset");
             set_decimal_nvram_param(param_name, abs(map->vap_array[index].u.bss_info.mgmtPowerControl));
             wifi_setApManagementFramePowerControl(map->vap_array[index].vap_index, map->vap_array[index].u.bss_info.mgmtPowerControl);
+
+            set_ap_bss_color_value(map->vap_array[index].vap_index, iconf->he_op.he_bss_color_disabled ? 0 : iconf->he_op.he_bss_color);
         } else if (map->vap_array[index].vap_mode == wifi_vap_mode_sta) {
 
             prepare_param_name(param_name, interface_name, "_akm");
