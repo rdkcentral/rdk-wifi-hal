@@ -5817,6 +5817,13 @@ int init_nl80211()
         g_wifi_hal.radio_info[i].index = -1;
     }
     init_interface_map();
+
+    #ifdef RDKB_ONE_WIFI_PROD
+    /* Remap the interfaces depending on the Wiphy enumeration
+    * in the kernel */
+    remap_wifi_interface_name_index_map();
+    #endif /* RDKB_ONE_WIFI_PROD */
+
 #if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
     !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
