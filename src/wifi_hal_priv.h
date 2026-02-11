@@ -273,7 +273,7 @@ typedef struct {
     unsigned int    op_class;
     unsigned int    global_op_class;
     unsigned int    num;
-    unsigned int    ch_list[16];
+    unsigned int    ch_list[25];
 } wifi_radio_op_class_t;
 
 struct wifiCountryEnumStrMap {
