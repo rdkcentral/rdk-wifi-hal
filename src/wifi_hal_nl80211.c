@@ -13146,7 +13146,7 @@ int wifi_drv_hapd_send_eapol(
 
     //my_print_hex_dump(data_len + sizeof(struct ieee8023_hdr), buff);
     if ((ret = send((vap->vap_mode == wifi_vap_mode_ap) ? interface->u.ap.br_sock_fd:interface->u.sta.sta_sock_fd,
-            buff, data_len + sizeof(struct ieee8023_hdr), flags)) < 0) {
+            buff, data_len + sizeof(struct ieee8023_hdr), 0)) < 0) {
         wifi_hal_error_print("%s:%d: eapol send failed ret=%d\n", __func__, __LINE__,ret);
 
         if (interface->data_frames_registered == 1) {
