@@ -3309,7 +3309,7 @@ int nl80211_interface_enable(const char *ifname, bool enable)
             flags |= IFF_UP;
         }
     } else {
-        if ((flags | ~IFF_UP) == 0) {
+        if ((flags & IFF_UP) == 0) {
             // already down
             wifi_hal_dbg_print("%s:%d interface %s already down\n", __func__, __LINE__, ifname);
             return 0;
@@ -10493,8 +10493,8 @@ int wifi_drv_send_action(void *priv,
         // *csa_offs = <csa offset data>
     }
 
-    ret = nl80211_send_frame_cmd(interface, freq, wait_time, buf, 24 + data_len, use_cookie, no_ack,
-        offchanok, csa_offs, csa_offs_len);
+    ret = nl80211_send_frame_cmd(interface, freq, wait_time, buf, 24 + data_len, use_cookie, offchanok,
+                                 no_ack, csa_offs, csa_offs_len);
 
     free(csa_offs);
     free(buf);
