@@ -273,7 +273,7 @@ typedef struct {
     unsigned int    op_class;
     unsigned int    global_op_class;
     unsigned int    num;
-    unsigned int    ch_list[16];
+    unsigned int    ch_list[25];
 } wifi_radio_op_class_t;
 
 struct wifiCountryEnumStrMap {
@@ -288,7 +288,7 @@ struct wifiEnvironmentEnumStrMap {
 
 typedef struct {
     wifi_countrycode_type_t    cc;
-    wifi_radio_op_class_t   op_class[6];
+    wifi_radio_op_class_t   op_class[20];
 } wifi_country_radio_op_class_t;
 
 typedef struct {
@@ -485,6 +485,7 @@ typedef struct wifi_interface_info_t {
     int mgmt_frames_registered;
     int spurious_frames_registered;
     int bss_frames_registered;
+    int data_frames_registered;
     hash_map_t  *acl_map;
 
     /* Scan support */
@@ -651,6 +652,10 @@ typedef struct {
     wifi_bm_steering_group_t  bm_steer_groups[MAX_STEERING_GROUP_NUM];
     hash_map_t *mgt_frame_rate_limit_hashmap;
     wifi_hal_mgt_frame_rate_limit_t mgt_frame_rate_limit;
+#ifdef CONFIG_GENERIC_MLO
+    unsigned int mld_count;
+    struct hostapd_mld **mld_array;
+#endif
 } wifi_hal_priv_t;
 
 extern wifi_hal_priv_t g_wifi_hal;
@@ -828,6 +833,7 @@ void wifi_hal_deauth(int vap_index, int status, uint8_t *mac);
 INT wifi_hal_getInterfaceMap(wifi_interface_name_idex_map_t *if_map, unsigned int max_entries,
     unsigned int *if_map_size);
 INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal);
+INT wifi_hal_sm_deinit(INT vap_index);
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss);
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map);
@@ -1423,4 +1429,6 @@ wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_inf
     mac_address_t mac);
 int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
+int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
+    size_t ifname_out_len);
 #endif // WIFI_HAL_PRIV_H
