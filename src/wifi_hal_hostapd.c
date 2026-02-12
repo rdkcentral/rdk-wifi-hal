@@ -714,18 +714,22 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 
         case wifi_encryption_aes:
             conf->wpa_pairwise = WPA_CIPHER_CCMP;
-#ifdef CONFIG_IEEE80211BE
-            switch (sec->mode) {
-            case wifi_security_mode_wpa3_personal:
-            case wifi_security_mode_wpa3_transition:
-            case wifi_security_mode_wpa3_enterprise:
-                conf->wpa_pairwise |= (conf->disable_11be ? 0 : WPA_CIPHER_GCMP_256);
-                break;
-            default:
-                break;
-            }
-#endif /* CONFIG_IEEE80211BE */
             break;
+
+#ifdef CONFIG_IEEE80211BE
+	case wifi_encryption_aes_gcmp256:
+	    conf->wpa_pairwise = WPA_CIPHER_CCMP;
+	    switch(sec->mode) {
+	    case wifi_security_mode_wpa3_personal:
+	    case wifi_security_mode_wpa3_transition:
+	    case wifi_security_mode_wpa3_enterprise:
+	        conf->wpa_pairwise |= (conf->disable_11be ? 0 : WPA_CIPHER_GCMP_256);
+	        break;
+	    default:
+	        break;
+	    }
+	    break;
+#endif /* CONFIG_IEEE80211BE */
 
         case wifi_encryption_aes_tkip:
             conf->wpa_pairwise = wpa_parse_cipher("TKIP CCMP");
