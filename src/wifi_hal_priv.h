@@ -841,6 +841,7 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac);
 INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mode, INT dwell_time, UINT num, UINT *chan_list);
 INT wifi_hal_disconnect(INT ap_index);
 INT wifi_hal_getRadioVapInfoMap(wifi_radio_index_t index, wifi_vap_info_map_t *map);
+INT wifi_hal_getApMld(wifi_apmld_info_t **wifi_apmld_ret, UINT *apmld_count);
 INT wifi_hal_setApWpsButtonPush(INT apIndex);
 INT wifi_hal_setApWpsPin(INT ap_index, char *wps_pin);
 INT wifi_hal_setApWpsCancel(INT ap_index);
