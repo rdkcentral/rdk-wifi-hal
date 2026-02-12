@@ -3782,10 +3782,12 @@ void wifi_hal_register_frame_hook(wifi_hal_frame_hook_fn_t func)
 
 static int build_candidates_list(const wifi_BTMRequest_t *request, u8 *nei_rep, size_t nei_rep_len)
 {
+    wifi_hal_error_print("SHARMAN-3047 build_candidates_list enter\n");
     unsigned i;
     const wifi_NeighborReport_t *candidate;
     u8 *nei_pos = nei_rep;
 
+    wifi_hal_error_print("SHARMAN-3047 build_candidates_list request->numCandidates = %d\n", request->numCandidates);
     if (request->numCandidates >= MAX_CANDIDATES) {
         wifi_hal_error_print("%s:%d: [BTM] Wrong number of candidates (%u)\n", __func__, __LINE__, request->numCandidates);
         return -1;
@@ -3837,6 +3839,7 @@ static int build_candidates_list(const wifi_BTMRequest_t *request, u8 *nei_rep, 
 */
 INT wifi_hal_setBTMRequest(UINT apIndex, mac_address_t peerMac, wifi_BTMRequest_t *request)
 {
+    wifi_hal_error_print(" SHARMAN-3047 wifi_hal_setBTMRequest enter\n");
     wifi_interface_info_t *interface;
     u8 requestMode = request->requestMode;
     struct sta_info *sta = NULL;
@@ -3897,7 +3900,9 @@ INT wifi_hal_setBTMRequest(UINT apIndex, mac_address_t peerMac, wifi_BTMRequest_
             wifi_hal_error_print("%s:%d: [BTM] BTM request: Cannot allocate memory\n", __func__, __LINE__);
             goto exit;
         }
+	wifi_hal_error_print(" SHARMAN-3047 wifi_hal_setBTMRequest calling build_candidates_list\n");
         nei_len = build_candidates_list(request, nei_rep, NEIREP_LEN);
+	wifi_hal_error_print(" SHARMAN-3047 wifi_hal_setBTMRequest nei_len = %d\n",nei_len);
         if (nei_len < 0) {
             wifi_hal_error_print("%s:%d: [BTM] BTM request: Cannot build candidates list\n", __func__, __LINE__);
             goto exit;
@@ -3930,6 +3935,7 @@ INT wifi_hal_setBTMRequest(UINT apIndex, mac_address_t peerMac, wifi_BTMRequest_
     }
 
     // - interface->u.ap.hapd has to be locked by mutex g_wifi_hal.hapd_lock
+    wifi_hal_error_print(" SHARMAN-3047 wifi_hal_setBTMRequest calling wifi_wnm_send_bss_tm_req\n");
     ret_token = wifi_wnm_send_bss_tm_req(interface, sta,
                 request->token,
                 requestMode,
