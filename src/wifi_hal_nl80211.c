@@ -2305,7 +2305,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             mgmt_frame.sig_dbm = sig_dbm;
             mgmt_frame.len = len;
             mgmt_frame.data = (unsigned char *)mgmt;
-
+            wifi_hal_info_print("%s:%d leela_debug_hal BEFORE CALLBACK - frame_type=%d sig_dbm=%d phy_rate=%d sta="MACSTR"\n",__func__, __LINE__, mgmt_type, sig_dbm, phy_rate, MAC2STR(sta));
 #ifdef WIFI_HAL_VERSION_3_PHASE2
         callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame, recv_freq);
 #else
@@ -2498,9 +2498,14 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
     if ((attr = tb[NL80211_ATTR_WIPHY_FREQ]) != NULL) {
         recv_freq = nla_get_u32(attr);
     }
+   
+    wifi_hal_info_print("%s:%d leela_debug_hal BEFORE RSSI check - sig_dbm=%d (default)\n", __func__, __LINE__, sig_dbm);
 
     if (tb[NL80211_ATTR_RX_SIGNAL_DBM]) {
-        sig_dbm = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
+            wifi_hal_info_print("%s:%d leela_debug_hal NL80211_ATTR_RX_SIGNAL_DBM PRESENT - sig_dbm=%d frame_type=%d\n", __func__, __LINE__, sig_dbm, WLAN_FC_GET_STYPE(le_to_host16(mgmt->frame_control)));
+	    sig_dbm = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
+    }else{
+        wifi_hal_info_print("%s:%d leela_debug_hal NL80211_ATTR_RX_SIGNAL_DBM MISSING - sig_dbm=%d (default) frame_type=%d\n", __func__, __LINE__, sig_dbm, WLAN_FC_GET_STYPE(le_to_host16(mgmt->frame_control)));
     }
 #if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(TCHCBRV2_PORT) || \
     defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || \
