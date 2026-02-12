@@ -6532,7 +6532,7 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
         return NL_SKIP;
     }
 
-    memcpy(sta_mac, nla_data(tb[NL80211_ATTR_MAC]), nla_len(tb[NL80211_ATTR_MAC]));
+    memcpy(sta_mac, nla_data(tb[NL80211_ATTR_MAC]), ETH_ALEN);
 
     if (!tb[NL80211_ATTR_STA_INFO]) {
         wifi_hal_info_print("%s:%d: STA stats missing\n", __func__, __LINE__);
@@ -6550,7 +6550,7 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE)
     if (tb[NL80211_ATTR_MLD_ADDR]) {
         mac_addr_str_t mld_mac_str;
-        memcpy(mld_mac, nla_data(tb[NL80211_ATTR_MLD_ADDR]), 6);
+        memcpy(mld_mac, nla_data(tb[NL80211_ATTR_MLD_ADDR]), ETH_ALEN);
         wifi_hal_dbg_print("%s:%d: Received MLD:%s, for MAC:%s\n", __func__, __LINE__,
             sta_mac_str, to_mac_str(mld_mac, mld_mac_str));
     } else {
