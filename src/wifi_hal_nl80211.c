@@ -3521,12 +3521,12 @@ static int execute_send_and_recv(struct nl_cb *cb_ctx,
 
     /* try to set NETLINK_EXT_ACK to 1, ignoring errors */
     opt = 1;
-    setsockopt(nl_socket_get_fd((const struct nl_sock *)nl_handle), SOL_NETLINK,
+    (void)setsockopt(nl_socket_get_fd((const struct nl_sock *)nl_handle), SOL_NETLINK,
            NETLINK_EXT_ACK, &opt, sizeof(opt));
 
     /* try to set NETLINK_CAP_ACK to 1, ignoring errors */
     opt = 1;
-    setsockopt(nl_socket_get_fd((const struct nl_sock *)nl_handle), SOL_NETLINK,
+    (void)setsockopt(nl_socket_get_fd((const struct nl_sock *)nl_handle), SOL_NETLINK,
            NETLINK_CAP_ACK, &opt, sizeof(opt));
 
     err = nl_send_auto_complete((struct nl_sock *)nl_handle, msg);
@@ -9681,6 +9681,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 
             if (key_mgmt == -1) {
                 wifi_hal_error_print("Unsupported AKM suite: 0x%x\n", data.key_mgmt);
+                nlmsg_free(msg);
                 return -1;
             }
 
@@ -15079,7 +15080,7 @@ int set_bss_param(void *priv, struct wpa_driver_ap_params *params)
         wifi_hal_error_print("%s:%d: Failed to create message\n", __func__, __LINE__);
         return -1;
     }
-    nla_put_u8(msg, NL80211_ATTR_AP_ISOLATE, params->isolate);
+    (void)nla_put_u8(msg, NL80211_ATTR_AP_ISOLATE, params->isolate);
     wifi_hal_info_print("Set AP isolate:%d \r\n", params->isolate);
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
@@ -16604,10 +16605,8 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     }
 
     wifi_hal_dbg_print("%s:%d: new key success for ifname:%s vap_index:%d\n", __func__, __LINE__, interface->name, vap->vap_index);
-    if ((ret == -ENOENT || ret == -ENOLINK) && params->alg == WPA_ALG_NONE)
-      ret = 0;
-    if (ret || skip_set_key)
-      return ret;
+    if (skip_set_key)
+      return 0;
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_KEY);
 
@@ -17494,7 +17493,7 @@ int wifi_drv_set_acs_exclusion_list(unsigned int radioIndex, char* str)
     }
 }
 
-int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t chanlist, char* buff)
+int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, const wifi_channels_list_t *chanlist, char* buff)
 {
     wifi_hal_dbg_print("%s:%d Enter\n",__func__,__LINE__);
     platform_get_chanspec_list_t platform_get_chanspec_list_fn = get_platform_chanspec_list_fn();
