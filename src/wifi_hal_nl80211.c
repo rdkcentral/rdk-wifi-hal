@@ -6509,7 +6509,7 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
     };
     int rem, signals_cnt = 0;
     int rssi = 0;
-    mac_address_t sta_mac;
+    mac_address_t sta_mac, mld_mac;
     mac_addr_str_t sta_mac_str;
     bool has_link_stats = false;
 
@@ -6548,6 +6548,16 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
     }
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE)
+    if (tb[NL80211_ATTR_MLD_ADDR]) {
+        mac_addr_str_t mld_mac_str;
+        memcpy(mld_mac, nla_data(tb[NL80211_ATTR_MLD_ADDR]), 6);
+        wifi_hal_dbg_print("%s:%d: Received MLD:%s, for MAC:%s\n", __func__, __LINE__,
+            sta_mac_str, to_mac_str(mld_mac, mld_mac_str));
+    } else {
+        wifi_hal_dbg_print("%s:%d: MLD is not present for MAC:%s\n", __func__, __LINE__,
+            sta_mac_str);
+    }
+
     if (tb[NL80211_ATTR_MLO_LINKS] != NULL) {
         struct nlattr *link_nest;
         int rem_links;
