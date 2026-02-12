@@ -45,6 +45,9 @@
 #endif
 
 #define MAC_ADDRESS_LEN 6
+#define VLAN_INTERFACE_LEN 32
+#define VLAN_MIN 1
+#define VLAN_MAX 4094
 
 #ifdef CONFIG_WIFI_EMULATOR
 #define RADIO_INDEX_ASSERT_RC(radioIndex, retcode) \
@@ -1613,6 +1616,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif 
 #endif
     char *interface_name = NULL;
+    char vlan_ifname[VLAN_INTERFACE_LEN] = {0};
+    int vlan_id = 0;
 
     RADIO_INDEX_ASSERT(index);
     NULL_PTR_ASSERT(map);
@@ -1698,6 +1703,30 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
         memcpy((unsigned char *)&interface->vap_info, (unsigned char *)vap, sizeof(wifi_vap_info_t));
         interface_name = wifi_hal_get_interface_name(interface);
+
+ 	// VLAN Implementation for traffic separation
+        if (vap->vap_mode == wifi_vap_mode_ap) 
+	{
+            vlan_id = vap->vlan_id;
+            if ( vlan_id == 0 )
+                vlan_id = get_ap_vlan_id(interface_name);
+
+            wifi_hal_info_print("%s:%d: [TRAFFIC_SEP] intf vlan %d, vlan_get: %d vap->vlan_id=%d : bridge_name =%s \n", __func__, __LINE__, interface->vlan, vlan_id, vap->vlan_id,vap->bridge_name);
+            if (interface->vlan && (interface->vlan != vlan_id)) {
+                memset(vlan_ifname, 0, sizeof(vlan_ifname));
+                snprintf(vlan_ifname, sizeof(vlan_ifname), "%s.%d", interface_name, interface->vlan);
+                nl80211_remove_vlan(vlan_ifname);
+            }
+
+            interface->vlan = vlan_id;
+            if ((interface->vlan >= VLAN_MIN) && (interface->vlan <= VLAN_MAX)) {
+                memset(vlan_ifname, 0, sizeof(vlan_ifname));
+                snprintf(vlan_ifname, sizeof(vlan_ifname), "%s.%d", interface_name, interface->vlan);
+                if ( nl80211_add_vlan(interface_name, interface->vlan, vlan_ifname) != -1 ) {
+                    interface_name = vlan_ifname;
+                }
+            }
+        }
 
 #ifdef CONFIG_GENERIC_MLO
         // VAP down removes MLO links, so restrict down of interface to sta mode only
