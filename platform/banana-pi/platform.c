@@ -1090,19 +1090,81 @@ void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nla
     }
 }
 
-// TODO: support multiple mld
-static struct hostapd_mld mld;
+static struct hostapd_mld *find_mld(struct wifi_interface_info_t *interface)
+{
+    struct hostapd_mld *mld_it = NULL;
+
+    for (unsigned int i = 0; i < g_wifi_hal.mld_count; ++i) {
+        mld_it = g_wifi_hal.mld_array[i];
+
+        if (strncmp(interface->mld_name, mld_it->name, sizeof(mld_it->name)) == 0) {
+            return mld_it;
+        }
+    }
+
+    return NULL;
+}
 
 static bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 {
     struct hostapd_data *link_bss;
 
-    dl_list_for_each(link_bss, &mld.links, struct hostapd_data, link) {
+    if (hapd->mld == NULL) {
+        return false;
+    }
+
+    dl_list_for_each(link_bss, &hapd->mld->links, struct hostapd_data, link) {
         if (link_bss == hapd) {
             return true;
         }
     }
+
     return false;
+}
+
+static int alloc_mld(wifi_interface_info_t *interface)
+{
+    struct hostapd_mld *mld;
+    struct hostapd_mld **new_mld_array;
+    struct hostapd_data *hapd = &interface->u.ap.hapd;
+
+    mld = find_mld(interface);
+    if (mld) {
+        wifi_hal_dbg_print("%s:%d hapd->mld was found for interface %s\n", __func__, __LINE__,
+            interface->name);
+        hapd->mld = mld;
+        return 0;
+    }
+
+    mld = calloc(1, sizeof(struct hostapd_mld));
+    if (mld == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate memory for hostapd_mld %s\n", __func__,
+            __LINE__, interface->mld_name);
+        return -1;
+    }
+
+    new_mld_array = realloc(g_wifi_hal.mld_array,
+        (g_wifi_hal.mld_count + 1) * sizeof(struct hostapd_mld *));
+    if (new_mld_array == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to reallocate MLD array\n", __func__, __LINE__);
+        free(mld);
+        return -1;
+    }
+
+    strncpy(mld->name, interface->mld_name, sizeof(mld->name) - 1);
+    dl_list_init(&mld->links);
+    mld->ctrl_sock = -1;
+    memcpy(mld->mld_addr, wifi_hal_get_mld_mac_address(interface), ETH_ALEN);
+
+    mld->refcount++;
+
+    new_mld_array[g_wifi_hal.mld_count] = mld;
+    hapd->mld = mld;
+    g_wifi_hal.mld_array = new_mld_array;
+
+    g_wifi_hal.mld_count++;
+
+    return 0;
 }
 
 int update_hostap_mlo(wifi_interface_info_t *interface)
@@ -1125,16 +1187,17 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     hapd = &interface->u.ap.hapd;
     conf = hapd->conf;
 
+    if (hapd->mld == NULL) {
+        if (alloc_mld(interface) < 0) {
+            wifi_hal_error_print("Failed to obtain hostapd_mld for MLD interface %s\n",
+                interface->mld_name);
+            return -1;
+        }
+    }
+
     conf->mld_ap = 1;
     conf->okc = 1;
     hapd->mld_link_id = wifi_hal_get_mld_link_id(interface);
-
-    if (mld.num_links == 0) {
-        strncpy(mld.name, conf->iface, sizeof(mld.name) - 1);
-        dl_list_init(&mld.links);
-        memcpy(mld.mld_addr, wifi_hal_get_mld_mac_address(interface), ETH_ALEN);
-    }
-    hapd->mld = &mld;
 
     if (!wifi_hal_is_mld_link_exists(hapd) && hostapd_mld_add_link(hapd) != 0) {
         wifi_hal_error_print("%s:%d: Failed to add link %d in MLD %s\n", __func__, __LINE__,
@@ -1164,6 +1227,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
             return -1;
         }
     }
+
 #endif
     return 0;
 }

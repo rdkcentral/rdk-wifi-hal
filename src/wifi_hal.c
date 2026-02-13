@@ -468,14 +468,18 @@ INT wifi_hal_init()
 #endif
     if (pthread_create(&g_wifi_hal.nl_tid, attrp, nl_recv_func, &g_wifi_hal) != 0) {
         wifi_hal_error_print("%s:%d:ssp_main create failed\n", __func__, __LINE__);
-        if(attrp != NULL) {
+#if defined(_PLATFORM_BANANAPI_R4_)
+        if (attrp != NULL) {
             pthread_attr_destroy(attrp);
         }
+#endif
         return RETURN_ERR;
     }
-    if(attrp != NULL) {
+#if defined(_PLATFORM_BANANAPI_R4_)
+    if (attrp != NULL) {
         pthread_attr_destroy(attrp);
     }
+#endif
 #ifndef CONFIG_WIFI_EMULATOR
     if (eap_server_register_methods() != 0) {
         wifi_hal_error_print("%s:%d: failing to register eap server default methods\n", __func__, __LINE__);
@@ -1101,6 +1105,30 @@ reload_config:
     radio->configuration_in_progress = false;
     return RETURN_ERR;
 
+}
+
+INT wifi_hal_sm_deinit(INT vap_index)
+{
+    wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: interface for vap index:%d not found\n", __func__, __LINE__,
+            vap_index);
+        return RETURN_ERR;
+    }
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_sta) {
+        wifi_hal_error_print("%s:%d:interface for vap index:%d not found\n", __func__, __LINE__,
+            vap_index);
+        return RETURN_ERR;
+    }
+
+    if (interface->u.sta.wpa_sm != NULL) {
+        eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
+        interface->u.sta.wpa_sm->eapol = NULL;
+        wpa_sm_deinit(interface->u.sta.wpa_sm);
+        interface->u.sta.wpa_sm = NULL;
+    }
+    return RETURN_OK;
 }
 
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
@@ -2217,11 +2245,7 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
     memcpy(acl_map->mac_addr_str, key, sizeof(mac_addr_str_t));
     memcpy(acl_map->mac_addr, DeviceMacAddress, sizeof(mac_address_t));
 
-    if (hash_map_put(interface->acl_map, key, acl_map) == -1) {
-        free(acl_map);
-        wifi_hal_error_print("%s:%d: MAC %s map failure for ap_index:%d\n", __func__, __LINE__, key, apIndex);
-        return RETURN_ERR;
-    }
+    hash_map_put(interface->acl_map, strdup(key), acl_map);
 
     if (nl80211_set_acl(interface) != 0) {
         wifi_hal_error_print("%s:%d: MAC %s nl80211_set_acl failure for ap_index:%d\n", __func__, __LINE__, key, apIndex);
@@ -2280,11 +2304,7 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
     memcpy(acl_map->mac_addr_str, DeviceMacAddress, sizeof(mac_addr_str_t));
     to_mac_bytes(acl_map->mac_addr_str, acl_map->mac_addr);
 
-    if (hash_map_put(interface->acl_map, DeviceMacAddress, acl_map) == -1) {
-        free(acl_map);
-        wifi_hal_error_print("%s:%d: MAC %s map failure for ap_index:%d\n", __func__, __LINE__, DeviceMacAddress, apIndex);
-        return RETURN_ERR;
-    }
+    hash_map_put(interface->acl_map, strdup(DeviceMacAddress), acl_map);
 
     if (nl80211_set_acl(interface) != 0) {
         wifi_hal_error_print("%s:%d: MAC %s nl80211_set_acl failure for ap_index:%d\n", __func__, __LINE__, DeviceMacAddress, apIndex);
@@ -2351,9 +2371,7 @@ INT wifi_hal_delApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
         memcpy(acl_map->mac_addr_str, key, sizeof(mac_addr_str_t));
         memcpy(acl_map->mac_addr, DeviceMacAddress, sizeof(mac_addr_str_t));
 
-        if (hash_map_put(interface->acl_map, key, acl_map) == -1) {
-            free(acl_map);
-        }
+        hash_map_put(interface->acl_map, strdup(key), acl_map);
 
         return -1;
     }
@@ -2404,9 +2422,7 @@ INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
         memcpy(acl_map->mac_addr_str, DeviceMacAddress, sizeof(mac_addr_str_t));
         to_mac_bytes(acl_map->mac_addr_str, acl_map->mac_addr);
 
-        if (hash_map_put(interface->acl_map, DeviceMacAddress, acl_map) == -1) {
-            free(acl_map);
-        }
+        hash_map_put(interface->acl_map, strdup(DeviceMacAddress), acl_map);
 
         return -1;
     }
@@ -3545,7 +3561,7 @@ INT wifi_hal_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, I
 
     case WIFI_RADIO_SCAN_MODE_SELECT_CHANNELS: {
 
-        if (chan_num != 0 || chan_list != NULL) {
+        if (chan_num == 0 || chan_list == NULL) {
             wifi_hal_error_print("%s:%d: [SCAN] Needs chan_num and chan_list param\n", __func__,
                 __LINE__);
             return WIFI_HAL_INVALID_ARGUMENTS;

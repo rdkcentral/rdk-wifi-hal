@@ -1109,13 +1109,16 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     struct hostapd_bss_config   *conf;
     wifi_vap_info_t *vap;
     wifi_radio_info_t *radio;
-    mac_addr_str_t  mac_str;
     wifi_radio_operationParam_t *op_param;
     int vlan_id = 0;
     // re-initialize the default parameters
     init_hostap_bss(interface);
 
     vap = &interface->vap_info;
+    /* Initialize interface->bridge from vap configuration early, so it's available for all flows */
+    if (vap->bridge_name[0] != '\0') {
+        strncpy(interface->bridge, vap->bridge_name, sizeof(interface->bridge));
+    }
     radio = get_radio_by_rdk_index(vap->radio_index);
     op_param = &radio->oper_param;
 
@@ -1125,8 +1128,8 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     conf->disable_11be = !radio->iconf.ieee80211be;
 #endif /* CONFIG_IEEE80211BE */
 
-    strcpy(conf->iface, interface->name);
-    strcpy(conf->bridge, interface->bridge);
+    snprintf(conf->iface, sizeof(conf->iface), "%s", interface->name);
+    snprintf(conf->bridge, sizeof(conf->bridge), "%s", interface->bridge);
     sprintf(conf->vlan_bridge, "vlan%d", vap->vap_index);
 
     conf->ctrl_interface = interface->ctrl_interface;
@@ -1136,7 +1139,7 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     memcpy(conf->bssid, interface->mac, sizeof(interface->mac));
 
     memset(conf->ssid.ssid, 0, sizeof(conf->ssid.ssid));
-    strcpy(conf->ssid.ssid, vap->u.bss_info.ssid);
+    memcpy(conf->ssid.ssid, vap->u.bss_info.ssid, sizeof(conf->ssid.ssid));
     conf->ssid.ssid_len = strlen(vap->u.bss_info.ssid);
     if (!conf->ssid.ssid_len)
         conf->ssid.ssid_set = 0;
@@ -1163,8 +1166,15 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     if (is_backhaul_interface(interface)) {
         // For backhaul VAPs, set multi-ap flag to 1
         conf->multi_ap = BACKHAUL_BSS;
-        wifi_hal_info_print("%s:%d: Enabled multi_ap:%d for interface:%s\n", __func__,
-            __LINE__, conf->multi_ap, interface->name);
+
+        /* Enable WDS mode for backhaul STAs to create per-STA virtual interfaces
+         * This allows 4-address frames and proper bridge forwarding
+         */
+        conf->wds_sta = 1;
+        strncpy(conf->wds_bridge, interface->bridge, sizeof(conf->wds_bridge));
+
+        wifi_hal_info_print("%s:%d: Enabled multi_ap:%d for interface:%s, wds_bridge:%s\n",
+            __func__, __LINE__, conf->multi_ap, interface->name, conf->wds_bridge);
     }
 #endif // EASY_MESH_NODE
 
@@ -1258,7 +1268,6 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     
     //hessid
 
-    strcpy(conf->hessid, to_mac_str(vap->u.bss_info.interworking.interworking.hessid, mac_str));
     to_mac_bytes((vap->u.bss_info.interworking.interworking.hessid), conf->hessid);
     wifi_hal_dbg_print(" %s: %s 802.11u - NEW IW_En=%d access_network_type=%d conf->[venue_info_set=%d venue_group=%d venue_type=%d hessid="MACF"]\n",
                 __func__, interface->name, conf->interworking, conf->access_network_type,
@@ -2799,6 +2808,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                     sel = (WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w) & data.key_mgmt;
                 } else if (sec->mode == wifi_security_mode_wpa3_enterprise) {
                     sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_enhanced_open) {
+                    sel = (WPA_KEY_MGMT_OWE | wpa_key_mgmt_11w) & data.key_mgmt;
                 } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
 #if !defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
                     wpa_sm_set_param(sm, WPA_PARAM_RSN_OVERRIDE_SUPPORT, true);
@@ -2866,6 +2877,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                 sel = (WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w);
             } else if (sec->mode == wifi_security_mode_wpa3_enterprise) {
                 sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w);
+            } else if (sec->mode == wifi_security_mode_enhanced_open) {
+                sel = (WPA_KEY_MGMT_OWE | wpa_key_mgmt_11w);
             } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
                 sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE);
             } else {

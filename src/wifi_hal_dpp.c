@@ -56,6 +56,7 @@
 #include <wifi_hal_rdk_framework.h>
 #include <collection.h>
 #include <cJSON.h>
+#include <limits.h>
 
 #define printf wifi_dpp_dbg_print
 
@@ -435,7 +436,7 @@ EC_POINT *dpp_build_point_from_connector_string(wifi_device_dpp_context_t *ctx, 
 	}
 
 	ptr++;
-	strcpy(connector_encoded, ptr);
+	snprintf(connector_encoded, sizeof(connector_encoded), "%s", ptr);
 	if ((ptr = strchr(connector_encoded, '.')) == NULL) {
 		printf("%s:%d: Wrong connector format\n", __func__, __LINE__);
 		return NULL;	
@@ -488,7 +489,7 @@ EC_POINT *dpp_build_point_from_connector_string(wifi_device_dpp_context_t *ctx, 
 	}
 	printf("%s:%d: base64 decoded x\n", __func__, __LINE__);
 
-	BN_bin2bn(x, len, instance->x);
+	instance->x = BN_bin2bn(x, len, instance->x);
 	printf("%s:%d: Built big num x\n", __func__, __LINE__);
 
 	len = base64urldecode(y, y_json->valuestring, strlen(y_json->valuestring));
@@ -499,7 +500,7 @@ EC_POINT *dpp_build_point_from_connector_string(wifi_device_dpp_context_t *ctx, 
 	}
 	printf("%s:%d: base64 decoded y\n", __func__, __LINE__);
 
-	BN_bin2bn(y, len, instance->y);
+	instance->y = BN_bin2bn(y, len, instance->y);
 	printf("%s:%d: Built big num y\n", __func__, __LINE__);
 
 	EC_POINT_set_affine_coordinates_GFp(instance->group, instance->responder_connector, instance->x, instance->y, instance->bnctx);
@@ -852,6 +853,9 @@ hkdf (const EVP_MD *h, int skip,
 
     digestlen = prklen = EVP_MD_size(h);
     if (digestlen == UINT_MAX) {
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        HMAC_CTX_free(ctx);
+#endif
         return 0;
     }
 
@@ -1623,6 +1627,10 @@ void delete_dpp_session_instance(wifi_device_dpp_context_t *ctx)
 
 int delete_dpp_reconfig_context(unsigned int ap_index, wifi_dpp_reconfig_instance_t *instance)
 {
+	if (instance == NULL) {
+		printf("%s:%d:Invalid Argument\n", __func__, __LINE__);
+		return RETURN_ERR;
+	}
 	if (instance->bnctx != NULL) {
 		BN_CTX_free(instance->bnctx);
 	}
@@ -1647,9 +1655,7 @@ int delete_dpp_reconfig_context(unsigned int ap_index, wifi_dpp_reconfig_instanc
 		EC_POINT_free(instance->pt);
 	}
 	
-	if (instance != NULL) {
-		free(instance);
-	}
+	free(instance);
 
 	return RETURN_OK;
 }
@@ -1756,6 +1762,10 @@ int wifi_dppCreateReconfigContext(unsigned int ap_index, char *net_access_key, w
 
 int delete_dpp_csign_instance(unsigned int ap_index, wifi_dpp_csign_instance_t *instance)
 {
+	if (instance == NULL) {
+		printf("%s:%d:Invalid Argument\n", __func__, __LINE__);
+		return RETURN_ERR;
+	}
 	if (instance->bnctx != NULL) {
 		BN_CTX_free(instance->bnctx);
 	}
@@ -1784,9 +1794,7 @@ int delete_dpp_csign_instance(unsigned int ap_index, wifi_dpp_csign_instance_t *
 		free(instance->bn);
 	}
 	
-	if (instance != NULL) {
-		free(instance);
-	}
+	free(instance);
 	
 	return RETURN_OK;
 
@@ -2232,8 +2240,8 @@ wifi_dppProcessReconfigAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
     primelen = BN_num_bytes(instance->prime);
     printf("primelen: %d\n", primelen);
 
-    BN_bin2bn(tlv->value, primelen, instance->x);
-    BN_bin2bn(tlv->value + primelen, primelen, instance->y);
+    instance->x = BN_bin2bn(tlv->value, primelen, instance->x);
+    instance->y = BN_bin2bn(tlv->value + primelen, primelen, instance->y);
     printf("X: ");
     print_bignum(instance->x);
     printf("Y: ");
@@ -2603,8 +2611,8 @@ INT wifi_dppProcessAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
     primelen = BN_num_bytes(instance->prime);
     printf("primelen: %d\n", primelen);
 
-    BN_bin2bn(tlv->value, primelen, instance->x);
-    BN_bin2bn(tlv->value + primelen, primelen, instance->y);
+    instance->x = BN_bin2bn(tlv->value, primelen, instance->x);
+    instance->y = BN_bin2bn(tlv->value + primelen, primelen, instance->y);
     printf("X: ");
     print_bignum(instance->x);
     printf("Y: ");
@@ -2825,6 +2833,11 @@ INT wifi_dppSendConfigResponse(wifi_device_dpp_context_t *ctx)
     tlv_len += 5;
 
     wrapped_len = set_config_frame_wrapped_data(config_response_frame->rsp_body, tlv_len, instance, ctx);
+    if (wrapped_len == UINT_MAX) {
+        ctx->activation_status = ActStatus_Failed;
+        printf("%s:%d Invalid wrapped_len\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
     tlv_len += (wrapped_len + 4);
 
     config_response_frame->rsp_len = tlv_len;
