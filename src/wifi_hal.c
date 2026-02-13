@@ -423,11 +423,7 @@ INT wifi_hal_init()
     while (lsmod_by_name(drv_name) == false) {
         usleep(5000);
     }
-    #ifdef RDKB_ONE_WIFI_PROD
-    /* Remap the interfaces depending on the Wiphy enumeration
-    * in the kernel */
-    remap_wifi_interface_name_index_map();
-    #endif /* RDKB_ONE_WIFI_PROD */
+
     pthread_mutexattr_init(&g_wifi_hal.hapd_lock_attr);
     pthread_mutexattr_settype(&g_wifi_hal.hapd_lock_attr, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&g_wifi_hal.hapd_lock, &g_wifi_hal.hapd_lock_attr);
@@ -1023,6 +1019,32 @@ Exit:
     if (!radio->configured) {
         radio->configured = true;
     }
+
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && (HOSTAPD_VERSION >= 210)
+    for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+        wifi_interface_info_t *interface_iter = NULL;
+
+        if (index == radio_index) {
+            continue;
+        }
+        wifi_radio_info_t *radio_iter = get_radio_by_rdk_index(radio_index);
+        if (radio_iter == NULL) {
+            continue;
+        }
+
+        hash_map_foreach(radio_iter->interface_map, interface_iter) {
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap ||
+                !interface_iter->vap_info.u.bss_info.enabled ||
+                !interface_iter->vap_info.u.bss_info.hostap_mgt_frame_ctrl) {
+                continue;
+            }
+
+            ieee802_11_set_beacon(&interface_iter->u.ap.hapd);
+        }
+    }
+
+#endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) &&  (HOSTAPD_VERSION >= 210)
+
     return RETURN_OK;
 
 reload_config:
