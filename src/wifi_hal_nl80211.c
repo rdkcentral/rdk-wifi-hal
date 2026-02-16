@@ -3104,7 +3104,7 @@ void recv_link_status()
 #endif // CONFIG_GENERIC_MLO
 
 			wifi_hal_dbg_print("%s %d bridge-name : %s ifname : %s\n", __func__, __LINE__, get_vap_bridge_name(&interface->vap_info), ifName);
-                        if(strncmp(get_vap_bridge_name(&interface->vap_info), ifName, strlen(get_vap_bridge_name(interface->vap_info))+1) == 0) {
+                        if(strncmp(get_vap_bridge_name(&interface->vap_info), ifName, strlen(get_vap_bridge_name(&interface->vap_info))+1) == 0) {
                             if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
                                 switch (nlmsgHdr->nlmsg_type)
                                 {
