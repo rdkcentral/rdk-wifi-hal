@@ -3102,7 +3102,8 @@ void recv_link_status()
                         }
 #endif // CONFIG_GENERIC_MLO
 
-                        if(strncmp(interface->vap_info.bridge_name, ifName, strlen(interface->vap_info.bridge_name)+1) == 0) {
+			wifi_hal_dbg_print("%s %d bridge-name : %s ifname : %s\n", __func__, __LINE__, get_vap_bride_name(interface->vap_info), ifName);
+                        if(strncmp(get_vap_bride_name(interface->vap_info), ifName, strlen(get_vap_bridge_name(interface->vap_info))+1) == 0) {
                             if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
                                 switch (nlmsgHdr->nlmsg_type)
                                 {
@@ -8295,21 +8296,22 @@ int wifi_hal_configure_sta_4addr_to_bridge(wifi_interface_info_t *interface, int
     }
 
     if (add == 1) {
-        if ((ret = nl80211_create_bridge(interface->name, vap->bridge_name)) != 0) {
+	wifi_hal_error_print("%s:%d: Bridge name : %s\n", __func__, __LINE__, get_vap_bridge_name(vap));
+        if ((ret = nl80211_create_bridge(interface->name, get_vap_bridge_name(vap))) != 0) {
             wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s with ret:%d\n",
-                __func__, __LINE__, interface->name, vap->bridge_name, ret);
+                __func__, __LINE__, interface->name, get_vap_bridge_name(vap), ret);
             return ret;
         }
         wifi_hal_info_print("%s:%d: Sta %s interface added successfully to bridge:%s\n",
-            __func__, __LINE__, interface->name, vap->bridge_name);
+            __func__, __LINE__, interface->name, get_vap_bridge_name(vap));
 
-        if ((ret = nl80211_interface_enable(vap->bridge_name, true)) != 0) {
+        if ((ret = nl80211_interface_enable(get_vap_bridge_name(vap), true)) != 0) {
             wifi_hal_error_print("%s:%d: interface:%s failed to set bridge %s with ret:%d\n",
-                __func__, __LINE__, interface->name, vap->bridge_name, ret);
+                __func__, __LINE__, interface->name, get_vap_bridge_name(vap), ret);
         }
     } else {
         wifi_hal_info_print("%s:%d: interface:%s remove from bridge:%s\n", __func__, __LINE__,
-            interface->name, vap->bridge_name);
+            interface->name, get_vap_bridge_name(vap));
         nl80211_remove_from_bridge(interface->name);
     }
     return ret;
@@ -8529,12 +8531,13 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     }
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-        is_wildcard_ssid = strlen(interface->vap_info.u.sta_info.ssid) == 0;
+        is_wildcard_ssid = strlen(get_vap_ssid(interface->vap_info)) == 0;
+	 wifi_hal_stats_info_print("%s:%d: [DL] SSID: %s\n", __func__, __LINE__, get_vap_ssid(vap));
 
         // STA mode: filter result (unless wildcard SSID)
         scan_info = hash_map_get_first(interface->scan_info_map);
         while (scan_info != NULL) {
-            if (strcmp(scan_info->ssid, interface->vap_info.u.sta_info.ssid) == 0 ||
+            if (strcmp(scan_info->ssid, get_vap_ssid(interface->vap_info)) == 0 ||
                 is_wildcard_ssid) {
 #if defined(_PLATFORM_BANANAPI_R4_)
                 int scan_info_radio_index = -1;
@@ -8563,7 +8566,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
                 ssid_found_count);
         } else {
             wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan found %u results with ssid:%s\n", __func__,
-                __LINE__, ssid_found_count, interface->vap_info.u.sta_info.ssid);
+                __LINE__, ssid_found_count, get_vap_ssid(interface->vap_info));
         }
     }
     else {
@@ -10979,10 +10982,11 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
         memcpy(scan_info_ap->ie, ie, scan_info_ap->ie_len);
     }
 
+    wifi_hal_stats_dbg_print("%s:%d SSID updated as %s\n", __func__, __LINE__, get_vap_ssid(vap));
     if (vap->vap_mode == wifi_vap_mode_sta) {
         // Wildcard STA VAP SSIDs cannot be used to set the backhaul BSSID
-        if (strcmp(scan_info_ap->ssid, vap->u.sta_info.ssid) == 0 &&
-            strlen(vap->u.sta_info.ssid) > 0) {
+        if (strcmp(scan_info_ap->ssid, get_vap_ssid(vap)) == 0 &&
+            strlen(get_vap_ssid(vap)) > 0) {
             wifi_hal_stats_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d snr = %d chan_utilization = %d noise = %d on freq:%d for ssid:%s\n", __func__, __LINE__,
                         to_mac_str(bssid, bssid_str), scan_info_ap->rssi, scan_info_ap->snr, scan_info_ap->chan_utilization, scan_info_ap->noise, scan_info_ap->freq, scan_info_ap->ssid);
             memcpy(vap->u.sta_info.bssid, bssid, sizeof(bssid_t));
@@ -12876,7 +12880,7 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
             }
             if (bridge_ifname && nl80211_create_bridge(name, bridge_ifname) != 0) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
-                    __func__, __LINE__, name, vap->bridge_name);
+                    __func__, __LINE__, name, get_vap_bridge_name(vap));
                 return RETURN_ERR;
             } else {
                 if (nl80211_interface_enable(bridge_ifname, true) != 0) {
@@ -13162,10 +13166,18 @@ int wifi_drv_hapd_send_eapol(
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
 
         if (sock_fd < 0) {
-            wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, interface->vap_info.bridge_name);
+            wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, get_vap_bridge_name(interface->vap_info));
         } else {
-            ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:interface->name;
-
+	    if (vap->vap_mode == wifi_vap_mode_ap) {
+		ifname = vap->bridge_name;
+                wifi_hal_error_print("%s:%d: ifname: %s\n", __func__, __LINE__, ifname);
+            } else if (vap->u.sta_info.ignite_enabled) {
+                ifname = vap->repurposed_bridge_name;
+                wifi_hal_error_print("%s:%d: ifname: %s\n", __func__, __LINE__, ifname);
+            } else {
+                ifname = interface->name;
+                wifi_hal_error_print("%s:%d: ifname: %s\n", __func__, __LINE__, ifname);
+            }
             memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
             sockaddr.sll_family   = AF_PACKET;
             sockaddr.sll_protocol = htons(ETH_P_EAPOL);
@@ -15961,7 +15973,7 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
         if (sock_fd < 0) {
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__,
-                __LINE__, vap->bridge_name);
+                __LINE__, get_vap_bridge_name(vap));
             return -1;
         }
     }
@@ -15984,9 +15996,10 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
     ifname = vap->bridge_name;
 #else
     ifname = (vap->vap_mode == wifi_vap_mode_ap || vap->u.sta_info.ignite_enabled) ?
-        vap->bridge_name :
+        get_vap_bridge_name(vap) :
         interface->name;
 #endif
+    wifi_hal_stats_info_print("%s:%d: [DL] Bridge-name: %s ifname : %s\n", __func__, __LINE__, get_vap_bridge_name(vap), ifname);
     memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
     sockaddr.sll_family = AF_PACKET;
     sockaddr.sll_ifindex = if_nametoindex(ifname);
@@ -16036,7 +16049,7 @@ int wifi_drv_set_operstate(void *priv, int state)
     vap = &interface->vap_info;
 
     wifi_hal_info_print("%s:%d: Enter, interface:%s bridge:%s driver operation state:%d\n",
-            __func__, __LINE__, interface->name, vap->bridge_name, state);
+            __func__, __LINE__, interface->name, get_vap_bridge_name(vap), state);
 
 #ifndef CONFIG_WIFI_EMULATOR
     if (interface->vap_configured == true) {
@@ -16095,7 +16108,7 @@ int wifi_drv_set_operstate(void *priv, int state)
     interface->bridge_configured = true;
     interface->vap_configured = true;
     wifi_hal_info_print("%s:%d: Exit, interface:%s bridge:%s driver configured for 802.11\n",
-            __func__, __LINE__, interface->name, vap->bridge_name);
+            __func__, __LINE__, interface->name, get_vap_bridge_name(vap));
 
     return 0;
 }
