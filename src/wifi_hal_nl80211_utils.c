@@ -40,6 +40,7 @@
 #include "wifi_hal.h"
 #include "wifi_hal_priv.h"
 #include <cjson/cJSON.h>
+#include <limits.h>
 
 static wifi_interface_name_idex_map_t *interface_index_map = NULL;
 
@@ -1235,9 +1236,8 @@ static const char *const cn_op_class_cc[] = {
 
 wifi_country_radio_op_class_t us_op_class = {
     wifi_countrycode_US,
-    {
-      { 1, 115, 4,
-            { 36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-1 */
+    { { 1, 115, 4,
+          { 36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-1 */
         { 2, 118, 4,
             { 52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-2A */
         { 4, 121, 12,
@@ -1279,22 +1279,23 @@ wifi_country_radio_op_class_t us_op_class = {
         { 33, 84, 7,
             { 5, 6, 7, 8, 9, 10, 11, 0, 0, 0, 0, 0, 0, 0, 0,
                 0 } }, /* 40MHz: 2.4GHz ch 5-11 (primary upper) */
-        { 128, 128, 12,
-            { 36, 40, 44, 48, 52, 56, 60, 64, 149, 153, 157, 161, 0, 0, 0,
-                0 } }, /* 80MHz: centers 42, 58, 155 */
-        { 129, 129, 8,
-            { 36, 40, 44, 48, 52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 160MHz: center 50 */
-        { 130, 130, 12,
-            { 36, 40, 44, 48, 52, 56, 60, 64, 149, 153, 157, 161, 0, 0, 0,
-                0 } } /* 80MHz+: centers 42, 58, 155 (80+80) */
-    }
+        { 128, 128, 24,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140,
+                144, 149, 153, 157, 161 } }, /* 80MHz: centers 42, 58, 106, 122, 138, 155*/
+        { 129, 129, 16,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124,
+                128 } }, /* 160MHz: center 50, 114, 163 */
+        {
+            130, 130, 24,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140,
+                144, 149, 153, 157, 161 } /* 80MHz+: centers 42, 58, 155, 122, 138, 155(80+80) */
+        } }
 };
 
 wifi_country_radio_op_class_t eu_op_class = {
     wifi_countrycode_AT,
-    {
-      { 1, 115, 4,
-            { 36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-1 */
+    { { 1, 115, 4,
+          { 36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-1 */
         { 2, 118, 4,
             { 52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-2A */
         { 3, 121, 11,
@@ -1328,22 +1329,23 @@ wifi_country_radio_op_class_t eu_op_class = {
         { 17, 125, 6,
             { 149, 153, 157, 161, 165, 169, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0 } }, /* 20MHz: 5GHz UNII-3 extended */
-        { 128, 128, 13,
-            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 0, 0,
-                0 } }, /* 80MHz: centers 42, 58, 106, 122 */
-        { 129, 129, 13,
-            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 0, 0,
-                0 } }, /* 160MHz: centers 50, 114 */
-        { 130, 130, 13,
-            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 0, 0,
-                0 } } /* 80MHz+: centers 42, 58, 106, 122 (80+80) */
-    }
+        { 128, 128, 16,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124,
+                128 } }, /* 80MHz: centers 42, 58, 106, 122*/
+        { 129, 129, 16,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124,
+                128 } }, /* 160MHz: center 50, 114 */
+        {
+            130, 130, 16,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124,
+                128 } /* 80MHz+: centers 42, 58, 155, 122(80+80) */
+        } }
 };
 
 wifi_country_radio_op_class_t jp_op_class = {
     wifi_countrycode_JP,
     {
-      { 30, 81, 13, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0 } }, /* 20MHz: 2.4GHz */
+        { 30, 81, 13, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0 } }, /* 20MHz: 2.4GHz */
         { 31, 82, 1,
             { 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 2.4GHz channel 14 */
         { 32, 118, 4,
@@ -1380,22 +1382,22 @@ wifi_country_radio_op_class_t jp_op_class = {
         { 57, 84, 9,
             { 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0, 0, 0, 0,
                 0 } }, /* 40MHz: 2.4GHz ch 5-13 (primary upper) */
-        { 128, 128, 13,
-            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 0, 0,
-                0 } }, /* 80MHz: centers 42, 58, 106, 122 */
-        { 129, 129, 13,
-            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 0, 0,
-                0 } }, /* 160MHz: centers 50, 114 */
-        { 130, 130, 13,
-            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 0, 0,
-                0 } } /* 80MHz+: centers 42, 58, 106, 122 (80+80) */
+        { 128, 128, 20,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140,
+                144 } }, /* 80MHz: centers 42, 58, 106, 122, 138 */
+        { 129, 129, 16,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124,
+                128 } }, /* 160MHz: centers 50, 114 */
+        { 130, 130, 20,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140,
+                144 } } /* 80MHz+: centers 42, 58, 106, 122, 138 (80+80) */
     }
 };
 
 wifi_country_radio_op_class_t cn_op_class = {
     wifi_countrycode_CN,
     {
-      { 1, 115, 4,
+        { 1, 115, 4,
             { 36, 40, 44, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-1 */
         { 2, 118, 4,
             { 52, 56, 60, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 5GHz UNII-2A */
@@ -1429,7 +1431,7 @@ wifi_country_radio_op_class_t cn_op_class = {
 wifi_country_radio_op_class_t other_op_class = {
     wifi_countrycode_IN,
     {
-      { 81, 81, 13, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0 } }, /* 20MHz: 2.4GHz */
+        { 81, 81, 13, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 0, 0 } }, /* 20MHz: 2.4GHz */
         { 82, 82, 1,
             { 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* 20MHz: 2.4GHz channel 14 */
         { 83, 83, 9,
@@ -1474,15 +1476,15 @@ wifi_country_radio_op_class_t other_op_class = {
         { 127, 127, 2,
             { 153, 161, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0 } }, /* 40MHz: 5GHz UNII-3 (primary upper) */
-        { 128, 128, 16,
-            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124,
-                128 } }, /* 80MHz: centers 42, 58, 106, 122 (no 138, 155) */
+        { 128, 128, 24,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140,
+                144, 149, 153, 157, 161 } }, /* 80MHz: centers 42, 58, 106, 122, 138, 155 */
         { 129, 129, 16,
             { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124,
                 128 } }, /* 160MHz: centers 50, 114 */
-        { 130, 130, 16,
-            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124,
-                128 } } /* 80MHz+: centers 42, 58, 106, 122 (80+80, no 138, 155) */
+        { 130, 130, 24,
+            { 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140,
+                144, 149, 153, 157, 161 } } /* 80MHz+: centers 42, 58, 106, 122, 138, 155 (80+80) */
     }
 };
 
@@ -1744,21 +1746,22 @@ static const wifi_enum_to_str_map_t wifi_bandwidth_Map[] =
 #endif /* CONFIG_IEEE80211BE */
 };
 
+// Map of bitrate enum to string in Mbps format
 static const wifi_enum_to_str_map_t wifi_bitrate_Map[] =
 {
     {WIFI_BITRATE_DEFAULT, "default" },
-    {WIFI_BITRATE_1MBPS,   "1.0"     },
-    {WIFI_BITRATE_2MBPS,   "2.0"     },
-    {WIFI_BITRATE_5_5MBPS, "5.5"     },
-    {WIFI_BITRATE_6MBPS,   "6.0"     },
-    {WIFI_BITRATE_9MBPS,   "9.0"     },
-    {WIFI_BITRATE_11MBPS,  "11.0"    },
-    {WIFI_BITRATE_12MBPS,  "12.0"    },
-    {WIFI_BITRATE_18MBPS,  "18.0"    },
-    {WIFI_BITRATE_24MBPS,  "24.0"    },
-    {WIFI_BITRATE_36MBPS,  "36.0"    },
-    {WIFI_BITRATE_48MBPS,  "48.0"    },
-    {WIFI_BITRATE_54MBPS,  "54.0"    },
+    {WIFI_BITRATE_1MBPS,   "1Mbps"     },
+    {WIFI_BITRATE_2MBPS,   "2Mbps"     },
+    {WIFI_BITRATE_5_5MBPS, "5.5Mbps"     },
+    {WIFI_BITRATE_6MBPS,   "6Mbps"     },
+    {WIFI_BITRATE_9MBPS,   "9Mbps"     },
+    {WIFI_BITRATE_11MBPS,  "11Mbps"    },
+    {WIFI_BITRATE_12MBPS,  "12Mbps"    },
+    {WIFI_BITRATE_18MBPS,  "18Mbps"    },
+    {WIFI_BITRATE_24MBPS,  "24Mbps"    },
+    {WIFI_BITRATE_36MBPS,  "36Mbps"    },
+    {WIFI_BITRATE_48MBPS,  "48Mbps"    },
+    {WIFI_BITRATE_54MBPS,  "54Mbps"    },
 };
 
 int get_interface_name_from_radio_index(uint8_t radio_index, char *interface_name)
@@ -1904,6 +1907,56 @@ unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index)
     return 0;
 }
 
+int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
+    size_t ifname_out_len)
+{
+    static const char *staPrefix = "bhaul-sta-";
+    const char *suffix = NULL;
+
+    if (!ifname_out || ifname_out_len == 0) {
+        wifi_hal_error_print("%s:%d: invalid output buffer for interface name\n", __func__,
+            __LINE__);
+        return -1;
+    }
+
+    unsigned int radio_band = get_band_info_from_rdk_radio_index(index);
+
+    switch (radio_band) {
+    case WIFI_FREQUENCY_2_4_BAND:
+        suffix = "24";
+        break;
+
+    case WIFI_FREQUENCY_5_BAND:
+        suffix = "50";
+        break;
+    case WIFI_FREQUENCY_5L_BAND:
+        suffix = "5gl";
+        break;
+    case WIFI_FREQUENCY_5H_BAND:
+        suffix = "5gh";
+        break;
+
+    case WIFI_FREQUENCY_6_BAND:
+        wifi_hal_error_print("%s:%d: 6 GHz band not mapped to a backhaul STA interface\n", __func__,
+            __LINE__);
+        return -1;
+
+    default:
+        wifi_hal_error_print("%s:%d: Unsupported band value: %u (index=%d)\n", __func__, __LINE__,
+            radio_band, (int)index);
+        return -1;
+    }
+
+    int n = snprintf(ifname_out, ifname_out_len, "%s%s", staPrefix, suffix);
+    if (n < 0 || (size_t)n >= ifname_out_len) {
+        wifi_hal_error_print("%s:%d: interface name truncated (need %d bytes, have %zu)\n",
+            __func__, __LINE__, n + 1, ifname_out_len);
+        return -1;
+    }
+
+    return 0;
+}
+
 void update_vap_mode(wifi_interface_info_t *interface)
 {
     wifi_vap_info_t *vap = &interface->vap_info;
@@ -2044,7 +2097,7 @@ int get_mac_address (char *intf_name,  mac_address_t mac)
     }
 
     ifr.ifr_addr.sa_family = AF_INET;
-    strcpy(ifr.ifr_name, intf_name);
+    snprintf(ifr.ifr_name, IFNAMSIZ, "%s", intf_name);
     if (ioctl(sock, SIOCGIFHWADDR, &ifr) != 0) {
         close(sock);
         return RETURN_ERR;
@@ -2283,14 +2336,14 @@ int get_radio_variant_str_from_int(unsigned int variant, char *variant_str)
 
     for (index = 0; index < ARRAY_SIZE(wifi_variant_Map); index++) {
         if ((variant & wifi_variant_Map[index].enum_val) && (strlen(temp_variant_str) == 0)) {
-            strcpy(temp_variant_str, wifi_variant_Map[index].str_val);
+            snprintf(temp_variant_str, sizeof(temp_variant_str), "%s", wifi_variant_Map[index].str_val);
         } else if (variant & wifi_variant_Map[index].enum_val) {
-            strcat(temp_variant_str, ",");
-            strcat(temp_variant_str, wifi_variant_Map[index].str_val);
+            strncat(temp_variant_str, ",", sizeof(temp_variant_str) - strlen(temp_variant_str) - 1);
+            strncat(temp_variant_str, wifi_variant_Map[index].str_val, sizeof(temp_variant_str) - strlen(temp_variant_str) - 1);
         }
     }
 
-    strncpy(variant_str, temp_variant_str, strlen(temp_variant_str));
+    snprintf(variant_str, strlen(temp_variant_str) + 1, "%s", temp_variant_str);
 
     return RETURN_OK;
 }
@@ -2869,6 +2922,9 @@ int pick_akm_suite(int sel)
     } else if (sel & WPA_KEY_MGMT_PSK) {
         wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT WPA-PSK\n", __func__, __LINE__);
         return WPA_KEY_MGMT_PSK;
+    } else if (sel & WPA_KEY_MGMT_OWE) {
+        wifi_hal_dbg_print("%s:%d: WPA: using OWE key mgmt\n", __func__, __LINE__);
+        return WPA_KEY_MGMT_OWE;
     } else {
         wifi_hal_dbg_print("%s:%d: WPA: Failed to select authenticated key management type\n", __func__, __LINE__);
         return -1;
@@ -5390,6 +5446,10 @@ static inline int init_json_interface_map(void)
 
     fseek(fp, 0, SEEK_END);
     len = ftell(fp);
+    if (len == UINT_MAX) {
+        fclose(fp);
+        return -1;
+    }
     fseek(fp, 0, SEEK_SET);
 
     ret = -1;
