@@ -1489,19 +1489,19 @@ wifi_country_radio_op_class_t other_op_class = {
 };
 
 const char *
-get_vap_ssid(struct wifi_vap_info_t *vap)
+get_vap_ssid(wifi_vap_info_t *vap)
 {
     return (vap->u.sta_info.ignite_enabled) ? vap->u.sta_info.repurposed_ssid : vap->u.sta_info.ssid;
 }
 
 const char *
-get_vap_bridge_name(struct wifi_vap_info_t *vap)
+get_vap_bridge_name(wifi_vap_info_t *vap)
 {
     return (vap->u.sta_info.ignite_enabled) ? vap->repurposed_bridge_name : vap->bridge_name;
 }
 
 const char *
-get_vap_security_mode(struct wifi_vap_info_t *vap, wifi_vap_security_t *sec)
+get_vap_security_mode(wifi_vap_info_t *vap, wifi_vap_security_t *sec)
 {
      return (vap->u.sta_info.ignite_enabled) ? vap->u.sta_info.security.repurposed_mode : vap->u.sta_info.security.mode;
 }
