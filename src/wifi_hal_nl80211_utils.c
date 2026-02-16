@@ -3345,7 +3345,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
     // Search country-specific op_class table: match channel AND bandwidth
     for (i = 0; i < ARRAY_SZ(cc_op_class.op_class); i++) {
         op_class = &cc_op_class.op_class[i];
-
+#ifndef BANANA_PI_PORT
         // Skip invalid/empty entries (not all countries use all 19 slots)
         if (op_class->op_class == 0 || op_class->global_op_class == 0) {
             continue;
@@ -3356,7 +3356,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
                 cc_op_class.cc)) {
             continue;
         }
-
+#endif
         // Check if requested channel is in this op_class
         for (j = 0; j < op_class->num; j++) {
             if (op_class->ch_list[j] == param->channel) {
@@ -3372,7 +3372,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
     // Fallback: search global op_class table: match channel AND bandwidth
     for (i = 0; i < ARRAY_SZ(other_op_class.op_class); i++) {
         op_class = &other_op_class.op_class[i];
-
+#ifndef BANANA_PI_PORT
         // Skip invalid/empty entries
         if (op_class->op_class == 0 || op_class->global_op_class == 0) {
             continue;
@@ -3383,7 +3383,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
                 param->countryCode)) {
             continue;
         }
-
+#endif
         // Check if requested channel is in this op_class
         for (j = 0; j < op_class->num; j++) {
             if (op_class->ch_list[j] == param->channel) {
