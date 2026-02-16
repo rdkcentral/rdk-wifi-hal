@@ -3056,7 +3056,7 @@ static void update_eapol_method(wifi_interface_info_t *interface, int eap_type)
                 break;
             default:
                 wifi_hal_error_print("%s:%d: Unsupported EAP method :%d\n", __func__, __LINE__,
-                    sec->u.radius.eap_type);
+                    eap_type);
                 return;
      }
      wifi_hal_dbg_print("%s:%d: EAPOL method %d\n", __func__, __LINE__, interface->u.sta.wpa_eapol_method.method);
@@ -3114,10 +3114,9 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
         }
 #endif // CONFIG_WIFI_EMULATOR
         if (vap->u.sta_info.ignite_enabled == true) {   
-
             wifi_hal_dbg_print("[%s %d] Mode : %d type : %d phase : %d id : %s password : %s\n",
-                __func__, __LINE__, sec->repurposed_mode, sec->u.repurposed_radius.eap_type, sec->u.repurposed_radius.phase2,
-                sec->u.repurposed_radius.identity, sec->u.repurposed_radius.key);
+                __func__, __LINE__, sec->repurposed_mode, sec->repurposed_radius.eap_type, sec->repurposed_radius.phase2,
+                sec->repurposed_radius.identity, sec->repurposed_radius.key);
             if (sec->repurposed_mode == wifi_security_mode_wpa2_enterprise ||
                     sec->repurposed_mode == wifi_security_mode_wpa3_enterprise) {
                 update_eapol_method(interface, sec->u.repurposed_radius.eap_type);
@@ -3197,7 +3196,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                     }
                 }
                 memset(interface->u.sta.wpa_eapol_config.phase2, 0, MAX_STR_LEN);
-                switch (sec->u.repurposed_radius.phase2) {
+                switch (sec->repurposed_radius.phase2) {
                     case WIFI_EAP_PHASE2_PAP:
                         strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP",
                                 MAX_STR_LEN - 1);
@@ -3219,10 +3218,10 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 (unsigned char *)anonymous_identity;
             interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(
                     anonymous_identity);
-            interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.repurposed_radius.identity;
-            interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.repurposed_radius.identity);
-            interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.repurposed_radius.key;
-            interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.repurposed_radius.key);
+            interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->repurposed_radius.identity;
+            interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->repurposed_radius.identity);
+            interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->repurposed_radius.key;
+            interface->u.sta.wpa_eapol_config.password_len = strlen(sec->repurposed_radius.key);
         }
 #endif // CONFIG_WIFI_EMULATOR
         interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;

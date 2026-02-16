@@ -1500,7 +1500,7 @@ get_vap_bridge_name(wifi_vap_info_t *vap)
     return (vap->u.sta_info.ignite_enabled) ? vap->repurposed_bridge_name : vap->bridge_name;
 }
 
-const char *
+unsigned int
 get_vap_security_mode(wifi_vap_info_t *vap, wifi_vap_security_t *sec)
 {
      return (vap->u.sta_info.ignite_enabled) ? vap->u.sta_info.security.repurposed_mode : vap->u.sta_info.security.mode;
