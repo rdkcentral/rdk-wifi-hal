@@ -40,6 +40,7 @@
 #include <netpacket/packet.h>
 #include <netlink/route/link/bridge.h>
 #include "wifi_hal.h"
+#include "wifi_hal_ap.h"
 #include "wifi_hal_priv.h"
 #include "wpa_auth_i.h"
 #include "driver_nl80211.h"
@@ -3102,8 +3103,8 @@ void recv_link_status()
                         }
 #endif // CONFIG_GENERIC_MLO
 
-			wifi_hal_dbg_print("%s %d bridge-name : %s ifname : %s\n", __func__, __LINE__, get_vap_bride_name(interface->vap_info), ifName);
-                        if(strncmp(get_vap_bride_name(interface->vap_info), ifName, strlen(get_vap_bridge_name(interface->vap_info))+1) == 0) {
+			wifi_hal_dbg_print("%s %d bridge-name : %s ifname : %s\n", __func__, __LINE__, get_vap_bridge_name(interface->vap_info), ifName);
+                        if(strncmp(get_vap_bridge_name(interface->vap_info), ifName, strlen(get_vap_bridge_name(interface->vap_info))+1) == 0) {
                             if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
                                 switch (nlmsgHdr->nlmsg_type)
                                 {
@@ -8531,13 +8532,13 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     }
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-        is_wildcard_ssid = strlen(get_vap_ssid(interface->vap_info)) == 0;
-	 wifi_hal_stats_info_print("%s:%d: [DL] SSID: %s\n", __func__, __LINE__, get_vap_ssid(vap));
+        is_wildcard_ssid = strlen(get_vap_ssid(&interface->vap_info)) == 0;
+	 wifi_hal_stats_info_print("%s:%d: [DL] SSID: %s\n", __func__, __LINE__, get_vap_ssid(&interface->vap_info));
 
         // STA mode: filter result (unless wildcard SSID)
         scan_info = hash_map_get_first(interface->scan_info_map);
         while (scan_info != NULL) {
-            if (strcmp(scan_info->ssid, get_vap_ssid(interface->vap_info)) == 0 ||
+            if (strcmp(scan_info->ssid, get_vap_ssid(&interface->vap_info)) == 0 ||
                 is_wildcard_ssid) {
 #if defined(_PLATFORM_BANANAPI_R4_)
                 int scan_info_radio_index = -1;
@@ -8566,7 +8567,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
                 ssid_found_count);
         } else {
             wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan found %u results with ssid:%s\n", __func__,
-                __LINE__, ssid_found_count, get_vap_ssid(interface->vap_info));
+                __LINE__, ssid_found_count, get_vap_ssid(&interface->vap_info));
         }
     }
     else {
@@ -13166,7 +13167,7 @@ int wifi_drv_hapd_send_eapol(
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
 
         if (sock_fd < 0) {
-            wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, get_vap_bridge_name(interface->vap_info));
+            wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, get_vap_bridge_name(&interface->vap_info));
         } else {
 	    if (vap->vap_mode == wifi_vap_mode_ap) {
 		ifname = vap->bridge_name;

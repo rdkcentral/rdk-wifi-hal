@@ -3119,7 +3119,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 sec->repurposed_radius.identity, sec->repurposed_radius.key);
             if (sec->repurposed_mode == wifi_security_mode_wpa2_enterprise ||
                     sec->repurposed_mode == wifi_security_mode_wpa3_enterprise) {
-                update_eapol_method(interface, sec->u.repurposed_radius.eap_type);
+                update_eapol_method(interface, sec->repurposed_radius.eap_type);
                 wifi_hal_dbg_print("%s:%d: EAPOL method %d\n", __func__, __LINE__, interface->u.sta.wpa_eapol_method.method);
             }
         } else {
