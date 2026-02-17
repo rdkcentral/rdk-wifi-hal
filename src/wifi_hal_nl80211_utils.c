@@ -1725,21 +1725,22 @@ static const wifi_enum_to_str_map_t wifi_bandwidth_Map[] =
 #endif /* CONFIG_IEEE80211BE */
 };
 
+// Map of bitrate enum to string in Mbps format
 static const wifi_enum_to_str_map_t wifi_bitrate_Map[] =
 {
     {WIFI_BITRATE_DEFAULT, "default" },
-    {WIFI_BITRATE_1MBPS,   "1.0"     },
-    {WIFI_BITRATE_2MBPS,   "2.0"     },
-    {WIFI_BITRATE_5_5MBPS, "5.5"     },
-    {WIFI_BITRATE_6MBPS,   "6.0"     },
-    {WIFI_BITRATE_9MBPS,   "9.0"     },
-    {WIFI_BITRATE_11MBPS,  "11.0"    },
-    {WIFI_BITRATE_12MBPS,  "12.0"    },
-    {WIFI_BITRATE_18MBPS,  "18.0"    },
-    {WIFI_BITRATE_24MBPS,  "24.0"    },
-    {WIFI_BITRATE_36MBPS,  "36.0"    },
-    {WIFI_BITRATE_48MBPS,  "48.0"    },
-    {WIFI_BITRATE_54MBPS,  "54.0"    },
+    {WIFI_BITRATE_1MBPS,   "1Mbps"     },
+    {WIFI_BITRATE_2MBPS,   "2Mbps"     },
+    {WIFI_BITRATE_5_5MBPS, "5.5Mbps"     },
+    {WIFI_BITRATE_6MBPS,   "6Mbps"     },
+    {WIFI_BITRATE_9MBPS,   "9Mbps"     },
+    {WIFI_BITRATE_11MBPS,  "11Mbps"    },
+    {WIFI_BITRATE_12MBPS,  "12Mbps"    },
+    {WIFI_BITRATE_18MBPS,  "18Mbps"    },
+    {WIFI_BITRATE_24MBPS,  "24Mbps"    },
+    {WIFI_BITRATE_36MBPS,  "36Mbps"    },
+    {WIFI_BITRATE_48MBPS,  "48Mbps"    },
+    {WIFI_BITRATE_54MBPS,  "54Mbps"    },
 };
 
 int get_interface_name_from_radio_index(uint8_t radio_index, char *interface_name)
@@ -2925,6 +2926,40 @@ static bool matches_bandwidth_for_country(unsigned int global_op_class, wifi_cha
 
     /* Default to global for all other countries */
     return matches_bandwidth_global(global_op_class, bw);
+}
+
+int convert_enum_beaconrate_to_int(wifi_bitrate_t rates)
+{
+    switch (rates) {
+    case WIFI_BITRATE_1MBPS:
+        return 1;
+    case WIFI_BITRATE_2MBPS:
+        return 2;
+    case WIFI_BITRATE_5_5MBPS:
+        return 5.5;
+    case WIFI_BITRATE_11MBPS:
+        return 11;
+    case WIFI_BITRATE_6MBPS:
+        return 6;
+    case WIFI_BITRATE_9MBPS:
+        return 9;
+    case WIFI_BITRATE_12MBPS:
+        return 12;
+    case WIFI_BITRATE_18MBPS:
+        return 18;
+    case WIFI_BITRATE_24MBPS:
+        return 24;
+    case WIFI_BITRATE_36MBPS:
+        return 36;
+    case WIFI_BITRATE_48MBPS:
+        return 48;
+    case WIFI_BITRATE_54MBPS:
+        return 54;
+    default:
+        wifi_hal_error_print("%s:%d: failed to convert beacon rate %d to nl80211 rate\n", __func__,
+            __LINE__, rates);
+        return RETURN_ERR;
+    }
 }
 
 int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
