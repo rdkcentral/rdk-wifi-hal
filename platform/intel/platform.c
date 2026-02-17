@@ -1372,7 +1372,7 @@ int nvram_get_mgmt_frame_power_control(int vap_index, int* output_dbm)
 }
 
 /* Stub for MXL platform to resolve build issue. */
-int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff)
+int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, const wifi_channels_list_t *channels, char *buff)
 {
     //wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__); 
     return 0;
