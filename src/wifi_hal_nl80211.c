@@ -9697,7 +9697,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         wifi_hal_dbg_print("%s:%d: %x %x %x\n", __func__, __LINE__, data.group_cipher,
             data.pairwise_cipher, key_mgmt);
     } else {
-        if (security->mode == wifi_security_mode_none) {
+        wifi_hal_dbg_print("%s:%d security mode %d\n", __func__, __LINE__, get_vap_security_mode(vap, security));
+	if (get_vap_security_mode(vap, security) == wifi_security_mode_none) {
             wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_NONE;
             wpa_conf.wpa_group = WPA_CIPHER_NONE;
             wpa_conf.rsn_pairwise = WPA_CIPHER_NONE;
@@ -9715,7 +9716,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                 wifi_hal_info_print("%s:%d:Invalid encryption mode:%d in wifi_hal_connect\n", __func__, __LINE__, security->encr);
             }
 
-            switch (security->mode) {
+            switch (get_vap_security_mode(vap, security)) {
                 case wifi_security_mode_wpa_personal:
                 case wifi_security_mode_wpa2_personal:
                 case wifi_security_mode_wpa_wpa2_personal:
@@ -9744,25 +9745,26 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 #endif /* HOSTAPD_VERSION >= 210 */
                     break;
                 default:
-                    wifi_hal_info_print("%s:%d:Invalid security mode: %d in wifi_hal_connect\r\n", __func__, __LINE__, security->mode);
+                    wifi_hal_info_print("%s:%d:Invalid security mode: %d in wifi_hal_connect\r\n", __func__, __LINE__, get_vap_security_mode(vap, security));
                     wpa_conf.wpa_key_mgmt = -1;
                     break;
             }
         }
     }
 
+    int security_mode = get_vap_security_mode(vap, security);
 #ifdef CONFIG_IEEE80211W
-    if (security->mode == wifi_security_mode_wpa3_personal ||
-        security->mode == wifi_security_mode_wpa3_enterprise ||
-        security->mode == wifi_security_mode_wpa3_transition || 
-        security->mode == wifi_security_mode_wpa3_compatibility) {
+    if (security_mode == wifi_security_mode_wpa3_personal ||
+        security_mode == wifi_security_mode_wpa3_enterprise ||
+        security_mode == wifi_security_mode_wpa3_transition || 
+        security_mode == wifi_security_mode_wpa3_compatibility) {
         // WPA3 REQUIRES MFP
         wpa_conf.ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
         wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
     }
 #endif
 
-    if (security->mode != wifi_security_mode_none) {
+    if (security_mode != wifi_security_mode_none) {
         if ((ret = wpa_write_rsn_ie(&wpa_conf, pos, rsn_ie + sizeof(rsn_ie) - pos, NULL)) < 0) {
             wifi_hal_error_print("%s:%d Failed to build RSN %d\r\n", __func__, __LINE__, ret);
             nlmsg_free(msg);
@@ -16295,15 +16297,20 @@ int wifi_supplicant_drv_associate(void *priv, struct wpa_driver_associate_params
 int wifi_supplicant_drv_authenticate(void *priv, struct wpa_driver_auth_params *params)
 {
     wifi_interface_info_t *interface = NULL;
+    wifi_vap_info_t *vap = NULL;
     interface = (wifi_interface_info_t *)priv;
     struct nl_msg *msg;
     int ret;
     wifi_vap_security_t *security;
+    vap = &interface->vap_info;
+    int security_mode = 0;
 
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
     security = &interface->vap_info.u.sta_info.security;
 
+    security_mode = get_vap_security_mode(vap, security);
+    wifi_hal_dbg_print("%s:%d: Security mode : %d\n", __func__, __LINE__, get_vap_security_mode(vap, security));
     if ((msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_AUTHENTICATE)) == NULL) {
         return -1;
     }
@@ -16311,9 +16318,9 @@ int wifi_supplicant_drv_authenticate(void *priv, struct wpa_driver_auth_params *
     nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->bssid);
     nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ, params->freq);
 
-    if ((security->mode == wifi_security_mode_wpa3_personal) ||
-        (security->mode == wifi_security_mode_wpa3_transition) ||
-        (security->mode == wifi_security_mode_wpa3_compatibility)) {
+    if ((security_mode == wifi_security_mode_wpa3_personal) ||
+        (security_mode == wifi_security_mode_wpa3_transition) ||
+        (security_mode == wifi_security_mode_wpa3_compatibility)) {
 #ifndef _PLATFORM_BANANAPI_R4_
         nla_put(msg, NL80211_ATTR_SAE_DATA, params->auth_data_len, params->auth_data);
         nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_SAE);

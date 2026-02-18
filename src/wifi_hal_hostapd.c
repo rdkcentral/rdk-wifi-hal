@@ -3129,6 +3129,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 wifi_hal_dbg_print("%s:%d: EAPOL method %d\n", __func__, __LINE__, interface->u.sta.wpa_eapol_method.method);
             }
         }
+	wifi_hal_dbg_print("[%s %d] EAPOL Method: %d\n", __func__, __LINE__, interface->u.sta.wpa_eapol_method.method);
         interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
         interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
         interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
