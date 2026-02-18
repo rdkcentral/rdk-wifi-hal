@@ -9514,6 +9514,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 
     if ( (security->mode == wifi_security_mode_wpa3_personal) ||
         (security->mode == wifi_security_mode_wpa3_compatibility) ||
+        (security->mode == wifi_security_mode_wpa3_enterprise) ||
         (security->mode == wifi_security_mode_wpa3_transition)) {
         if (interface->wpa_s.current_ssid->sae_password == NULL) {
             interface->wpa_s.current_ssid->sae_password = malloc(MAX_PWD_LEN);
