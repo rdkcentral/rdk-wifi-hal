@@ -9788,7 +9788,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         }
     }
 
-    if ((ret = configure_nl80211_security(msg, security, &wpa_conf)) < 0) {
+    if ((ret = configure_nl80211_security(msg, security, &wpa_conf, vap)) < 0) {
         wifi_hal_error_print("%s:%d: Failed to configure security: %d\n",
                       __func__, __LINE__, ret);
         nlmsg_free(msg);
