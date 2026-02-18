@@ -8351,7 +8351,8 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
         wifi_hal_dbg_print("%s:%d: Updating %s interface on dev:%d to type: NL80211_IFTYPE_AP successful\n",
                     __func__, __LINE__, interface->name, radio->index);
 
-        if (interface->vap_info.u.sta_info.enabled != true) {
+	wifi_hal_dbg_print("%s:%d: vap_enable : %d ignite_enable : %d\n", __func__, __LINE__, interface->vap_info.u.sta_info.enabled, interface->vap_info.u.sta_info.ignite_enabled);
+        if ((interface->vap_info.u.sta_info.enabled != true) && (interface->vap_info.u.sta_info.ignite_enabled != true)) {
             return 0;
         }
 
@@ -16070,7 +16071,7 @@ int wifi_drv_set_operstate(void *priv, int state)
     }
 #endif
 
-    if (vap->u.bss_info.enabled == false && vap->u.sta_info.enabled == false) {
+    if (vap->u.bss_info.enabled == false && vap->u.sta_info.enabled == false && vap->u.sta_info.ignite_enabled == false) {
         wifi_hal_dbg_print("%s:%d: VAP not enabled\n", __func__, __LINE__);
         return 0;
     }
