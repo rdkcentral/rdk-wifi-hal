@@ -2840,7 +2840,6 @@ int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *se
         return -1;
     }
     security_mode = get_vap_security_mode(vap, security);
-    wifi_hal_dbg_print("%s:%d: security-mode:%d\n", __func__, __LINE__, security_mode);
 
     if (security_mode == wifi_security_mode_none) {
         if ((ret = nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM)) < 0) {

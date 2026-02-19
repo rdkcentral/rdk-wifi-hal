@@ -3103,7 +3103,6 @@ void recv_link_status()
                         }
 #endif // CONFIG_GENERIC_MLO
 
-			wifi_hal_dbg_print("%s %d bridge-name : %s ifname : %s\n", __func__, __LINE__, get_vap_bridge_name(&interface->vap_info), ifName);
                         if(strncmp(get_vap_bridge_name(&interface->vap_info), ifName, strlen(get_vap_bridge_name(&interface->vap_info))+1) == 0) {
                             if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
                                 switch (nlmsgHdr->nlmsg_type)
@@ -8297,7 +8296,6 @@ int wifi_hal_configure_sta_4addr_to_bridge(wifi_interface_info_t *interface, int
     }
 
     if (add == 1) {
-	wifi_hal_error_print("%s:%d: Bridge name : %s\n", __func__, __LINE__, get_vap_bridge_name(vap));
         if ((ret = nl80211_create_bridge(interface->name, get_vap_bridge_name(vap))) != 0) {
             wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s with ret:%d\n",
                 __func__, __LINE__, interface->name, get_vap_bridge_name(vap), ret);
@@ -8351,7 +8349,6 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
         wifi_hal_dbg_print("%s:%d: Updating %s interface on dev:%d to type: NL80211_IFTYPE_AP successful\n",
                     __func__, __LINE__, interface->name, radio->index);
 
-	wifi_hal_dbg_print("%s:%d: vap_enable : %d ignite_enable : %d\n", __func__, __LINE__, interface->vap_info.u.sta_info.enabled, interface->vap_info.u.sta_info.ignite_enabled);
         if ((interface->vap_info.u.sta_info.enabled != true) && (interface->vap_info.u.sta_info.ignite_enabled != true)) {
             return 0;
         }
@@ -8534,7 +8531,6 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
         is_wildcard_ssid = strlen(get_vap_ssid(&interface->vap_info)) == 0;
-	 wifi_hal_stats_info_print("%s:%d: [DL] SSID: %s\n", __func__, __LINE__, get_vap_ssid(&interface->vap_info));
 
         // STA mode: filter result (unless wildcard SSID)
         scan_info = hash_map_get_first(interface->scan_info_map);
@@ -9697,7 +9693,6 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         wifi_hal_dbg_print("%s:%d: %x %x %x\n", __func__, __LINE__, data.group_cipher,
             data.pairwise_cipher, key_mgmt);
     } else {
-        wifi_hal_dbg_print("%s:%d security mode %d\n", __func__, __LINE__, get_vap_security_mode(vap, security));
 	if (get_vap_security_mode(vap, security) == wifi_security_mode_none) {
             wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_NONE;
             wpa_conf.wpa_group = WPA_CIPHER_NONE;
@@ -10988,7 +10983,6 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
         memcpy(scan_info_ap->ie, ie, scan_info_ap->ie_len);
     }
 
-    wifi_hal_stats_dbg_print("%s:%d SSID updated as %s\n", __func__, __LINE__, get_vap_ssid(vap));
     if (vap->vap_mode == wifi_vap_mode_sta) {
         // Wildcard STA VAP SSIDs cannot be used to set the backhaul BSSID
         if (strcmp(scan_info_ap->ssid, get_vap_ssid(vap)) == 0 &&
@@ -15996,7 +15990,6 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
         get_vap_bridge_name(vap) :
         interface->name;
 #endif
-    wifi_hal_stats_info_print("%s:%d: [DL] Bridge-name: %s ifname : %s\n", __func__, __LINE__, get_vap_bridge_name(vap), ifname);
     memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
     sockaddr.sll_family = AF_PACKET;
     sockaddr.sll_ifindex = if_nametoindex(ifname);
@@ -16301,7 +16294,6 @@ int wifi_supplicant_drv_authenticate(void *priv, struct wpa_driver_auth_params *
     security = &interface->vap_info.u.sta_info.security;
 
     security_mode = get_vap_security_mode(vap, security);
-    wifi_hal_dbg_print("%s:%d: Security mode : %d\n", __func__, __LINE__, get_vap_security_mode(vap, security));
     if ((msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_AUTHENTICATE)) == NULL) {
         return -1;
     }

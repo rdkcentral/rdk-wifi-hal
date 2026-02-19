@@ -1160,7 +1160,6 @@ INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
         // find from scan list
         pthread_mutex_lock(&interface->scan_info_mutex);
         tmp = hash_map_get_first(interface->scan_info_map);
-	wifi_hal_error_print("%s:%d SSID updated as %s\n", __func__, __LINE__, get_vap_ssid(vap));
         while (tmp != NULL) {
             if ((strcmp(tmp->ssid, get_vap_ssid(vap)) == 0) &&
                     (tmp->rssi > best_rssi)) {
@@ -1864,7 +1863,6 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             //nl80211_start_scan(interface);
             interface->vap_initialized = true;
 
-	    wifi_hal_stats_info_print("%s:%d: [DL] Bridge-name: %s\n", __func__, __LINE__, get_vap_bridge_name(vap));
             if (vap->u.sta_info.ignite_enabled) {
                 if (nl80211_create_bridge(interface->name, get_vap_bridge_name(vap)) != 0) {
                     wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
@@ -2678,7 +2676,6 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
         return RETURN_ERR;
     }
     
-    wifi_hal_stats_info_print("%s:%d: [DL] SSID: %s\n", __func__, __LINE__, get_vap_ssid(vap));
     strcpy(ssid_list[0], get_vap_ssid(vap));
     wifi_hal_stats_info_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
 

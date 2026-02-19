@@ -3120,16 +3120,13 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             if (sec->repurposed_mode == wifi_security_mode_wpa2_enterprise ||
                     sec->repurposed_mode == wifi_security_mode_wpa3_enterprise) {
                 update_eapol_method(interface, sec->repurposed_radius.eap_type);
-                wifi_hal_dbg_print("%s:%d: EAPOL method %d\n", __func__, __LINE__, interface->u.sta.wpa_eapol_method.method);
             }
         } else {
             if (sec->mode == wifi_security_mode_wpa2_enterprise ||
                     sec->mode == wifi_security_mode_wpa3_enterprise) {
                 update_eapol_method(interface, sec->u.radius.eap_type);
-                wifi_hal_dbg_print("%s:%d: EAPOL method %d\n", __func__, __LINE__, interface->u.sta.wpa_eapol_method.method);
             }
         }
-	wifi_hal_dbg_print("[%s %d] EAPOL Method: %d\n", __func__, __LINE__, interface->u.sta.wpa_eapol_method.method);
         interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
         interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
         interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
