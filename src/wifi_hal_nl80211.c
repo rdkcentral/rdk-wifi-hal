@@ -12806,18 +12806,10 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
     radio = get_radio_by_rdk_index(vap->radio_index);
 
 #ifdef CONFIG_GENERIC_MLO
-    link_id = wifi_hal_get_mld_link_id(interface);
-    if (link_id == -1) {
-        wifi_hal_error_print("%s:%d: Failed to get mld link id\n", __func__, __LINE__);
-        return RETURN_ERR;
-    }
-
     char *mld_name = NULL;
+    link_id = wifi_hal_get_mld_link_id(interface);
     mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
-    if (mld_name == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to get mld name by interface name\n", __func__, __LINE__);
-        return RETURN_ERR;
-    }
+
     vlan_name = mld_name;
 
     ret = os_snprintf(name, sizeof(name), "%s.sta%d", mld_name, aid);
