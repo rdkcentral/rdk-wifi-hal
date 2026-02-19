@@ -13174,17 +13174,8 @@ int wifi_drv_hapd_send_eapol(
         if (sock_fd < 0) {
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, get_vap_bridge_name(&interface->vap_info));
         } else {
-	    if (vap->vap_mode == wifi_vap_mode_ap) {
-		ifname = vap->bridge_name;
-                wifi_hal_error_print("%s:%d: ifname: %s\n", __func__, __LINE__, ifname);
-            } else if (vap->u.sta_info.ignite_enabled) {
-                ifname = vap->repurposed_bridge_name;
-                wifi_hal_error_print("%s:%d: ifname: %s\n", __func__, __LINE__, ifname);
-            } else {
-                ifname = interface->name;
-                wifi_hal_error_print("%s:%d: ifname: %s\n", __func__, __LINE__, ifname);
-            }
-            memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
+            ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:interface->name;
+	    memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
             sockaddr.sll_family   = AF_PACKET;
             sockaddr.sll_protocol = htons(ETH_P_EAPOL);
             sockaddr.sll_ifindex  = if_nametoindex(ifname);
