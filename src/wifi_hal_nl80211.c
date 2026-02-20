@@ -12822,6 +12822,18 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
         memcpy(intf_mac, vap->u.bss_info.bssid, sizeof(mac_address_t));
     }
 
+    if (mld_name != NULL) {
+        ret = os_snprintf(name, sizeof(name), "%s.sta%d", mld_name, aid);
+        if (wifi_hal_get_mac_address(mld_name, intf_mac) < 0) {
+            wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n", __func__,
+                __LINE__, mld_name);
+            return RETURN_ERR;
+        }
+    } else {
+        ret = os_snprintf(name, sizeof(name), "%s.sta%d", interface->name, aid);
+        memcpy(intf_mac, vap->u.bss_info.bssid, sizeof(mac_address_t));
+    }
+
     if (ret >= (int) sizeof(name)) {
         wifi_hal_info_print("%s:%d nl80211: WDS interface name:%s was truncated\r\n",
             __func__, __LINE__, name);
