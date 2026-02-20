@@ -488,7 +488,6 @@ static inline bool is_open_sec_radius_auth(wifi_vap_security_t *sec)
     return true;
 }
 
-
 int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *conf)
 {
     char test_ip[45];
@@ -3024,45 +3023,42 @@ static void wpa_sm_eapol_eap_error_cb(void *ctx, int error_code)
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 }
 
-
-
 static void update_eapol_method(wifi_interface_info_t *interface, int eap_type)
 {
-     wifi_hal_dbg_print("%s:%d: eap-type updated as %d\n", __func__, __LINE__, eap_type);
-     switch (eap_type) {
-            case WIFI_EAP_TYPE_PWD:
-                interface->u.sta.wpa_eapol_method.method = EAP_TYPE_PWD;
-                eap_peer_pwd_register();
-                break;
-            case WIFI_EAP_TYPE_MD5:
-                interface->u.sta.wpa_eapol_method.method = EAP_TYPE_MD5;
-                eap_peer_md5_register();
-                break;
-            case WIFI_EAP_TYPE_TLS:
-                interface->u.sta.wpa_eapol_method.method = EAP_TYPE_TLS;
-                eap_peer_tls_register();
-                break;
-            case WIFI_EAP_TYPE_MSCHAPV2:
-                interface->u.sta.wpa_eapol_method.method = EAP_TYPE_MSCHAPV2;
-                eap_peer_mschapv2_register();
-                break;
-            case WIFI_EAP_TYPE_PEAP:
-                interface->u.sta.wpa_eapol_method.method = EAP_TYPE_PEAP;
-                eap_peer_peap_register();
-                break;
-            case WIFI_EAP_TYPE_TTLS:
-                interface->u.sta.wpa_eapol_method.method = EAP_TYPE_TTLS;
-                eap_peer_ttls_register();
-                break;
-            default:
-                wifi_hal_error_print("%s:%d: Unsupported EAP method :%d\n", __func__, __LINE__,
+    wifi_hal_dbg_print("%s:%d: eap-type updated as %d\n", __func__, __LINE__, eap_type);
+    switch (eap_type) {
+        case WIFI_EAP_TYPE_PWD:
+            interface->u.sta.wpa_eapol_method.method = EAP_TYPE_PWD;
+            eap_peer_pwd_register();
+            break;
+        case WIFI_EAP_TYPE_MD5:
+            interface->u.sta.wpa_eapol_method.method = EAP_TYPE_MD5;
+            eap_peer_md5_register();
+            break;
+        case WIFI_EAP_TYPE_TLS:
+            interface->u.sta.wpa_eapol_method.method = EAP_TYPE_TLS;
+            eap_peer_tls_register();
+            break;
+        case WIFI_EAP_TYPE_MSCHAPV2:
+            interface->u.sta.wpa_eapol_method.method = EAP_TYPE_MSCHAPV2;
+            eap_peer_mschapv2_register();
+            break;
+        case WIFI_EAP_TYPE_PEAP:
+            interface->u.sta.wpa_eapol_method.method = EAP_TYPE_PEAP;
+            eap_peer_peap_register();
+            break;
+        case WIFI_EAP_TYPE_TTLS:
+            interface->u.sta.wpa_eapol_method.method = EAP_TYPE_TTLS;
+            eap_peer_ttls_register();
+            break;
+        default:
+            wifi_hal_error_print("%s:%d: Unsupported EAP method :%d\n", __func__, __LINE__,
                     eap_type);
-                return;
-     }
-     wifi_hal_dbg_print("%s:%d: EAPOL method %d\n", __func__, __LINE__, interface->u.sta.wpa_eapol_method.method);
-     return;       
+            return;
+    }
+    wifi_hal_dbg_print("%s:%d: EAPOL method %d\n", __func__, __LINE__, interface->u.sta.wpa_eapol_method.method);
+    return;       
 }
-
 
 #define MAX_STR_LEN 64
 #define SUPPORTED_CIPHERS \
