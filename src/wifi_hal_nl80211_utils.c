@@ -5745,9 +5745,16 @@ char *wifi_hal_get_interface_name(wifi_interface_info_t *interface)
         return NULL;
     }
 
+#ifdef CONFIG_GENERIC_MLO
+    if ((interface->vap_info.u.bss_info.enabled == false) ||
+        (wifi_hal_is_mld_enabled(interface) == false) || (interface->mld_name[0] == '\0')) {
+        return interface->name;
+    }
+#else
     if (interface->mld_name[0] == '\0') {
         return interface->name;
     }
+#endif
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap &&
         interface->vap_info.u.bss_info.mld_info.common_info.mld_enable) {
@@ -5808,7 +5815,26 @@ int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface)
     return NL80211_DRV_LINK_ID_NA;
 }
 
-int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id)
+int wifi_hal_get_mld_id(wifi_interface_info_t *interface)
+{
+    wifi_hal_dbg_print("%s:%d Entering\n", __func__, __LINE__);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return NL80211_DRV_LINK_ID_NA;
+    }
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return NL80211_DRV_LINK_ID_NA;
+    }
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_monitor) {
+        return interface->vap_info.u.bss_info.mld_info.common_info.mld_id;
+    }
+
+    return NL80211_DRV_LINK_ID_NA;
+}
+
+int wifi_hal_set_mld_id(wifi_interface_info_t *interface, int mld_id)
 {
     if (interface == NULL) {
         wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
@@ -5816,13 +5842,14 @@ int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id)
     }
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
-        interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id = link_id;
+        interface->vap_info.u.bss_info.mld_info.common_info.mld_id = mld_id;
         return 0;
     }
 
     return -1;
 }
 
+#ifdef CONFIG_GENERIC_MLO
 wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *interface)
 {
     wifi_radio_info_t *radio;
@@ -5845,14 +5872,26 @@ wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *i
                 continue;
             }
 
-            if (interface_iter->index == interface->index) {
-                return interface_iter;
+            if (interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_id !=
+                interface->vap_info.u.bss_info.mld_info.common_info.mld_id) {
+                continue;
+            }
+
+            if (interface_iter->u.ap.hapd.mld != NULL) {
+                if (hostapd_mld_is_first_bss(&interface_iter->u.ap.hapd)) {
+                    return interface_iter;
+                }
             }
         }
     }
 
+    // TODO: because currently we configure MLD in VAP pre_create but add
+    // to driver in update_hostap(), we might encounter a situation where mld is
+    // already enabled but not fully configured. Only when these get
+    // merged into one place, this can return NULL.
     return interface;
 }
+#endif // CONFIG_GENERIC_MLO
 
 uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
 {
@@ -5915,7 +5954,8 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info
                 continue;
             }
 
-            if (interface_iter->index != interface->index) {
+            if (interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_id !=
+                interface->vap_info.u.bss_info.mld_info.common_info.mld_id) {
                 continue;
             }
 
@@ -5955,7 +5995,8 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_freq(wifi_interface_info_t 
                 continue;
             }
 
-            if (interface_iter->index != interface->index) {
+            if (interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_id !=
+                interface->vap_info.u.bss_info.mld_info.common_info.mld_id) {
                 continue;
             }
 
@@ -6077,4 +6118,197 @@ uint16_t freq_to_primary(uint16_t freq, wifi_channelBandwidth_t chwid)
     }
 
     return freq;
+}
+
+static int reload_interface(wifi_interface_info_t *interface)
+{
+    char *interface_name = wifi_hal_get_interface_name(interface);
+
+    wifi_hal_dbg_print("%s:%d: interface:%s reload hostapd config\n", __func__, __LINE__,
+        interface_name);
+
+#ifndef CONFIG_GENERIC_MLO
+    interface->beacon_set = 0;
+#endif /* CONFIG_GENERIC_MLO */
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    if (hostapd_reload_config(interface->u.ap.hapd.iface) < 0) {
+        wifi_hal_error_print("%s:%d: interface:%s failed to reload VAP configuration\n", __func__,
+            __LINE__, interface_name);
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return -1;
+    }
+#ifdef CONFIG_SAE
+    if (interface->u.ap.conf.sae_groups != NULL) {
+        interface->u.ap.conf.sae_groups = NULL;
+    }
+#endif
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+    /* Prevent hostap calling set_ap when client is removed due to VAP disable before
+     * start_bss */
+    interface->in_reconf = true;
+
+    wifi_hal_info_print("%s:%d: interface:%s disable AP\n", __func__, __LINE__, interface_name);
+    if (nl80211_enable_ap(interface, false) != 0) {
+        wifi_hal_error_print("%s:%d: interface:%s disable AP failed - try to deinitialize anyway\n",
+            __func__, __LINE__, interface_name);
+    }
+    interface->bss_started = false;
+
+    wifi_hal_dbg_print("%s:%d: interface:%s free hostapd data\n", __func__, __LINE__,
+        interface_name);
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    deinit_bss(&interface->u.ap.hapd);
+    if (interface->u.ap.hapd.conf->ssid.wpa_psk != NULL &&
+        interface->u.ap.hapd.conf->ssid.wpa_psk->next == NULL) {
+        hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+    return 0;
+}
+
+static int restart_interface(wifi_interface_info_t *interface)
+{
+    char *interface_name = wifi_hal_get_interface_name(interface);
+    wifi_radio_info_t *radio = get_radio_by_rdk_index(interface->rdk_radio_index);
+    if (unlikely(radio == NULL)) {
+        wifi_hal_error_print("%s:%d: interface:%s failed to get radio for index:%d\n", __func__,
+            __LINE__, interface_name, interface->rdk_radio_index);
+        return -1;
+    }
+
+    wifi_hal_dbg_print("%s:%d: interface:%s update hostapd params\n", __func__, __LINE__,
+        interface_name);
+
+    if (update_hostap_interface_params(interface) < 0) {
+        wifi_hal_error_print("%s:%d: interface:%s failed to update hostapd params\n", __func__,
+            __LINE__, interface_name);
+        return -1;
+    }
+
+    interface->in_reconf = false;
+
+    if (interface->vap_info.u.bss_info.enabled && radio->configured && radio->oper_param.enable) {
+        wifi_hal_info_print("%s:%d: interface:%s enable ap\n", __func__, __LINE__, interface_name);
+        interface->beacon_set = 0;
+        if (start_bss(interface) < 0) {
+            wifi_hal_error_print("%s:%d: interface:%s failed to start BSS\n", __func__, __LINE__,
+                interface_name);
+            return -1;
+        }
+        interface->bss_started = true;
+    }
+
+#if defined(CONFIG_GENERIC_MLO) && defined(_PLATFORM_BANANAPI_R4_)
+    if (wifi_hal_is_mld_enabled(interface)) {
+        // Deinit will cause removal of beacon - set it again before
+        // start_bss to enable broadcasting for BPi
+        if (ieee802_11_set_beacon(&interface->u.ap.hapd) != 0) {
+            wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
+                __func__, __LINE__, interface_name, interface->u.ap.hapd.mld_link_id);
+            return -1;
+        }
+    }
+#endif
+
+    return 0;
+}
+
+#ifdef CONFIG_GENERIC_MLO
+static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
+{
+    wifi_hal_dbg_print("%s:%d Entering\n", __func__, __LINE__);
+    // MLO links share some resources (i.e. RADIUS settings) of the first
+    // link - first take care of it, then attempt to set the rest
+    wifi_interface_info_t *first_interface = wifi_hal_get_first_mld_interface(interface);
+    if (first_interface == NULL) {
+        wifi_hal_error_print("%s:%d: Trying to reload non-existing MLD\n", __func__, __LINE__);
+        return -1;
+    }
+
+    for (int i = g_wifi_hal.num_radios - 1; i >= 0; i--) {
+        wifi_interface_info_t *interface_iter = NULL;
+        wifi_radio_info_t *radio = get_radio_by_rdk_index(i);
+        if (unlikely(radio == NULL)) {
+            wifi_hal_error_print("%s:%d: interface:%s failed to get radio for index:%d\n", __func__,
+                __LINE__, interface->mld_name, interface->rdk_radio_index);
+            return -1;
+        }
+
+        hash_map_foreach(radio->interface_map, interface_iter) {
+
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            if (interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_id !=
+                interface->vap_info.u.bss_info.mld_info.common_info.mld_id) {
+                continue;
+            }
+
+            if (first_interface == interface_iter) {
+                continue;
+            }
+
+            if (reload_interface(interface_iter)) {
+                return -1;
+            }
+        }
+    }
+
+    if (reload_interface(first_interface) < 0) {
+        return -1;
+    }
+
+    if (restart_interface(first_interface) < 0) {
+        return -1;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        wifi_interface_info_t *interface_iter = NULL;
+        wifi_radio_info_t *radio = get_radio_by_rdk_index(i);
+
+        hash_map_foreach(radio->interface_map, interface_iter) {
+            if (!wifi_hal_is_mld_enabled(interface_iter)) {
+                continue;
+            }
+
+            if (interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_id !=
+                interface->vap_info.u.bss_info.mld_info.common_info.mld_id) {
+                continue;
+            }
+
+            if (first_interface == interface_iter) {
+                continue;
+            }
+
+            if (restart_interface(interface_iter) < 0) {
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+#endif /* CONFIG_GENERIC_MLO */
+
+int reload_vap_configuration(wifi_interface_info_t *interface)
+{
+#ifdef CONFIG_GENERIC_MLO
+    if (wifi_hal_is_mld_enabled(interface)) {
+        return reload_mlo_vap_configuration(interface);
+    }
+#endif /* CONFIG_GENERIC_MLO */
+
+    if (reload_interface(interface)) {
+        return -1;
+    }
+
+    if (restart_interface(interface)) {
+        return -1;
+    }
+
+    return 0;
 }
