@@ -2368,7 +2368,6 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                 total_len = sizeof(msg_type) + sizeof(msg_ops_type) + sizeof(len) + (len) + sizeof(mac_address_t) + sizeof(mac_address_t);
 
                 c_buff = (unsigned char *)malloc(sizeof(unsigned char) * total_len);
-                 wifi_hal_info_print("%s:%d: Sending the packet of sa %s and da %s\n", __func__, __LINE__, to_mac_str(mgmt->sa, sta_mac_str), to_mac_str(mgmt->da, frame_da_str));
                 if (c_buff != NULL) {
                     memset(c_buff, 0, total_len);
                     frame_buff = c_buff;
