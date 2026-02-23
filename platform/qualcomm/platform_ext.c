@@ -471,7 +471,31 @@ void qca_getRadioMode(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
 
 int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    char interface_name[32] = { 0 };
+    char cmd[DEFAULT_CMD_SIZE];
+    char mode[16];
+
+    if (get_backhaul_sta_ifname_from_radio_index(index, interface_name, sizeof(interface_name)) !=
+        0) {
+        return -1;
+    }
+
+    qca_getRadioMode(index, operationParam, mode);
+
+    if (snprintf(cmd, sizeof(cmd), "cfg80211tool %s mode %s", interface_name, mode) >=
+        (int)sizeof(cmd)) {
+        wifi_hal_error_print("%s:%d: command truncated; buffer too small\n", __func__, __LINE__);
+        return -1;
+    }
+
+    int rc = system(cmd);
+    if (rc != 0) {
+        wifi_hal_error_print("%s:%d: system(\"%s\") failed with rc=%d\n", __func__, __LINE__, cmd,
+            rc);
+        return -1;
+    }
+
+    wifi_hal_dbg_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
     return 0;
 }
 

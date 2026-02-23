@@ -502,6 +502,13 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 #if HOSTAPD_VERSION >= 210
     conf->wpa_key_mgmt_rsno = 0;
 #endif /* HOSTAPD_VERSION >= 210 */
+
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && \
+    !defined(BANANA_PI_PORT)
+    conf->wpa_key_mgmt_rsno_2 = 0;
+    conf->rsn_pairwise_rsno_2 = 0;
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 && !BANANA_PI_PORT */
+
     conf->wpa = 0;
     memset(&test_ip, 0, sizeof(test_ip));
 
@@ -535,6 +542,12 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->auth_algs = WPA_AUTH_ALG_SAE;
 #if HOSTAPD_VERSION >= 210 //2.10
             if (is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
+                /* For 6GHz, Wi-Fi 7 AP must advertise both AKM 8 (SAE) and AKM 24 (SAE-EXT-KEY) */
+#if defined(CONFIG_IEEE80211BE)
+                conf->wpa_key_mgmt |= WPA_KEY_MGMT_SAE_EXT_KEY;
+                wifi_hal_info_print("%s:%d: 6GHz interface:%s - Added SAE_EXT_KEY (AKM 24) for Wi-Fi 7\n",
+                       __func__, __LINE__, conf->iface);
+#endif /* CONFIG_IEEE80211BE */				
                 conf->sae_pwe = 1;  /* 0 = Hunt-and-Peck, 1 = Hash-to-Element, 2 = both */
                 wifi_hal_info_print("%s:%d: interface_name:%s sae_pwe:%d\n",
                        __func__, __LINE__, conf->iface, conf->sae_pwe);
@@ -576,7 +589,20 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->wpa_key_mgmt = WPA_KEY_MGMT_PSK;
 #if HOSTAPD_VERSION >= 210
             conf->wpa_key_mgmt_rsno = WPA_KEY_MGMT_SAE;
-            conf->sae_pwe = 1;
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && \
+    !defined(BANANA_PI_PORT)
+            if(is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
+                conf->wpa_key_mgmt = WPA_KEY_MGMT_SAE;
+                conf->wpa_key_mgmt_rsno = 0;
+            }
+            if(!conf->disable_11be) {
+                conf->wpa_key_mgmt_rsno_2 = WPA_KEY_MGMT_SAE_EXT_KEY;
+                conf->rsn_pairwise_rsno_2 = WPA_CIPHER_GCMP_256;
+            }
+            wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d wpa_key_mgmt:%d wpa_key_mgmt_rsno_2:%d \n",
+                __FUNCTION__, __LINE__, conf->iface, conf->disable_11be, conf->wpa_key_mgmt, conf->wpa_key_mgmt_rsno_2);
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 && !BANANA_PI_PORT */
+            conf->sae_pwe = 2;
 #endif /* HOSTAPD_VERSION >= 210 */
             conf->auth_algs = WPA_AUTH_ALG_SAE | WPA_AUTH_ALG_SHARED | WPA_AUTH_ALG_OPEN;
             break;
@@ -635,6 +661,16 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
 #endif /* HOSTAPD_VERSION >= 210 */
         conf->sae_require_mfp = 1;
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+        if(is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
+            conf->ieee80211w = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
+	    if(!conf->disable_11be) {
+	        conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED; 
+	    }
+    	    wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d ieee80211w:%d ieee80211w_rsno:%d \n",
+                           __func__, __LINE__, conf->iface, conf->disable_11be, conf->ieee80211w, conf->ieee80211w_rsno);
+	}
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */		
     }
 #endif
 

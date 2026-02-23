@@ -991,6 +991,19 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         cf1, cf2, op_class, ch_type, event_type);
 
     if (wifi_chan_event_type == WIFI_EVENT_CHANNELS_CHANGED) {
+        if (radio->configuration_in_progress == true) {
+            wifi_hal_info_print(
+                "%s:%d: drop channel change event, radio configuration in progress\n", __func__,
+                __LINE__);
+            wifi_hal_info_print(
+                "%s:%d: Event dropped - ifidx: %d vap_name: %s radio: %d channel: %d freq: %d "
+                "bandwidth: %d "
+                "cf1: %d cf2: %d op class: %d channel type: %d radar event type: %d\n",
+                __func__, __LINE__, ifidx, interface->vap_info.vap_name,
+                interface->vap_info.radio_index, channel, freq, bw, cf1, cf2, op_class, ch_type,
+                event_type);
+            return;
+        }
 #if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
         hash_map_foreach(radio->interface_map, sta_interface) {
             if (sta_interface->vap_info.vap_mode == wifi_vap_mode_sta) {
