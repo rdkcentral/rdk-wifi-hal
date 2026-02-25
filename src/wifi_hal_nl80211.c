@@ -40,6 +40,7 @@
 #include <netpacket/packet.h>
 #include <netlink/route/link/bridge.h>
 #include "wifi_hal.h"
+#include "wifi_hal_ap.h"
 #include "wifi_hal_priv.h"
 #include "wpa_auth_i.h"
 #include "driver_nl80211.h"
@@ -2434,6 +2435,22 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
         return NL_SKIP;
     }
 
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+    if ((attr = tb[NL80211_ATTR_MLO_LINK_ID]) != NULL) {
+        link_id = nla_get_u8(attr);
+    }
+
+    if ((attr = tb[NL80211_ATTR_WIPHY_FREQ]) != NULL) {
+        freq = nla_get_u32(attr);
+    }
+
+    if (link_id != -1) {
+        interface = wifi_hal_get_mld_interface_by_link_id(interface, link_id);
+    } else if (freq != 0) {
+        interface = wifi_hal_get_mld_interface_by_freq(interface, freq);
+    }
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+
     if ((gnlh->cmd == NL80211_CMD_UNEXPECTED_FRAME) ||
         (gnlh->cmd == NL80211_CMD_UNEXPECTED_4ADDR_FRAME)) {
         union wpa_event_data event;
@@ -2516,22 +2533,6 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
     if ((attr = tb[NL80211_ATTR_REASON_CODE]) != NULL) {
         reason = nla_get_u16(attr);
     }
-
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-    if ((attr = tb[NL80211_ATTR_MLO_LINK_ID]) != NULL) {
-        link_id = nla_get_u8(attr);
-    }
-
-    if ((attr = tb[NL80211_ATTR_WIPHY_FREQ]) != NULL) {
-        freq = nla_get_u32(attr);
-    }
-
-    if (link_id != -1) {
-        interface = wifi_hal_get_mld_interface_by_link_id(interface, link_id);
-    } else if (freq != 0) {
-        interface = wifi_hal_get_mld_interface_by_freq(interface, freq);
-    }
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
 #ifdef CMXB7_PORT
     if (tb[NL80211_ATTR_RX_SNR_DB]) {
@@ -3102,7 +3103,7 @@ void recv_link_status()
                         }
 #endif // CONFIG_GENERIC_MLO
 
-                        if(strncmp(interface->vap_info.bridge_name, ifName, strlen(interface->vap_info.bridge_name)+1) == 0) {
+                        if(strncmp(get_vap_bridge_name(&interface->vap_info), ifName, strlen(get_vap_bridge_name(&interface->vap_info))+1) == 0) {
                             if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
                                 switch (nlmsgHdr->nlmsg_type)
                                 {
@@ -8295,21 +8296,21 @@ int wifi_hal_configure_sta_4addr_to_bridge(wifi_interface_info_t *interface, int
     }
 
     if (add == 1) {
-        if ((ret = nl80211_create_bridge(interface->name, vap->bridge_name)) != 0) {
+        if ((ret = nl80211_create_bridge(interface->name, get_vap_bridge_name(vap))) != 0) {
             wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s with ret:%d\n",
-                __func__, __LINE__, interface->name, vap->bridge_name, ret);
+                __func__, __LINE__, interface->name, get_vap_bridge_name(vap), ret);
             return ret;
         }
         wifi_hal_info_print("%s:%d: Sta %s interface added successfully to bridge:%s\n",
-            __func__, __LINE__, interface->name, vap->bridge_name);
+            __func__, __LINE__, interface->name, get_vap_bridge_name(vap));
 
-        if ((ret = nl80211_interface_enable(vap->bridge_name, true)) != 0) {
+        if ((ret = nl80211_interface_enable(get_vap_bridge_name(vap), true)) != 0) {
             wifi_hal_error_print("%s:%d: interface:%s failed to set bridge %s with ret:%d\n",
-                __func__, __LINE__, interface->name, vap->bridge_name, ret);
+                __func__, __LINE__, interface->name, get_vap_bridge_name(vap), ret);
         }
     } else {
         wifi_hal_info_print("%s:%d: interface:%s remove from bridge:%s\n", __func__, __LINE__,
-            interface->name, vap->bridge_name);
+            interface->name, get_vap_bridge_name(vap));
         nl80211_remove_from_bridge(interface->name);
     }
     return ret;
@@ -8348,7 +8349,7 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
         wifi_hal_dbg_print("%s:%d: Updating %s interface on dev:%d to type: NL80211_IFTYPE_AP successful\n",
                     __func__, __LINE__, interface->name, radio->index);
 
-        if (interface->vap_info.u.sta_info.enabled != true) {
+        if ((interface->vap_info.u.sta_info.enabled != true) && (interface->vap_info.u.sta_info.ignite_enabled != true)) {
             return 0;
         }
 
@@ -8529,12 +8530,12 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     }
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-        is_wildcard_ssid = strlen(interface->vap_info.u.sta_info.ssid) == 0;
+        is_wildcard_ssid = strlen(get_vap_ssid(&interface->vap_info)) == 0;
 
         // STA mode: filter result (unless wildcard SSID)
         scan_info = hash_map_get_first(interface->scan_info_map);
         while (scan_info != NULL) {
-            if (strcmp(scan_info->ssid, interface->vap_info.u.sta_info.ssid) == 0 ||
+            if (strcmp(scan_info->ssid, get_vap_ssid(&interface->vap_info)) == 0 ||
                 is_wildcard_ssid) {
 #if defined(_PLATFORM_BANANAPI_R4_)
                 int scan_info_radio_index = -1;
@@ -8563,7 +8564,7 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
                 ssid_found_count);
         } else {
             wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan found %u results with ssid:%s\n", __func__,
-                __LINE__, ssid_found_count, interface->vap_info.u.sta_info.ssid);
+                __LINE__, ssid_found_count, get_vap_ssid(&interface->vap_info));
         }
     }
     else {
@@ -9692,7 +9693,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         wifi_hal_dbg_print("%s:%d: %x %x %x\n", __func__, __LINE__, data.group_cipher,
             data.pairwise_cipher, key_mgmt);
     } else {
-        if (security->mode == wifi_security_mode_none) {
+	if (get_vap_security_mode(vap, security) == wifi_security_mode_none) {
             wpa_conf.wpa_key_mgmt = WPA_KEY_MGMT_NONE;
             wpa_conf.wpa_group = WPA_CIPHER_NONE;
             wpa_conf.rsn_pairwise = WPA_CIPHER_NONE;
@@ -9710,7 +9711,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                 wifi_hal_info_print("%s:%d:Invalid encryption mode:%d in wifi_hal_connect\n", __func__, __LINE__, security->encr);
             }
 
-            switch (security->mode) {
+            switch (get_vap_security_mode(vap, security)) {
                 case wifi_security_mode_wpa_personal:
                 case wifi_security_mode_wpa2_personal:
                 case wifi_security_mode_wpa_wpa2_personal:
@@ -9739,25 +9740,26 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 #endif /* HOSTAPD_VERSION >= 210 */
                     break;
                 default:
-                    wifi_hal_info_print("%s:%d:Invalid security mode: %d in wifi_hal_connect\r\n", __func__, __LINE__, security->mode);
+                    wifi_hal_info_print("%s:%d:Invalid security mode: %d in wifi_hal_connect\r\n", __func__, __LINE__, get_vap_security_mode(vap, security));
                     wpa_conf.wpa_key_mgmt = -1;
                     break;
             }
         }
     }
 
+    int security_mode = get_vap_security_mode(vap, security);
 #ifdef CONFIG_IEEE80211W
-    if (security->mode == wifi_security_mode_wpa3_personal ||
-        security->mode == wifi_security_mode_wpa3_enterprise ||
-        security->mode == wifi_security_mode_wpa3_transition || 
-        security->mode == wifi_security_mode_wpa3_compatibility) {
+    if (security_mode == wifi_security_mode_wpa3_personal ||
+        security_mode == wifi_security_mode_wpa3_enterprise ||
+        security_mode == wifi_security_mode_wpa3_transition || 
+        security_mode == wifi_security_mode_wpa3_compatibility) {
         // WPA3 REQUIRES MFP
         wpa_conf.ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
         wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
     }
 #endif
 
-    if (security->mode != wifi_security_mode_none) {
+    if (security_mode != wifi_security_mode_none) {
         if ((ret = wpa_write_rsn_ie(&wpa_conf, pos, rsn_ie + sizeof(rsn_ie) - pos, NULL)) < 0) {
             wifi_hal_error_print("%s:%d Failed to build RSN %d\r\n", __func__, __LINE__, ret);
             nlmsg_free(msg);
@@ -9781,7 +9783,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         }
     }
 
-    if ((ret = configure_nl80211_security(msg, security, &wpa_conf)) < 0) {
+    if ((ret = configure_nl80211_security(msg, security, &wpa_conf, vap)) < 0) {
         wifi_hal_error_print("%s:%d: Failed to configure security: %d\n",
                       __func__, __LINE__, ret);
         nlmsg_free(msg);
@@ -10983,8 +10985,8 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
 
     if (vap->vap_mode == wifi_vap_mode_sta) {
         // Wildcard STA VAP SSIDs cannot be used to set the backhaul BSSID
-        if (strcmp(scan_info_ap->ssid, vap->u.sta_info.ssid) == 0 &&
-            strlen(vap->u.sta_info.ssid) > 0) {
+        if (strcmp(scan_info_ap->ssid, get_vap_ssid(vap)) == 0 &&
+            strlen(get_vap_ssid(vap)) > 0) {
             wifi_hal_stats_dbg_print("%s:%d: [SCAN] found backhaul bssid:%s rssi:%d snr = %d chan_utilization = %d noise = %d on freq:%d for ssid:%s\n", __func__, __LINE__,
                         to_mac_str(bssid, bssid_str), scan_info_ap->rssi, scan_info_ap->snr, scan_info_ap->chan_utilization, scan_info_ap->noise, scan_info_ap->freq, scan_info_ap->ssid);
             memcpy(vap->u.sta_info.bssid, bssid, sizeof(bssid_t));
@@ -12868,7 +12870,7 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
             }
             if (bridge_ifname && nl80211_create_bridge(name, bridge_ifname) != 0) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
-                    __func__, __LINE__, name, vap->bridge_name);
+                    __func__, __LINE__, name, get_vap_bridge_name(vap));
                 return RETURN_ERR;
             } else {
                 if (nl80211_interface_enable(bridge_ifname, true) != 0) {
@@ -13158,11 +13160,10 @@ int wifi_drv_hapd_send_eapol(
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
 
         if (sock_fd < 0) {
-            wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, interface->vap_info.bridge_name);
+            wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, get_vap_bridge_name(&interface->vap_info));
         } else {
             ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:interface->name;
-
-            memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
+	    memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
             sockaddr.sll_family   = AF_PACKET;
             sockaddr.sll_protocol = htons(ETH_P_EAPOL);
             sockaddr.sll_ifindex  = if_nametoindex(ifname);
@@ -15957,7 +15958,7 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
         if (sock_fd < 0) {
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__,
-                __LINE__, vap->bridge_name);
+                __LINE__, get_vap_bridge_name(vap));
             return -1;
         }
     }
@@ -15980,7 +15981,7 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
     ifname = vap->bridge_name;
 #else
     ifname = (vap->vap_mode == wifi_vap_mode_ap || vap->u.sta_info.ignite_enabled) ?
-        vap->bridge_name :
+        get_vap_bridge_name(vap) :
         interface->name;
 #endif
     memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
@@ -16032,7 +16033,7 @@ int wifi_drv_set_operstate(void *priv, int state)
     vap = &interface->vap_info;
 
     wifi_hal_info_print("%s:%d: Enter, interface:%s bridge:%s driver operation state:%d\n",
-            __func__, __LINE__, interface->name, vap->bridge_name, state);
+            __func__, __LINE__, interface->name, get_vap_bridge_name(vap), state);
 
 #ifndef CONFIG_WIFI_EMULATOR
     if (interface->vap_configured == true) {
@@ -16052,7 +16053,7 @@ int wifi_drv_set_operstate(void *priv, int state)
     }
 #endif
 
-    if (vap->u.bss_info.enabled == false && vap->u.sta_info.enabled == false) {
+    if (vap->u.bss_info.enabled == false && vap->u.sta_info.enabled == false && vap->u.sta_info.ignite_enabled == false) {
         wifi_hal_dbg_print("%s:%d: VAP not enabled\n", __func__, __LINE__);
         return 0;
     }
@@ -16091,7 +16092,7 @@ int wifi_drv_set_operstate(void *priv, int state)
     interface->bridge_configured = true;
     interface->vap_configured = true;
     wifi_hal_info_print("%s:%d: Exit, interface:%s bridge:%s driver configured for 802.11\n",
-            __func__, __LINE__, interface->name, vap->bridge_name);
+            __func__, __LINE__, interface->name, get_vap_bridge_name(vap));
 
     return 0;
 }
@@ -16274,15 +16275,19 @@ int wifi_supplicant_drv_associate(void *priv, struct wpa_driver_associate_params
 int wifi_supplicant_drv_authenticate(void *priv, struct wpa_driver_auth_params *params)
 {
     wifi_interface_info_t *interface = NULL;
+    wifi_vap_info_t *vap = NULL;
     interface = (wifi_interface_info_t *)priv;
     struct nl_msg *msg;
     int ret;
     wifi_vap_security_t *security;
+    vap = &interface->vap_info;
+    int security_mode = 0;
 
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
     security = &interface->vap_info.u.sta_info.security;
 
+    security_mode = get_vap_security_mode(vap, security);
     if ((msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_AUTHENTICATE)) == NULL) {
         return -1;
     }
@@ -16290,9 +16295,9 @@ int wifi_supplicant_drv_authenticate(void *priv, struct wpa_driver_auth_params *
     nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->bssid);
     nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ, params->freq);
 
-    if ((security->mode == wifi_security_mode_wpa3_personal) ||
-        (security->mode == wifi_security_mode_wpa3_transition) ||
-        (security->mode == wifi_security_mode_wpa3_compatibility)) {
+    if ((security_mode == wifi_security_mode_wpa3_personal) ||
+        (security_mode == wifi_security_mode_wpa3_transition) ||
+        (security_mode == wifi_security_mode_wpa3_compatibility)) {
 #ifndef _PLATFORM_BANANAPI_R4_
         nla_put(msg, NL80211_ATTR_SAE_DATA, params->auth_data_len, params->auth_data);
         nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_SAE);
