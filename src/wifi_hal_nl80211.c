@@ -12798,7 +12798,7 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
     int ret;
     wifi_vap_info_t *vap;
     wifi_radio_info_t *radio;
-    char *mld_name = NULL;
+    char *vap_name = NULL;
     int link_id = -1;
     mac_address_t intf_mac = {};
 
@@ -12806,10 +12806,9 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
     radio = get_radio_by_rdk_index(vap->radio_index);
 
 #ifdef CONFIG_GENERIC_MLO
+    char *mld_name = NULL;
     link_id = wifi_hal_get_mld_link_id(interface);
     mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
-#endif // CONFIG_GENERIC_MLO
-
     if (mld_name != NULL) {
         ret = os_snprintf(name, sizeof(name), "%s.sta%d", mld_name, aid);
         if (wifi_hal_get_mac_address(mld_name, intf_mac) < 0) {
@@ -12817,10 +12816,17 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
                 __LINE__, mld_name);
             return RETURN_ERR;
         }
+        vap_name = mld_name;
     } else {
         ret = os_snprintf(name, sizeof(name), "%s.sta%d", interface->name, aid);
         memcpy(intf_mac, vap->u.bss_info.bssid, sizeof(mac_address_t));
+        vap_name = interface->name;
     }
+#else
+    ret = os_snprintf(name, sizeof(name), "%s.sta%d", interface->name, aid);
+    memcpy(intf_mac, vap->u.bss_info.bssid, sizeof(mac_address_t));
+    vap_name = interface->name;
+#endif // CONFIG_GENERIC_MLO
 
     if (ret >= (int) sizeof(name)) {
         wifi_hal_info_print("%s:%d nl80211: WDS interface name:%s was truncated\r\n",
@@ -12904,11 +12910,7 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
             return RETURN_ERR;
         }
 
-        if (mld_name != NULL) {
-            nl80211_set_sta_vlan(radio, interface, addr, mld_name, 0, link_id);
-        } else {
-            nl80211_set_sta_vlan(radio, interface, addr, interface->name, 0, link_id);
-        }
+        nl80211_set_sta_vlan(radio, interface, addr, vap_name, 0, link_id);
 
         nl80211_delete_interface(radio->index, name, if_nametoindex(name));
         memset(&event, 0, sizeof(event));
