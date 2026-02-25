@@ -3120,13 +3120,12 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             if (sec->mode == wifi_security_mode_wpa2_enterprise ||
                     sec->mode == wifi_security_mode_wpa3_enterprise) {
                 update_eapol_method(interface, sec->u.radius.eap_type);
+		interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
+                interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
+                interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
+                interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.radius.key);
+            	interface->u.sta.wpa_eapol_config.eap_ttls_ignite_mode = 0;
             }
-        }
-        if (!vap->u.sta_info.ignite_enabled) {
-            interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
-            interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
-            interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
-            interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.radius.key);
         }
 #ifdef CONFIG_WIFI_EMULATOR
         if (vap->vap_mode == wifi_vap_mode_sta) {
@@ -3160,14 +3159,10 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             }
         }
         interface->wpa_s.current_ssid->eap.fragment_size = 400;
-        if (vap->u.sta_info.ignite_enabled == true) {
-            interface->wpa_s.current_ssid->eap.eap_ttls_ignite_mode = 1;
-        } else {
-            interface->wpa_s.current_ssid->eap.identity = (unsigned char *)&sec->u.radius.identity;
-            interface->wpa_s.current_ssid->eap.identity_len = strlen(sec->u.radius.identity);
-            interface->wpa_s.current_ssid->eap.password = (unsigned char *)&sec->u.radius.key;
-            interface->wpa_s.current_ssid->eap.password_len = strlen(sec->u.radius.key);
-        }
+        interface->wpa_s.current_ssid->eap.identity = (unsigned char *)&sec->u.radius.identity;
+        interface->wpa_s.current_ssid->eap.identity_len = strlen(sec->u.radius.identity);
+        interface->wpa_s.current_ssid->eap.password = (unsigned char *)&sec->u.radius.key;
+        interface->wpa_s.current_ssid->eap.password_len = strlen(sec->u.radius.key);
         interface->wpa_s.current_ssid->eap.eap_methods = &interface->u.sta.wpa_eapol_method;
         eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
 
