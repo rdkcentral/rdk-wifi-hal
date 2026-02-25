@@ -1488,6 +1488,24 @@ wifi_country_radio_op_class_t other_op_class = {
     }
 };
 
+const char *
+get_vap_ssid(wifi_vap_info_t *vap)
+{
+    return (vap->u.sta_info.ignite_enabled) ? vap->u.sta_info.repurposed_ssid : vap->u.sta_info.ssid;
+}
+
+const char *
+get_vap_bridge_name(wifi_vap_info_t *vap)
+{
+    return (vap->u.sta_info.ignite_enabled) ? vap->repurposed_bridge_name : vap->bridge_name;
+}
+
+unsigned int
+get_vap_security_mode(wifi_vap_info_t *vap, wifi_vap_security_t *sec)
+{
+     return (vap->u.sta_info.ignite_enabled) ? vap->u.sta_info.security.repurposed_mode : vap->u.sta_info.security.mode;
+}
+
 unsigned int get_sizeof_interfaces_index_map(void) {
 #ifdef CONFIG_WIFI_EMULATOR
     unsigned int count = 0;
@@ -2809,19 +2827,21 @@ enum nl80211_auth_type get_auth_type(wifi_security_modes_t mode, u32 akm_suite)
 }
 
 int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *security,
-    const struct wpa_auth_config *wpa_conf)
+    const struct wpa_auth_config *wpa_conf, wifi_vap_info_t *vap)
 {
     u32 ver, pairwise_cipher, group_cipher, akm_suite;
     enum nl80211_mfp mfp;
     enum nl80211_auth_type auth_type;
     int ret;
+    int security_mode;
 
     if (!msg || !security || !wpa_conf) {
         wifi_hal_error_print("%s:%d: Invalid parameters\n", __func__, __LINE__);
         return -1;
     }
+    security_mode = get_vap_security_mode(vap, security);
 
-    if (security->mode == wifi_security_mode_none) {
+    if (security_mode == wifi_security_mode_none) {
         if ((ret = nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM)) < 0) {
             wifi_hal_error_print("%s:%d: Failed to set auth type: %d\n", __func__, __LINE__, ret);
             return ret;
@@ -2830,14 +2850,14 @@ int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *se
         return 0;
     }
 
-    ver = get_wpa_version(security->mode);
+    ver = get_wpa_version(security_mode);
     if ((ret = nla_put_u32(msg, NL80211_ATTR_WPA_VERSIONS, ver)) < 0) {
         wifi_hal_error_print("%s:%d: Failed to set WPA version: %d\n", __func__, __LINE__, ret);
         return ret;
     }
     wifi_hal_info_print("%s:%d: WPA version: 0x%x\n", __func__, __LINE__, ver);
 
-    get_cipher_suites(security->mode, security->encr, wpa_conf, &pairwise_cipher, &group_cipher);
+    get_cipher_suites(security_mode, security->encr, wpa_conf, &pairwise_cipher, &group_cipher);
 
     if ((ret = nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITES_PAIRWISE, pairwise_cipher)) < 0) {
         wifi_hal_error_print("%s:%d: Failed to set pairwise cipher: %d\n", __func__, __LINE__, ret);
@@ -2852,7 +2872,7 @@ int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *se
     wifi_hal_info_print("%s:%d: Cipher - Pairwise: 0x%x, Group: 0x%x\n", __func__, __LINE__,
         pairwise_cipher, group_cipher);
 
-    akm_suite = get_akm_suite(wpa_conf->wpa_key_mgmt, security->mode);
+    akm_suite = get_akm_suite(wpa_conf->wpa_key_mgmt, security_mode);
     if (akm_suite != 0) {
         if ((ret = nla_put_u32(msg, NL80211_ATTR_AKM_SUITES, akm_suite)) < 0) {
             wifi_hal_error_print("%s:%d: Failed to set AKM suite: %d\n", __func__, __LINE__, ret);
@@ -2865,14 +2885,14 @@ int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *se
         return -1;
     }
 
-    auth_type = get_auth_type(security->mode, akm_suite);
+    auth_type = get_auth_type(security_mode, akm_suite);
     if ((ret = nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, auth_type)) < 0) {
         wifi_hal_error_print("%s:%d: Failed to set auth type: %d\n", __func__, __LINE__, ret);
         return ret;
     }
     wifi_hal_info_print("%s:%d: Auth type: %d\n", __func__, __LINE__, auth_type);
 
-    mfp = get_mfp_mode(security->mode, wpa_conf->ieee80211w);
+    mfp = get_mfp_mode(security_mode, wpa_conf->ieee80211w);
     if (mfp != NL80211_MFP_NO) {
         if ((ret = nla_put_u32(msg, NL80211_ATTR_USE_MFP, mfp)) < 0) {
             wifi_hal_error_print("%s:%d: Failed to set MFP: %d\n", __func__, __LINE__, ret);

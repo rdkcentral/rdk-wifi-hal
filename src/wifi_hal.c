@@ -1165,7 +1165,7 @@ INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
         pthread_mutex_lock(&interface->scan_info_mutex);
         tmp = hash_map_get_first(interface->scan_info_map);
         while (tmp != NULL) {
-            if ((strcmp(tmp->ssid, vap->u.sta_info.ssid) == 0) &&
+            if ((strcmp(tmp->ssid, get_vap_ssid(vap)) == 0) &&
                     (tmp->rssi > best_rssi)) {
                 best_rssi = tmp->rssi;
                 best = tmp;
@@ -1688,7 +1688,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             wifi_hal_info_print("%s:%d: vap_enable_status:%d\n", __func__, __LINE__, vap->u.bss_info.enabled);
             memcpy(vap->u.bss_info.bssid, interface->mac, sizeof(vap->u.bss_info.bssid));
         } else {
-            wifi_hal_info_print("%s:%d: vap_enable_status:%d\n", __func__, __LINE__, vap->u.sta_info.enabled);
+            wifi_hal_info_print("%s:%d: vap_enable_status:%d Ignite-vap-enable-status: %d\n", __func__, __LINE__, vap->u.sta_info.enabled,
+                 vap->u.sta_info.ignite_enabled);
 #if  !defined(CONFIG_WIFI_EMULATOR) && !defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
             memcpy(vap->u.sta_info.mac, interface->mac, sizeof(vap->u.sta_info.mac));
 #else
@@ -1867,16 +1868,16 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             interface->vap_initialized = true;
 
             if (vap->u.sta_info.ignite_enabled) {
-                if (nl80211_create_bridge(interface->name, vap->bridge_name) != 0) {
+                if (nl80211_create_bridge(interface->name, get_vap_bridge_name(vap)) != 0) {
                     wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
-                        __func__, __LINE__, interface->name, vap->bridge_name);
+                        __func__, __LINE__, interface->name, get_vap_bridge_name(vap));
                     return RETURN_ERR;
                 }
                 wifi_hal_info_print("%s:%d: interface:%s set bridge %s up\n", __func__, __LINE__,
-                    interface->name, vap->bridge_name);
-                if (nl80211_interface_enable(vap->bridge_name, true) != 0) {
+                    interface->name, get_vap_bridge_name(vap));
+                if (nl80211_interface_enable(get_vap_bridge_name(vap), true) != 0) {
                     wifi_hal_error_print("%s:%d: interface:%s failed to set bridge %s up\n",
-                        __func__, __LINE__, interface->name, vap->bridge_name);
+                        __func__, __LINE__, interface->name, get_vap_bridge_name(vap));
                     return RETURN_ERR;
                 }
             }
@@ -1892,7 +1893,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 wifi_drv_set_operstate(interface, 1);
                 if (nl80211_interface_enable(interface->name, true) != 0) {
                     wifi_hal_error_print("%s:%d interface:%s failed to set bridge %s up\n",
-                        __func__, __LINE__, interface->name, vap->bridge_name);
+                        __func__, __LINE__, interface->name, get_vap_bridge_name(vap));
                 }
             } else {
                 wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__,
@@ -2678,8 +2679,8 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
         wifi_hal_stats_error_print("%s:%d: No valid channels\n", __func__, __LINE__);
         return RETURN_ERR;
     }
-
-    strcpy(ssid_list[0], vap->u.sta_info.ssid);
+    
+    strcpy(ssid_list[0], get_vap_ssid(vap));
     wifi_hal_stats_info_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
 
     pthread_mutex_lock(&interface->scan_info_mutex);
