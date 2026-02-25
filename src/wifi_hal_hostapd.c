@@ -3125,6 +3125,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
                 interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
                 interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.radius.key);
+#ifdef PROJECT_IGNITE
                 interface->u.sta.wpa_eapol_config.eap_ttls_ignite_mode = 0;
 #endif            
             }
