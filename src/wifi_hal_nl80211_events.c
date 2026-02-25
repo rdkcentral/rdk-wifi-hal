@@ -760,7 +760,7 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         wifi_hal_dbg_print("%s:%d: pmkid attribute absent\n", __func__, __LINE__);
     }
 
-    if (sec->mode != wifi_security_mode_none) {
+    if (get_vap_security_mode(&interface->vap_info, sec) != wifi_security_mode_none) {
         eapol_sm_notify_eap_fail(interface->u.sta.wpa_sm->eapol, 0);
         eapol_sm_notify_eap_success(interface->u.sta.wpa_sm->eapol, 0);
         eapol_sm_notify_portEnabled(interface->u.sta.wpa_sm->eapol, TRUE);
@@ -788,7 +788,7 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         interface->u.sta.pending_rx_eapol = false;
     }
 
-    if (sec->mode == wifi_security_mode_none) {
+    if (get_vap_security_mode(&interface->vap_info, sec) == wifi_security_mode_none) {
         wpa_sm_set_state(interface->u.sta.wpa_sm, WPA_COMPLETED);
         interface->u.sta.state = WPA_COMPLETED;
         wifi_drv_set_supp_port(interface, 1);
@@ -882,6 +882,30 @@ bool is_channel_supported_on_radio(wifi_freq_bands_t l_band, int freq)
         return true;
 #endif
     }
+    return false;
+}
+
+bool is_chan_freq_supported_on_radio(wifi_radio_info_t *radio, int freq)
+{
+    enum nl80211_band band = wifi_freq_band_to_nl80211_band(radio->oper_param.band);
+    const struct hostapd_hw_modes *mode = NULL;
+    int i;
+
+    if (band == NUM_NL80211_BANDS) {
+        wifi_hal_stats_error_print("%s:%d: unsupported band (0x%2x)\n", __func__, __LINE__, radio->oper_param.band);
+        return false;
+    }
+
+    mode = &radio->hw_modes[band];
+
+    for (i = 0; i < mode->num_channels; ++i) {
+        struct hostapd_channel_data *channel_data = &radio->channel_data[band][i];
+
+        if (freq == channel_data->freq) {
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -1003,6 +1027,14 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
                                     channel, interface->vap_info.radio_index, radio_param->band);
         return;
     }
+
+	if ((radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5H_BAND)) {
+		if (is_chan_freq_supported_on_radio(radio, freq) == false) {
+			wifi_hal_dbg_print("%s:%d invalid freq:%d for name:%s\n", __func__, __LINE__,
+					freq, interface->name);
+			return;
+		}
+	}
 
     switch (bw) {
     case NL80211_CHAN_WIDTH_20:
@@ -1254,6 +1286,14 @@ static void nl80211_dfs_radar_event(wifi_interface_info_t *interface, struct nla
 
     if (tb[NL80211_ATTR_RADAR_EVENT]) {
         event_type = nla_get_u32(tb[NL80211_ATTR_RADAR_EVENT]);
+    }
+
+    if ((radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5H_BAND)) {
+        if (is_chan_freq_supported_on_radio(radio, freq) == false) {
+            wifi_hal_dbg_print("%s:%d invalid freq:%d for name:%s\n", __func__, __LINE__,
+                    freq, interface->name);
+            return;
+        }
     }
 
     wifi_hal_error_print("%s:%d name:%s freq:%d cf1:%d cf2:%d chan_offset:%d event_type:%d bw:%d bandwidth:%d \n", __func__, __LINE__,

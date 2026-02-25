@@ -816,11 +816,12 @@ int platform_vap_enable_update(wifi_vap_info_map_t *vap_map, bool handle_mld)
                     }
                 }
 
-                if (vap_map[i].vap_array[j].vap_mode == wifi_vap_mode_ap)
+                if (vap_map[i].vap_array[j].vap_mode == wifi_vap_mode_ap) {
                     vap_enabled = vap_map[i].vap_array[j].u.bss_info.enabled;
-                else
-                    vap_enabled = vap_map[i].vap_array[j].u.sta_info.enabled;
-                _vap_enable[vap_index] = vap_enabled;
+		} else {
+                    vap_enabled = (vap_map[i].vap_array[j].u.sta_info.enabled || vap_map[i].vap_array[j].u.sta_info.ignite_enabled);
+		}
+		_vap_enable[vap_index] = vap_enabled;
 
                 if (is_mlo) {
                     if (vap_enabled == FALSE) {
