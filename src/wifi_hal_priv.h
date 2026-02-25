@@ -1431,7 +1431,4 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
 int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
     size_t ifname_out_len);
-const char *get_vap_ssid(wifi_vap_info_t *vap);
-const char *get_vap_bridge_name(wifi_vap_info_t *vap);
-unsigned int get_vap_security_mode(wifi_vap_info_t *vap, wifi_vap_security_t *sec);
 #endif // WIFI_HAL_PRIV_H
