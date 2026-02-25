@@ -2434,6 +2434,22 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
         return NL_SKIP;
     }
 
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+    if ((attr = tb[NL80211_ATTR_MLO_LINK_ID]) != NULL) {
+        link_id = nla_get_u8(attr);
+    }
+
+    if ((attr = tb[NL80211_ATTR_WIPHY_FREQ]) != NULL) {
+        freq = nla_get_u32(attr);
+    }
+
+    if (link_id != -1) {
+        interface = wifi_hal_get_mld_interface_by_link_id(interface, link_id);
+    } else if (freq != 0) {
+        interface = wifi_hal_get_mld_interface_by_freq(interface, freq);
+    }
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+
     if ((gnlh->cmd == NL80211_CMD_UNEXPECTED_FRAME) ||
         (gnlh->cmd == NL80211_CMD_UNEXPECTED_4ADDR_FRAME)) {
         union wpa_event_data event;
@@ -2516,22 +2532,6 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
     if ((attr = tb[NL80211_ATTR_REASON_CODE]) != NULL) {
         reason = nla_get_u16(attr);
     }
-
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-    if ((attr = tb[NL80211_ATTR_MLO_LINK_ID]) != NULL) {
-        link_id = nla_get_u8(attr);
-    }
-
-    if ((attr = tb[NL80211_ATTR_WIPHY_FREQ]) != NULL) {
-        freq = nla_get_u32(attr);
-    }
-
-    if (link_id != -1) {
-        interface = wifi_hal_get_mld_interface_by_link_id(interface, link_id);
-    } else if (freq != 0) {
-        interface = wifi_hal_get_mld_interface_by_freq(interface, freq);
-    }
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
 #ifdef CMXB7_PORT
     if (tb[NL80211_ATTR_RX_SNR_DB]) {
