@@ -414,6 +414,10 @@ INT wifi_hal_init()
     char *drv_name;
 
     wifi_hal_info_print("%s:%d: start\n", __func__, __LINE__);
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+    void supplicant_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
+    wpa_supplicant_event = supplicant_event;
+#endif // BANANA_PI_PORT
     if ((drv_name = get_wifi_drv_name()) == NULL) {
         wifi_hal_error_print("%s:%d: driver not found, get drv name failed\n", __func__, __LINE__);
         return RETURN_ERR;
