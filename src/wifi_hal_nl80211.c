@@ -10821,7 +10821,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
         [NL80211_BSS_PARENT_TSF] = { .type = NLA_U64 },
         [NL80211_BSS_PARENT_BSSID] = { .type = NLA_UNSPEC },
         [NL80211_BSS_LAST_SEEN_BOOTTIME] = { .type = NLA_U64 },
-#ifdef IGNITE_SCAN_PARAMS
+#ifdef PROJECT_IGNITE
         [NL80211_BSS_NOISE] = { .type = NLA_U32 },
         [NL80211_BSS_SNR] = { .type = NLA_U32 },
         [NL80211_BSS_CU] = { .type = NLA_U8 },
@@ -10943,7 +10943,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
         scan_info_ap->rssi = rssi;
     }
 
-#ifdef IGNITE_SCAN_PARAMS
+#ifdef PROJECT_IGNITE
     wifi_hal_stats_dbg_print(" noise attribute: %p snr attribute: %p cu attribute: %p\n", bss[NL80211_BSS_NOISE], bss[NL80211_BSS_SNR], bss[NL80211_BSS_CU]);
     // - noise
     if (bss[NL80211_BSS_NOISE]) {
