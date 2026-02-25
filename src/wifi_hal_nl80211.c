@@ -14405,8 +14405,11 @@ wifi_drv_get_hw_feature_data(void *priv, u16 *num_modes, u16 *flags, u8 *dfs_dom
     *dfs_domain = 0;
 #if !(defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2))
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
-    nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
     if (msg == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to create message\n", __func__, __LINE__);
+        return NULL;
+    }
+    nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
 #else
     u32 feat;
     if (fetch_nl80211_protocol_features(g_wifi_hal.nl80211_id, &feat)) {
@@ -14418,11 +14421,15 @@ wifi_drv_get_hw_feature_data(void *priv, u16 *num_modes, u16 *flags, u8 *dfs_dom
         *flags = NLM_F_DUMP;
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, *flags, NL80211_CMD_GET_WIPHY);
-    if (!msg || nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP)) {
-#endif
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to create message\n", __func__, __LINE__);
+        return NULL;
+    }
+    if (nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP)) {
         nlmsg_free(msg);
         return NULL;
     }
+#endif
     
     if (nl80211_send_and_recv(msg, phy_info_get_hw_feature_handler, &result, NULL, NULL) == 0) {
         struct hostapd_hw_modes *modes;
