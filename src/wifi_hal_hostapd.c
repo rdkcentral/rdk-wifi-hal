@@ -3109,10 +3109,9 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, ForceAuthorized);
         }
 #endif // CONFIG_WIFI_EMULATOR
-        if (vap->u.sta_info.ignite_enabled == true) {   
-            wifi_hal_dbg_print("[%s %d] Mode : %d type : %d phase : %d id : %s password : %s\n",
-                __func__, __LINE__, sec->repurposed_mode, sec->repurposed_radius.eap_type, sec->repurposed_radius.phase2,
-                sec->repurposed_radius.identity, sec->repurposed_radius.key);
+        if (vap->u.sta_info.ignite_enabled == true) {
+            wifi_hal_dbg_print("[%s %d] Mode : %d type : %d phase : %d\n",
+                __func__, __LINE__, sec->repurposed_mode, sec->repurposed_radius.eap_type, sec->repurposed_radius.phase2);
             if (sec->repurposed_mode == wifi_security_mode_wpa2_enterprise ||
                     sec->repurposed_mode == wifi_security_mode_wpa3_enterprise) {
                 update_eapol_method(interface, sec->repurposed_radius.eap_type);
@@ -3123,10 +3122,12 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                 update_eapol_method(interface, sec->u.radius.eap_type);
             }
         }
-        interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
-        interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
-        interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
-        interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.radius.key);
+        if (!vap->u.sta_info.ignite_enabled) {
+            interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
+            interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
+            interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
+            interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.radius.key);
+        }
 #ifdef CONFIG_WIFI_EMULATOR
         if (vap->vap_mode == wifi_vap_mode_sta) {
             if (interface->wpa_s.current_ssid->eap.openssl_ciphers == NULL) {
@@ -3159,18 +3160,20 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
             }
         }
         interface->wpa_s.current_ssid->eap.fragment_size = 400;
-        interface->wpa_s.current_ssid->eap.identity = (unsigned char *)&sec->u.radius.identity;
-        interface->wpa_s.current_ssid->eap.identity_len = strlen(sec->u.radius.identity);
-        interface->wpa_s.current_ssid->eap.password = (unsigned char *)&sec->u.radius.key;
-        interface->wpa_s.current_ssid->eap.password_len = strlen(sec->u.radius.key);
+        if (vap->u.sta_info.ignite_enabled == true) {
+            interface->wpa_s.current_ssid->eap.eap_ttls_ignite_mode = 1;
+        } else {
+            interface->wpa_s.current_ssid->eap.identity = (unsigned char *)&sec->u.radius.identity;
+            interface->wpa_s.current_ssid->eap.identity_len = strlen(sec->u.radius.identity);
+            interface->wpa_s.current_ssid->eap.password = (unsigned char *)&sec->u.radius.key;
+            interface->wpa_s.current_ssid->eap.password_len = strlen(sec->u.radius.key);
+        }
         interface->wpa_s.current_ssid->eap.eap_methods = &interface->u.sta.wpa_eapol_method;
         eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
 
 #else
         wifi_hal_dbg_print("%s:%d: Ignite-status : %d\n", __func__, __LINE__, vap->u.sta_info.ignite_enabled);
         if (vap->u.sta_info.ignite_enabled == true) {
-            char *anonymous_identity;
-            anonymous_identity = "anonymous@xfignite.com";
             if (vap->vap_mode == wifi_vap_mode_sta) {
                 if (interface->u.sta.wpa_eapol_config.openssl_ciphers == NULL) {
                     interface->u.sta.wpa_eapol_config.openssl_ciphers = (char *)malloc(MAX_STR_LEN);
@@ -3200,22 +3203,14 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                                 MAX_STR_LEN - 1);
                         break;
                     default:
-                        // using PAP as default value.
                         strncpy(interface->u.sta.wpa_eapol_config.phase2, "auth=PAP",
                                 MAX_STR_LEN - 1);
                         break;
                 }
             }
             interface->u.sta.wpa_eapol_config.fragment_size = 400;
+            interface->u.sta.wpa_eapol_config.eap_ttls_ignite_mode = 1;
             eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
-            interface->u.sta.wpa_eapol_config.anonymous_identity =
-                (unsigned char *)anonymous_identity;
-            interface->u.sta.wpa_eapol_config.anonymous_identity_len = strlen(
-                    anonymous_identity);
-            interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->repurposed_radius.identity;
-            interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->repurposed_radius.identity);
-            interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->repurposed_radius.key;
-            interface->u.sta.wpa_eapol_config.password_len = strlen(sec->repurposed_radius.key);
         }
 #endif // CONFIG_WIFI_EMULATOR
         interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
