@@ -3210,7 +3210,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
 #ifdef PROJECT_IGNITE
             interface->u.sta.wpa_eapol_config.eap_ttls_ignite_mode = 1;
 #endif            
-	    eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
+            eapol_sm_notify_portControl(interface->u.sta.wpa_sm->eapol, Auto);
         }
 #endif // CONFIG_WIFI_EMULATOR
         interface->u.sta.wpa_eapol_method.vendor = EAP_VENDOR_IETF;
