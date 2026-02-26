@@ -262,12 +262,20 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         sprintf(param_name, "wl%d_country_code", index);
         set_string_nvram_param(param_name, temp_buff);
 
+        snprintf(param_name, sizeof(param_name), "wl%d_reg_mode", index);
+        if (operationParam->DfsEnabled) {
+            set_string_nvram_param(param_name, "h");
+        } else {
+            set_string_nvram_param(param_name, "d");
+        }
+
         if (radio->oper_param.DfsEnabled != operationParam->DfsEnabled) {
             /* userspace selects new channel and configures CSA when radar detected */
             disable_dfs_auto_channel_change(index, true);
         }
+
     }
-    
+
     return 0;
 }
 
@@ -716,7 +724,17 @@ int wifi_setApRetrylimit(void *priv)
 
 int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
-    return 0;
+    wifi_hal_info_print("%s:%d DfsEnabled:%u \n", __func__, __LINE__, operationParam->DfsEnabled);
+    if (wifi_setRadioDfsEnable(index, operationParam->DfsEnabled) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d RadioDfsEnable Failed\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    if (wifi_applyRadioSettings(index) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d applyRadioSettings Failed\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    return RETURN_OK;
 }
 
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
