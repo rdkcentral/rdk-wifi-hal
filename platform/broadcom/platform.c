@@ -718,10 +718,11 @@ void platform_mld_update(wifi_vap_info_t *vap)
     int i, mld_unit = -1, vapidx = -1;
     wifi_mld_common_info_t *mld_cmn = &vap->u.bss_info.mld_info.common_info;
 
-    wifi_hal_info_print("### %s: %s radio=%d vap_index=%d mld: enable=%d unit=%d linkid=%d apply=%d ###\n",
-        __func__, vap->vap_name, vap->radio_index, vap->vap_index, mld_cmn->mld_enable,
-        mld_cmn->mld_id, mld_cmn->mld_link_id, mld_cmn->mld_apply);
-    if (mld_cmn->mld_enable && mld_cmn->mld_id < MLD_UNIT_COUNT) {
+    wifi_hal_info_print("### %s: %s radio=%d vap_index=%d enable %d mld: enable=%d unit=%d linkid=%d apply=%d ###\n",
+        __func__, vap->vap_name, vap->radio_index, vap->vap_index, vap->u.bss_info.enabled,
+        mld_cmn->mld_enable, mld_cmn->mld_id, mld_cmn->mld_link_id, mld_cmn->mld_apply);
+
+    if (vap->u.bss_info.enabled && mld_cmn->mld_enable && mld_cmn->mld_id < MLD_UNIT_COUNT) {
         mld_unit = mld_cmn->mld_id;
         vapidx = mld_vapidx[mld_unit][vap->radio_index];
         if (vapidx != vap->vap_index) {
@@ -771,6 +772,45 @@ int nl80211_send_mld_apply(wifi_interface_info_t *interface)
     if ((msg_mlo = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
              RDK_VENDOR_NL80211_SUBCMD_SET_MLD)) == NULL ||
         (nlattr_vendor = nla_nest_start(msg_mlo, NL80211_ATTR_VENDOR_DATA)) == NULL ||
+        nla_put_u8(msg_mlo, RDK_VENDOR_ATTR_MLD_CONFIG_APPLY, 1) < 0) {
+        wifi_hal_error_print("### %s: Failed to create NL command ###\n", __func__);
+        nlmsg_free(msg_mlo);
+        return -1;
+    }
+    nla_nest_end(msg_mlo, nlattr_vendor);
+    ret = nl80211_send_and_recv(msg_mlo, NULL, &g_wifi_hal, NULL, NULL);
+
+    wifi_hal_info_print("### %s: ret=%d ###\n", __func__, ret);
+    return ret;
+}
+
+/*
+ * Send SET_MLD subcommand with RDK_VENDOR_ATTR_MLD_ENABLE = false
+ */
+int nl80211_send_mld_vap_disable(wifi_interface_info_t *interface)
+{
+    int ret = 0;
+    struct nl_msg *msg_mlo;
+    struct nlattr *nlattr_vendor;
+    unsigned char mld_enable = 0;
+
+    if (interface == NULL) {
+        wifi_hal_info_print("### %s: NULL interface ###\n", __func__);
+        return -1;
+    }
+    wifi_hal_info_print("### %s: mlo_init_map=%d mlo_radio_map=%d on %s ###\n",
+        __func__, mlo_init_map, mlo_radio_map, interface->name);
+
+    /*
+     * message format
+     *
+     * NL80211_ATTR_VENDOR_DATA
+     * RDK_VENDOR_ATTR_MLD_CONFIG_APPLY
+     */
+    if ((msg_mlo = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_COMCAST,
+             RDK_VENDOR_NL80211_SUBCMD_SET_MLD)) == NULL ||
+        (nlattr_vendor = nla_nest_start(msg_mlo, NL80211_ATTR_VENDOR_DATA)) == NULL ||
+        nla_put_u8(msg_mlo, RDK_VENDOR_ATTR_MLD_ENABLE, mld_enable) < 0 ||
         nla_put_u8(msg_mlo, RDK_VENDOR_ATTR_MLD_CONFIG_APPLY, 1) < 0) {
         wifi_hal_error_print("### %s: Failed to create NL command ###\n", __func__);
         nlmsg_free(msg_mlo);
@@ -5294,7 +5334,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
 
     old_mld_link_id = hapd->mld_link_id;
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
-    mld_ap = (!conf->disable_11be && (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
+    mld_ap = vap->u.bss_info.enabled && (!conf->disable_11be && (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
     nvram_update_wl_bss_mlo_mode(conf->iface, mld_ap ? mld_conf->mld_enable : 0, &nvram_changed);
     if (nvram_changed) {
         wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
@@ -5331,12 +5371,21 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         if (hapd->mld) {
             mlo_remove_link(hapd);
             hapd->mld = NULL;
+#if defined(MLO_ENAB)
+            if (!vap->u.bss_info.enabled) {
+                /* In case VAP was part of MLO we need to update driver about disabled MLO VAP here,
+                 * because nl80211_drv_mlo_msg(called from start_bss) is not called when VAP is disabled
+                 */
+                nl80211_send_mld_vap_disable(interface);
+            }
+#endif /* MLO_ENAB */
         }
         conf->mld_ap = mld_ap;
     }
 
-    wifi_hal_info_print("%s:%d: iface:%s - mld_ap:%d mld_unit:%u mld_link_id:%u\n", __func__,
-        __LINE__, conf->iface, conf->mld_ap, get_mld_unit(conf), hapd->mld_link_id);
+    wifi_hal_info_print("%s:%d: iface:%s enabled %d mld_enable: %d mld_ap:%d mld_unit:%u mld_link_id:%u\n",
+        __func__, __LINE__, conf->iface, vap->u.bss_info.enabled, mld_conf->mld_enable,
+        conf->mld_ap, get_mld_unit(conf), hapd->mld_link_id);
 
     return RETURN_OK;
 }
