@@ -115,6 +115,7 @@ void recv_data_frame(wifi_interface_info_t *interface);
 static wifi_radio_info_t *rnr_find_6g_radio(void);
 #endif //FEATURE_SINGLE_PHY
 int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx);
+static bool is_interface_in_bridge(const char *iface, const char *bridge_name);
 
 struct family_data {
     const char *group;
@@ -2382,16 +2383,19 @@ void recv_link_status()
                                         interface->data_frames_registered = 0;
                                     }
                                     if (interface->data_frames_registered == 0) {
+                                        const char *bind_ifname;
                                         wifi_hal_info_print("%s:%d: %s BRIDGE IS CREATED\n", __func__, __LINE__, interface->vap_info.bridge_name);
                                         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 
                                         if (sock_fd < 0) {
                                             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, interface->vap_info.bridge_name);
                                         } else {
+                                            bind_ifname = is_interface_in_bridge(interface->name, interface->vap_info.bridge_name)
+                                                ? interface->vap_info.bridge_name : interface->name;
                                             memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
                                             sockaddr.sll_family   = AF_PACKET;
                                             sockaddr.sll_protocol = htons(ETH_P_ALL);
-                                            sockaddr.sll_ifindex  = if_nametoindex(interface->vap_info.bridge_name);
+                                            sockaddr.sll_ifindex  = if_nametoindex(bind_ifname);
 
                                             if (setsockopt(sock_fd, SOL_SOCKET, SO_ATTACH_FILTER, &bpf, sizeof(bpf)) < 0) {
                                                 wifi_hal_error_print("%s:%d: Error in setting sockopt err:%d\n", __func__, __LINE__, errno);
@@ -12476,8 +12480,14 @@ int wifi_drv_hapd_send_eapol(
         if (sock_fd < 0) {
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, get_vap_bridge_name(&interface->vap_info));
         } else {
-            ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:interface->name;
-	    memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
+            if (vap->vap_mode == wifi_vap_mode_ap) {
+                ifname = is_interface_in_bridge(interface->name, vap->bridge_name)
+                    ? vap->bridge_name : interface->name;
+            } else {
+                ifname = interface->name;
+            }
+
+            memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
             sockaddr.sll_family   = AF_PACKET;
             sockaddr.sll_protocol = htons(ETH_P_EAPOL);
             sockaddr.sll_ifindex  = if_nametoindex(ifname);
@@ -15161,6 +15171,35 @@ error:
     return -1;
 }
 
+/**
+ * Check if the given interface is a member of the given bridge.
+ * Used to decide whether to bind the EAPOL socket to the bridge (frames
+ * forwarded to bridge) or to the VAP interface (e.g. when VAP is in another bridge).
+ * Returns true if interface is in the given bridge, false otherwise (or if unknown).
+ */
+static bool is_interface_in_bridge(const char *iface, const char *bridge_name)
+{
+    char path[64], link[128];
+    ssize_t n;
+    bool in_bridge;
+
+    if (!iface || !bridge_name) {
+        return false;
+    }
+    snprintf(path, sizeof(path), "/sys/class/net/%s/master", iface);
+    n = readlink(path, link, sizeof(link) - 1);
+    if (n < 0) {
+        return false; /* no master = not in a bridge */
+    }
+    link[n] = '\0';
+    {
+        const char *base = strrchr(link, '/');
+        base = base ? base + 1 : link;
+        in_bridge = (strcmp(base, bridge_name) == 0);
+        return in_bridge;
+    }
+}
+
 static int register_data_frame_socket(wifi_interface_info_t *interface)
 {
     wifi_vap_info_t *vap;
@@ -15230,9 +15269,18 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
 #ifdef CONFIG_WIFI_EMULATOR
     ifname = vap->bridge_name;
 #else
-    ifname = (vap->vap_mode == wifi_vap_mode_ap || vap->u.sta_info.ignite_enabled) ?
-        vap->bridge_name :
-        interface->name;
+    if (vap->vap_mode == wifi_vap_mode_ap) {
+        /* If VAP interface is not in the configured bridge (e.g. in another bridge),
+         * bind to the VAP interface so we still receive EAPOL from that interface. */
+        if (is_interface_in_bridge(interface->name, vap->bridge_name))
+            ifname = get_vap_bridge_name(vap);
+        else
+            ifname = interface->name;
+    } else if (vap->u.sta_info.ignite_enabled) {
+        ifname = get_vap_bridge_name(vap);
+    } else {
+        ifname = interface->name;
+    }
 #endif
     memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
     sockaddr.sll_family = AF_PACKET;
