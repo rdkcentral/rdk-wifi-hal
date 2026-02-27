@@ -96,3 +96,5 @@ jobs:
       working-directory: easymesh_project/OneWifi
       run: |
         make -f ${{ matrix.platform.makefile_path }} all
+      env:
+        CFLAGS: ${{matrix.platform.extra_cflags}}
