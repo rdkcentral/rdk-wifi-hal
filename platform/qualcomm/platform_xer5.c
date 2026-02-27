@@ -427,7 +427,7 @@ int check_radio_index(uint8_t radio_index)
     return -1;
 }
 
-int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff)
+int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, const wifi_channels_list_t *channels, char *buff)
 {
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);    
     return 0;
@@ -1465,6 +1465,11 @@ int update_hostap_mlo(wifi_interface_info_t *interface) {
 #endif /* CONFIG_IEEE80211BE */
 
 int platform_get_radio_caps(wifi_radio_index_t index)
+{
+    return RETURN_OK;
+}
+
+int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
 {
     return RETURN_OK;
 }
