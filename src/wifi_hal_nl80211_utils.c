@@ -3141,6 +3141,7 @@ int convert_enum_beaconrate_to_int(wifi_bitrate_t rates)
     }
 }
 
+#ifndef BANANA_PI_PORT
 /* US/CA: Check if global operating class matches bandwidth */
 static bool matches_bandwidth_us(unsigned int global_op_class, wifi_channelBandwidth_t bw)
 {
@@ -3315,6 +3316,7 @@ static bool matches_bandwidth_for_country(unsigned int global_op_class, wifi_cha
     /* Default to global for all other countries */
     return matches_bandwidth_global(global_op_class, bw);
 }
+#endif
 
 int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
 {
