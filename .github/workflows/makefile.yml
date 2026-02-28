@@ -15,8 +15,13 @@ jobs:
         platform:
           - name: "Raspberry Pi"
             makefile_path: "build/linux/rpi/makefile"
+            extra_cflags: ""
           - name: "Banana Pi R4"
+            extra_cflags: ""
             makefile_path: "build/linux/bpi/makefile"
+          - name: "Banana Pi R4 with MLO enabled"
+            makefile_path: "build/linux/bpi/makefile"
+            extra_cflags: "-DCONFIG_GENERIC_MLO"
       fail-fast: false
 
     name: Build for ${{ matrix.platform.name }}
@@ -84,3 +89,5 @@ jobs:
       working-directory: easymesh_project/OneWifi
       run: |
         make -f ${{ matrix.platform.makefile_path }} all
+      env:
+        CFLAGS: ${{matrix.platform.extra_cflags}}
