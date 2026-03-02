@@ -10639,6 +10639,8 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
     }
 #endif
     if (drv->device_ap_sme) {
+        for (int i = 0; i < 2; i++)
+            wifi_sta_remove(interface, addr, 1, reason);
         return wifi_sta_remove(interface, addr, 1, reason);
     }
 
