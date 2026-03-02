@@ -1061,7 +1061,7 @@ enum nl80211_mfp get_mfp_mode(wifi_security_modes_t mode, int configured_mfp);
 u32 get_akm_suite(int wpa_key_mgmt, wifi_security_modes_t mode);
 enum nl80211_auth_type get_auth_type(wifi_security_modes_t mode, u32 akm_suite);
 int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *security,
-    const struct wpa_auth_config *wpa_conf);
+const struct wpa_auth_config *wpa_conf, wifi_vap_info_t *vap);
 int validate_radio_operation_param(wifi_radio_operationParam_t *param);
 int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg, int len);
 int is_backhaul_interface(wifi_interface_info_t *interface);
