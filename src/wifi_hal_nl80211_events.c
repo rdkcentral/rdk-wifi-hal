@@ -760,7 +760,7 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         wifi_hal_dbg_print("%s:%d: pmkid attribute absent\n", __func__, __LINE__);
     }
 
-    if (sec->mode != wifi_security_mode_none) {
+    if (get_vap_security_mode(&interface->vap_info, sec) != wifi_security_mode_none) {
         eapol_sm_notify_eap_fail(interface->u.sta.wpa_sm->eapol, 0);
         eapol_sm_notify_eap_success(interface->u.sta.wpa_sm->eapol, 0);
         eapol_sm_notify_portEnabled(interface->u.sta.wpa_sm->eapol, TRUE);
@@ -788,7 +788,7 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         interface->u.sta.pending_rx_eapol = false;
     }
 
-    if (sec->mode == wifi_security_mode_none) {
+    if (get_vap_security_mode(&interface->vap_info, sec) == wifi_security_mode_none) {
         wpa_sm_set_state(interface->u.sta.wpa_sm, WPA_COMPLETED);
         interface->u.sta.state = WPA_COMPLETED;
         wifi_drv_set_supp_port(interface, 1);
