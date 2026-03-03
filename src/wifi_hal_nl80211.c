@@ -4032,6 +4032,13 @@ int nl80211_remove_from_bridge(const char *if_name)
 
     device = rtnl_link_get_by_name(link_cache, if_name);
 
+    if (device == NULL) {
+        wifi_hal_error_print("%s:%d: Interface %s not found in cache\n", __func__, __LINE__, if_name);
+        nl_cache_free(link_cache);
+        nl_socket_free(sk);
+        return -1;
+    }
+
     if (rtnl_link_release(sk, device)) {
         wifi_hal_error_print("%s:%d:Unable to release interface:%s \n", __func__, __LINE__, if_name);
         nl_cache_free(link_cache);
