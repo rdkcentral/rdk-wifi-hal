@@ -6689,11 +6689,10 @@ int update_channel_flags()
     struct nl_msg *msg;
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
-    nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
     if (msg == NULL) {
-        nlmsg_free(msg);
         return -1;
     }
+    nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
 
     if (nl80211_send_and_recv(msg, phy_info_handler, &g_wifi_hal, NULL, NULL)) {
         return -1;
@@ -8114,6 +8113,10 @@ int nl80211_set_regulatory_domain(wifi_countrycode_type_t country_code)
 #endif
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_REQ_SET_REG);
+    if (msg == NULL) {
+        wifi_hal_dbg_print("%s:%d: Failed to allocate nl msg\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
     nla_put_string(msg, NL80211_ATTR_REG_ALPHA2, alpha2);
     if ((ret = nl80211_send_and_recv(msg, regulatory_domain_set_info_handler, &g_wifi_hal, NULL, NULL))) {
         wifi_hal_dbg_print("%s:%d: Error updating regulatory_domain error: %d (%s)\n",
@@ -12054,9 +12057,10 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
 
     get_coutry_str_from_code(radio_param->countryCode, country);
 
-    interface_freq = ieee80211_chan_to_freq(country, radio_param->operatingClass,
-          radio_param->channel);
-
+    if ((interface_freq = ieee80211_chan_to_freq(country, radio_param->operatingClass,radio_param->channel)) == -1) {
+        wifi_hal_error_print("%s:%d ieee80211_chan_to_freq failed (country=%s, ch=%d)\n", __func__, __LINE__, country, radio_param->channel);
+        return RETURN_ERR;
+    }
 
     mgmt = (struct ieee80211_mgmt *) data;
     fc = le_to_host16(mgmt->frame_control);
