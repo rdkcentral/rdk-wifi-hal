@@ -570,11 +570,13 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             break;
     }
     if(sec->mode == wifi_security_mode_wpa3_compatibility) {
-        conf->ieee80211w = (enum mfp_options) MGMT_FRAME_PROTECTION_OPTIONAL;
+	    
+        conf->ieee80211w = (enum mfp_options) NO_MGMT_FRAME_PROTECTION;
 #if HOSTAPD_VERSION >= 210
-        conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
+        conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_OPTIONAL;
+	conf->sae_pwe = 2;
 #endif /* HOSTAPD_VERSION >= 210 */
-        conf->sae_require_mfp = 1;
+        conf->sae_require_mfp = 0;
     }
 #endif
 
