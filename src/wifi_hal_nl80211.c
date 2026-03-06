@@ -16464,7 +16464,6 @@ int    wifi_drv_send_radius_eap_failure(void *priv, const u8 *addr, int failure_
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
 	mac_address_t sta;
-    mac_addr_str_t  sta_mac_str;
     if(!addr || !priv) {
         wifi_hal_error_print("%s:%d addr or interface info is null\n", __func__, __LINE__);
         return RETURN_ERR;
