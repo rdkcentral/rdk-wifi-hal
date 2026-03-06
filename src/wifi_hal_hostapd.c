@@ -2706,8 +2706,11 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
 
     memcpy(sm->bssid, backhaul->bssid, sizeof(mac_address_t));
 
-    pbkdf2_sha1(sec->u.key.key, backhaul->ssid, strlen(backhaul->ssid), 
-        4096, pmk, PMK_LEN);
+    if (pbkdf2_sha1(sec->u.key.key, backhaul->ssid, strlen(backhaul->ssid),
+        4096, pmk, PMK_LEN) != 0) {
+        wifi_hal_error_print("%s:%d: pbkdf2_sha1 failed\n", __func__, __LINE__);
+        return;
+    }
 
     wpa_sm_set_own_addr(sm, interface->mac);
     wpa_sm_set_pmk(sm, pmk, PMK_LEN, NULL, NULL);

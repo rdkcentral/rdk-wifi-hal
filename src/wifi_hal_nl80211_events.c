@@ -673,7 +673,11 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
 
     }
 
-    ieee80211_freq_to_channel_ext(backhaul->freq,0,0,(unsigned char*)&radio_param->operatingClass, (unsigned char*)&radio_param->channel);
+    if (ieee80211_freq_to_channel_ext(backhaul->freq,0,0,(unsigned char*)&radio_param->operatingClass,
+        (unsigned char*)&radio_param->channel) == NUM_HOSTAPD_MODES) {
+        wifi_hal_error_print("%s:%d Failed to get op class for freq : %d\n", __func__, __LINE__, backhaul->freq);
+        return;
+    }
 
     if (tb[NL80211_ATTR_REQ_IE] == NULL) { 
         wifi_hal_dbg_print("%s:%d: req ie attribute absent\n", __func__, __LINE__);
