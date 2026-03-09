@@ -273,7 +273,7 @@ typedef struct {
     unsigned int    op_class;
     unsigned int    global_op_class;
     unsigned int    num;
-    unsigned int    ch_list[16];
+    unsigned int    ch_list[25];
 } wifi_radio_op_class_t;
 
 struct wifiCountryEnumStrMap {
@@ -288,7 +288,7 @@ struct wifiEnvironmentEnumStrMap {
 
 typedef struct {
     wifi_countrycode_type_t    cc;
-    wifi_radio_op_class_t   op_class[6];
+    wifi_radio_op_class_t   op_class[20];
 } wifi_country_radio_op_class_t;
 
 typedef struct {
@@ -485,6 +485,7 @@ typedef struct wifi_interface_info_t {
     int mgmt_frames_registered;
     int spurious_frames_registered;
     int bss_frames_registered;
+    int data_frames_registered;
     hash_map_t  *acl_map;
 
     /* Scan support */
@@ -542,6 +543,7 @@ typedef struct {
     unsigned int  prev_channelWidth;
     bool radio_presence; //True for ECO mode Active radio, false for ECO mode power down sleeping radio
     bool radar_detected;
+    bool configuration_in_progress;
 } wifi_radio_info_t;
 
 typedef wifi_vap_name_t wifi_vap_type_t;
@@ -650,6 +652,10 @@ typedef struct {
     wifi_bm_steering_group_t  bm_steer_groups[MAX_STEERING_GROUP_NUM];
     hash_map_t *mgt_frame_rate_limit_hashmap;
     wifi_hal_mgt_frame_rate_limit_t mgt_frame_rate_limit;
+#ifdef CONFIG_GENERIC_MLO
+    unsigned int mld_count;
+    struct hostapd_mld **mld_array;
+#endif
 } wifi_hal_priv_t;
 
 extern wifi_hal_priv_t g_wifi_hal;
@@ -678,7 +684,7 @@ typedef int    (* platform_update_radio_presence_t)();
 typedef int    (* platform_set_txpower_t)(void* priv, uint txpower);
 typedef int    (* platform_set_offload_mode_t)(void* priv, uint offload_mode);
 typedef int    (* platform_get_ApAclDeviceNum_t)(int vap_index, uint *acl_count);
-typedef int    (* platform_get_chanspec_list_t)(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff);
+typedef int    (* platform_get_chanspec_list_t)(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, const wifi_channels_list_t *channels, char *buff);
 typedef int    (* platform_set_acs_exclusion_list_t)(unsigned int radioIndex, char* str);
 typedef int    (* platform_get_vendor_oui_t)(char* vendor_oui, int vendor_oui_len);
 typedef int    (* platform_set_neighbor_report_t)(uint apIndex, uint add, mac_address_t mac);
@@ -827,6 +833,7 @@ void wifi_hal_deauth(int vap_index, int status, uint8_t *mac);
 INT wifi_hal_getInterfaceMap(wifi_interface_name_idex_map_t *if_map, unsigned int max_entries,
     unsigned int *if_map_size);
 INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal);
+INT wifi_hal_sm_deinit(INT vap_index);
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss);
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map);
@@ -1054,7 +1061,7 @@ enum nl80211_mfp get_mfp_mode(wifi_security_modes_t mode, int configured_mfp);
 u32 get_akm_suite(int wpa_key_mgmt, wifi_security_modes_t mode);
 enum nl80211_auth_type get_auth_type(wifi_security_modes_t mode, u32 akm_suite);
 int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *security,
-    const struct wpa_auth_config *wpa_conf);
+const struct wpa_auth_config *wpa_conf, wifi_vap_info_t *vap);
 int validate_radio_operation_param(wifi_radio_operationParam_t *param);
 int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg, int len);
 int is_backhaul_interface(wifi_interface_info_t *interface);
@@ -1138,7 +1145,7 @@ int nvram_get_mgmt_frame_power_control(int vap_index, int* output_dbm);
 int nl80211_set_regulatory_domain(wifi_countrycode_type_t country_code);
 int platform_get_channel_bandwidth(wifi_radio_index_t index, wifi_channelBandwidth_t *channelWidth);
 int wifi_drv_getApAclDeviceNum(int vap_index, uint *acl_count);
-int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char* buff);
+int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, const wifi_channels_list_t *channels, char* buff);
 int wifi_drv_set_acs_exclusion_list(unsigned int radioIndex, char* str);
 int platform_get_acl_num(int vap_index, uint *acl_hal_count);
 int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode);
@@ -1244,7 +1251,7 @@ extern int platform_free_aid(void* priv, u16* aid);
 extern int platform_sync_done(void* priv);
 extern int platform_update_radio_presence(void);
 extern int platform_set_txpower(void* priv, uint txpower);
-extern int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t channels, char *buff);
+extern int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, const wifi_channels_list_t *channels, char *buff);
 extern int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str);
 extern int platform_get_vendor_oui(char* vendor_oui, int vendor_oui_len);
 extern int platform_set_neighbor_report(uint apIndex, uint add, mac_address_t mac);
@@ -1422,4 +1429,6 @@ wifi_interface_info_t *wifi_hal_get_mld_link_interface_by_mac(wifi_interface_inf
     mac_address_t mac);
 int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
+int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
+    size_t ifname_out_len);
 #endif // WIFI_HAL_PRIV_H
