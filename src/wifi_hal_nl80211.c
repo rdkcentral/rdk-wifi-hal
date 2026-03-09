@@ -3126,14 +3126,23 @@ void recv_link_status()
                                     }
                                     if (interface->data_frames_registered == 0) {
                                         const char *bind_ifname;
+                                        const char *ifname = wifi_hal_get_interface_name(interface);
                                         wifi_hal_info_print("%s:%d: %s BRIDGE IS CREATED\n", __func__, __LINE__, interface->vap_info.bridge_name);
                                         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 
                                         if (sock_fd < 0) {
                                             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, interface->vap_info.bridge_name);
                                         } else {
-                                            bind_ifname = is_interface_in_bridge(interface->name, interface->vap_info.bridge_name)
-                                                ? interface->vap_info.bridge_name : interface->name;
+                                            if (is_interface_in_bridge(ifname,
+                                                    interface->vap_info.bridge_name)) {
+                                                bind_ifname = interface->vap_info.bridge_name;
+                                            } else {
+                                                bind_ifname = ifname;
+                                            }
+
+                                            wifi_hal_info_print(
+                                                "%s:%d: Binding data frames socket to %s\n",
+                                                __func__, __LINE__, bind_ifname);
                                             memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
                                             sockaddr.sll_family   = AF_PACKET;
                                             sockaddr.sll_protocol = htons(ETH_P_ALL);
@@ -6692,11 +6701,10 @@ int update_channel_flags()
     struct nl_msg *msg;
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
-    nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
     if (msg == NULL) {
-        nlmsg_free(msg);
         return -1;
     }
+    nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
 
     if (nl80211_send_and_recv(msg, phy_info_handler, &g_wifi_hal, NULL, NULL)) {
         return -1;
@@ -8019,13 +8027,15 @@ Exit:
                             __func__, __LINE__, ret);
                     }
                 }
+                pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                 if (update_hostap_interface_params(interface) != RETURN_OK) {
                     wifi_hal_error_print("%s:%d - Failed to update_hostap_interface_params\n", __func__, __LINE__);
+                    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                     return RETURN_ERR;
                 }
-
                 interface->beacon_set = 0;
                 start_bss(interface);
+                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
                 if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
                     if (platform_is_bss_up(wifi_hal_get_interface_name(interface))) {
@@ -8366,6 +8376,10 @@ int nl80211_set_regulatory_domain(wifi_countrycode_type_t country_code)
 #endif
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_REQ_SET_REG);
+    if (msg == NULL) {
+        wifi_hal_dbg_print("%s:%d: Failed to allocate nl msg\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
     nla_put_string(msg, NL80211_ATTR_REG_ALPHA2, alpha2);
     if ((ret = nl80211_send_and_recv(msg, regulatory_domain_set_info_handler, &g_wifi_hal, NULL, NULL))) {
         wifi_hal_dbg_print("%s:%d: Error updating regulatory_domain error: %d (%s)\n",
@@ -12306,9 +12320,10 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
 
     get_coutry_str_from_code(radio_param->countryCode, country);
 
-    interface_freq = ieee80211_chan_to_freq(country, radio_param->operatingClass,
-          radio_param->channel);
-
+    if ((interface_freq = ieee80211_chan_to_freq(country, radio_param->operatingClass,radio_param->channel)) == -1) {
+        wifi_hal_error_print("%s:%d ieee80211_chan_to_freq failed (country=%s, ch=%d)\n", __func__, __LINE__, country, radio_param->channel);
+        return RETURN_ERR;
+    }
 
     mgmt = (struct ieee80211_mgmt *) data;
     fc = le_to_host16(mgmt->frame_control);
@@ -13063,7 +13078,7 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
     int ret;
     wifi_vap_info_t *vap;
     wifi_radio_info_t *radio;
-    char *mld_name = NULL;
+    char *vap_name = NULL;
     int link_id = -1;
     mac_address_t intf_mac = {};
 
@@ -13071,10 +13086,9 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
     radio = get_radio_by_rdk_index(vap->radio_index);
 
 #ifdef CONFIG_GENERIC_MLO
+    char *mld_name = NULL;
     link_id = wifi_hal_get_mld_link_id(interface);
     mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
-#endif // CONFIG_GENERIC_MLO
-
     if (mld_name != NULL) {
         ret = os_snprintf(name, sizeof(name), "%s.sta%d", mld_name, aid);
         if (wifi_hal_get_mac_address(mld_name, intf_mac) < 0) {
@@ -13082,10 +13096,17 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
                 __LINE__, mld_name);
             return RETURN_ERR;
         }
+        vap_name = mld_name;
     } else {
         ret = os_snprintf(name, sizeof(name), "%s.sta%d", interface->name, aid);
         memcpy(intf_mac, vap->u.bss_info.bssid, sizeof(mac_address_t));
+        vap_name = interface->name;
     }
+#else
+    ret = os_snprintf(name, sizeof(name), "%s.sta%d", interface->name, aid);
+    memcpy(intf_mac, vap->u.bss_info.bssid, sizeof(mac_address_t));
+    vap_name = interface->name;
+#endif // CONFIG_GENERIC_MLO
 
     if (ret >= (int) sizeof(name)) {
         wifi_hal_info_print("%s:%d nl80211: WDS interface name:%s was truncated\r\n",
@@ -13169,11 +13190,7 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
             return RETURN_ERR;
         }
 
-        if (mld_name != NULL) {
-            nl80211_set_sta_vlan(radio, interface, addr, mld_name, 0, link_id);
-        } else {
-            nl80211_set_sta_vlan(radio, interface, addr, interface->name, 0, link_id);
-        }
+        nl80211_set_sta_vlan(radio, interface, addr, vap_name, 0, link_id);
 
         nl80211_delete_interface(radio->index, name, if_nametoindex(name));
         memset(&event, 0, sizeof(event));
@@ -13316,7 +13333,7 @@ int wifi_drv_hapd_send_eapol(
     mac_addr_str_t src_mac_str, dst_mac_str;
     int sock_fd;
     struct sockaddr_ll sockaddr;
-    const char *ifname;
+    const char *bind_ifname;
 #ifdef WIFI_EMULATOR_CHANGE
     static int fd_c = -1;
 #endif
@@ -13422,20 +13439,26 @@ int wifi_drv_hapd_send_eapol(
         }
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
 
+        const char *ifname = wifi_hal_get_interface_name(interface);
         if (sock_fd < 0) {
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, get_vap_bridge_name(&interface->vap_info));
         } else {
             if (vap->vap_mode == wifi_vap_mode_ap) {
-                ifname = is_interface_in_bridge(interface->name, vap->bridge_name)
-                    ? vap->bridge_name : interface->name;
+                if (is_interface_in_bridge(ifname, vap->bridge_name)) {
+                    bind_ifname = vap->bridge_name;
+                } else {
+                    bind_ifname = ifname;
+                }
             } else {
-                ifname = interface->name;
+                bind_ifname = ifname;
             }
 
+            wifi_hal_info_print("%s:%d: Binding data frames socket to %s\n", __func__, __LINE__,
+                bind_ifname);
             memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
             sockaddr.sll_family   = AF_PACKET;
             sockaddr.sll_protocol = htons(ETH_P_EAPOL);
-            sockaddr.sll_ifindex  = if_nametoindex(ifname);
+            sockaddr.sll_ifindex = if_nametoindex(bind_ifname);
 
             if (bind(sock_fd, (struct sockaddr *)&sockaddr, sizeof(sockaddr)) < 0) {
                 wifi_hal_error_print("%s:%d: Error binding to interface, err:%d\n", __func__, __LINE__, errno);
@@ -14675,8 +14698,11 @@ wifi_drv_get_hw_feature_data(void *priv, u16 *num_modes, u16 *flags, u8 *dfs_dom
     *dfs_domain = 0;
 #if !(defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2))
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
-    nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
     if (msg == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to create message\n", __func__, __LINE__);
+        return NULL;
+    }
+    nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
 #else
     u32 feat;
     if (fetch_nl80211_protocol_features(g_wifi_hal.nl80211_id, &feat)) {
@@ -14688,12 +14714,16 @@ wifi_drv_get_hw_feature_data(void *priv, u16 *num_modes, u16 *flags, u8 *dfs_dom
         *flags = NLM_F_DUMP;
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, *flags, NL80211_CMD_GET_WIPHY);
-    if (!msg || nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP)) {
-#endif
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to create message\n", __func__, __LINE__);
+        return NULL;
+    }
+    if (nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP)) {
         nlmsg_free(msg);
         return NULL;
     }
-
+#endif
+    
     if (nl80211_send_and_recv(msg, phy_info_get_hw_feature_handler, &result, NULL, NULL) == 0) {
         struct hostapd_hw_modes *modes;
         
@@ -16225,7 +16255,7 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
 {
     wifi_vap_info_t *vap;
     struct sockaddr_ll sockaddr;
-    const char *ifname;
+    const char *bind_ifname;
     int sock_fd;
 
 #if defined(CONFIG_GENERIC_MLO)
@@ -16276,24 +16306,30 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
 #endif
 
 #ifdef CONFIG_WIFI_EMULATOR
-    ifname = vap->bridge_name;
+    bind_ifname = vap->bridge_name;
 #else
+    const char *ifname;
+    ifname = wifi_hal_get_interface_name(interface);
     if (vap->vap_mode == wifi_vap_mode_ap) {
         /* If VAP interface is not in the configured bridge (e.g. in another bridge),
          * bind to the VAP interface so we still receive EAPOL from that interface. */
-        if (is_interface_in_bridge(interface->name, vap->bridge_name))
-            ifname = get_vap_bridge_name(vap);
-        else
-            ifname = interface->name;
+        if (is_interface_in_bridge(ifname, vap->bridge_name)) {
+            bind_ifname = get_vap_bridge_name(vap);
+        } else {
+            bind_ifname = ifname;
+        }
     } else if (vap->u.sta_info.ignite_enabled) {
-        ifname = get_vap_bridge_name(vap);
+        bind_ifname = get_vap_bridge_name(vap);
     } else {
-        ifname = interface->name;
+        bind_ifname = ifname;
     }
 #endif
+
+    wifi_hal_info_print("%s:%d: Binding data frames socket to %s\n", __func__, __LINE__,
+        bind_ifname);
     memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
     sockaddr.sll_family = AF_PACKET;
-    sockaddr.sll_ifindex = if_nametoindex(ifname);
+    sockaddr.sll_ifindex = if_nametoindex(bind_ifname);
 
     if (vap->vap_mode == wifi_vap_mode_ap) {
         sockaddr.sll_protocol = htons(ETH_P_ALL);

@@ -5046,7 +5046,9 @@ void re_configure_steering_mac_list(wifi_interface_info_t *interface)
                 steering_set_acl_mode(vap->vap_index, wifi_mac_filter_mode_black_list);
             }
             key = to_mac_str(ptr->mac_addr, sta_mac_str);
-            wifi_hal_addApAclDevice(ptr->vap_index, key);
+            if (wifi_hal_addApAclDevice(ptr->vap_index, key) != RETURN_OK) {
+                wifi_hal_info_print("%s:%d: wifi_hal_addApAclDevice id failed vap_index:%d\n", __func__, __LINE__, ptr->vap_index);
+            }
         }
         ptr = hash_map_get_next(interface->bm_sta_map, ptr);
     }

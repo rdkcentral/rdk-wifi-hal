@@ -2268,7 +2268,6 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
     }
 #endif /* CONFIG_GENERIC_MLO */
 
-    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     // initialize the default params
     if (update_hostap_data(interface) != RETURN_OK) {
         goto exit;
@@ -2299,7 +2298,6 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
 
     ret = RETURN_OK;
 exit:
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return ret;
 }
 
@@ -2754,8 +2752,11 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
 
     memcpy(sm->bssid, backhaul->bssid, sizeof(mac_address_t));
 
-    pbkdf2_sha1(sec->u.key.key, backhaul->ssid, strlen(backhaul->ssid), 
-        4096, pmk, PMK_LEN);
+    if (pbkdf2_sha1(sec->u.key.key, backhaul->ssid, strlen(backhaul->ssid),
+        4096, pmk, PMK_LEN) != 0) {
+        wifi_hal_error_print("%s:%d: pbkdf2_sha1 failed\n", __func__, __LINE__);
+        return;
+    }
 
     wpa_sm_set_own_addr(sm, interface->mac);
     wpa_sm_set_pmk(sm, pmk, PMK_LEN, NULL, NULL);
@@ -3295,8 +3296,6 @@ int start_bss(wifi_interface_info_t *interface)
     //struct hostapd_config *iconf;
     wifi_vap_info_t *vap = &interface->vap_info;
 
-    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-
     hapd = &interface->u.ap.hapd;
     conf = hapd->conf;
     //iconf = hapd->iconf;
@@ -3325,8 +3324,6 @@ int start_bss(wifi_interface_info_t *interface)
 #endif
 #endif
 #endif /* CONFIG_GENERIC_MLO */
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-
     return ret;
 }
 
