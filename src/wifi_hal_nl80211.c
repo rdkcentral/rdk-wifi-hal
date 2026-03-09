@@ -16004,7 +16004,6 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
     wifi_vap_info_t *vap;
     struct sockaddr_ll sockaddr;
     const char *bind_ifname;
-    const char *ifname;
     int sock_fd;
 
 #if defined(CONFIG_GENERIC_MLO)
@@ -16057,6 +16056,7 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
 #ifdef CONFIG_WIFI_EMULATOR
     bind_ifname = vap->bridge_name;
 #else
+    const char *ifname;
     ifname = wifi_hal_get_interface_name(interface);
     if (vap->vap_mode == wifi_vap_mode_ap) {
         /* If VAP interface is not in the configured bridge (e.g. in another bridge),
