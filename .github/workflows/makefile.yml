@@ -15,13 +15,8 @@ jobs:
         platform:
           - name: "Raspberry Pi"
             makefile_path: "build/linux/rpi/makefile"
-            extra_cflags: ""
-          - name: "Banana Pi R4"
-            extra_cflags: ""
+          - name: "Banana Pi R4 - MLO"
             makefile_path: "build/linux/bpi/makefile"
-          - name: "Banana Pi R4 with MLO enabled"
-            makefile_path: "build/linux/bpi/makefile"
-            extra_cflags: "-DCONFIG_GENERIC_MLO"
       fail-fast: false
 
     name: Build for ${{ matrix.platform.name }}
@@ -71,7 +66,19 @@ jobs:
                                 mariadb-server \
                                 gnupg \
                                 file \
-                                golang
+                                golang \
+                                pkg-config \
+                                libperl-dev \
+                                libjson-c-dev
+
+        # Steps for ucode installation required for hostapd compilation
+        git clone https://github.com/jow-/ucode.git ucode
+        cd ucode
+        mkdir build && cd build
+        cmake -DUBUS_SUPPORT=OFF -DUCI_SUPPORT=OFF -DULOOP_SUPPORT=OFF ..
+        make -j$(nproc)
+        sudo make install
+        sudo ldconfig
 
     - name: Setup OneWiFi for ${{ matrix.platform.name }}
       working-directory: easymesh_project/OneWifi
