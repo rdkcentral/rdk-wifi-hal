@@ -71,7 +71,7 @@
 #include "config_supplicant.h"
 #elif defined(BANANA_PI_PORT)
 #include "wpa_supplicant/config.h"
-#include <sys/syscfg.h>
+#include "syscfg/syscfg.h"
 #endif
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD)
