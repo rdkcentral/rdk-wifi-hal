@@ -19607,6 +19607,7 @@ const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops = {
 #endif // CONFIG_VENDOR_COMMANDS
     .radius_eap_failure = wifi_drv_send_radius_eap_failure,
     .radius_fallback_failover = wifi_drv_send_radius_fallback_and_failover,
+    .get_handshake_status = wifi_drv_get_handshake_status,
 #ifdef CMXB7_PORT
     .set_chan_dfs_state = nl80211_set_channel_dfs_state,
 #endif
