@@ -8024,15 +8024,13 @@ Exit:
                             __func__, __LINE__, ret);
                     }
                 }
-                pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                 if (update_hostap_interface_params(interface) != RETURN_OK) {
                     wifi_hal_error_print("%s:%d - Failed to update_hostap_interface_params\n", __func__, __LINE__);
-                    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                     return RETURN_ERR;
                 }
+
                 interface->beacon_set = 0;
                 start_bss(interface);
-                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
                 if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
                     if (platform_is_bss_up(wifi_hal_get_interface_name(interface))) {
