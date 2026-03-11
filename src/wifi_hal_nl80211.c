@@ -71,7 +71,6 @@
 #include "config_supplicant.h"
 #elif defined(BANANA_PI_PORT)
 #include "wpa_supplicant/config.h"
-#include "syscfg/syscfg.h"
 #endif
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD)
@@ -6926,8 +6925,10 @@ int init_nl80211()
     char thread_id[24];
     wifi_netlink_thread_info_t *core_thread_socket = NULL;
 #ifdef CONFIG_WIFI_EMULATOR
-    char buf[8] = { 0 };
-    uint sim_client_count = 0;
+    char buf[64] = { 0 };
+    int sim_client_count = 0;
+    FILE *fp = NULL;
+    char cmd[128] = { 0 };
 #endif
 
     core_thread_socket = create_nl80211_socket();
@@ -7073,14 +7074,20 @@ int init_nl80211()
 #ifndef CONFIG_WIFI_EMULATOR
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
 #else
-    syscfg_init();
-        if (0 == syscfg_get(NULL, CCI_SIM_CLI_COUNT_SYS_ENTRY, buf, sizeof(buf)) && (buf[0] != '\0')) {
-        sim_client_count = (int)atoi(buf);
+    snprintf(cmd, sizeof(cmd), "syscfg get %s", CCI_SIM_CLI_COUNT_SYS_ENTRY);
+    fp = popen(cmd, "r");
+    if (fp != NULL) {
+        if (fgets(buf, sizeof(buf), fp) != NULL && buf[0] != '\0') {
+            sim_client_count = atoi(buf);
+        }
+        pclose(fp);
     }
+
     if ((sim_client_count <= 0) || (sim_client_count > 300)) {
         sim_client_count = g_wifi_hal.num_radios;
     }
-    wifi_hal_dbg_print("%s:%d: Simulated client count from syscfg is %d\n", __func__, __LINE__, sim_client_count);
+    wifi_hal_dbg_print("%s:%d: Simulated client count from syscfg is %d\n", __func__, __LINE__,
+        sim_client_count);
     for (i = 0; i < sim_client_count; i++) {
 #endif
         radio = &g_wifi_hal.radio_info[i];
