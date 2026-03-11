@@ -868,17 +868,14 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                                 __func__, __LINE__, ret);
                         }
                     }
-                    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                     if (update_hostap_interface_params(interface) != RETURN_OK) {
                         free(old_operationParam);
                         old_operationParam = NULL;
-                        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                         return RETURN_ERR;
                     }
                     interface->beacon_set = 0;
                     start_bss(interface);
                     interface->bss_started = true;
-                    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                 }
 
                 if (radio->oper_param.enable == false && interface->bss_started) {
@@ -899,15 +896,14 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                     deinit_bss(&interface->u.ap.hapd);
                     if (interface->u.ap.hapd.conf->ssid.wpa_psk && !interface->u.ap.hapd.conf->ssid.wpa_psk->next)
                         hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
+                    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
                     if (update_hostap_interface_params(interface) != RETURN_OK) {
                         free(old_operationParam);
                         old_operationParam = NULL;
-                        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                         return RETURN_ERR;
                     }
                     interface->bss_started = false;
-                    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                     nl80211_interface_enable(interface_name, false);
                 }
             }
@@ -1433,15 +1429,16 @@ static int reload_single_vap_configuration(wifi_interface_info_t *interface)
         interface->u.ap.hapd.conf->ssid.wpa_psk->next == NULL) {
         hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
     }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     wifi_hal_info_print("%s:%d: interface:%s update hostapd params\n", __func__, __LINE__,
         interface_name);
     if (update_hostap_interface_params(interface) < 0) {
         wifi_hal_error_print("%s:%d: interface:%s failed to update hostapd params\n", __func__,
             __LINE__, interface_name);
-        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         return -1;
     }
+
     interface->in_reconf = false;
 
     if (interface->vap_info.u.bss_info.enabled && radio->configured && radio->oper_param.enable) {
@@ -1450,12 +1447,11 @@ static int reload_single_vap_configuration(wifi_interface_info_t *interface)
         if (start_bss(interface) < 0) {
             wifi_hal_error_print("%s:%d: interface:%s failed to start BSS\n", __func__, __LINE__,
                 interface_name);
-            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
             return -1;
         }
         interface->bss_started = true;
     }
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
     return 0;
 }
 
@@ -1548,14 +1544,13 @@ static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
 
             wifi_hal_info_print("%s:%d: interface:%s link id:%d update hostapd params\n", __func__,
                 __LINE__, interface_iter_name, interface_iter_link_id);
-            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             if (update_hostap_interface_params(interface_iter) < 0) {
                 wifi_hal_error_print("%s:%d: interface:%s link id:%d failed to update hostapd "
                                      "params\n",
                     __func__, __LINE__, interface_iter_name, interface_iter_link_id);
-                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                 return -1;
             }
+
             interface_iter->in_reconf = false;
 
             if (interface->vap_info.u.bss_info.enabled && radio->configured &&
@@ -1565,14 +1560,13 @@ static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
                 if (start_bss(interface_iter) < 0) {
                     wifi_hal_error_print("%s:%d: interface:%s link id:%d failed to start BSS\n",
                         __func__, __LINE__, interface_iter_name, interface_iter_link_id);
-                    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                     return -1;
                 }
                 interface_iter->bss_started = true;
             }
         }
     }
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
     return 0;
 }
 
@@ -1806,16 +1800,14 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
             wifi_hal_info_print("%s:%d: interface:%s update hostapd params\n", __func__, __LINE__,
                 interface_name);
-            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             if (update_hostap_interface_params(interface) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to update hostapd params\n",
                     __func__, __LINE__, interface_name);
-                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                 return RETURN_ERR;
             }
+
             wifi_hal_info_print("%s:%d: interface:%s vap_initialized:%d\n", __func__, __LINE__,
                 interface_name, interface->vap_initialized);
-            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
             if (interface->vap_initialized == true) {
                 wifi_hal_info_print("%s:%d: interface:%s bss_started:%d\n", __func__, __LINE__,
                     interface_name, interface->bss_started);
@@ -1823,21 +1815,17 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     if (vap->u.bss_info.enabled && radio->configured && radio->oper_param.enable) {
                         wifi_hal_info_print("%s:%d: interface:%s enable ap\n", __func__,
                             __LINE__, interface_name);
-                        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                         interface->beacon_set = 0;
                         ret = start_bss(interface);
                         interface->bss_started = true;
-                        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                     }
                 } else {
                     ret = reload_vap_configuration(interface);
                 }
             } else {
-                pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                 interface->vap_initialized = true;
                 wifi_hal_info_print("%s:%d: radio index:%d update hostapd interfaces\n", __func__,
                     __LINE__, radio->index);
-                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                 if (update_hostap_interfaces(radio)!= RETURN_OK) {
                     wifi_hal_error_print("%s:%d: radio index:%d failed to update hostapd "
                         "interfaces\n", __func__, __LINE__, radio->index);
@@ -1846,11 +1834,9 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 if (vap->u.bss_info.enabled && radio->configured && radio->oper_param.enable) {
                     wifi_hal_info_print("%s:%d: interface:%s enable ap\n", __func__,
                         __LINE__, interface_name);
-                    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                     interface->beacon_set = 0;
                     ret = start_bss(interface);
                     interface->bss_started = true;
-                    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                 }
             }
             if (radio->configured && radio->oper_param.enable) {
