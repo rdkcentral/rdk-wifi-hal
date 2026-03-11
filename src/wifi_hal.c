@@ -533,9 +533,9 @@ INT wifi_hal_init()
         if (first_ap_interface != NULL) {
             struct hostapd_iface *iface = &first_ap_interface->u.ap.iface;
             if (iface->num_hw_features > 0) {
-                wifi_hal_dbg_print("%s:%d: Copying hw_features to radio->hw_modes for radio %u\n",
-                                   __func__, __LINE__, i);
-                copy_hw_features_to_radio_hw_modes(i, radio, iface);
+                wifi_hal_dbg_print("%s:%d: Copying hw_features to radio->hw_modes for radio %u:%d\n",
+                                   __func__, __LINE__, i, radio->rdk_radio_index);
+                copy_hw_features_to_radio_hw_modes(radio, iface);
             } else {
                 wifi_hal_dbg_print("%s:%d: No hw_features found for radio %u (num_hw_features=%u)\n",
                                    __func__, __LINE__, i, iface->num_hw_features);
