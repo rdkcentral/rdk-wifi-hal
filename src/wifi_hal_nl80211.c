@@ -13179,7 +13179,7 @@ int wifi_drv_hapd_send_eapol(
         if (sock_fd < 0) {
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, get_vap_bridge_name(&interface->vap_info));
         } else {
-#ifdef WIFI_EMULATOR_CHANGE
+#ifdef CONFIG_WIFI_EMULATOR
             bind_ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:interface->name;
 #else
             const char *ifname = wifi_hal_get_interface_name(interface);
