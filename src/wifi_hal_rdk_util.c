@@ -157,6 +157,7 @@ static int move_radio_capability(wifi_radio_capabilities_t *tmp_cap, wifi_radio_
     tmp_cap->numcountrySupported = cap->numcountrySupported;
     tmp_cap->maxNumberVAPs = cap->maxNumberVAPs;
     tmp_cap->mldOperationalCap = cap->mldOperationalCap;
+    tmp_cap->TIDLinkMapNegotiation = cap->TIDLinkMapNegotiation;
     for (j=0 ; j<tmp_cap->numcountrySupported ; j++) {
         tmp_cap->countrySupported[j] = cap->countrySupported[j];
     }

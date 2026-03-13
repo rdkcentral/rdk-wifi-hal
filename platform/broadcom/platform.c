@@ -4351,6 +4351,9 @@ int platform_get_radio_caps(wifi_radio_index_t index)
     if ((radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops
         & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK) > 0)
         radio->capab.mldOperationalCap |= STR;
+    if ((radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops
+        & EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_NEG_SUPP_MSK) > 0)
+        radio->capab.TIDLinkMapNegotiation = TRUE;
 
 #endif /* CONFIG_IEEE80211BE */
 
