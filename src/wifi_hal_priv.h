@@ -245,6 +245,14 @@ extern "C" {
 #define CHANWIDTH_320MHZ CONF_OPER_CHWIDTH_320MHZ
 #endif /* HOSTAPD_VERSION >= 211 */
 
+#ifdef __GNUC__
+#define likely(x)       __builtin_expect(!!(x), 1)
+#define unlikely(x)     __builtin_expect(!!(x), 0)
+#else
+#define likely(x)       (x)
+#define unlikely(x)     (x)
+#endif
+
 extern const struct wpa_driver_ops g_wpa_driver_nl80211_ops;
 #ifdef CONFIG_WIFI_EMULATOR
 extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
@@ -949,7 +957,13 @@ int     wifi_hal_emu_set_radio_diag_stats(unsigned int radio_index, bool emu_sta
 int     wifi_hal_emu_set_neighbor_stats(unsigned int radio_index, bool emu_state, wifi_neighbor_ap2_t *neighbor_stats, unsigned int count);
 #endif //CONFIG_WIFI_EMULATOR
 #endif
+int nl80211_register_spurious_frames(wifi_interface_info_t *interface);
 int     nl80211_register_mgmt_frames(wifi_interface_info_t *interface);
+int register_data_frame_socket(wifi_interface_info_t *interface);
+void nl80211_unregister_spurious_frames(wifi_interface_info_t *interface);
+void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface);
+void unregister_data_frame_socket(wifi_interface_info_t *interface);
+
 int     nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         unsigned int num_freq, unsigned int  *freq_list, unsigned int dwell_time,
         unsigned int num_ssid,  ssid_t *ssid_list);
@@ -1418,7 +1432,8 @@ unsigned int wifi_hal_get_interface_ifindex(wifi_interface_info_t *interface);
 bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface);
 int wifi_hal_set_mld_enabled(wifi_interface_info_t *interface, bool enabled);
 int wifi_hal_get_mld_link_id(wifi_interface_info_t *interface);
-int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, int link_id);
+int wifi_hal_get_mld_id(wifi_interface_info_t *interface);
+int wifi_hal_set_mld_id(wifi_interface_info_t *interface, int mld_id);
 wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *interface);
 uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface);
 int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t mac);
@@ -1432,4 +1447,5 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
 int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
     size_t ifname_out_len);
+int reload_vap_configuration(wifi_interface_info_t *interface);
 #endif // WIFI_HAL_PRIV_H
