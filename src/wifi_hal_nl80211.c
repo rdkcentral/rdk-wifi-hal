@@ -15962,6 +15962,7 @@ error:
     return -1;
 }
 
+#ifndef CONFIG_WIFI_EMULATOR
 /**
  * Check if the given interface is a member of the given bridge.
  * Used to decide whether to bind the EAPOL socket to the bridge (frames
@@ -15990,6 +15991,7 @@ static bool is_interface_in_bridge(const char *iface, const char *bridge_name)
         return in_bridge;
     }
 }
+#endif
 
 static int register_data_frame_socket(wifi_interface_info_t *interface)
 {
