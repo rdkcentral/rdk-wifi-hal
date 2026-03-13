@@ -3120,20 +3120,23 @@ void recv_link_status()
                                     }
                                     if (interface->data_frames_registered == 0) {
                                         const char *bind_ifname;
-                                        const char *ifname = wifi_hal_get_interface_name(interface);
                                         wifi_hal_info_print("%s:%d: %s BRIDGE IS CREATED\n", __func__, __LINE__, interface->vap_info.bridge_name);
                                         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 
                                         if (sock_fd < 0) {
                                             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, interface->vap_info.bridge_name);
                                         } else {
+#ifdef CONFIG_WIFI_EMULATOR
+                                            bind_ifname = interface->vap_info.bridge_name;
+#else
+                                            const char *ifname = wifi_hal_get_interface_name(interface);
                                             if (is_interface_in_bridge(ifname,
                                                     interface->vap_info.bridge_name)) {
                                                 bind_ifname = interface->vap_info.bridge_name;
                                             } else {
                                                 bind_ifname = ifname;
                                             }
-
+#endif
                                             wifi_hal_info_print(
                                                 "%s:%d: Binding data frames socket to %s\n",
                                                 __func__, __LINE__, bind_ifname);
@@ -13173,10 +13176,13 @@ int wifi_drv_hapd_send_eapol(
         }
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
 
-        const char *ifname = wifi_hal_get_interface_name(interface);
         if (sock_fd < 0) {
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, get_vap_bridge_name(&interface->vap_info));
         } else {
+#ifdef WIFI_EMULATOR_CHANGE
+            bind_ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:interface->name;
+#else
+            const char *ifname = wifi_hal_get_interface_name(interface);
             if (vap->vap_mode == wifi_vap_mode_ap) {
                 if (is_interface_in_bridge(ifname, vap->bridge_name)) {
                     bind_ifname = vap->bridge_name;
@@ -13186,7 +13192,7 @@ int wifi_drv_hapd_send_eapol(
             } else {
                 bind_ifname = ifname;
             }
-
+#endif
             wifi_hal_info_print("%s:%d: Binding data frames socket to %s\n", __func__, __LINE__,
                 bind_ifname);
             memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
