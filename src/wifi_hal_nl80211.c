@@ -106,7 +106,7 @@ static int scan_info_handler(struct nl_msg *msg, void *arg);
 static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface);
 int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx);
 
-#ifndef CONFIG_WIFI_EMULATOR
+#ifndef WIFI_EMULATOR_CHANGE
 static bool is_interface_in_bridge(const char *iface, const char *bridge_name);
 #endif
 
@@ -3129,7 +3129,8 @@ void recv_link_status()
                                         if (sock_fd < 0) {
                                             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, interface->vap_info.bridge_name);
                                         } else {
-#ifdef CONFIG_WIFI_EMULATOR
+#ifdef WIFI_EMULATOR_CHANGE
+                                            wifi_hal_info_print("%s:%d: Entering\n", __func__, __LINE__);
                                             bind_ifname = interface->vap_info.bridge_name;
 #else
                                             const char *ifname = wifi_hal_get_interface_name(interface);
@@ -13182,7 +13183,8 @@ int wifi_drv_hapd_send_eapol(
         if (sock_fd < 0) {
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, get_vap_bridge_name(&interface->vap_info));
         } else {
-#ifdef CONFIG_WIFI_EMULATOR
+#ifdef WIFI_EMULATOR_CHANGE
+            wifi_hal_info_print("%s:%d: Entering\n", __func__, __LINE__);
             bind_ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:interface->name;
 #else
             const char *ifname = wifi_hal_get_interface_name(interface);
@@ -15965,7 +15967,7 @@ error:
     return -1;
 }
 
-#ifndef CONFIG_WIFI_EMULATOR
+#ifndef WIFI_EMULATOR_CHANGE
 /**
  * Check if the given interface is a member of the given bridge.
  * Used to decide whether to bind the EAPOL socket to the bridge (frames
