@@ -3249,6 +3249,7 @@ int convert_enum_beaconrate_to_int(wifi_bitrate_t rates)
     }
 }
 
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
 /* US/CA: Check if global operating class matches bandwidth */
 static bool matches_bandwidth_us(unsigned int global_op_class, wifi_channelBandwidth_t bw)
 {
@@ -3423,6 +3424,7 @@ static bool matches_bandwidth_for_country(unsigned int global_op_class, wifi_cha
     /* Default to global for all other countries */
     return matches_bandwidth_global(global_op_class, bw);
 }
+#endif
 
 int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
 {
@@ -3473,7 +3475,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
     // Search country-specific op_class table: match channel AND bandwidth
     for (i = 0; i < ARRAY_SZ(cc_op_class.op_class); i++) {
         op_class = &cc_op_class.op_class[i];
-#ifndef BANANA_PI_PORT
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
         // Skip invalid/empty entries (not all countries use all 19 slots)
         if (op_class->op_class == 0 || op_class->global_op_class == 0) {
             continue;
@@ -3500,7 +3502,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
     // Fallback: search global op_class table: match channel AND bandwidth
     for (i = 0; i < ARRAY_SZ(other_op_class.op_class); i++) {
         op_class = &other_op_class.op_class[i];
-#ifndef BANANA_PI_PORT
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
         // Skip invalid/empty entries
         if (op_class->op_class == 0 || op_class->global_op_class == 0) {
             continue;
@@ -5152,7 +5154,9 @@ void re_configure_steering_mac_list(wifi_interface_info_t *interface)
                 steering_set_acl_mode(vap->vap_index, wifi_mac_filter_mode_black_list);
             }
             key = to_mac_str(ptr->mac_addr, sta_mac_str);
-            wifi_hal_addApAclDevice(ptr->vap_index, key);
+            if (wifi_hal_addApAclDevice(ptr->vap_index, key) != RETURN_OK) {
+                wifi_hal_info_print("%s:%d: wifi_hal_addApAclDevice id failed vap_index:%d\n", __func__, __LINE__, ptr->vap_index);
+            }
         }
         ptr = hash_map_get_next(interface->bm_sta_map, ptr);
     }

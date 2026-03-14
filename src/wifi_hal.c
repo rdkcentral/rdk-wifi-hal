@@ -414,9 +414,12 @@ INT wifi_hal_init()
     char *drv_name;
 
     wifi_hal_info_print("%s:%d: start\n", __func__, __LINE__);
-#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211) && defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
     void supplicant_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
     wpa_supplicant_event = supplicant_event;
+#elif defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+    void hostapd_wpa_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
+    wpa_supplicant_event = hostapd_wpa_event;
 #endif // BANANA_PI_PORT
     if ((drv_name = get_wifi_drv_name()) == NULL) {
         wifi_hal_error_print("%s:%d: driver not found, get drv name failed\n", __func__, __LINE__);
@@ -554,12 +557,6 @@ INT wifi_hal_pre_init()
         wifi_hal_info_print("%s:%d: platfrom pre init\n", __func__, __LINE__);
         pre_init_fn();
     }
-
-#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-    void hostapd_wpa_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
-
-    wpa_supplicant_event = hostapd_wpa_event;
-#endif // BANANA_PI_PORT
 
     return RETURN_OK;
 }
@@ -4565,6 +4562,20 @@ void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_
 
     callbacks->disassoc_cb[callbacks->num_disassoc_cbs] = func;
     callbacks->num_disassoc_cbs++;
+}
+
+void wifi_hal_handshake_callback_register(wifi_handshake_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+    
+    if (callbacks == NULL || callbacks->num_handshake_cbs >= MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+    
+    callbacks->handshake_cb[callbacks->num_handshake_cbs] = func;
+    callbacks->num_handshake_cbs++;
 }
 
 void wifi_hal_stamode_callback_register(wifi_stamode_callback func)
