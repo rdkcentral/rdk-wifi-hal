@@ -8183,7 +8183,7 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
         struct he_capabilities *src_he = &hw_feat_mode->he_capab[opmode];
         struct he_capabilities *dst_he = &radio->hw_modes[nl_band].he_capab[opmode];
         if (src_he && src_he->he_supported) {
-	    dst_he->he_supported = true;
+			dst_he->he_supported = true;
             memcpy(dst_he->phy_cap, src_he->phy_cap, HE_MAX_PHY_CAPAB_SIZE);
             memcpy(dst_he->mac_cap, src_he->mac_cap, HE_MAX_MAC_CAPAB_SIZE);
             memcpy(dst_he->mcs, src_he->mcs, HE_MAX_MCS_CAPAB_SIZE);
