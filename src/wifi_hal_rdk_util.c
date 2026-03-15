@@ -125,6 +125,7 @@ static int move_radio_capability(wifi_radio_capabilities_t *tmp_cap, wifi_radio_
     unsigned j = 0;
 
     tmp_cap->index = cap->index;
+    tmp_cap->rdk_radio_index = cap->rdk_radio_index;
     tmp_cap->numSupportedFreqBand = 1;
     tmp_cap->band[0] = cap->band[arr_loc];
     memcpy(&tmp_cap->channel_list[0], &cap->channel_list[arr_loc], sizeof(wifi_channels_list_t));
