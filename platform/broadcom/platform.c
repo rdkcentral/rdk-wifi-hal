@@ -19,6 +19,8 @@
 
 #include <stddef.h>
 #include "wifi_hal.h"
+#define MAX_EMU_NEIGHBOR_AP_COUNT 64
+
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
 #include "typedefs.h"
 #include "bcmwifi_channels.h"
@@ -328,6 +330,11 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
         sem_post(sem);
         sem_close(sem);
         return RETURN_ERR;
+    }
+    if (neighbor_header.neighbor_count > MAX_EMU_NEIGHBOR_AP_COUNT) {
+        wifi_hal_stats_info_print("%s:%d: Invalid neighbor_count %u,reset into 64\n", __func__,
+            __LINE__, neighbor_header.neighbor_count);
+        neighbor_header.neighbor_count = MAX_EMU_NEIGHBOR_AP_COUNT;
     }
 
     combined_data = malloc(
