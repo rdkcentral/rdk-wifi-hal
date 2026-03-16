@@ -8071,6 +8071,12 @@ INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_b
     wifi_hal_info_print("%s:%d: Radio's rdk_index:%u nl_band:%d\n", 
         __func__, __LINE__, radio->rdk_radio_index, nl_band);
 
+    if (nl_band < 0 || nl_band >= NUM_NL80211_BANDS) {
+        wifi_hal_error_print("%s:%d: Invalid nl_band index %d (valid range 0-%d)\n",
+            __func__, __LINE__, nl_band, NUM_NL80211_BANDS - 1);
+        return RETURN_ERR;
+    }
+
     hw_mode = &radio->hw_modes[nl_band];
     if (hw_mode == NULL) {
         wifi_hal_error_print("%s:%d: hw_mode is NULL for band %d\n", __func__, __LINE__, nl_band);
@@ -8104,6 +8110,14 @@ INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_b
         wifi_hal_dbg_print("%s:%d: HE capabilities not supported or not populated for band %d\n", 
             __func__, __LINE__, nl_band);
         capability->wifi6_supported = false;
+        /* Ensure no stale HE capability data is exposed when WiFi6 is not supported */
+        memset(capability->he_phy_cap, 0, HE_MAX_PHY_CAPAB_SIZE);
+        memset(capability->he_mac_cap, 0, HE_MAX_MAC_CAPAB_SIZE);
+        memset(capability->he_mcs_nss_set, 0, HE_MAX_MCS_CAPAB_SIZE);
+        memset(capability->he_ppet, 0, HE_MAX_PPET_CAPAB_SIZE);
+#if HOSTAPD_VERSION >= 210
+        capability->he_6ghz_capa = 0;
+#endif
     }
 #endif /* CONFIG_IEEE80211AX */
 
@@ -8123,6 +8137,10 @@ INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_b
         wifi_hal_dbg_print("%s:%d: EHT capabilities not supported or not populated for band %d\n", 
             __func__, __LINE__, nl_band);
         capability->wifi7_supported = false;
+        capability->eht_mac_cap = 0;
+        memset(capability->eht_phy_cap, 0, EHT_PHY_CAPAB_LEN);
+        memset(capability->eht_mcs, 0, EHT_MCS_NSS_CAPAB_LEN);
+        memset(capability->eht_ppet, 0, EHT_PPE_THRESH_CAPAB_LEN);
     }
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif /* CONFIG_IEEE80211BE */
@@ -8155,6 +8173,11 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
     }
 
     nl_band = get_nl80211_band_from_rdk_radio_index(radio->rdk_radio_index);
+    if (nl_band >= NUM_NL80211_BANDS) {
+        wifi_hal_error_print("%s:%d: Invalid nl80211 band %d for rdk_radio_index=%d\n",
+                            __func__, __LINE__, nl_band, radio->rdk_radio_index);
+        return RETURN_ERR;
+    }
     switch (nl_band) {
         case NL80211_BAND_2GHZ:
             mode = HOSTAPD_MODE_IEEE80211G;
@@ -8163,8 +8186,15 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
         case NL80211_BAND_6GHZ:
             mode = HOSTAPD_MODE_IEEE80211A;
             break;
-	default:
-            break;
+	    default:
+            wifi_hal_error_print("%s:%d: Unsupported nl80211 band %d for rdk_radio_index=%d\n",
+                                  __func__, __LINE__, nl_band, radio->rdk_radio_index);
+            return RETURN_ERR;
+    }
+    if (mode == NUM_HOSTAPD_MODES) {
+        wifi_hal_error_print("%s:%d: Failed to map nl80211 band %d to hostapd hw mode\n",
+                            __func__, __LINE__, nl_band);
+        return RETURN_ERR;
     }
     wifi_hal_dbg_print("%s:%d: Radio from rdk_radio_index[%d] -> rdk_band=%d, and nlband=%d and identified mode=%d\n",
         __func__, __LINE__, radio->rdk_radio_index, rdk_band, nl_band, mode);
@@ -8210,7 +8240,11 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
     }
 
     // Also copy to radio cap
-    wifi_getRadioCapabilityData(radio, nl_band);
+    int rc = wifi_getRadioCapabilityData(radio, nl_band);
+    if (rc != RETURN_OK) {
+        wifi_hal_dbg_print("%s: wifi_getRadioCapabilityData failed for band %d, rc=%d\n",
+                        __func__, nl_band, rc);
+    }
 
     return RETURN_OK;
 }

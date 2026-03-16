@@ -412,7 +412,6 @@ INT wifi_hal_init()
     int ret = 0;
 #endif
     char *drv_name;
-    wifi_interface_info_t *first_ap_interface = NULL;
 
     wifi_hal_info_print("%s:%d: start\n", __func__, __LINE__);
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211) && defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
@@ -512,6 +511,7 @@ INT wifi_hal_init()
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
+        wifi_interface_info_t *first_ap_interface = NULL;
         wifi_interface_info_t *interface;
         radio = get_radio_by_rdk_index(i);
         update_hostap_config_params(radio);
