@@ -16054,21 +16054,20 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
 
 #ifdef CONFIG_WIFI_EMULATOR
     bind_ifname = vap->bridge_name;
+#elif defined WIFI_EMULATOR_CHANGE
+    bind_ifname = (vap->vap_mode == wifi_vap_mode_ap || vap->u.sta_info.ignite_enabled) ?
+            get_vap_bridge_name(vap) : interface->name;
 #else
     const char *ifname;
     ifname = wifi_hal_get_interface_name(interface);
     if (vap->vap_mode == wifi_vap_mode_ap) {
         /* If VAP interface is not in the configured bridge (e.g. in another bridge),
          * bind to the VAP interface so we still receive EAPOL from that interface. */
-#ifndef WIFI_EMULATOR_CHANGE
         if (is_interface_in_bridge(ifname, vap->bridge_name)) {
             bind_ifname = get_vap_bridge_name(vap);
         } else {
-#endif
             bind_ifname = ifname;
-#ifndef WIFI_EMULATOR_CHANGE
         }
-#endif
     } else if (vap->u.sta_info.ignite_enabled) {
         bind_ifname = get_vap_bridge_name(vap);
     } else {
