@@ -511,6 +511,7 @@ INT wifi_hal_init()
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
+        wifi_interface_info_t *first_ap_interface = NULL;
         wifi_interface_info_t *interface;
         radio = get_radio_by_rdk_index(i);
         update_hostap_config_params(radio);
@@ -521,8 +522,26 @@ INT wifi_hal_init()
                 update_hostap_iface(interface);
                 update_hostap_iface_flags(interface);
                 init_hostap_hw_features(interface);
+		        if (first_ap_interface == NULL) {
+                    first_ap_interface = interface;
+                    wifi_hal_dbg_print("%s:%d: Saved first AP interface %s for radio %u\n",
+                                       __func__, __LINE__, interface->name, i);
+                }
             }
             interface = hash_map_get_next(radio->interface_map, interface);
+        }
+        if (first_ap_interface != NULL) {
+            struct hostapd_iface *iface = &first_ap_interface->u.ap.iface;
+            if (iface->num_hw_features > 0) {
+                wifi_hal_dbg_print("%s:%d: Copying hw_features to radio->hw_modes for radio %u:%d\n",
+                                   __func__, __LINE__, i, radio->rdk_radio_index);
+                copy_hw_features_to_radio_hw_modes(radio, iface);
+            } else {
+                wifi_hal_dbg_print("%s:%d: No hw_features found for radio %u (num_hw_features=%u)\n",
+                                   __func__, __LINE__, i, iface->num_hw_features);
+            }
+        } else {
+            wifi_hal_dbg_print("%s:%d: No AP interface found for radio %u\n", __func__, __LINE__, i);
         }
     }
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
