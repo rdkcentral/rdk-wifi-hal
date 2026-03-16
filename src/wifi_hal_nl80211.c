@@ -7353,6 +7353,9 @@ int nl80211_init_primary_interfaces()
                     __LINE__, interface_name);
                 msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0,
                     NL80211_CMD_SET_INTERFACE);
+                if (msg == NULL) {
+                   return -1;
+                }
                 nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
                 ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL);
                 if (ret) {
