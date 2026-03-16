@@ -8124,6 +8124,18 @@ Exit:
     return 0;
 }
 
+static void dump_bytes(const char *name, u8 *data, int len)
+{
+    char buf[512] = {0};
+    int pos = 0;
+
+    for (int i = 0; i < len && pos < sizeof(buf) - 4; i++) {
+        pos += snprintf(buf + pos, sizeof(buf) - pos, "%02x ", data[i]);
+    }
+
+    wifi_hal_info_print("%s:%d: %s: %s\n", __func__, __LINE__, name, buf);
+}
+
 INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_band)
 {
     struct hostapd_hw_modes *hw_mode;
@@ -8163,6 +8175,44 @@ INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_b
         wifi_hal_dbg_print("%s:%d: hw_mode not fully populated for band %d\n", 
             __func__, __LINE__, nl_band);
     }
+
+    //Lets print Ht/vht as well
+    wifi_hal_info_print("%s:%d HT Capabilities: 0x%x\n", __func__, __LINE__, hw_mode->ht_capab);
+    dump_bytes("MCS byte", hw_mode->mcs_set, 16);
+
+    u16 ht = hw_mode->ht_capab;
+    if (ht & (1 << 1)) {
+        wifi_hal_info_print("%s:%d Supports HT40\n", __func__, __LINE__);
+    }
+
+    if (ht & (1 << 5)) {
+        wifi_hal_info_print("%s:%d Supports Short GI 20\n", __func__, __LINE__);
+    }
+
+    if (hw_mode->mcs_set[0] & (1 << 7)) {
+        wifi_hal_info_print("%s:%d MCS7 supported\n", __func__, __LINE__);
+    }
+
+    if (hw_mode->mcs_set[1] & (1 << 0)) {
+        wifi_hal_info_print("%s:%d MCS8 supported\n", __func__, __LINE__);
+    }
+
+    u8 ampdu = hw_mode->a_mpdu_params;
+    u8 max_len = ampdu & 0x03;
+    u8 density = (ampdu >> 2) & 0x07;
+    wifi_hal_info_print("%s:%d Max AMPDU exponent: %u\n", __func__, __LINE__, max_len);
+    wifi_hal_info_print("%s:%d MPDU density: %u\n", __func__, __LINE__, density);
+
+    //========VHT=======
+    wifi_hal_info_print("%s:%d VHT Capabilities: 0x%08x\n", __func__, __LINE__, hw_mode->vht_capab);
+    dump_bytes("VHT MCS byte", hw_mode->vht_mcs_set, 8);
+
+    //Copy to capab
+    capability->ht_capab = hw_mode->ht_capab;
+    memcpy(capability->mcs_set, hw_mode->mcs_set, 16);
+    capability->ampdu_params = hw_mode->a_mpdu_params;
+    capability->vht_capab = hw_mode->vht_capab;
+    memcpy(capability->vht_mcs_set, hw_mode->vht_mcs_set, 8);
 
 #ifdef CONFIG_IEEE80211AX
     /* Extract HE (WiFi6) capabilities for AP mode */
@@ -8274,8 +8324,8 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
     for (int i = 0; i < iface->num_hw_features; i++) {
         struct hostapd_hw_modes *test_hw_mode = &iface->hw_features[i];
         if (mode == test_hw_mode->mode) {
-	    hw_mode_idx = i;
-	    break;
+            hw_mode_idx = i;
+            break;
         }
     }
     if(hw_mode_idx == -1) {
