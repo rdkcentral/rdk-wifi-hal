@@ -109,6 +109,9 @@ static unsigned char llc_info[] = {0xaa, 0xaa, 0x03, 0x00,0x00,0x00,0x88,0x8e};
 
 static int scan_info_handler(struct nl_msg *msg, void *arg);
 static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface);
+#ifndef FEATURE_SINGLE_PHY
+static wifi_radio_info_t *rnr_find_6g_radio(void);
+#endif //FEATURE_SINGLE_PHY
 
 struct family_data {
     const char *group;
@@ -7202,19 +7205,25 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     }
 
     if (callbacks->scan_result_callback != NULL &&
-        interface->vap_info.vap_mode == wifi_vap_mode_sta && ssid_found_count) {
-        if (ssid_found_count < count) {
-            wifi_bss_info_t* new_bss = realloc(bss, ssid_found_count * sizeof(wifi_bss_info_t));
-            if (!new_bss) {
-                // - error, but not critical, original array still is valid
-                wifi_hal_stats_error_print("%s:%d: [SCAN] memory re-allocation error!\n", __func__, __LINE__);
+        interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        if (ssid_found_count > 0) {
+            if (ssid_found_count < count) {
+                wifi_bss_info_t* new_bss = realloc(bss, ssid_found_count * sizeof(wifi_bss_info_t));
+                if (!new_bss) {
+                    // - error, but not critical, original array still is valid
+                    wifi_hal_stats_error_print("%s:%d: [SCAN] memory re-allocation error!\n", __func__, __LINE__);
+                }
+                else
+                    bss = new_bss;
             }
-            else
-                bss = new_bss;
+            // It is assumed that "bss" has to be released by callback function:
+            callbacks->scan_result_callback(interface->vap_info.radio_index, &bss, &ssid_found_count);
+        } else {
+            // No SSID matches, still notify upper layer so it can track scan completion
+            free(bss);
+            bss = NULL;
+            callbacks->scan_result_callback(interface->vap_info.radio_index, &bss, &ssid_found_count);
         }
-
-        // It is assumed that "bss" has to be released by callback function:
-        callbacks->scan_result_callback(interface->vap_info.radio_index, &bss, &ssid_found_count);
     } else {
         free(bss);
     }
@@ -7278,7 +7287,60 @@ int nl80211_get_scan_results(wifi_interface_info_t *interface)
     }
     pthread_mutex_unlock(&interface->scan_state_mutex);
 
-    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan results collected\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan results collected\n",
+        __func__, __LINE__);
+
+#ifndef FEATURE_SINGLE_PHY
+    wifi_radio_info_t *radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+
+    if (radio != NULL && radio->rnr_enabled && radio->oper_param.band != WIFI_FREQUENCY_6_BAND &&
+        interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        wifi_radio_info_t *radio6g = rnr_find_6g_radio();
+
+        radio->rnr_enabled = false;
+
+        if (radio6g != NULL) {
+            wifi_hal_dbg_print("%s:%d: [RNR] %s freqs=%u scan_started=%d\n", __func__, __LINE__,
+                radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND ? "2.4G" : "5G",
+                radio6g->rnr.nfreq, radio6g->rnr.scan_started);
+
+            if (!radio6g->rnr.scan_started && radio6g->rnr.nfreq > 0) {
+                rnr_scan6(radio6g, get_dwell_time());
+            }
+
+            if (!radio6g->rnr.scan_started && radio6g->rnr.have_ssid) {
+                bool all_done = true;
+                unsigned int r;
+
+                for (r = 0; r < g_wifi_hal.num_radios; r++) {
+                    if (g_wifi_hal.radio_info[r].oper_param.band != WIFI_FREQUENCY_6_BAND &&
+                        g_wifi_hal.radio_info[r].rnr_enabled) {
+                        all_done = false;
+                        break;
+                    }
+                }
+
+                if (all_done) {
+                    wifi_device_callbacks_t *cbs = get_hal_device_callbacks();
+
+                    wifi_hal_dbg_print("%s:%d: [RNR] no 6G scan "
+                                       "results, reporting empty result for "
+                                       "radio %u\n",
+                        __func__, __LINE__, radio6g->rdk_radio_index);
+
+                    if (cbs != NULL && cbs->scan_result_callback != NULL) {
+                        wifi_bss_info_t *empty_bss = NULL;
+                        unsigned int zero_count = 0;
+
+                        cbs->scan_result_callback(radio6g->rdk_radio_index, &empty_bss,
+                            &zero_count);
+                    }
+                }
+            }
+        }
+    }
+#endif //FEATURE_SINGLE_PHY
+
     return RETURN_OK;
 }
 
@@ -8596,6 +8658,7 @@ static int bss_info_handler(struct nl_msg *msg, void *arg)
 struct parse_ies_data {
     unsigned char *ie;
     int ielen;
+    wifi_radio_info_t *radio;
 };
 
 #if 0
@@ -9202,6 +9265,140 @@ static void parse_eht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
 
 #endif /* CONFIG_IEEE80211BE */
 
+#ifndef FEATURE_SINGLE_PHY
+static wifi_radio_info_t *rnr_find_6g_radio(void)
+{
+    unsigned int r;
+
+    for (r = 0; r < g_wifi_hal.num_radios; r++) {
+        if (g_wifi_hal.radio_info[r].oper_param.band == WIFI_FREQUENCY_6_BAND)
+            return &g_wifi_hal.radio_info[r];
+    }
+    return NULL;
+}
+
+int rnr_scan6(wifi_radio_info_t *radio, INT dwell)
+{
+    wifi_interface_info_t *ifc;
+    rnr_scan_t *rnr;
+    ssid_t ssid[1];
+
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: [RNR] NULL radio\n", __func__, __LINE__);
+        return -1;
+    }
+
+    rnr = &radio->rnr;
+
+    if (rnr->nfreq == 0) {
+        wifi_hal_dbg_print("%s:%d: [RNR] no 6G freqs, skip\n", __func__, __LINE__);
+        return 0;
+    }
+
+    ifc = rnr_sta6();
+    if (ifc == NULL) {
+        wifi_hal_error_print("%s:%d: [RNR] no 6G STA iface\n", __func__, __LINE__);
+        return -1;
+    }
+
+    char buf[128];
+    int off = 0;
+    unsigned int i;
+
+    for (i = 0; i < rnr->nfreq && off < (int)sizeof(buf) - 8; i++)
+        off += snprintf(buf + off, sizeof(buf) - (size_t)off, "%u ", rnr->freq[i]);
+    wifi_hal_dbg_print("%s:%d: [RNR] scan 6G %uch: %s\n", __func__, __LINE__, rnr->nfreq, buf);
+
+    memset(ssid, 0, sizeof(ssid));
+    strncpy(ssid[0], rnr->ssid, sizeof(ssid[0]) - 1);
+    pthread_mutex_lock(&ifc->scan_info_mutex);
+    hash_map_cleanup(ifc->scan_info_map);
+    pthread_mutex_unlock(&ifc->scan_info_mutex);
+
+    int ret = nl80211_start_scan(ifc, 0, rnr->nfreq, rnr->freq, dwell, 1, ssid);
+    if (ret == 0) {
+        rnr->scan_started = true;
+        wifi_hal_dbg_print("%s:%d: [RNR] 6G scan triggered successfully\n", __func__, __LINE__);
+    } else {
+        wifi_hal_error_print("%s:%d: [RNR] 6G scan trigger failed ret=%d\n", __func__, __LINE__,
+            ret);
+    }
+    return ret;
+}
+
+static void parse_rnr(const uint8_t type, uint8_t ie_len, const uint8_t *data,
+    const struct parse_ies_data *ie_buf, wifi_bss_info_t *bss)
+{
+    const uint8_t *p = data;
+    const uint8_t *end = data + ie_len;
+    wifi_radio_info_t *scan_radio;
+    wifi_radio_info_t *radio6g;
+    rnr_scan_t *rnr;
+    char country[8];
+    (void)type;
+    (void)bss;
+
+    scan_radio = ie_buf->radio;
+    if (scan_radio == NULL || !scan_radio->rnr_enabled)
+        return;
+
+    get_coutry_str_from_code(scan_radio->oper_param.countryCode, country);
+
+    radio6g = rnr_find_6g_radio();
+    if (radio6g == NULL)
+        return;
+
+    rnr = &radio6g->rnr;
+
+    if (ie_len < RNR_NAP_HDR || !rnr->have_ssid)
+        return;
+
+    while (p + RNR_NAP_HDR <= end) {
+        const uint8_t cnt = (p[0] >> 4) + 1;
+        const uint8_t ilen = p[1];
+        const uint8_t oc = p[2];
+        const uint8_t ch = p[3];
+        const uint8_t *set = p + RNR_NAP_HDR;
+        const size_t slen = (size_t)cnt * ilen;
+        const uint8_t *next = set + slen;
+        int freq;
+        unsigned int ssid_off;
+
+        if (next > end) {
+            wifi_hal_error_print("%s:%d: [RNR] overflow oc=%u ch=%u "
+                                 "cnt=%u ilen=%u\n",
+                __func__, __LINE__, oc, ch, cnt, ilen);
+            return;
+        }
+
+        if (ilen == 0)
+            goto next_nap;
+
+        if (!rnr_is_6ghz_opclass(oc))
+            goto next_nap;
+
+        freq = ieee80211_chan_to_freq(country, oc, ch);
+        if (freq <= 0) {
+            wifi_hal_error_print("%s:%d: [RNR] invalid oc=%u ch=%u\n", __func__, __LINE__, oc, ch);
+            goto next_nap;
+        }
+
+        ssid_off = rnr_ssid_offset(ilen);
+
+        if (ssid_off != 0 &&
+            !rnr_tbtt_match(set, cnt, ilen, ssid_off, rnr->ssid_crc))
+            goto next_nap;
+
+        if (rnr_freq_add(rnr, (uint32_t)freq))
+            wifi_hal_dbg_print("%s:%d: [RNR] +ch%u %uMHz n=%u%s\n", __func__, __LINE__, ch,
+                (uint32_t)freq, rnr->nfreq, ssid_off ? "" : " (no short_ssid)");
+
+next_nap:
+        p = next;
+    }
+}
+#endif // FEATURE_SINGLE_PHY
+
 static void parse_bss_load(const uint8_t type, uint8_t len, const uint8_t *data,
             const struct parse_ies_data *ie_buffer, wifi_bss_info_t *bss)
 {
@@ -9297,6 +9494,9 @@ static const struct ie_parse ie_parsers[] = {
     [WLAN_EID_EXT_SUPP_RATES] = { "Extended supported rates", parse_supprates, 0, 255, BIT(PARSE_SCAN), },
     [WLAN_EID_SECONDARY_CHANNEL_OFFSET] = { "Secondary Channel Offset", parse_secchan_offs, 1, 1, BIT(PARSE_SCAN), },
     [WLAN_EID_EXTENSION]      = { "Extension Tag", parse_extension_tag, 0, 255, BIT(PARSE_SCAN), },
+#ifndef FEATURE_SINGLE_PHY
+    [WLAN_EID_REDUCED_NEIGHBOR_REPORT] = { "Reduced Neighbor Report", parse_rnr, 4, 255, BIT(PARSE_SCAN), },
+#endif //FEATURE_SINGLE_PHY
 };
 
 #if 0
@@ -9341,11 +9541,13 @@ static void parse_vendor(unsigned char len, unsigned char *data)
 #endif
 }
 
-static void parse_ies(unsigned char *ie, int ielen, wifi_bss_info_t *bss)
+static void parse_ies(unsigned char *ie, int ielen, wifi_bss_info_t *bss,
+    wifi_radio_info_t *radio)
 {
     struct parse_ies_data ie_buffer = {
         .ie = ie,
-        .ielen = ielen };
+        .ielen = ielen,
+        .radio = radio };
 
     /* Set initial values, needed in case its legacy mode AP with no HT, VHT or HE IEs present */
     bss->supp_chan_bw |= WIFI_CHANNELBANDWIDTH_20MHZ;
@@ -9538,13 +9740,14 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     // - ies
     uint32_t radio_index = 0;
     wifi_convert_freq_band_to_radio_index(scan_info_ap->oper_freq_band, (int *)&radio_index);
+    wifi_radio_info_t *scan_radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
 
     if (ie) {
         // Parse standard IEs including SSID
-        parse_ies(ie, len, scan_info_ap);
+        parse_ies(ie, len, scan_info_ap, scan_radio);
     } else {
         // Parse IEs from beacon IEs (including SSID)
-        parse_ies(beacon_ies, beacon_ie_len, scan_info_ap);
+        parse_ies(beacon_ies, beacon_ie_len, scan_info_ap, scan_radio);
     }
 
     if (ie != NULL && len > 0) {

@@ -223,6 +223,22 @@ extern "C" {
 #define SSID_MAX_LEN                32
 #define ACS_MAX_VECTOR_LEN  (256 * 7) /* Max Possible non operable (Exclude) chanspecs in a radio is 256*/
 
+#ifndef FEATURE_SINGLE_PHY
+#define RNR_NAP_HDR 4u
+#define RNR_FREQ_CAP 64u
+typedef struct {
+    uint32_t freq[RNR_FREQ_CAP];
+    unsigned int nfreq;
+    uint32_t ssid_crc;
+    bool have_ssid;
+    bool scan_started;
+    ssid_t   ssid;
+} rnr_scan_t;
+#endif //FEATURE_SINGLE_PHY
+
+#define DWELL_TIME_PATH "/nvram/wifi_dwell_time"
+#define DEFAULT_DWELL_TIME_MS 50
+
 #if HOSTAPD_VERSION >= 211
 #define CHANWIDTH_320MHZ CONF_OPER_CHWIDTH_320MHZ
 #endif /* HOSTAPD_VERSION >= 211 */
@@ -512,6 +528,10 @@ typedef struct {
     bool radio_presence; //True for ECO mode Active radio, false for ECO mode power down sleeping radio
     bool radar_detected;
     bool configuration_in_progress;
+#ifndef FEATURE_SINGLE_PHY
+    rnr_scan_t rnr;
+    bool rnr_enabled;
+#endif //FEATURE_SINGLE_PHY
 } wifi_radio_info_t;
 
 typedef wifi_vap_name_t wifi_vap_type_t;
@@ -790,6 +810,19 @@ int wifi_rrm_send_beacon_resp(unsigned int ap_index, wifi_neighbor_ap2_t *bss, u
                             unsigned int num_count);
 int wifi_hal_parse_rm_beacon_request(unsigned int apIndex, char* buff, size_t len,
     wifi_hal_rrm_request_t *req);
+
+#ifndef FEATURE_SINGLE_PHY
+void wifi_hal_rnr_init(wifi_radio_index_t radio_index, const char *ssid);
+uint32_t rnr_crc32(const uint8_t *p, size_t n);
+bool rnr_is_6ghz_opclass(uint8_t opclass);
+bool rnr_freq_add(rnr_scan_t *rnr, uint32_t f);
+unsigned int rnr_ssid_offset(uint8_t ilen);
+bool rnr_tbtt_match(const uint8_t *set, uint8_t cnt, uint8_t ilen, unsigned int ssid_off,
+    uint32_t crc);
+wifi_interface_info_t *rnr_sta6(void);
+int rnr_scan6(wifi_radio_info_t *radio, int dwell_time);
+#endif //FEATURE_SINGLE_PHY
+int get_dwell_time(void);
 wifi_radio_info_t *get_radio_by_index(wifi_radio_index_t index);
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index);
 wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index);
