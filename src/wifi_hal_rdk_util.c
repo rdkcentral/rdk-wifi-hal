@@ -125,6 +125,7 @@ static int move_radio_capability(wifi_radio_capabilities_t *tmp_cap, wifi_radio_
     unsigned j = 0;
 
     tmp_cap->index = cap->index;
+    tmp_cap->rdk_radio_index = cap->rdk_radio_index;
     tmp_cap->numSupportedFreqBand = 1;
     tmp_cap->band[0] = cap->band[arr_loc];
     memcpy(&tmp_cap->channel_list[0], &cap->channel_list[arr_loc], sizeof(wifi_channels_list_t));
@@ -158,9 +159,22 @@ static int move_radio_capability(wifi_radio_capabilities_t *tmp_cap, wifi_radio_
     tmp_cap->numcountrySupported = cap->numcountrySupported;
     tmp_cap->maxNumberVAPs = cap->maxNumberVAPs;
     tmp_cap->mldOperationalCap = cap->mldOperationalCap;
+    tmp_cap->TIDLinkMapNegotiation = cap->TIDLinkMapNegotiation;
     for (j=0 ; j<tmp_cap->numcountrySupported ; j++) {
         tmp_cap->countrySupported[j] = cap->countrySupported[j];
     }
+    // Copy HE (WiFi6) and EHT (WiFi7) capability fields
+    tmp_cap->wifi6_supported = cap->wifi6_supported;
+    memcpy(tmp_cap->he_phy_cap, cap->he_phy_cap, HE_MAX_PHY_CAPAB_SIZE);
+    memcpy(tmp_cap->he_mac_cap, cap->he_mac_cap, HE_MAX_MAC_CAPAB_SIZE);
+    memcpy(tmp_cap->he_mcs_nss_set, cap->he_mcs_nss_set, HE_MAX_MCS_CAPAB_SIZE);
+    memcpy(tmp_cap->he_ppet, cap->he_ppet, HE_MAX_PPET_CAPAB_SIZE);
+    tmp_cap->he_6ghz_capa = cap->he_6ghz_capa;
+    tmp_cap->wifi7_supported = cap->wifi7_supported;
+    tmp_cap->eht_mac_cap = cap->eht_mac_cap;
+    memcpy(tmp_cap->eht_phy_cap, cap->eht_phy_cap, EHT_PHY_CAPAB_LEN);
+    memcpy(tmp_cap->eht_mcs, cap->eht_mcs, EHT_MCS_NSS_CAPAB_LEN);
+    memcpy(tmp_cap->eht_ppet, cap->eht_ppet, EHT_PPE_THRESH_CAPAB_LEN);
     memcpy(cap, tmp_cap, sizeof(wifi_radio_capabilities_t));
     return RETURN_OK;
 }
