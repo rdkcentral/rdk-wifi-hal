@@ -3135,7 +3135,6 @@ void recv_link_status()
                                             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, interface->vap_info.bridge_name);
                                         } else {
 #ifdef WIFI_EMULATOR_CHANGE
-                                            wifi_hal_info_print("%s:%d: Entering\n", __func__, __LINE__);
                                             bind_ifname = interface->vap_info.bridge_name;
 #else
                                             const char *ifname = wifi_hal_get_interface_name(interface);
@@ -13592,7 +13591,6 @@ int wifi_drv_hapd_send_eapol(
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, get_vap_bridge_name(&interface->vap_info));
         } else {
 #ifdef WIFI_EMULATOR_CHANGE
-            wifi_hal_info_print("%s:%d: Entering\n", __func__, __LINE__);
             bind_ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:interface->name;
 #else
             const char *ifname = wifi_hal_get_interface_name(interface);
