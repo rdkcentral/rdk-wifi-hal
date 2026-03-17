@@ -2589,6 +2589,34 @@ INT wifi_hal_sendDataFrame( int vap_id, unsigned char *dmac, unsigned char *data
     return RETURN_ERR;
 }
 
+#ifndef FEATURE_SINGLE_PHY
+void wifi_hal_rnr_init(wifi_radio_index_t radio_index, const char *ssid)
+{
+    wifi_radio_info_t *radio = get_radio_by_rdk_index(radio_index);
+
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: [RNR] invalid radio_index=%d\n", __func__, __LINE__,
+            radio_index);
+        return;
+    }
+
+    memset(&radio->rnr, 0, sizeof(radio->rnr));
+    radio->rnr_enabled = false;
+
+    if (ssid != NULL && ssid[0] != '\0') {
+        radio->rnr.ssid_crc = rnr_crc32((const uint8_t *)ssid, strlen(ssid));
+        radio->rnr.have_ssid = true;
+        strncpy(radio->rnr.ssid, ssid, sizeof(radio->rnr.ssid) - 1);
+        wifi_hal_dbg_print("%s:%d: [RNR] init radio=%d ssid=\"%s\" "
+                           "crc=0x%08X\n",
+            __func__, __LINE__, radio_index, radio->rnr.ssid, radio->rnr.ssid_crc);
+    } else {
+        radio->rnr.have_ssid = false;
+        wifi_hal_dbg_print("%s:%d: [RNR] init radio=%d no ssid\n", __func__, __LINE__, radio_index);
+    }
+}
+#endif // FEATURE_SINGLE_PHY
+
 INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mode, INT dwell_time, UINT num, UINT *chan_list)
 {
     wifi_radio_info_t *radio;
@@ -2614,7 +2642,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
         wifi_hal_stats_error_print("%s:%d:Could not find radio for index: %d\n", __func__, __LINE__, index);
-        return RETURN_ERR; 
+        return RETURN_ERR;
     }
 
     interface = hash_map_get_first(radio->interface_map);
@@ -2702,6 +2730,15 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     pthread_mutex_lock(&interface->scan_info_mutex);
     hash_map_cleanup(interface->scan_info_map);
     pthread_mutex_unlock(&interface->scan_info_mutex);
+
+#ifndef FEATURE_SINGLE_PHY
+    for (unsigned int r = 0; r < g_wifi_hal.num_radios; r++) {
+        if (g_wifi_hal.radio_info[r].oper_param.band == WIFI_FREQUENCY_6_BAND) {
+            radio->rnr_enabled = true;
+            break;
+        }
+    }
+#endif //FEATURE_SINGLE_PHY
 
     return (nl80211_start_scan(interface, NL80211_SCAN_FLAG_COLOCATED_6GHZ, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
 }
