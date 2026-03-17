@@ -928,6 +928,8 @@ char *to_mac_str    (mac_address_t mac, mac_addr_str_t key);
 const char *wifi_freq_bands_to_string(wifi_freq_bands_t band);
 const char *wpa_alg_to_string(enum wpa_alg alg);
 int nl80211_update_wiphy(wifi_radio_info_t *radio);
+int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_iface *iface);
+INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band band);
 wifi_interface_info_t* get_private_vap_interface(wifi_radio_info_t *radio);
 wifi_interface_info_t* get_primary_interface(wifi_radio_info_t *radio);
 wifi_interface_info_t* get_private_vap_interface(wifi_radio_info_t *radio);
