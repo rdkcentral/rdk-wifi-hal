@@ -120,6 +120,11 @@ typedef struct {
     unsigned char   *wps_data;
 } __attribute__((__packed__)) wifi_wps_event_t;
 
+#ifdef UWM_EXT_WPS_SUPPORT
+/* WPS STA event callback type - called when WPS credentials are received for station interface */
+typedef void (*wifi_wps_sta_event_callback_t)(unsigned int vap_index, unsigned int event);
+#endif
+
 typedef struct {
     struct rtnl_handle                      rtnl;
     struct rtnl_kvr_handle                  rtnl_kvr;
@@ -215,5 +220,14 @@ char *get_formatted_time(char *time);
 INT wifi_chan_event_register(wifi_chan_event_CB_t event_cb);
 
 int adjust_radio_capability_band(wifi_radio_capabilities_t *cap, unsigned int radio_band);
+
+#ifdef UWM_EXT_WPS_SUPPORT
+/* WPS STA event callback registration */
+INT wifi_wpsStaEvent_callback_register(wifi_wps_sta_event_callback_t callback);
+wifi_wps_sta_event_callback_t wifi_hal_get_wps_sta_event_callback(void);
+
+/* WPA supplicant state machine reinitialization */
+INT wifi_hal_sm_reinit(INT vap_index);
+#endif
 
 #endif //_RDK_HAL_FRAMEWORK_H_
