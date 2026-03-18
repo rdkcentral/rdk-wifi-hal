@@ -8049,7 +8049,6 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     mac_addr_str_t bssid_str;
     //unsigned int rsn_ie_len;
 #if !defined(CONFIG_WIFI_EMULATOR) && !defined(BANANA_PI_PORT)
-    u32 ver = 0;
     u8 *pos, rsn_ie[128];
     ieee80211_tlv_t *bh_rsn = NULL;
     struct wpa_auth_config wpa_conf = {0};
@@ -14169,12 +14168,6 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
     }
 #endif // CONFIG_GENERIC_MLO
 
-    if (interface->data_frames_registered == 1) {
-        wifi_hal_dbg_print("%s:%d: data frame socket already registered for %s\n", __func__,
-            __LINE__, wifi_hal_get_interface_name(interface));
-        return 0;
-    }
-
     vap = &interface->vap_info;
 
 #ifndef CONFIG_WIFI_EMULATOR
@@ -14249,8 +14242,6 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
     } else {
         close(sock_fd);
     }
-
-    interface->data_frames_registered = 1;
 
     return 0;
 }
