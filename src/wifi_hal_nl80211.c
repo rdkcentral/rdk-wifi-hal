@@ -105,7 +105,15 @@ static unsigned char llc_info[] = {0xaa, 0xaa, 0x03, 0x00,0x00,0x00,0x88,0x8e};
 static int scan_info_handler(struct nl_msg *msg, void *arg);
 static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface);
 int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx);
+
+#ifndef WIFI_EMULATOR_CHANGE
 static bool is_interface_in_bridge(const char *iface, const char *bridge_name);
+#endif
+
+#ifndef FEATURE_SINGLE_PHY
+static wifi_radio_info_t *rnr_find_6g_radio(void);
+#endif //FEATURE_SINGLE_PHY
+
 
 struct family_data {
     const char *group;
@@ -3120,20 +3128,23 @@ void recv_link_status()
                                     }
                                     if (interface->data_frames_registered == 0) {
                                         const char *bind_ifname;
-                                        const char *ifname = wifi_hal_get_interface_name(interface);
                                         wifi_hal_info_print("%s:%d: %s BRIDGE IS CREATED\n", __func__, __LINE__, interface->vap_info.bridge_name);
                                         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 
                                         if (sock_fd < 0) {
                                             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, interface->vap_info.bridge_name);
                                         } else {
+#ifdef WIFI_EMULATOR_CHANGE
+                                            bind_ifname = interface->vap_info.bridge_name;
+#else
+                                            const char *ifname = wifi_hal_get_interface_name(interface);
                                             if (is_interface_in_bridge(ifname,
                                                     interface->vap_info.bridge_name)) {
                                                 bind_ifname = interface->vap_info.bridge_name;
                                             } else {
                                                 bind_ifname = ifname;
                                             }
-
+#endif
                                             wifi_hal_info_print(
                                                 "%s:%d: Binding data frames socket to %s\n",
                                                 __func__, __LINE__, bind_ifname);
@@ -5994,6 +6005,9 @@ static int wiphy_get_info_handler(struct nl_msg *msg, void *arg)
     wifi_hal_dbg_print("%s:%d:wiphy index:%d rdk_radio_index:%d name:%s\n",
         __func__, __LINE__, radio->index, radio->rdk_radio_index, radio->name);
 
+    radio->capab.rdk_radio_index = radio->rdk_radio_index;
+    wifi_hal_dbg_print("%s:%d:radio->capab.rdk_radio_index:%d\n",
+        __func__, __LINE__, radio->capab.rdk_radio_index);
     radio->capab.cipherSupported = 0;
     if (tb[NL80211_ATTR_CIPHER_SUITES]) {
         phy_info_cipher(radio, tb[NL80211_ATTR_CIPHER_SUITES]);
@@ -7353,6 +7367,9 @@ int nl80211_init_primary_interfaces()
                     __LINE__, interface_name);
                 msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0,
                     NL80211_CMD_SET_INTERFACE);
+                if (msg == NULL) {
+                   return -1;
+                }
                 nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
                 ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL);
                 if (ret) {
@@ -8046,6 +8063,203 @@ Exit:
     return 0;
 }
 
+INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_band)
+{
+    struct hostapd_hw_modes *hw_mode;
+    wifi_radio_capabilities_t *capability = NULL;
+    
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: No Radio found\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    capability = &radio->capab;
+    if (capability == NULL) {
+        wifi_hal_error_print("%s:%d: capability pointer is NULL\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d: Radio's rdk_index:%u nl_band:%d\n", 
+        __func__, __LINE__, radio->rdk_radio_index, nl_band);
+
+    if (nl_band < 0 || nl_band >= NUM_NL80211_BANDS) {
+        wifi_hal_error_print("%s:%d: Invalid nl_band index %d (valid range 0-%d)\n",
+            __func__, __LINE__, nl_band, NUM_NL80211_BANDS - 1);
+        return RETURN_ERR;
+    }
+
+    hw_mode = &radio->hw_modes[nl_band];
+    if (hw_mode == NULL) {
+        wifi_hal_error_print("%s:%d: hw_mode is NULL for band %d\n", __func__, __LINE__, nl_band);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d: hw_mode->mode:%d, num_channels:%u\n", 
+        __func__, __LINE__, hw_mode->mode, hw_mode->num_channels);
+
+    /* Check if hw_mode is valid */
+    if (hw_mode->mode == 0 && hw_mode->num_channels == 0) {
+        wifi_hal_dbg_print("%s:%d: hw_mode not fully populated for band %d\n", 
+            __func__, __LINE__, nl_band);
+    }
+
+#ifdef CONFIG_IEEE80211AX
+    /* Extract HE (WiFi6) capabilities for AP mode */
+    struct he_capabilities *he_cap = &hw_mode->he_capab[IEEE80211_MODE_AP];
+
+    if (he_cap != NULL && he_cap->he_supported) {
+        wifi_hal_info_print("%s:%d: Updating HE capabilities for WiFi6\n", __func__, __LINE__);
+        capability->wifi6_supported = true;
+        memcpy(capability->he_phy_cap, he_cap->phy_cap, HE_MAX_PHY_CAPAB_SIZE);
+        memcpy(capability->he_mac_cap, he_cap->mac_cap, HE_MAX_MAC_CAPAB_SIZE);
+        memcpy(capability->he_mcs_nss_set, he_cap->mcs, HE_MAX_MCS_CAPAB_SIZE);
+        memcpy(capability->he_ppet, he_cap->ppet, HE_MAX_PPET_CAPAB_SIZE);
+#if HOSTAPD_VERSION >= 210
+        capability->he_6ghz_capa = he_cap->he_6ghz_capa;
+#endif
+    } else {
+        wifi_hal_dbg_print("%s:%d: HE capabilities not supported or not populated for band %d\n", 
+            __func__, __LINE__, nl_band);
+        capability->wifi6_supported = false;
+        /* Ensure no stale HE capability data is exposed when WiFi6 is not supported */
+        memset(capability->he_phy_cap, 0, HE_MAX_PHY_CAPAB_SIZE);
+        memset(capability->he_mac_cap, 0, HE_MAX_MAC_CAPAB_SIZE);
+        memset(capability->he_mcs_nss_set, 0, HE_MAX_MCS_CAPAB_SIZE);
+        memset(capability->he_ppet, 0, HE_MAX_PPET_CAPAB_SIZE);
+#if HOSTAPD_VERSION >= 210
+        capability->he_6ghz_capa = 0;
+#endif
+    }
+#endif /* CONFIG_IEEE80211AX */
+
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    /* Extract EHT (WiFi7) capabilities for AP mode */
+    struct eht_capabilities *eht_cap = &hw_mode->eht_capab[IEEE80211_MODE_AP];
+
+    if (eht_cap != NULL && eht_cap->eht_supported) {
+        wifi_hal_info_print("%s:%d: Updating EHT capabilities for WiFi7\n", __func__, __LINE__);
+        capability->wifi7_supported = true;
+        capability->eht_mac_cap = eht_cap->mac_cap;
+        memcpy(capability->eht_phy_cap, eht_cap->phy_cap, EHT_PHY_CAPAB_LEN);
+        memcpy(capability->eht_mcs, eht_cap->mcs, EHT_MCS_NSS_CAPAB_LEN);
+        memcpy(capability->eht_ppet, eht_cap->ppet, EHT_PPE_THRESH_CAPAB_LEN);
+    } else {
+        wifi_hal_dbg_print("%s:%d: EHT capabilities not supported or not populated for band %d\n", 
+            __func__, __LINE__, nl_band);
+        capability->wifi7_supported = false;
+        capability->eht_mac_cap = 0;
+        memset(capability->eht_phy_cap, 0, EHT_PHY_CAPAB_LEN);
+        memset(capability->eht_mcs, 0, EHT_MCS_NSS_CAPAB_LEN);
+        memset(capability->eht_ppet, 0, EHT_PPE_THRESH_CAPAB_LEN);
+    }
+#endif /* HOSTAPD_VERSION >= 211 */
+#endif /* CONFIG_IEEE80211BE */
+
+    wifi_hal_info_print("%s:%d: Successfully retrieved radio capabilities for nlband:%d\n", 
+        __func__, __LINE__, nl_band);
+    return RETURN_OK;
+}
+
+int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_iface *iface)
+{
+    enum nl80211_band nl_band = NUM_NL80211_BANDS;
+    enum hostapd_hw_mode mode = NUM_HOSTAPD_MODES;
+    int hw_mode_idx = -1;
+    struct hostapd_hw_modes *hw_feat_mode = NULL;
+    unsigned int rdk_band;
+
+    if (radio == NULL || iface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL pointer: radio=%p, iface=%p\n", 
+                             __func__, __LINE__, radio, iface);
+        return RETURN_ERR;
+    }
+
+    rdk_band = get_band_info_from_rdk_radio_index(radio->rdk_radio_index);
+
+    if (iface->num_hw_features == 0 || iface->hw_features == NULL) {
+        wifi_hal_dbg_print("%s:%d: No hw_features to copy (num_hw_features=%u)\n",
+                           __func__, __LINE__, iface->num_hw_features);
+        return RETURN_ERR;
+    }
+
+    nl_band = get_nl80211_band_from_rdk_radio_index(radio->rdk_radio_index);
+    if (nl_band >= NUM_NL80211_BANDS) {
+        wifi_hal_error_print("%s:%d: Invalid nl80211 band %d for rdk_radio_index=%d\n",
+                            __func__, __LINE__, nl_band, radio->rdk_radio_index);
+        return RETURN_ERR;
+    }
+    switch (nl_band) {
+        case NL80211_BAND_2GHZ:
+            mode = HOSTAPD_MODE_IEEE80211G;
+            break;
+        case NL80211_BAND_5GHZ:
+        case NL80211_BAND_6GHZ:
+            mode = HOSTAPD_MODE_IEEE80211A;
+            break;
+	    default:
+            wifi_hal_error_print("%s:%d: Unsupported nl80211 band %d for rdk_radio_index=%d\n",
+                                  __func__, __LINE__, nl_band, radio->rdk_radio_index);
+            return RETURN_ERR;
+    }
+    if (mode == NUM_HOSTAPD_MODES) {
+        wifi_hal_error_print("%s:%d: Failed to map nl80211 band %d to hostapd hw mode\n",
+                            __func__, __LINE__, nl_band);
+        return RETURN_ERR;
+    }
+    wifi_hal_dbg_print("%s:%d: Radio from rdk_radio_index[%d] -> rdk_band=%d, and nlband=%d and identified mode=%d\n",
+        __func__, __LINE__, radio->rdk_radio_index, rdk_band, nl_band, mode);
+
+    for (int i = 0; i < iface->num_hw_features; i++) {
+        struct hostapd_hw_modes *test_hw_mode = &iface->hw_features[i];
+        if (mode == test_hw_mode->mode) {
+	    hw_mode_idx = i;
+	    break;
+        }
+    }
+    if(hw_mode_idx == -1) {
+        wifi_hal_error_print("%s:%d: No hw features found\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    hw_feat_mode = &iface->hw_features[hw_mode_idx];
+    for (enum ieee80211_op_mode opmode = 0; opmode < IEEE80211_MODE_NUM; opmode++) {
+        struct he_capabilities *src_he = &hw_feat_mode->he_capab[opmode];
+        struct he_capabilities *dst_he = &radio->hw_modes[nl_band].he_capab[opmode];
+        if (src_he && src_he->he_supported) {
+			dst_he->he_supported = true;
+            memcpy(dst_he->phy_cap, src_he->phy_cap, HE_MAX_PHY_CAPAB_SIZE);
+            memcpy(dst_he->mac_cap, src_he->mac_cap, HE_MAX_MAC_CAPAB_SIZE);
+            memcpy(dst_he->mcs, src_he->mcs, HE_MAX_MCS_CAPAB_SIZE);
+            memcpy(dst_he->ppet, src_he->ppet, HE_MAX_PPET_CAPAB_SIZE);
+#if HOSTAPD_VERSION >= 210
+            dst_he->he_6ghz_capa = src_he->he_6ghz_capa;
+#endif
+        }
+
+#ifdef CONFIG_IEEE80211BE
+        struct eht_capabilities *src_eht = &hw_feat_mode->eht_capab[opmode];
+        struct eht_capabilities *dst_eht = &radio->hw_modes[nl_band].eht_capab[opmode];
+        if (src_eht && src_eht->eht_supported) {
+            dst_eht->eht_supported = true;
+            memcpy((unsigned char *)&dst_eht->mac_cap, (unsigned char *)&src_eht->mac_cap, sizeof(dst_eht->mac_cap));
+            memcpy(dst_eht->phy_cap, src_eht->phy_cap, EHT_PHY_CAPAB_LEN);
+            memcpy(dst_eht->mcs, src_eht->mcs, EHT_MCS_NSS_CAPAB_LEN);
+            memcpy(dst_eht->ppet, src_eht->ppet, EHT_PPE_THRESH_CAPAB_LEN);
+        }
+#endif /* CONFIG_IEEE80211BE */
+    }
+
+    // Also copy to radio cap
+    int rc = wifi_getRadioCapabilityData(radio, nl_band);
+    if (rc != RETURN_OK) {
+        wifi_hal_dbg_print("%s: wifi_getRadioCapabilityData failed for band %d, rc=%d\n",
+                        __func__, nl_band, rc);
+    }
+
+    return RETURN_OK;
+}
+
 #if defined(TCXB8_PORT) || defined(XB10_PORT)
 int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
 {
@@ -8605,19 +8819,25 @@ static int scan_results_handler(struct nl_msg *msg, void *arg)
     }
 
     if (callbacks->scan_result_callback != NULL &&
-        interface->vap_info.vap_mode == wifi_vap_mode_sta && ssid_found_count) {
-        if (ssid_found_count < count) {
-            wifi_bss_info_t* new_bss = realloc(bss, ssid_found_count * sizeof(wifi_bss_info_t));
-            if (!new_bss) {
-                // - error, but not critical, original array still is valid
-                wifi_hal_stats_error_print("%s:%d: [SCAN] memory re-allocation error!\n", __func__, __LINE__);
+        interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        if (ssid_found_count > 0) {
+            if (ssid_found_count < count) {
+                wifi_bss_info_t* new_bss = realloc(bss, ssid_found_count * sizeof(wifi_bss_info_t));
+                if (!new_bss) {
+                    // - error, but not critical, original array still is valid
+                    wifi_hal_stats_error_print("%s:%d: [SCAN] memory re-allocation error!\n", __func__, __LINE__);
+                }
+                else
+                    bss = new_bss;
             }
-            else
-                bss = new_bss;
+            // It is assumed that "bss" has to be released by callback function:
+            callbacks->scan_result_callback(interface->vap_info.radio_index, &bss, &ssid_found_count);
+        } else {
+            // No SSID matches, still notify upper layer so it can track scan completion
+            free(bss);
+            bss = NULL;
+            callbacks->scan_result_callback(interface->vap_info.radio_index, &bss, &ssid_found_count);
         }
-
-        // It is assumed that "bss" has to be released by callback function:
-        callbacks->scan_result_callback(interface->vap_info.radio_index, &bss, &ssid_found_count);
     } else {
         free(bss);
     }
@@ -8681,7 +8901,60 @@ int nl80211_get_scan_results(wifi_interface_info_t *interface)
     }
     pthread_mutex_unlock(&interface->scan_state_mutex);
 
-    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan results collected\n", __func__, __LINE__);
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan results collected\n",
+        __func__, __LINE__);
+
+#ifndef FEATURE_SINGLE_PHY
+    wifi_radio_info_t *radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+
+    if (radio != NULL && radio->rnr_enabled && radio->oper_param.band != WIFI_FREQUENCY_6_BAND &&
+        interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        wifi_radio_info_t *radio6g = rnr_find_6g_radio();
+
+        radio->rnr_enabled = false;
+
+        if (radio6g != NULL) {
+            wifi_hal_dbg_print("%s:%d: [RNR] %s freqs=%u scan_started=%d\n", __func__, __LINE__,
+                radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND ? "2.4G" : "5G",
+                radio6g->rnr.nfreq, radio6g->rnr.scan_started);
+
+            if (!radio6g->rnr.scan_started && radio6g->rnr.nfreq > 0) {
+                rnr_scan6(radio6g, get_dwell_time());
+            }
+
+            if (!radio6g->rnr.scan_started && radio6g->rnr.have_ssid) {
+                bool all_done = true;
+                unsigned int r;
+
+                for (r = 0; r < g_wifi_hal.num_radios; r++) {
+                    if (g_wifi_hal.radio_info[r].oper_param.band != WIFI_FREQUENCY_6_BAND &&
+                        g_wifi_hal.radio_info[r].rnr_enabled) {
+                        all_done = false;
+                        break;
+                    }
+                }
+
+                if (all_done) {
+                    wifi_device_callbacks_t *cbs = get_hal_device_callbacks();
+
+                    wifi_hal_dbg_print("%s:%d: [RNR] no 6G scan "
+                                       "results, reporting empty result for "
+                                       "radio %u\n",
+                        __func__, __LINE__, radio6g->rdk_radio_index);
+
+                    if (cbs != NULL && cbs->scan_result_callback != NULL) {
+                        wifi_bss_info_t *empty_bss = NULL;
+                        unsigned int zero_count = 0;
+
+                        cbs->scan_result_callback(radio6g->rdk_radio_index, &empty_bss,
+                            &zero_count);
+                    }
+                }
+            }
+        }
+    }
+#endif //FEATURE_SINGLE_PHY
+
     return RETURN_OK;
 }
 
@@ -10046,6 +10319,7 @@ static int bss_info_handler(struct nl_msg *msg, void *arg)
 struct parse_ies_data {
     unsigned char *ie;
     int ielen;
+    wifi_radio_info_t *radio;
 };
 
 #if 0
@@ -10651,6 +10925,140 @@ static void parse_eht_oper(const uint8_t type, uint8_t len, const uint8_t *data,
 }
 #endif /* CONFIG_IEEE80211BE */
 
+#ifndef FEATURE_SINGLE_PHY
+static wifi_radio_info_t *rnr_find_6g_radio(void)
+{
+    unsigned int r;
+
+    for (r = 0; r < g_wifi_hal.num_radios; r++) {
+        if (g_wifi_hal.radio_info[r].oper_param.band == WIFI_FREQUENCY_6_BAND)
+            return &g_wifi_hal.radio_info[r];
+    }
+    return NULL;
+}
+
+int rnr_scan6(wifi_radio_info_t *radio, INT dwell)
+{
+    wifi_interface_info_t *ifc;
+    rnr_scan_t *rnr;
+    ssid_t ssid[1];
+
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: [RNR] NULL radio\n", __func__, __LINE__);
+        return -1;
+    }
+
+    rnr = &radio->rnr;
+
+    if (rnr->nfreq == 0) {
+        wifi_hal_dbg_print("%s:%d: [RNR] no 6G freqs, skip\n", __func__, __LINE__);
+        return 0;
+    }
+
+    ifc = rnr_sta6();
+    if (ifc == NULL) {
+        wifi_hal_error_print("%s:%d: [RNR] no 6G STA iface\n", __func__, __LINE__);
+        return -1;
+    }
+
+    char buf[128];
+    int off = 0;
+    unsigned int i;
+
+    for (i = 0; i < rnr->nfreq && off < (int)sizeof(buf) - 8; i++)
+        off += snprintf(buf + off, sizeof(buf) - (size_t)off, "%u ", rnr->freq[i]);
+    wifi_hal_dbg_print("%s:%d: [RNR] scan 6G %uch: %s\n", __func__, __LINE__, rnr->nfreq, buf);
+
+    memset(ssid, 0, sizeof(ssid));
+    strncpy(ssid[0], rnr->ssid, sizeof(ssid[0]) - 1);
+    pthread_mutex_lock(&ifc->scan_info_mutex);
+    hash_map_cleanup(ifc->scan_info_map);
+    pthread_mutex_unlock(&ifc->scan_info_mutex);
+
+    int ret = nl80211_start_scan(ifc, 0, rnr->nfreq, rnr->freq, dwell, 1, ssid);
+    if (ret == 0) {
+        rnr->scan_started = true;
+        wifi_hal_dbg_print("%s:%d: [RNR] 6G scan triggered successfully\n", __func__, __LINE__);
+    } else {
+        wifi_hal_error_print("%s:%d: [RNR] 6G scan trigger failed ret=%d\n", __func__, __LINE__,
+            ret);
+    }
+    return ret;
+}
+
+static void parse_rnr(const uint8_t type, uint8_t ie_len, const uint8_t *data,
+    const struct parse_ies_data *ie_buf, wifi_bss_info_t *bss)
+{
+    const uint8_t *p = data;
+    const uint8_t *end = data + ie_len;
+    wifi_radio_info_t *scan_radio;
+    wifi_radio_info_t *radio6g;
+    rnr_scan_t *rnr;
+    char country[8];
+    (void)type;
+    (void)bss;
+
+    scan_radio = ie_buf->radio;
+    if (scan_radio == NULL || !scan_radio->rnr_enabled)
+        return;
+
+    get_coutry_str_from_code(scan_radio->oper_param.countryCode, country);
+
+    radio6g = rnr_find_6g_radio();
+    if (radio6g == NULL)
+        return;
+
+    rnr = &radio6g->rnr;
+
+    if (ie_len < RNR_NAP_HDR || !rnr->have_ssid)
+        return;
+
+    while (p + RNR_NAP_HDR <= end) {
+        const uint8_t cnt = (p[0] >> 4) + 1;
+        const uint8_t ilen = p[1];
+        const uint8_t oc = p[2];
+        const uint8_t ch = p[3];
+        const uint8_t *set = p + RNR_NAP_HDR;
+        const size_t slen = (size_t)cnt * ilen;
+        const uint8_t *next = set + slen;
+        int freq;
+        unsigned int ssid_off;
+
+        if (next > end) {
+            wifi_hal_error_print("%s:%d: [RNR] overflow oc=%u ch=%u "
+                                 "cnt=%u ilen=%u\n",
+                __func__, __LINE__, oc, ch, cnt, ilen);
+            return;
+        }
+
+        if (ilen == 0)
+            goto next_nap;
+
+        if (!rnr_is_6ghz_opclass(oc))
+            goto next_nap;
+
+        freq = ieee80211_chan_to_freq(country, oc, ch);
+        if (freq <= 0) {
+            wifi_hal_error_print("%s:%d: [RNR] invalid oc=%u ch=%u\n", __func__, __LINE__, oc, ch);
+            goto next_nap;
+        }
+
+        ssid_off = rnr_ssid_offset(ilen);
+
+        if (ssid_off != 0 &&
+            !rnr_tbtt_match(set, cnt, ilen, ssid_off, rnr->ssid_crc))
+            goto next_nap;
+
+        if (rnr_freq_add(rnr, (uint32_t)freq))
+            wifi_hal_dbg_print("%s:%d: [RNR] +ch%u %uMHz n=%u%s\n", __func__, __LINE__, ch,
+                (uint32_t)freq, rnr->nfreq, ssid_off ? "" : " (no short_ssid)");
+
+next_nap:
+        p = next;
+    }
+}
+#endif // FEATURE_SINGLE_PHY
+
 static void parse_bss_load(const uint8_t type, uint8_t len, const uint8_t *data,
             const struct parse_ies_data *ie_buffer, wifi_bss_info_t *bss)
 {
@@ -10746,6 +11154,9 @@ static const struct ie_parse ie_parsers[] = {
     [WLAN_EID_EXT_SUPP_RATES] = { "Extended supported rates", parse_supprates, 0, 255, BIT(PARSE_SCAN), },
     [WLAN_EID_SECONDARY_CHANNEL_OFFSET] = { "Secondary Channel Offset", parse_secchan_offs, 1, 1, BIT(PARSE_SCAN), },
     [WLAN_EID_EXTENSION]      = { "Extension Tag", parse_extension_tag, 0, 255, BIT(PARSE_SCAN), },
+#ifndef FEATURE_SINGLE_PHY
+    [WLAN_EID_REDUCED_NEIGHBOR_REPORT] = { "Reduced Neighbor Report", parse_rnr, 4, 255, BIT(PARSE_SCAN), },
+#endif //FEATURE_SINGLE_PHY
 };
 
 #if 0
@@ -10790,11 +11201,13 @@ static void parse_vendor(unsigned char len, unsigned char *data)
 #endif
 }
 
-static void parse_ies(unsigned char *ie, int ielen, wifi_bss_info_t *bss)
+static void parse_ies(unsigned char *ie, int ielen, wifi_bss_info_t *bss,
+    wifi_radio_info_t *radio)
 {
     struct parse_ies_data ie_buffer = {
         .ie = ie,
-        .ielen = ielen };
+        .ielen = ielen,
+        .radio = radio };
 
     /* Set initial values, needed in case its legacy mode AP with no HT, VHT or HE IEs present */
     bss->supp_chan_bw |= WIFI_CHANNELBANDWIDTH_20MHZ;
@@ -10985,13 +11398,14 @@ static int scan_info_handler(struct nl_msg *msg, void *arg)
     // - ies
     uint32_t radio_index = 0;
     wifi_convert_freq_band_to_radio_index(scan_info_ap->oper_freq_band, (int *)&radio_index);
+    wifi_radio_info_t *scan_radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
 
     if (ie) {
         // Parse standard IEs including SSID
-        parse_ies(ie, len, scan_info_ap);
+        parse_ies(ie, len, scan_info_ap, scan_radio);
     } else {
         // Parse IEs from beacon IEs (including SSID)
-        parse_ies(beacon_ies, beacon_ie_len, scan_info_ap);
+        parse_ies(beacon_ies, beacon_ie_len, scan_info_ap, scan_radio);
     }
 
     if (ie != NULL && len > 0) {
@@ -13173,10 +13587,13 @@ int wifi_drv_hapd_send_eapol(
         }
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
 
-        const char *ifname = wifi_hal_get_interface_name(interface);
         if (sock_fd < 0) {
             wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__, get_vap_bridge_name(&interface->vap_info));
         } else {
+#ifdef WIFI_EMULATOR_CHANGE
+            bind_ifname = (vap->vap_mode == wifi_vap_mode_ap) ? vap->bridge_name:interface->name;
+#else
+            const char *ifname = wifi_hal_get_interface_name(interface);
             if (vap->vap_mode == wifi_vap_mode_ap) {
                 if (is_interface_in_bridge(ifname, vap->bridge_name)) {
                     bind_ifname = vap->bridge_name;
@@ -13186,7 +13603,7 @@ int wifi_drv_hapd_send_eapol(
             } else {
                 bind_ifname = ifname;
             }
-
+#endif
             wifi_hal_info_print("%s:%d: Binding data frames socket to %s\n", __func__, __LINE__,
                 bind_ifname);
             memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
@@ -15956,6 +16373,7 @@ error:
     return -1;
 }
 
+#ifndef WIFI_EMULATOR_CHANGE
 /**
  * Check if the given interface is a member of the given bridge.
  * Used to decide whether to bind the EAPOL socket to the bridge (frames
@@ -15984,6 +16402,7 @@ static bool is_interface_in_bridge(const char *iface, const char *bridge_name)
         return in_bridge;
     }
 }
+#endif
 
 static int register_data_frame_socket(wifi_interface_info_t *interface)
 {
@@ -16041,6 +16460,9 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
 
 #ifdef CONFIG_WIFI_EMULATOR
     bind_ifname = vap->bridge_name;
+#elif defined WIFI_EMULATOR_CHANGE
+    bind_ifname = (vap->vap_mode == wifi_vap_mode_ap || vap->u.sta_info.ignite_enabled) ?
+            get_vap_bridge_name(vap) : interface->name;
 #else
     const char *ifname;
     ifname = wifi_hal_get_interface_name(interface);
