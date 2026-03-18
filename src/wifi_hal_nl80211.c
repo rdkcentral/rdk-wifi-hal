@@ -2180,16 +2180,9 @@ void recv_link_status()
                     if (radio == NULL) continue;
                     if (radio->interface_map == NULL) continue;
 
-                    hash_map_foreach(radio->interface_map, interface) {
-#if defined(CONFIG_GENERIC_MLO)
-                        wifi_interface_info_t *first_interface = wifi_hal_get_first_mld_interface(
-                            interface);
-                        if (interface != first_interface) {
-                            continue;
-                        }
-#endif // CONFIG_GENERIC_MLO
-
-                        if(strncmp(get_vap_bridge_name(&interface->vap_info), ifName, strlen(get_vap_bridge_name(&interface->vap_info))+1) == 0) {
+                    interface = hash_map_get_first(radio->interface_map);
+                    while (interface != NULL) {
+                        if(strncmp(interface->vap_info.bridge_name, ifName, strlen(interface->vap_info.bridge_name)+1) == 0) {
                             if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
                                 switch (nlmsgHdr->nlmsg_type)
                                 {
@@ -2226,7 +2219,7 @@ void recv_link_status()
                                             if (bind(sock_fd, (struct sockaddr *)&sockaddr, sizeof(sockaddr)) < 0) {
                                                 wifi_hal_error_print("%s:%d: Error binding to interface, err:%d\n", __func__, __LINE__, errno);
                                                 close(sock_fd);
-                                            } else { 
+                                            } else {
                                                 interface->u.ap.br_sock_fd = sock_fd;
                                                 interface->bridge_configured = true;
                                             }
@@ -2243,6 +2236,7 @@ void recv_link_status()
                             found = true;
                             break;
                         }
+                        interface = hash_map_get_next(radio->interface_map, interface);
                     }
                 }
             }
