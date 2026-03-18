@@ -8242,7 +8242,7 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
         struct eht_capabilities *dst_eht = &radio->hw_modes[nl_band].eht_capab[opmode];
         if (src_eht && src_eht->eht_supported) {
             dst_eht->eht_supported = true;
-            dst_eht->mac_cap = src_eht->mac_cap;
+            memcpy((unsigned char *)&dst_eht->mac_cap, (unsigned char *)&src_eht->mac_cap, sizeof(dst_eht->mac_cap));
             memcpy(dst_eht->phy_cap, src_eht->phy_cap, EHT_PHY_CAPAB_LEN);
             memcpy(dst_eht->mcs, src_eht->mcs, EHT_MCS_NSS_CAPAB_LEN);
             memcpy(dst_eht->ppet, src_eht->ppet, EHT_PPE_THRESH_CAPAB_LEN);
