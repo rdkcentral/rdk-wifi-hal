@@ -17317,7 +17317,10 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
 {
     struct hostapd_channel_data *chan = NULL;
 #if HOSTAPD_VERSION >= 210 // 2.10
-    enum dfs_channel_type channel_type = DFS_AVAILABLE;
+
+    wifi_hal_error_print("%s:%d POORNA DFS: radar detected — selecting non-DFS-only fallback channel\n", __func__,
+            __LINE__);	
+    enum dfs_channel_type channel_type = DFS_NON_DFS_ONLY; //select only non-dfs channel
 
     chan = dfs_get_valid_channel(&interface->u.ap.iface, secondary_channel,
                                     oper_centr_freq_seg0_idx,
