@@ -2385,7 +2385,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     get_coutry_str_from_code(radio_param->countryCode, country);
     memcpy((unsigned char *)&param, (unsigned char *)radio_param, sizeof(wifi_radio_operationParam_t));
 
-    param->channelWidth = WIFI_CHANNELBANDWIDTH_20MHZ;
+    param.channelWidth = WIFI_CHANNELBANDWIDTH_20MHZ;
 
     for (i = 0; i < num && freq_num < MAX_FREQ_LIST_SIZE; i++) {
         param.channel = (scan_mode == WIFI_RADIO_SCAN_MODE_ONCHAN) ?
