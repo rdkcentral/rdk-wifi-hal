@@ -3162,11 +3162,16 @@ static int decode_bss_info_to_neighbor_ap_info(wifi_neighbor_ap2_t *ap, const wi
 
     // - ap_DTIMPeriod
     ap->ap_DTIMPeriod = bss->dtim_period;
-    // - ap_ChannelUtilization
-    ap->ap_ChannelUtilization = bss->chan_utilization;
 
-    wifi_hal_stats_dbg_print("%s:%d: [SCAN] bssid: %s, ssid: %s, channel: %d, noise: %d\n",
-        __func__, __LINE__, ap->ap_BSSID, ap->ap_SSID, ap->ap_Channel, ap->ap_Noise);
+    // - bss_load_element 
+    if (bss->bss_load_element_present) {
+        ap->bss_load_element_present = bss->bss_load_element_present;
+        ap->ap_ChannelUtilization = bss->chan_utilization;
+        ap->ap_StaCount = bss->station_cnt;
+    }
+
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] bssid: %s, ssid: %s, channel: %d, noise: %d station_cnt %u\n",
+        __func__, __LINE__, ap->ap_BSSID, ap->ap_SSID, ap->ap_Channel, ap->ap_Noise, ap->ap_StaCount);
 
     return ret;
 }
