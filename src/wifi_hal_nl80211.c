@@ -11249,7 +11249,9 @@ static void parse_bss_load(const uint8_t type, uint8_t len, const uint8_t *data,
     (void)len;
     (void)ie_buffer;
 
+    bss->bss_load_element_present = 1;
     bss->chan_utilization = ((unsigned)data[2] * 100) / 255;
+    bss->station_cnt = (unsigned)data[0] | ((unsigned)data[1] << 8);
 }
 
 static void parse_extension_tag(const uint8_t type, uint8_t len, const uint8_t *data,
