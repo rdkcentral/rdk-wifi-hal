@@ -16761,12 +16761,27 @@ u8 *wifi_drv_get_ap_channel_report_ie(void *priv, u8 *eid)
 
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         temp_radio = get_radio_by_rdk_index(i);
-        if (temp_radio && (temp_radio->oper_param.enable == true) &&
-            (temp_radio->rdk_radio_index != radio->rdk_radio_index)) {
+        if (!temp_radio || (temp_radio->oper_param.enable == false) ||
+            (temp_radio->rdk_radio_index == radio->rdk_radio_index))
+            continue;
+
+        struct hostapd_data *hapd;
+        wifi_interface_info_t *interface_iter = hash_map_get_first(temp_radio->interface_map);
+        while (interface_iter != NULL) {
+            u8 op_class, channel;
+            hapd = &interface_iter->u.ap.hapd;
+
+            if (hapd->iface == NULL || hapd->iconf == NULL ||
+                ieee80211_freq_to_channel_ext(hapd->iface->freq, hapd->iconf->secondary_channel,
+                    hostapd_get_oper_chwidth(hapd->iconf), &op_class, &channel) == NUM_HOSTAPD_MODES) {
+                interface_iter = hash_map_get_next(temp_radio->interface_map, interface_iter);
+                continue;
+            }
             *eid++ = WLAN_EID_AP_CHANNEL_REPORT;
             *eid++ = 2;
-            *eid++ = temp_radio->oper_param.operatingClass;
-            *eid++ = temp_radio->oper_param.channel;
+            *eid++ = op_class;
+            *eid++ = channel;
+            break;
         }
     }
 
