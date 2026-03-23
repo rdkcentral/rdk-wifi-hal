@@ -19,6 +19,8 @@
 
 #include <stddef.h>
 #include "wifi_hal.h"
+#define MAX_EMU_NEIGHBOR_AP_COUNT 64
+
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
 #include "typedefs.h"
 #include "bcmwifi_channels.h"
@@ -134,7 +136,7 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
 };
 
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
-#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
 static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames);
 #endif
 static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl);
@@ -338,6 +340,11 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
         sem_close(sem);
         return RETURN_ERR;
     }
+    if (neighbor_header.neighbor_count > MAX_EMU_NEIGHBOR_AP_COUNT) {
+        wifi_hal_stats_info_print("%s:%d: Invalid neighbor_count %u,reset into 64\n", __func__,
+            __LINE__, neighbor_header.neighbor_count);
+        neighbor_header.neighbor_count = MAX_EMU_NEIGHBOR_AP_COUNT;
+    }
 
     combined_data = malloc(
         (existing_count + neighbor_header.neighbor_count) * sizeof(wifi_neighbor_ap2_t));
@@ -516,7 +523,7 @@ static bool platform_down_reqd(wifi_radio_index_t r_index, wifi_vap_info_map_t *
 
         reqd |= needs_conf_split_assoc_req(
             vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
-#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
         reqd |= needs_conf_mbssid_num_frames(
             vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
 #endif
@@ -1932,7 +1939,7 @@ static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl
  * [in] hostap_mgt_frame_ctrl
  * [out] mbssid_num_frames
 */
-#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
 static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames)
 {
     char interface_name[8] = { 0 };
@@ -1958,7 +1965,7 @@ static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ct
     }
     return false;
 }
-#endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+#endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
 
 static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, int enable)
 {
@@ -1966,9 +1973,9 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
     char buf[128] = { 0 };
     char interface_name[8] = { 0 };
     struct maclist *maclist = (struct maclist *)buf;
-#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
     int mbssid_num_frames = 1;
-#endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+#endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
     bool split_assoc_req_change = false;
     bool mbssid_num_frames_change = false;
 
@@ -2014,7 +2021,7 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
     }
 
     split_assoc_req_change = needs_conf_split_assoc_req(vap_index, enable, &assoc_ctrl);
-#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
     mbssid_num_frames_change = needs_conf_mbssid_num_frames(vap_index, enable, &mbssid_num_frames);
 #endif
     if (split_assoc_req_change == false && mbssid_num_frames_change == false) {
@@ -2045,7 +2052,7 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
         nvram_commit();
     }
 
-#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
     // supported by driver version 23.2.1
     if (wl_iovar_set(interface_name, "mbssid_num_frames", &mbssid_num_frames,
             sizeof(mbssid_num_frames)) < 0) {
@@ -2053,7 +2060,7 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
             __func__, __LINE__, mbssid_num_frames, interface_name, errno, strerror(errno));
         return RETURN_ERR;
     }
-#endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+#endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
 
 #if !(defined(MLO_ENAB))
     if (wl_ioctl(interface_name, WLC_UP, NULL, 0) < 0) {
@@ -4503,6 +4510,9 @@ int platform_get_radio_caps(wifi_radio_index_t index)
     if ((radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops
         & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK) > 0)
         radio->capab.mldOperationalCap |= STR;
+    if ((radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops
+        & EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_NEG_SUPP_MSK) > 0)
+        radio->capab.TIDLinkMapNegotiation = TRUE;
 
 #endif /* CONFIG_IEEE80211BE */
 
