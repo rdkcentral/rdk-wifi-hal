@@ -3964,7 +3964,7 @@ int ovs_br_add_eapol_flow(const char *brname)
 {
     wifi_hal_dbg_print("%s:%d ovs-ofctl add-flow %s for EAPOL\n", __func__, __LINE__, brname);
     int rc = run_prog("/usr/bin/ovs-ofctl", "add-flow", brname,
-                      "priority=100,dl_type=0x888e,actions=NORMAL");
+                      "priority=50000,dl_type=0x888e,actions=NORMAL");
     if (rc) {
         wifi_hal_error_print("%s:%d failed to add EAPOL flow to bridge:%s\n",
             __func__, __LINE__, brname);
