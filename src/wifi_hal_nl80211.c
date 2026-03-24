@@ -2704,6 +2704,9 @@ void recv_data_frame(wifi_interface_info_t *interface)
     saddr_len = sizeof(saddr);
     memset(buff, 0, sizeof(buff));
 
+    wifi_hal_dbg_print("%s:%d: entered for interface:%s vap_mode:%d\n",
+        __func__, __LINE__, interface->name, vap->vap_mode);
+
     //Receive a network packet and copy in to buffer
     sock = (vap->vap_mode == wifi_vap_mode_ap) ? interface->u.ap.br_sock_fd :
         interface->u.sta.sta_sock_fd;
@@ -2880,8 +2883,18 @@ void recv_data_frame(wifi_interface_info_t *interface)
     eth_hdr = (struct ieee8023_hdr *)buff;
 
     if (eth_hdr->ethertype != host_to_be16(ETH_P_EAPOL)) {
+        wifi_hal_dbg_print("%s:%d: non-EAPOL frame ethertype:0x%04x on interface:%s, skipping\n",
+            __func__, __LINE__, be_to_host16(eth_hdr->ethertype), interface->name);
         return;
     }
+
+    wifi_hal_dbg_print("%s:%d: EAPOL frame received on interface:%s, src:%02x:%02x:%02x:%02x:%02x:%02x "
+        "dst:%02x:%02x:%02x:%02x:%02x:%02x len:%d\n",
+        __func__, __LINE__, interface->name,
+        eth_hdr->src[0], eth_hdr->src[1], eth_hdr->src[2],
+        eth_hdr->src[3], eth_hdr->src[4], eth_hdr->src[5],
+        eth_hdr->dest[0], eth_hdr->dest[1], eth_hdr->dest[2],
+        eth_hdr->dest[3], eth_hdr->dest[4], eth_hdr->dest[5], buflen);
 
 #ifdef CONFIG_GENERIC_MLO
     interface_mac = wifi_hal_is_mld_enabled(interface) ? wifi_hal_get_mld_mac_address(interface) :
@@ -2903,12 +2916,21 @@ void recv_data_frame(wifi_interface_info_t *interface)
         // received frame
       //  dir = wifi_direction_uplink;
         memcpy(sta, eth_hdr->src, sizeof(mac_address_t));
+        wifi_hal_dbg_print("%s:%d: EAPOL rx frame matched dest MAC on interface:%s\n",
+            __func__, __LINE__, interface->name);
     } else if (memcmp(eth_hdr->src, interface->mac, sizeof(mac_address_t)) == 0) {
         // transmitted frame
       //  dir = wifi_direction_downlink;
         memcpy(sta, eth_hdr->dest, sizeof(mac_address_t));
+        wifi_hal_dbg_print("%s:%d: EAPOL tx frame matched src MAC on interface:%s\n",
+            __func__, __LINE__, interface->name);
     } else {
         // drop
+        wifi_hal_dbg_print("%s:%d: EAPOL frame MAC mismatch on interface:%s, "
+            "interface_mac:%02x:%02x:%02x:%02x:%02x:%02x, dropping\n",
+            __func__, __LINE__, interface->name,
+            interface->mac[0], interface->mac[1], interface->mac[2],
+            interface->mac[3], interface->mac[4], interface->mac[5]);
         return;
     }
 #endif // CONFIG_GENERIC_MLO
@@ -2958,6 +2980,9 @@ void recv_data_frame(wifi_interface_info_t *interface)
         }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     } else if (vap->vap_mode == wifi_vap_mode_sta) {
+        wifi_hal_dbg_print("%s:%d: STA mode EAPOL processing on interface:%s state:%d wpa_sm:%p\n",
+            __func__, __LINE__, interface->name, interface->u.sta.state,
+            (void *)interface->u.sta.wpa_sm);
 #if defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
         //Capture the EAPOL frames.
         push_eapol_to_char_dev(buff, buflen, eth_hdr);
@@ -3298,6 +3323,8 @@ void *nl_recv_func(void *arg)
         }
 #else
         if (bridge_fd_isset(priv, &interface)) {
+            wifi_hal_dbg_print("%s:%d: bridge_fd_isset matched interface:%s vap_mode:%d\n",
+                __func__, __LINE__, interface->name, interface->vap_info.vap_mode);
             recv_data_frame(interface);
         }
 #endif
@@ -3933,6 +3960,20 @@ int ovs_br_add_if(const char *brname, const char *ifname)
 }
 
 static
+int ovs_br_add_eapol_flow(const char *brname)
+{
+    wifi_hal_dbg_print("%s:%d ovs-ofctl add-flow %s for EAPOL\n", __func__, __LINE__, brname);
+    int rc = run_prog("/usr/bin/ovs-ofctl", "add-flow", brname,
+                      "priority=100,dl_type=0x888e,actions=NORMAL");
+    if (rc) {
+        wifi_hal_error_print("%s:%d failed to add EAPOL flow to bridge:%s\n",
+            __func__, __LINE__, brname);
+        return -1;
+    }
+    return 0;
+}
+
+static
 int ovs_br_del_if(const char *brname, const char *ifname)
 {
     wifi_hal_dbg_print("%s:%d ovs-vsctl del-port %s %s\r\n", __func__, __LINE__, brname, ifname);
@@ -4127,6 +4168,9 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
             }
         }
         wifi_hal_dbg_print("%s:%d ovs bridge mapping for bridge:%s, interface:%s is created\n",  __func__, __LINE__, br_name, if_name);
+        if (vap_cfg && vap_cfg->vap_mode == wifi_vap_mode_sta && vap_cfg->u.sta_info.ignite_enabled) {
+            ovs_br_add_eapol_flow(br_name);
+        }
         return 0;
     }
 
