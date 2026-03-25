@@ -2122,7 +2122,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                 reason = station->disconnect_reason_code;
             }
 #endif
-#if !defined(CONFIG_GENERIC_MLO)
+#if !defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210)
             ap_free_sta(&interface->u.ap.hapd, station);
 #endif // !defined(CONFIG_GENERIC_MLO)
         } else {
@@ -2194,7 +2194,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                     reason = station->disconnect_reason_code;
                 }
 #endif
-#if !defined(CONFIG_GENERIC_MLO)
+#if !defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210)
             ap_free_sta(&interface->u.ap.hapd, station);
 #endif // !defined(CONFIG_GENERIC_MLO)
         }
@@ -6452,20 +6452,14 @@ static int kick_device_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 }
 
-static int notify_sta_listeners(wifi_interface_info_t *interface, mac_address_t sta_mac, int rssi)
+static int notify_sta_listeners(wifi_interface_info_t *interface, wifi_associated_dev_t *associated_dev)
 {
     mac_addr_str_t sta_mac_str;
     wifi_device_callbacks_t *callbacks;
-    wifi_associated_dev_t associated_dev;
     wifi_vap_info_t *vap = &interface->vap_info;
 
-    memset(&associated_dev, 0, sizeof(associated_dev));
-    memcpy(associated_dev.cli_MACAddress, sta_mac, sizeof(mac_address_t));
-    associated_dev.cli_RSSI = rssi;
-    associated_dev.cli_Active = true;
-
     wifi_hal_dbg_print("%s:%d: Notifying STA listeners for %s on VAP index %d\n", __func__,
-        __LINE__, to_mac_str(sta_mac, sta_mac_str), vap->vap_index);
+        __LINE__, to_mac_str(associated_dev->cli_MACAddress, sta_mac_str), vap->vap_index);
 
     callbacks = get_hal_device_callbacks();
     if (callbacks == NULL) {
@@ -6475,8 +6469,8 @@ static int notify_sta_listeners(wifi_interface_info_t *interface, mac_address_t 
     for (unsigned int i = 0; i < callbacks->num_assoc_cbs; i++) {
         if (callbacks->assoc_cb[i] != NULL) {
             wifi_hal_info_print("%s:%d: Client " MACSTR " associated\n", __func__, __LINE__,
-                MAC2STR(associated_dev.cli_MACAddress));
-            callbacks->assoc_cb[i](vap->vap_index, &associated_dev);
+                MAC2STR(associated_dev->cli_MACAddress));
+            callbacks->assoc_cb[i](vap->vap_index, associated_dev);
         }
     }
 
@@ -6487,7 +6481,7 @@ static int notify_sta_listeners(wifi_interface_info_t *interface, mac_address_t 
         uint32_t g_idx = 0;
         wifi_steering_evConnect_t connect_steering_event = {};
 
-        station = ap_get_sta(&interface->u.ap.hapd, sta_mac);
+        station = ap_get_sta(&interface->u.ap.hapd, associated_dev->cli_MACAddress);
         if (station == NULL) {
             wifi_hal_error_print("%s:%d: No station for Client Connect steering event", __func__,
                 __LINE__);
@@ -6496,11 +6490,11 @@ static int notify_sta_listeners(wifi_interface_info_t *interface, mac_address_t 
 
         pthread_mutex_lock(&g_wifi_hal.steering_data_lock);
         /* always call add_stalist to update info (type, assoc_time etc.) */
-        bm_sta_list_t *l_sta_info = steering_add_stalist(interface, NULL, sta_mac,
+        bm_sta_list_t *l_sta_info = steering_add_stalist(interface, NULL, associated_dev->cli_MACAddress,
             BM_STA_TYPE_ASSOC);
         if (l_sta_info == NULL) {
             wifi_hal_error_print("Fail to get the sta MAC=%s after adding it to list.\n",
-                to_mac_str(sta_mac, sta_mac_str));
+                to_mac_str(associated_dev->cli_MACAddress, sta_mac_str));
         }
 
         if (steering_find_ap_cfg(vap->vap_index, &g_idx) == NULL) {
@@ -6512,7 +6506,7 @@ static int notify_sta_listeners(wifi_interface_info_t *interface, mac_address_t 
 
         fill_steering_event_general(&steering_evt, WIFI_STEERING_EVENT_CLIENT_CONNECT, vap);
         steering_evt.data.connect = connect_steering_event;
-        memcpy(steering_evt.data.connect.client_mac, sta_mac, sizeof(mac_address_t));
+        memcpy(steering_evt.data.connect.client_mac, associated_dev->cli_MACAddress, sizeof(mac_address_t));
 
         wifi_hal_dbg_print("%s:%d: Send Client Connect steering event\n", __func__, __LINE__);
 
@@ -6538,11 +6532,17 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
     };
     int rem, signals_cnt = 0;
     int rssi = 0;
-    mac_address_t sta_mac;
     mac_addr_str_t sta_mac_str;
+    wifi_associated_dev_t associated_dev = {};
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE)
+    struct sta_info *sta = NULL;
     bool has_link_stats = false;
+#endif /* HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE */
 
     interface = (wifi_interface_info_t *)arg;
+
+    memset(&associated_dev, 0, sizeof(associated_dev));
+    associated_dev.cli_Active = true;
 
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
@@ -6561,7 +6561,8 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
         return NL_SKIP;
     }
 
-    memcpy(sta_mac, nla_data(tb[NL80211_ATTR_MAC]), nla_len(tb[NL80211_ATTR_MAC]));
+    memcpy(associated_dev.cli_MACAddress, nla_data(tb[NL80211_ATTR_MAC]),
+        nla_len(tb[NL80211_ATTR_MAC]));
 
     if (!tb[NL80211_ATTR_STA_INFO]) {
         wifi_hal_info_print("%s:%d: STA stats missing\n", __func__, __LINE__);
@@ -6569,7 +6570,7 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
     }
 
     wifi_hal_dbg_print("%s:%d: Received stats for %s\n", __func__, __LINE__,
-        to_mac_str(sta_mac, sta_mac_str));
+        to_mac_str(associated_dev.cli_MACAddress, sta_mac_str));
 
     if (nla_parse_nested(stats, NL80211_STA_INFO_MAX, tb[NL80211_ATTR_STA_INFO], stats_policy)) {
         wifi_hal_info_print("%s:%d: Failed to parse nested attributes\n", __func__, __LINE__);
@@ -6581,6 +6582,7 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
         struct nlattr *link_nest;
         int rem_links;
         uint8_t link_id;
+        int link_idx = 0;
 
         nla_for_each_nested(link_nest, tb[NL80211_ATTR_MLO_LINKS], rem_links) {
             struct nlattr *link_tb[NL80211_ATTR_MAX + 1] = {};
@@ -6613,8 +6615,6 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
                 }
 
                 if (link_stats[NL80211_STA_INFO_CHAIN_SIGNAL] != NULL) {
-                    wifi_interface_info_t *link_interface;
-
                     nla_for_each_nested(chain_nl, link_stats[NL80211_STA_INFO_CHAIN_SIGNAL],
                         rem_chain) {
                         int8_t chain_signal = (int8_t)nla_get_u8(chain_nl);
@@ -6629,21 +6629,21 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
                         wifi_hal_dbg_print("%s:%d: Link %u average RSSI: %d dBm\n", __func__,
                             __LINE__, link_id, link_rssi);
                     }
-                    has_link_stats = true;
-
-                    link_interface = wifi_hal_get_mld_interface_by_link_id(interface, link_id);
-                    if (link_interface != NULL) {
-                        notify_sta_listeners(link_interface, sta_mac, link_rssi);
+                    if (link_idx >= MAX_NUM_RADIOS) {
+                         wifi_hal_error_print("%s:%d: link_idx Out of bounds %d\n", __func__,
+                        __LINE__, link_idx);
+                        break;
                     }
+                    associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkID = link_id;
+                    associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_RSSI = link_rssi;
+                    associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_Valid = true;
+                    link_idx++;
+                    has_link_stats = true;
                 }
             }
         }
     }
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE
-
-    if (has_link_stats) {
-        return NL_SKIP;
-    }
 
     if (stats[NL80211_STA_INFO_CHAIN_SIGNAL] != NULL) {
         nla_for_each_nested(nl, stats[NL80211_STA_INFO_CHAIN_SIGNAL], rem) {
@@ -6655,10 +6655,71 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
     if (signals_cnt != 0) {
         rssi = rssi / signals_cnt;
     }
+    associated_dev.cli_RSSI = rssi;
+    wifi_hal_dbg_print("%s:%d: RSSI %d\n", __func__, __LINE__, associated_dev.cli_RSSI);
 
-    wifi_hal_dbg_print("%s:%d: RSSI %d\n", __func__, __LINE__, rssi);
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE)
+    sta = ap_get_sta(&interface->u.ap.hapd, associated_dev.cli_MACAddress);
+    if (sta == NULL) {
+        wifi_hal_error_print("%s:%d: " MACSTR " sta_info not found!\n", __func__, __LINE__,
+            MAC2STR(associated_dev.cli_MACAddress));
+        return NL_SKIP;
+    }
+    associated_dev.cli_MLDInfo.cli_MLDSta = sta->mld_info.mld_sta;
+    if (associated_dev.cli_MLDInfo.cli_MLDSta == true && has_link_stats == false) {
+        int link_idx = 0;
+        /* In case a vendor does not support NL80211_ATTR_MLO_LINKS attribute to obtain mlo links info,
+        * try to obtain link info from hostapd sta->mld_info
+        */
+        for (int link_id = 0; link_id < MAX_NUM_MLD_LINKS; link_id++) {
+            struct mld_link_info *link = &sta->mld_info.links[link_id];
 
-    notify_sta_listeners(interface, sta_mac, rssi);
+            if (!link->valid) {
+                continue;
+            }
+            if (link_idx >= MAX_NUM_RADIOS) {
+                wifi_hal_error_print("%s:%d: link_idx Out of bounds %d\n", __func__, __LINE__, link_idx);
+                break;
+            }
+            associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkID = link_id;
+            associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_RSSI = rssi;
+            associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_Valid = true;
+            link_idx++;
+            has_link_stats = true;
+        }
+    }
+
+    if (associated_dev.cli_MLDInfo.cli_MLDSta == true && has_link_stats == true) {
+        /* Determine and mark assoc link */
+        u8 mld_assoc_link_id = sta->mld_assoc_link_id;
+#if defined(CONFIG_DRIVER_BRCM)
+        mld_assoc_link_id = sta->rx_link_id;
+#endif /* CONFIG_DRIVER_BRCM */
+
+        for (int link_idx = 0; link_idx < MAX_NUM_RADIOS; link_idx++) {
+            if (associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_Valid) {
+                //Determine assoc link
+                if (associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkID == mld_assoc_link_id) {
+                    associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_IsAssocLink = true;
+                }
+                //update vap index for the link
+                int link_id = associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkID;
+                wifi_interface_info_t *link_iface = wifi_hal_get_mld_interface_by_link_id(interface, link_id);
+                if (link_iface == NULL) {
+                    associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_Valid = false;
+                    wifi_hal_error_print("%s:%d: Failed to get interface for link_id %d\n", __func__,
+                        __LINE__, link_id);
+                    continue;
+                }
+                associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_VapIndex = link_iface->vap_info.vap_index;
+            }
+        }
+    } else if (associated_dev.cli_MLDInfo.cli_MLDSta == true && has_link_stats == false) {
+        wifi_hal_error_print("%s:%d: Client is MLD STA but no link stats available\n", __func__, __LINE__);
+    }
+#endif /* HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE */
+
+    notify_sta_listeners(interface, &associated_dev);
 
     return NL_SKIP;
 }
@@ -8242,7 +8303,7 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
         struct eht_capabilities *dst_eht = &radio->hw_modes[nl_band].eht_capab[opmode];
         if (src_eht && src_eht->eht_supported) {
             dst_eht->eht_supported = true;
-            dst_eht->mac_cap = src_eht->mac_cap;
+            memcpy((unsigned char *)&dst_eht->mac_cap, (unsigned char *)&src_eht->mac_cap, sizeof(dst_eht->mac_cap));
             memcpy(dst_eht->phy_cap, src_eht->phy_cap, EHT_PHY_CAPAB_LEN);
             memcpy(dst_eht->mcs, src_eht->mcs, EHT_MCS_NSS_CAPAB_LEN);
             memcpy(dst_eht->ppet, src_eht->ppet, EHT_PPE_THRESH_CAPAB_LEN);
