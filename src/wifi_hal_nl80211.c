@@ -244,12 +244,16 @@ int get_biggest_in_fdset(wifi_hal_priv_t *priv)
             if (interface->vap_configured == true && interface->bridge_configured == true) {
                 if (interface->data_frames_registered == 1) {
                     vap = &interface->vap_info;
-                    if (sock_fd < ((vap->vap_mode == wifi_vap_mode_ap) ?
-                                          interface->u.ap.br_sock_fd :
-                                          interface->u.sta.sta_sock_fd)) {
-                        sock_fd = (vap->vap_mode == wifi_vap_mode_ap) ?
-                            interface->u.ap.br_sock_fd :
-                            interface->u.sta.sta_sock_fd;
+                    int intf_fd = (vap->vap_mode == wifi_vap_mode_ap) ?
+                        interface->u.ap.br_sock_fd : interface->u.sta.sta_sock_fd;
+                    if (vap->vap_mode == wifi_vap_mode_sta && vap->u.sta_info.ignite_enabled) {
+                        wifi_hal_dbg_print("%s:%d: SREESH radio:%d intf:%s "
+                            "vap_idx:%d sock_fd:%d current_biggest:%d\n",
+                            __func__, __LINE__, i, interface->name,
+                            vap->vap_index, intf_fd, sock_fd);
+                    }
+                    if (sock_fd < intf_fd) {
+                        sock_fd = intf_fd;
                     }
                 }
 #ifdef EAPOL_OVER_NL
@@ -398,11 +402,34 @@ bool bridge_fd_isset(wifi_hal_priv_t *priv, wifi_interface_info_t **intf)
 
         while (interface != NULL) {
             vap = &interface->vap_info;
+#if 0
+            if (vap->vap_mode == wifi_vap_mode_sta && vap->u.sta_info.ignite_enabled) {
+                interface = hash_map_get_next(radio->interface_map, interface);
+                continue;
+            }
+#endif
             if ((interface->vap_configured == true) && (interface->bridge_configured == true) &&
                 (interface->data_frames_registered == 1) &&
                 FD_ISSET(((vap->vap_mode == wifi_vap_mode_ap) ? interface->u.ap.br_sock_fd :
                                                                 interface->u.sta.sta_sock_fd),
                     &priv->drv_rfds)) {
+                if (vap->vap_mode == wifi_vap_mode_sta && vap->u.sta_info.ignite_enabled) {
+                    int sock_fd = interface->u.sta.sta_sock_fd;
+                    wifi_hal_dbg_print("%s:%d: SREESH radio:%d num_radios:%d "
+                        "intf:%s vap_idx:%d vap_mode:%d ignite:%d "
+                        "vap_configured:%d bridge_configured:%d data_frames_registered:%d "
+                        "sock_fd:%d bridge:%s mac:%02x:%02x:%02x:%02x:%02x:%02x "
+                        "state:%d wpa_sm:%p\n",
+                        __func__, __LINE__, i, priv->num_radios,
+                        interface->name, vap->vap_index, vap->vap_mode,
+                        vap->u.sta_info.ignite_enabled,
+                        interface->vap_configured, interface->bridge_configured,
+                        interface->data_frames_registered,
+                        sock_fd, vap->bridge_name,
+                        interface->mac[0], interface->mac[1], interface->mac[2],
+                        interface->mac[3], interface->mac[4], interface->mac[5],
+                        interface->u.sta.state, (void *)interface->u.sta.wpa_sm);
+                }
                 found = true;
                 *intf = interface;
                 break;
@@ -412,7 +439,12 @@ bool bridge_fd_isset(wifi_hal_priv_t *priv, wifi_interface_info_t **intf)
         }
 
     }
-
+    if (found && vap->vap_mode == wifi_vap_mode_sta && vap->u.sta_info.ignite_enabled) {
+        wifi_hal_dbg_print(
+            "%s:%d: SREESH found:%d for interface mac:%02x:%02x:%02x:%02x:%02x:%02x\n", __func__,
+            __LINE__, found, (*intf)->mac[0], (*intf)->mac[1], (*intf)->mac[2], (*intf)->mac[3],
+            (*intf)->mac[4], (*intf)->mac[5]);
+    }
     return found;
 }
 
@@ -2684,6 +2716,117 @@ static void push_eapol_to_char_dev(char *buff, int buflen, struct ieee8023_hdr *
 }
 #endif //defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
 
+#if 0
+static void process_ignite_sta_eapol(wifi_hal_priv_t *priv)
+{
+    wifi_interface_info_t *pending[MAX_NUM_RADIOS];
+    int num_pending = 0;
+    wifi_interface_info_t *target = NULL;
+    unsigned char buff[2048];
+    int buflen;
+    struct sockaddr saddr;
+    int saddr_len = sizeof(saddr);
+    mac_address_t sta;
+    unsigned int i;
+
+    for (i = 0; i < priv->num_radios; i++) {
+        wifi_interface_info_t *intf = hash_map_get_first(priv->radio_info[i].interface_map);
+        while (intf != NULL) {
+            wifi_vap_info_t *vap = &intf->vap_info;
+            if (vap->vap_mode == wifi_vap_mode_sta &&
+                vap->u.sta_info.ignite_enabled &&
+                intf->vap_configured && intf->bridge_configured &&
+                intf->data_frames_registered == 1 &&
+                FD_ISSET(intf->u.sta.sta_sock_fd, &priv->drv_rfds)) {
+                if (num_pending < MAX_NUM_RADIOS) {
+                    pending[num_pending++] = intf;
+                }
+            }
+            intf = hash_map_get_next(priv->radio_info[i].interface_map, intf);
+        }
+    }
+
+    if (num_pending == 0) {
+        return;
+    }
+
+    memset(buff, 0, sizeof(buff));
+    buflen = recvfrom(pending[0]->u.sta.sta_sock_fd, buff, sizeof(buff),
+                      MSG_DONTWAIT, &saddr, (socklen_t *)&saddr_len);
+
+    for (i = 1; i < (unsigned int)num_pending; i++) {
+        unsigned char discard[2048];
+        recvfrom(pending[i]->u.sta.sta_sock_fd, discard, sizeof(discard),
+                 MSG_DONTWAIT, NULL, NULL);
+    }
+
+    if (buflen < (int)(sizeof(struct ieee8023_hdr) + sizeof(struct ieee802_1x_hdr))) {
+        wifi_hal_dbg_print("%s:%d: frame too short (%d bytes), discarding\n",
+            __func__, __LINE__, buflen);
+        return;
+    }
+
+    struct ieee8023_hdr *eth_hdr = (struct ieee8023_hdr *)buff;
+
+    if (eth_hdr->ethertype != host_to_be16(ETH_P_EAPOL)) {
+        return;
+    }
+
+    for (i = 0; i < (unsigned int)num_pending; i++) {
+        if (memcmp(eth_hdr->dest, pending[i]->mac, sizeof(mac_address_t)) == 0) {
+            target = pending[i];
+            memcpy(sta, eth_hdr->src, sizeof(mac_address_t));
+            break;
+        }
+        if (memcmp(eth_hdr->src, pending[i]->mac, sizeof(mac_address_t)) == 0) {
+            target = pending[i];
+            memcpy(sta, eth_hdr->dest, sizeof(mac_address_t));
+            break;
+        }
+    }
+
+    if (target == NULL) {
+        wifi_hal_dbg_print("%s:%d: EAPOL frame on bridge has no matching Ignite STA interface, "
+            "discarding\n", __func__, __LINE__);
+        return;
+    }
+
+    struct ieee802_1x_hdr *hdr = (struct ieee802_1x_hdr *)(buff + sizeof(struct ieee8023_hdr));
+
+    wifi_hal_dbg_print("%s:%d: SREESH EAPOL matched interface:%s version:%d type:%d length:%d "
+        "state:%d wpa_sm:%p\n", __func__, __LINE__, target->name,
+        hdr->version, hdr->type, hdr->length,
+        target->u.sta.state, (void *)target->u.sta.wpa_sm);
+
+    if (target->u.sta.wpa_sm && target->u.sta.state >= WPA_ASSOCIATED) {
+#if HOSTAPD_VERSION >= 211
+        if (!target->u.sta.wpa_sm->eapol ||
+            !eapol_sm_rx_eapol(target->u.sta.wpa_sm->eapol, (unsigned char *)&sta,
+                (unsigned char *)hdr, buflen - sizeof(struct ieee8023_hdr),
+                FRAME_ENCRYPTION_UNKNOWN)) {
+            wpa_sm_rx_eapol(target->u.sta.wpa_sm, (unsigned char *)&sta,
+                (unsigned char *)hdr, buflen - sizeof(struct ieee8023_hdr),
+                FRAME_ENCRYPTION_UNKNOWN);
+        }
+#else
+        if (!target->u.sta.wpa_sm->eapol ||
+            !eapol_sm_rx_eapol(target->u.sta.wpa_sm->eapol, (unsigned char *)&sta,
+                (unsigned char *)hdr, buflen - sizeof(struct ieee8023_hdr))) {
+            wpa_sm_rx_eapol(target->u.sta.wpa_sm, (unsigned char *)&sta,
+                (unsigned char *)hdr, buflen - sizeof(struct ieee8023_hdr));
+        }
+#endif
+    } else if (target->u.sta.state < WPA_ASSOCIATED) {
+        wifi_hal_dbg_print("%s:%d: SREESH Buffering EAPOL for %s (state=%d < WPA_ASSOCIATED)\n",
+            __func__, __LINE__, target->name, target->u.sta.state);
+        target->u.sta.pending_rx_eapol = true;
+        memcpy(target->u.sta.rx_eapol_buff, buff, sizeof(buff));
+        target->u.sta.buff_len = buflen;
+        memcpy(target->u.sta.src_addr, sta, sizeof(mac_address_t));
+    }
+}
+#endif
+
 void recv_data_frame(wifi_interface_info_t *interface)
 {
     unsigned char buff[2048];
@@ -3269,6 +3412,28 @@ void *nl_recv_func(void *arg)
             }
         }
 
+        if (ret > 0) {
+            unsigned int _i;
+            for (_i = 0; _i < priv->num_radios; _i++) {
+                wifi_interface_info_t *_intf = hash_map_get_first(priv->radio_info[_i].interface_map);
+                while (_intf != NULL) {
+                    wifi_vap_info_t *_vap = &_intf->vap_info;
+                    if (_vap->vap_mode == wifi_vap_mode_sta && _vap->u.sta_info.ignite_enabled &&
+                        _intf->vap_configured && _intf->bridge_configured &&
+                        _intf->data_frames_registered == 1 &&
+                        FD_ISSET(_intf->u.sta.sta_sock_fd, &priv->drv_rfds)) {
+                        wifi_hal_dbg_print("%s:%d: SREESH select ret=%d "
+                            "radio:%d intf:%s vap_idx:%d sock_fd:%d FD_ISSET=1 "
+                            "state:%d\n",
+                            __func__, __LINE__, ret, _i, _intf->name,
+                            _vap->vap_index, _intf->u.sta.sta_sock_fd,
+                            _intf->u.sta.state);
+                    }
+                    _intf = hash_map_get_next(priv->radio_info[_i].interface_map, _intf);
+                }
+            }
+        }
+
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         eloop_timeout_run();
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -3322,6 +3487,9 @@ void *nl_recv_func(void *arg)
             }
         }
 #else
+#if 0 
+        process_ignite_sta_eapol(priv);
+#endif
         if (bridge_fd_isset(priv, &interface)) {
             wifi_hal_dbg_print("%s:%d: bridge_fd_isset matched interface:%s vap_mode:%d\n",
                 __func__, __LINE__, interface->name, interface->vap_info.vap_mode);
@@ -3960,20 +4128,6 @@ int ovs_br_add_if(const char *brname, const char *ifname)
 }
 
 static
-int ovs_br_add_eapol_flow(const char *brname)
-{
-    wifi_hal_dbg_print("%s:%d ovs-ofctl add-flow %s for EAPOL\n", __func__, __LINE__, brname);
-    int rc = run_prog("/usr/bin/ovs-ofctl", "add-flow", brname,
-                      "priority=50000,dl_type=0x888e,actions=NORMAL");
-    if (rc) {
-        wifi_hal_error_print("%s:%d failed to add EAPOL flow to bridge:%s\n",
-            __func__, __LINE__, brname);
-        return -1;
-    }
-    return 0;
-}
-
-static
 int ovs_br_del_if(const char *brname, const char *ifname)
 {
     wifi_hal_dbg_print("%s:%d ovs-vsctl del-port %s %s\r\n", __func__, __LINE__, brname, ifname);
@@ -4168,9 +4322,6 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
             }
         }
         wifi_hal_dbg_print("%s:%d ovs bridge mapping for bridge:%s, interface:%s is created\n",  __func__, __LINE__, br_name, if_name);
-        if (vap_cfg && vap_cfg->vap_mode == wifi_vap_mode_sta && vap_cfg->u.sta_info.ignite_enabled) {
-            ovs_br_add_eapol_flow(br_name);
-        }
         return 0;
     }
 
@@ -16621,6 +16772,17 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
         interface->u.sta.sta_sock_fd = sock_fd;
     } else {
         close(sock_fd);
+    }
+
+    if (vap->vap_mode == wifi_vap_mode_sta && vap->u.sta_info.ignite_enabled) {
+        wifi_hal_info_print("%s:%d: SREESH registered data frame socket: "
+            "intf:%s vap_idx:%d sock_fd:%d bind_to:%s ifindex:%d "
+            "protocol:0x%04x mac:%02x:%02x:%02x:%02x:%02x:%02x\n",
+            __func__, __LINE__,
+            interface->name, vap->vap_index, sock_fd, bind_ifname,
+            sockaddr.sll_ifindex, ntohs(sockaddr.sll_protocol),
+            interface->mac[0], interface->mac[1], interface->mac[2],
+            interface->mac[3], interface->mac[4], interface->mac[5]);
     }
 
     interface->data_frames_registered = 1;
