@@ -17380,7 +17380,7 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
 #if HOSTAPD_VERSION >= 210 // 2.10
 
     wifi_hal_error_print("%s:%d DFS: radar detected — selecting non-DFS-only fallback channel\n", __func__,
-            __LINE__);	
+            __LINE__);
     enum dfs_channel_type channel_type = DFS_NON_DFS_ONLY; //select only non-dfs channel
 
     chan = dfs_get_valid_channel(&interface->u.ap.iface, secondary_channel,
