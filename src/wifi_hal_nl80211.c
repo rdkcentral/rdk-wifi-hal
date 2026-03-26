@@ -109,6 +109,13 @@ static unsigned char llc_info[] = {0xaa, 0xaa, 0x03, 0x00,0x00,0x00,0x88,0x8e};
 
 static int scan_info_handler(struct nl_msg *msg, void *arg);
 static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface);
+void recv_data_frame(wifi_interface_info_t *interface);
+int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx);
+
+#ifndef WIFI_EMULATOR_CHANGE
+static bool is_interface_in_bridge(const char *iface, const char *bridge_name);
+#endif
+
 #ifndef FEATURE_SINGLE_PHY
 static wifi_radio_info_t *rnr_find_6g_radio(void);
 #endif //FEATURE_SINGLE_PHY
@@ -187,6 +194,10 @@ void prepare_interface_fdset(wifi_hal_priv_t *priv)
     FD_SET(priv->nl_event_fd, &priv->drv_rfds);
     FD_SET(priv->link_fd, &priv->drv_rfds);
 
+    if (priv->ignite_sta_sock_fd > 0) {
+        FD_SET(priv->ignite_sta_sock_fd, &priv->drv_rfds);
+    }
+
     for (i = 0; i < priv->num_radios; i++) {
         radio = &priv->radio_info[i];
         interface = hash_map_get_first(radio->interface_map);
@@ -194,10 +205,15 @@ void prepare_interface_fdset(wifi_hal_priv_t *priv)
         while (interface != NULL) {
             if (interface->vap_configured == true && interface->bridge_configured == true) {
 #ifndef EAPOL_OVER_NL
-                vap = &interface->vap_info;
-                sock_fd = (vap->vap_mode == wifi_vap_mode_ap) ?
-                                    interface->u.ap.br_sock_fd:interface->u.sta.sta_sock_fd;
-                FD_SET(sock_fd, &priv->drv_rfds);
+                if (interface->data_frames_registered == 1) {
+                    vap = &interface->vap_info;
+                    if (!(vap->vap_mode == wifi_vap_mode_sta &&
+                          vap->u.sta_info.ignite_enabled)) {
+                        sock_fd = (vap->vap_mode == wifi_vap_mode_ap) ?
+                            interface->u.ap.br_sock_fd : interface->u.sta.sta_sock_fd;
+                        FD_SET(sock_fd, &priv->drv_rfds);
+                    }
+                }
 #endif
                 if (interface->vap_info.vap_mode != wifi_vap_mode_monitor) {
 #ifdef EAPOL_OVER_NL
@@ -232,17 +248,26 @@ int get_biggest_in_fdset(wifi_hal_priv_t *priv)
 
     sock_fd = priv->nl_event_fd > priv->link_fd ? priv->nl_event_fd : priv->link_fd;
 
+    if (priv->ignite_sta_sock_fd > 0 && sock_fd < priv->ignite_sta_sock_fd) {
+        sock_fd = priv->ignite_sta_sock_fd;
+    }
+
     for (i = 0; i < priv->num_radios; i++) {
         radio = &priv->radio_info[i];
         interface = hash_map_get_first(radio->interface_map);
 
         while (interface != NULL) {
             if (interface->vap_configured == true && interface->bridge_configured == true) {
-                vap = &interface->vap_info;
-                if (sock_fd < ((vap->vap_mode == wifi_vap_mode_ap) ?
-                        interface->u.ap.br_sock_fd:interface->u.sta.sta_sock_fd)) {
-                    sock_fd = (vap->vap_mode == wifi_vap_mode_ap) ?
-                                    interface->u.ap.br_sock_fd:interface->u.sta.sta_sock_fd;
+                if (interface->data_frames_registered == 1) {
+                    vap = &interface->vap_info;
+                    if (!(vap->vap_mode == wifi_vap_mode_sta &&
+                          vap->u.sta_info.ignite_enabled)) {
+                        int intf_fd = (vap->vap_mode == wifi_vap_mode_ap) ?
+                            interface->u.ap.br_sock_fd : interface->u.sta.sta_sock_fd;
+                        if (sock_fd < intf_fd) {
+                            sock_fd = intf_fd;
+                        }
+                    }
                 }
 #ifdef EAPOL_OVER_NL
                     if (sock_fd < interface->bss_nl_connect_event_fd) {
@@ -390,6 +415,10 @@ bool bridge_fd_isset(wifi_hal_priv_t *priv, wifi_interface_info_t **intf)
 
         while (interface != NULL) {
             vap = &interface->vap_info;
+            if (vap->vap_mode == wifi_vap_mode_sta && vap->u.sta_info.ignite_enabled) {
+                interface = hash_map_get_next(radio->interface_map, interface);
+                continue;
+            }
             if ((interface->vap_configured == true) && (interface->bridge_configured == true) &&
                     FD_ISSET(((vap->vap_mode == wifi_vap_mode_ap)?
                             interface->u.ap.br_sock_fd:interface->u.sta.sta_sock_fd), &priv->drv_rfds)) {
@@ -402,7 +431,6 @@ bool bridge_fd_isset(wifi_hal_priv_t *priv, wifi_interface_info_t **intf)
         }
 
     }
-
     return found;
 }
 
@@ -1798,6 +1826,86 @@ static void push_eapol_to_char_dev(char *buff, int buflen, struct ieee8023_hdr *
 }
 #endif //defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
 
+static void process_ignite_sta_eapol(wifi_hal_priv_t *priv)
+{
+    wifi_interface_info_t *candidates[MAX_NUM_RADIOS];
+    int num_candidates = 0;
+    wifi_interface_info_t *target = NULL;
+    unsigned char peek_buff[64];
+    int peek_len;
+    unsigned int i;
+
+    if (priv->ignite_sta_sock_fd <= 0 ||
+        !FD_ISSET(priv->ignite_sta_sock_fd, &priv->drv_rfds)) {
+        return;
+    }
+
+    for (i = 0; i < priv->num_radios; i++) {
+        wifi_interface_info_t *intf = hash_map_get_first(priv->radio_info[i].interface_map);
+        while (intf != NULL) {
+            wifi_vap_info_t *vap = &intf->vap_info;
+            if (vap->vap_mode == wifi_vap_mode_sta &&
+                vap->u.sta_info.ignite_enabled &&
+                intf->vap_configured && intf->bridge_configured &&
+                intf->data_frames_registered == 1) {
+                if (num_candidates < MAX_NUM_RADIOS) {
+                    candidates[num_candidates++] = intf;
+                }
+            }
+            intf = hash_map_get_next(priv->radio_info[i].interface_map, intf);
+        }
+    }
+
+    if (num_candidates == 0) {
+        unsigned char discard[2048];
+        recvfrom(priv->ignite_sta_sock_fd, discard, sizeof(discard), MSG_DONTWAIT, NULL, NULL);
+        return;
+    }
+
+    peek_len = recvfrom(priv->ignite_sta_sock_fd, peek_buff, sizeof(peek_buff),
+                        MSG_DONTWAIT | MSG_PEEK, NULL, NULL);
+    if (peek_len < (int)sizeof(struct ieee8023_hdr)) {
+        unsigned char discard[2048];
+        recvfrom(priv->ignite_sta_sock_fd, discard, sizeof(discard), MSG_DONTWAIT, NULL, NULL);
+        return;
+    }
+
+    struct ieee8023_hdr *eth_hdr = (struct ieee8023_hdr *)peek_buff;
+
+    if (eth_hdr->ethertype != host_to_be16(ETH_P_EAPOL)) {
+        unsigned char discard[2048];
+        recvfrom(priv->ignite_sta_sock_fd, discard, sizeof(discard), MSG_DONTWAIT, NULL, NULL);
+        return;
+    }
+
+    for (i = 0; i < (unsigned int)num_candidates; i++) {
+        if (memcmp(eth_hdr->dest, candidates[i]->mac, sizeof(mac_address_t)) == 0) {
+            target = candidates[i];
+            break;
+        }
+    }
+
+    if (target == NULL) {
+        for (i = 0; i < (unsigned int)num_candidates; i++) {
+            if (memcmp(eth_hdr->src, candidates[i]->mac, sizeof(mac_address_t)) == 0) {
+                target = candidates[i];
+                break;
+            }
+        }
+    }
+
+    if (target == NULL) {
+        unsigned char discard[2048];
+        recvfrom(priv->ignite_sta_sock_fd, discard, sizeof(discard), MSG_DONTWAIT, NULL, NULL);
+        return;
+    }
+
+    wifi_hal_dbg_print("%s:%d: Ignite STA EAPOL dispatching to interface:%s state:%d\n",
+        __func__, __LINE__, target->name, target->u.sta.state);
+
+    recv_data_frame(target);
+}
+
 void recv_data_frame(wifi_interface_info_t *interface)
 {
     unsigned char buff[2048];
@@ -2355,6 +2463,7 @@ void *nl_recv_func(void *arg)
             }
         }
 #else
+        process_ignite_sta_eapol(priv);
         if (bridge_fd_isset(priv, &interface)) {
             recv_data_frame(interface);
         }
@@ -11696,9 +11805,12 @@ int wifi_drv_hapd_send_eapol(
             if (interface->u.ap.br_sock_fd != 0) {
                 close(interface->u.ap.br_sock_fd);
                 interface->u.ap.br_sock_fd = 0;
-            }
-        } else {
-            if (interface->u.sta.sta_sock_fd != 0) {
+            } else if (vap->vap_mode == wifi_vap_mode_sta &&
+                       vap->u.sta_info.ignite_enabled) {
+                wifi_hal_error_print("%s:%d: EAPOL send failed on shared Ignite STA "
+                    "socket for %s\n", __func__, __LINE__, interface->name);
+                return ret;
+            } else {
                 close(interface->u.sta.sta_sock_fd);
                 interface->u.sta.sta_sock_fd = 0;
             }
@@ -12952,12 +13064,25 @@ int wifi_drv_if_remove(void *priv, enum wpa_driver_if_type type, const char *ifn
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
     if ((interface->vap_configured == true)) {
-        if (vap->vap_mode == wifi_vap_mode_ap) {
-            close(interface->u.ap.br_sock_fd);
-            interface->u.ap.br_sock_fd = 0;
-        } else if (vap->vap_mode == wifi_vap_mode_sta) {
-            close(interface->u.sta.sta_sock_fd);
-            interface->u.sta.sta_sock_fd = 0;
+        if (interface->data_frames_registered == 1) {
+            if (vap->vap_mode == wifi_vap_mode_ap) {
+                close(interface->u.ap.br_sock_fd);
+                interface->u.ap.br_sock_fd = 0;
+            } else if (vap->vap_mode == wifi_vap_mode_sta) {
+                if (vap->u.sta_info.ignite_enabled) {
+                    g_wifi_hal.ignite_sta_sock_fd_count--;
+                    wifi_hal_info_print("%s:%d: Ignite STA shared socket fd_count:%d for %s\n",
+                        __func__, __LINE__, g_wifi_hal.ignite_sta_sock_fd_count, interface->name);
+                    if (g_wifi_hal.ignite_sta_sock_fd_count <= 0) {
+                        close(g_wifi_hal.ignite_sta_sock_fd);
+                        g_wifi_hal.ignite_sta_sock_fd = 0;
+                        g_wifi_hal.ignite_sta_sock_fd_count = 0;
+                    }
+                } else {
+                    close(interface->u.sta.sta_sock_fd);
+                }
+                interface->u.sta.sta_sock_fd = 0;
+            }
         }
 
         interface->vap_configured = false;
@@ -14145,6 +14270,177 @@ error:
         interface->spurious_nl_event = NULL;
     }
     return -1;
+}
+
+#ifndef WIFI_EMULATOR_CHANGE
+/**
+ * Check if the given interface is a member of the given bridge.
+ * Used to decide whether to bind the EAPOL socket to the bridge (frames
+ * forwarded to bridge) or to the VAP interface (e.g. when VAP is in another bridge).
+ * Returns true if interface is in the given bridge, false otherwise (or if unknown).
+ */
+static bool is_interface_in_bridge(const char *iface, const char *bridge_name)
+{
+    char path[64], link[128];
+    ssize_t n;
+    bool in_bridge;
+
+    if (!iface || !bridge_name) {
+        return false;
+    }
+    snprintf(path, sizeof(path), "/sys/class/net/%s/master", iface);
+    n = readlink(path, link, sizeof(link) - 1);
+    if (n < 0) {
+        return false; /* no master = not in a bridge */
+    }
+    link[n] = '\0';
+    {
+        const char *base = strrchr(link, '/');
+        base = base ? base + 1 : link;
+        in_bridge = (strcmp(base, bridge_name) == 0);
+        return in_bridge;
+    }
+}
+#endif
+
+static int register_data_frame_socket(wifi_interface_info_t *interface)
+{
+    wifi_vap_info_t *vap;
+    struct sockaddr_ll sockaddr;
+    const char *bind_ifname;
+    int sock_fd;
+
+#if defined(CONFIG_GENERIC_MLO)
+    interface = wifi_hal_get_first_mld_interface(interface);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get first MLD interface\n", __func__, __LINE__);
+        return -1;
+    }
+#endif // CONFIG_GENERIC_MLO
+
+    if (interface->data_frames_registered == 1) {
+        wifi_hal_dbg_print("%s:%d: data frame socket already registered for %s\n", __func__,
+            __LINE__, wifi_hal_get_interface_name(interface));
+        return 0;
+    }
+
+    vap = &interface->vap_info;
+
+    if (vap->vap_mode == wifi_vap_mode_sta &&
+        vap->u.sta_info.ignite_enabled &&
+        g_wifi_hal.ignite_sta_sock_fd > 0) {
+        interface->u.sta.sta_sock_fd = g_wifi_hal.ignite_sta_sock_fd;
+        g_wifi_hal.ignite_sta_sock_fd_count++;
+        interface->data_frames_registered = 1;
+        wifi_hal_info_print("%s:%d: Ignite STA reusing shared socket: "
+            "intf:%s sock_fd:%d fd_count:%d\n",
+            __func__, __LINE__, interface->name,
+            g_wifi_hal.ignite_sta_sock_fd, g_wifi_hal.ignite_sta_sock_fd_count);
+        return 0;
+    }
+
+#ifndef CONFIG_WIFI_EMULATOR
+    if (vap->vap_mode == wifi_vap_mode_ap) {
+        sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+        if (sock_fd < 0) {
+            wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__,
+                __LINE__, vap->bridge_name);
+            return -1;
+        }
+    } else {
+        sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_EAPOL));
+        if (sock_fd < 0) {
+            wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__,
+                __LINE__, get_vap_bridge_name(vap));
+            return -1;
+        }
+    }
+#else
+    if ((interface->vap_configured == true) && (vap->vap_mode == wifi_vap_mode_sta)) {
+        if (interface->u.sta.sta_sock_fd != 0) {
+            close(interface->u.sta.sta_sock_fd);
+            interface->u.sta.sta_sock_fd = 0;
+        }
+    }
+    sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if (sock_fd < 0) {
+        wifi_hal_error_print("%s:%d: Failed to open raw socket on bridge: %s\n", __func__, __LINE__,
+            vap->bridge_name);
+        return -1;
+    }
+#endif
+
+#ifdef CONFIG_WIFI_EMULATOR
+    bind_ifname = vap->bridge_name;
+#elif defined WIFI_EMULATOR_CHANGE
+    bind_ifname = (vap->vap_mode == wifi_vap_mode_ap || vap->u.sta_info.ignite_enabled) ?
+            get_vap_bridge_name(vap) : interface->name;
+#else
+    const char *ifname;
+    ifname = wifi_hal_get_interface_name(interface);
+    if (vap->vap_mode == wifi_vap_mode_ap) {
+        /* If VAP interface is not in the configured bridge (e.g. in another bridge),
+         * bind to the VAP interface so we still receive EAPOL from that interface. */
+        if (is_interface_in_bridge(ifname, vap->bridge_name)) {
+            bind_ifname = get_vap_bridge_name(vap);
+        } else {
+            bind_ifname = ifname;
+        }
+    } else if (vap->u.sta_info.ignite_enabled) {
+        bind_ifname = get_vap_bridge_name(vap);
+    } else {
+        bind_ifname = ifname;
+    }
+#endif
+
+    wifi_hal_info_print("%s:%d: Binding data frames socket to %s\n", __func__, __LINE__,
+        bind_ifname);
+    memset(&sockaddr, 0, sizeof(struct sockaddr_ll));
+    sockaddr.sll_family = AF_PACKET;
+    sockaddr.sll_ifindex = if_nametoindex(bind_ifname);
+
+    if (vap->vap_mode == wifi_vap_mode_ap) {
+        sockaddr.sll_protocol = htons(ETH_P_ALL);
+        if (setsockopt(sock_fd, SOL_SOCKET, SO_ATTACH_FILTER, &bpf, sizeof(bpf)) < 0) {
+            wifi_hal_error_print("%s:%d: Error in setting sockopt err:%d\n", __func__, __LINE__,
+                errno);
+            close(sock_fd);
+            return -1;
+        }
+    } else {
+#ifndef CONFIG_WIFI_EMULATOR
+        sockaddr.sll_protocol = htons(ETH_P_EAPOL);
+#else
+        sockaddr.sll_protocol = htons(ETH_P_ALL);
+#endif
+    }
+
+    if (bind(sock_fd, (struct sockaddr *)&sockaddr, sizeof(sockaddr)) < 0) {
+        wifi_hal_error_print("%s:%d: Error binding to interface, err:%d\n", __func__, __LINE__,
+            errno);
+        close(sock_fd);
+        return -1;
+    }
+
+    if (vap->vap_mode == wifi_vap_mode_ap) {
+        interface->u.ap.br_sock_fd = sock_fd;
+    } else if (vap->vap_mode == wifi_vap_mode_sta) {
+        interface->u.sta.sta_sock_fd = sock_fd;
+        if (vap->u.sta_info.ignite_enabled) {
+            g_wifi_hal.ignite_sta_sock_fd = sock_fd;
+            g_wifi_hal.ignite_sta_sock_fd_count = 1;
+            wifi_hal_info_print("%s:%d: Ignite STA created shared socket: "
+                "intf:%s sock_fd:%d bind_to:%s fd_count:%d\n",
+                __func__, __LINE__, interface->name, sock_fd,
+                bind_ifname, g_wifi_hal.ignite_sta_sock_fd_count);
+        }
+    } else {
+        close(sock_fd);
+    }
+
+    interface->data_frames_registered = 1;
+
+    return 0;
 }
 
 int wifi_drv_set_operstate(void *priv, int state)

@@ -2827,6 +2827,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         get_vap_security_mode(vap, sec) == wifi_security_mode_wpa3_enterprise ||
         get_vap_security_mode(vap, sec) == wifi_security_mode_wpa3_transition) {
         wpa_sm_set_param(sm, WPA_PARAM_MFP, MGMT_FRAME_PROTECTION_REQUIRED);
+        wpa_sm_set_param(sm, WPA_PARAM_MGMT_GROUP, WPA_CIPHER_AES_128_CMAC);
     }
 #endif
 

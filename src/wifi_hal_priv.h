@@ -620,6 +620,12 @@ typedef struct {
     pthread_mutex_t hapd_lock;
     hash_map_t *mgt_frame_rate_limit_hashmap;
     wifi_hal_mgt_frame_rate_limit_t mgt_frame_rate_limit;
+#ifdef CONFIG_GENERIC_MLO
+    unsigned int mld_count;
+    struct hostapd_mld **mld_array;
+#endif
+    int ignite_sta_sock_fd;
+    int ignite_sta_sock_fd_count;
 } wifi_hal_priv_t;
 
 extern wifi_hal_priv_t g_wifi_hal;
