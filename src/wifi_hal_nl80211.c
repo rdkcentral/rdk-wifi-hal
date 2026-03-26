@@ -19448,9 +19448,9 @@ u8 *wifi_drv_get_ap_channel_report_ie(void *priv, u8 *eid)
             u8 op_class, channel;
             if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap) {
                 interface_iter = hash_map_get_next(temp_radio->interface_map, interface_iter);
-	        continue;
-	    }
-	    hapd = &interface_iter->u.ap.hapd;
+	            continue;
+	        }
+	        hapd = &interface_iter->u.ap.hapd;
 
             if (hapd->iface == NULL || hapd->iconf == NULL ||
                 ieee80211_freq_to_channel_ext(hapd->iface->freq, hapd->iconf->secondary_channel,
