@@ -18421,7 +18421,7 @@ repeat_rnr_len:
 
             bss = &interface_iter->u.ap.hapd;
 
-            if (!bss->conf || !bss->started)
+            if (!bss || !bss->conf || !bss->started)
                 continue;
 
             ignore_broadcast_ssid = bss->conf->ignore_broadcast_ssid;
