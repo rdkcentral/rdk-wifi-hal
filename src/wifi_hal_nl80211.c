@@ -18412,9 +18412,14 @@ repeat_rnr_len:
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         for (; interface_iter != NULL;
             interface_iter = hash_map_get_next(radio->interface_map, interface_iter)) {
-            struct hostapd_data *bss = &interface_iter->u.ap.hapd;
+            struct hostapd_data *bss;
             bool ap_mld = false;
             bool ignore_broadcast_ssid;
+
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap)
+                continue;
+
+            bss = &interface_iter->u.ap.hapd;
 
             if (!bss || !bss->conf || !bss->started)
                 continue;
@@ -18497,6 +18502,9 @@ static size_t add_eid_rnr_iface_len(wifi_radio_info_t *radio,
 
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         for (; interface; interface = hash_map_get_next(radio->interface_map, interface)) {
+
+            if (interface->vap_info.vap_mode != wifi_vap_mode_ap)
+                continue;
 
             hapd = &interface->u.ap.hapd;
             if (!hapd->conf || !hapd->started) {
@@ -18631,7 +18639,12 @@ repeat_rnr:
         for (; interface_iter != NULL;
             interface_iter = hash_map_get_next(radio->interface_map, interface_iter)) {
             u8 op_class, channel;
-            struct hostapd_data *hapd = &interface_iter->u.ap.hapd;
+            struct hostapd_data *hapd;
+
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap)
+                continue;
+
+            hapd = &interface_iter->u.ap.hapd;
 
             if (hapd->iface == NULL || hapd->iconf == NULL ||
                 ieee80211_freq_to_channel_ext(hapd->iface->freq, hapd->iconf->secondary_channel,
@@ -18686,6 +18699,12 @@ static u8 *add_eid_rnr_iface(wifi_radio_info_t *radio, wifi_interface_info_t *re
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     while (interface_iter != NULL) {
         u8 op_class, channel;
+
+        if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap) {
+            interface_iter = hash_map_get_next(radio->interface_map, interface_iter);
+            continue;
+        }
+
         hapd = &interface_iter->u.ap.hapd;
 
         if (hapd->iface == NULL || hapd->iconf == NULL ||
@@ -18713,6 +18732,10 @@ static u8 *add_eid_rnr_iface(wifi_radio_info_t *radio, wifi_interface_info_t *re
             interface_iter = hash_map_get_next(radio->interface_map, interface_iter)) {
 
             bss_param = 0;
+
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap)
+                continue;
+
             hapd = &interface_iter->u.ap.hapd;
 
             if (hapd->conf == NULL || hapd->iconf == NULL || !hapd->started) {
@@ -19557,7 +19580,11 @@ u8 *wifi_drv_get_ap_channel_report_ie(void *priv, u8 *eid)
         wifi_interface_info_t *interface_iter = hash_map_get_first(temp_radio->interface_map);
         while (interface_iter != NULL) {
             u8 op_class, channel;
-            hapd = &interface_iter->u.ap.hapd;
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap) {
+                interface_iter = hash_map_get_next(temp_radio->interface_map, interface_iter);
+	            continue;
+	        }
+	        hapd = &interface_iter->u.ap.hapd;
 
             if (hapd->iface == NULL || hapd->iconf == NULL ||
                 ieee80211_freq_to_channel_ext(hapd->iface->freq, hapd->iconf->secondary_channel,
