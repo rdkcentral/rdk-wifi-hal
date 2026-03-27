@@ -636,7 +636,7 @@ int wifi_convert_freq_band_to_radio_index(int band, int *radio_index)
     return status;
 }
 
-#ifdef CONFIG_IEEE80211BE
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
 void wifi_get_mld_eml_cap(const u16 mld_cap, const u16 eml_cap, wifi_multi_link_modes_t *mode_val, BOOL *tid_neg)
 {
     if (mode_val)
@@ -654,4 +654,4 @@ void wifi_get_mld_eml_cap(const u16 mld_cap, const u16 eml_cap, wifi_multi_link_
     /* FIXME the NSTR is basic MLO mode, with enhanced EMLSR if supported assume supported always */
     // *mode_val |= NSTR;
 }
-#endif //CONFIG_IEEE80211BE
+#endif //(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
