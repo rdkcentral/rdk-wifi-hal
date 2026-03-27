@@ -4500,6 +4500,7 @@ int platform_get_radio_caps(wifi_radio_index_t index)
                 ((0 << 4) & EHT_ML_MLD_CAPA_SRS_SUPP) |
                 ((MAX_NUM_MLD_LINKS - 1) & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK));
 
+#if (HOSTAPD_VERSION >= 211)
         wifi_multi_link_modes_t mld_oper_cap = 0;
         BOOL tid_negotiation = false;
         wifi_get_mld_eml_cap(radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops,
@@ -4507,6 +4508,7 @@ int platform_get_radio_caps(wifi_radio_index_t index)
             &mld_oper_cap, &tid_negotiation);
         radio->capab.TIDLinkMapNegotiation = tid_negotiation;
         radio->capab.mldOperationalCap = mld_oper_cap;
+#endif
 
 #endif /* CONFIG_IEEE80211BE */
 
