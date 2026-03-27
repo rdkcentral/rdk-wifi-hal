@@ -676,6 +676,8 @@ typedef struct {
     unsigned int mld_count;
     struct hostapd_mld **mld_array;
 #endif
+    int ignite_sta_sock_fd;
+    int ignite_sta_sock_fd_count;
 } wifi_hal_priv_t;
 
 extern wifi_hal_priv_t g_wifi_hal;
