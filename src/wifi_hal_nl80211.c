@@ -6762,6 +6762,10 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
             MAC2STR(associated_dev.cli_MACAddress));
         return NL_SKIP;
     }
+
+    wifi_get_mld_eml_cap(sta->mld_info.common_info.mld_capa ,sta->mld_info.common_info.eml_capa,
+        &associated_dev.cli_MLDInfo.cli_MLModeCapa, &associated_dev.cli_MLDInfo.cli_TIDLinkMapNegotiation);
+
     associated_dev.cli_MLDInfo.cli_MLDSta = sta->mld_info.mld_sta;
     if (associated_dev.cli_MLDInfo.cli_MLDSta == true && has_link_stats == false) {
         int link_idx = 0;
