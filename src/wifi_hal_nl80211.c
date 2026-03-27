@@ -11221,6 +11221,7 @@ next_nap:
 }
 #endif // FEATURE_SINGLE_PHY
 
+#define BSS_LOAD_IE_MIN_LEN   5  /* 2B Station Count + 1B Channel Utilization + 2B Admission Capacity */
 static void parse_bss_load(const uint8_t type, uint8_t len, const uint8_t *data,
             const struct parse_ies_data *ie_buffer, wifi_bss_info_t *bss)
 {
@@ -11228,7 +11229,15 @@ static void parse_bss_load(const uint8_t type, uint8_t len, const uint8_t *data,
     (void)len;
     (void)ie_buffer;
 
+    if (len < BSS_LOAD_IE_MIN_LEN) {
+        wifi_hal_stats_error_print("%s:%d: Invalid BSS Load IE length (%u), expected >= 5\n",
+                                     __func__, __LINE__, len);
+        return;
+    }
+
+    bss->bss_load_element_present = 1;
     bss->chan_utilization = ((unsigned)data[2] * 100) / 255;
+    bss->station_cnt = (unsigned)data[0] | ((unsigned)data[1] << 8);
 }
 
 static void parse_extension_tag(const uint8_t type, uint8_t len, const uint8_t *data,
