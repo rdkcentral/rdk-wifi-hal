@@ -1127,6 +1127,16 @@ reload_config:
 
 }
 
+INT wifi_hal_emu_disconnect_sta(int ap_index, mac_address_t client_mac)
+{    wifi_interface_info_t *interface = get_interface_by_vap_index(ap_index);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: interface for vap index:%d not found\n", __func__, __LINE__,
+            ap_index);
+        return RETURN_ERR;
+    }
+    return nl80211_kick_device(interface, client_mac);
+}
+
 INT wifi_hal_sm_deinit(INT vap_index)
 {
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
