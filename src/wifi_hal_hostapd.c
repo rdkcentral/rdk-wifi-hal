@@ -1595,10 +1595,10 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         }
     }
     else {
-         if (iface->current_cac_rates) {
-             os_free(iface->current_cac_rates);
-             iface->current_cac_rates = NULL;
-         }        
+        if (iface->current_cac_rates) {
+            os_free(iface->current_cac_rates);
+            iface->current_cac_rates = NULL;
+        }
         iface->current_rates = radio->rate_data[band];
     }
     wifi_hal_info_print("%s:%d: Interface: %s band: %d mode:%p (%d) has %d rates\n", __func__,
