@@ -163,6 +163,13 @@ static int move_radio_capability(wifi_radio_capabilities_t *tmp_cap, wifi_radio_
     for (j=0 ; j<tmp_cap->numcountrySupported ; j++) {
         tmp_cap->countrySupported[j] = cap->countrySupported[j];
     }
+    // Copy HT and VHT capability fields
+    tmp_cap->ht_capab = cap->ht_capab;
+    memcpy(tmp_cap->mcs_set, cap->mcs_set, HT_MCS_SET_LEN);
+    tmp_cap->ampdu_params = cap->ampdu_params;
+    tmp_cap->vht_capab = cap->vht_capab;
+    memcpy(tmp_cap->vht_mcs_set, cap->vht_mcs_set, VHT_MCS_SET_LEN);
+
     // Copy HE (WiFi6) and EHT (WiFi7) capability fields
     tmp_cap->wifi6_supported = cap->wifi6_supported;
     memcpy(tmp_cap->he_phy_cap, cap->he_phy_cap, HE_MAX_PHY_CAPAB_SIZE);
