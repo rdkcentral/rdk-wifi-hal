@@ -1578,6 +1578,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     if ((strlen (vap->u.bss_info.preassoc.supported_data_transmit_rates) > 0) && strcmp(vap->u.bss_info.preassoc.supported_data_transmit_rates, "disabled")) {
         if(iface->current_cac_rates) {
             os_free(iface->current_cac_rates);
+            iface->current_cac_rates = NULL;
         }
         iface->current_cac_rates = os_calloc(mode->num_rates, sizeof(struct hostapd_rate_data));
         if (!iface->current_cac_rates) {
@@ -1594,6 +1595,10 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         }
     }
     else {
+         if (iface->current_cac_rates) {
+             os_free(iface->current_cac_rates);
+             iface->current_cac_rates = NULL;
+         }        
         iface->current_rates = radio->rate_data[band];
     }
     wifi_hal_info_print("%s:%d: Interface: %s band: %d mode:%p (%d) has %d rates\n", __func__,
