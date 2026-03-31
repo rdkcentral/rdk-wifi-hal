@@ -4500,19 +4500,15 @@ int platform_get_radio_caps(wifi_radio_index_t index)
                 ((0 << 4) & EHT_ML_MLD_CAPA_SRS_SUPP) |
                 ((MAX_NUM_MLD_LINKS - 1) & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK));
 
-    /* FIXME: NSTR capability disabled by default */
-    if (radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa
-        & EHT_ML_EML_CAPA_EMLMR_SUPP)
-        radio->capab.mldOperationalCap |= eMLMR;
-    if (radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa
-        & EHT_ML_EML_CAPA_EMLSR_SUPP)
-        radio->capab.mldOperationalCap |= eMLSR;
-    if ((radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops
-        & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK) > 0)
-        radio->capab.mldOperationalCap |= STR;
-    if ((radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops
-        & EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_NEG_SUPP_MSK) > 0)
-        radio->capab.TIDLinkMapNegotiation = TRUE;
+#if (HOSTAPD_VERSION >= 211)
+        wifi_multi_link_modes_t mld_oper_cap = 0;
+        BOOL tid_negotiation = false;
+        wifi_get_mld_eml_cap(radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops,
+            radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa,
+            &mld_oper_cap, &tid_negotiation);
+        radio->capab.TIDLinkMapNegotiation = tid_negotiation;
+        radio->capab.mldOperationalCap = mld_oper_cap;
+#endif
 
 #endif /* CONFIG_IEEE80211BE */
 

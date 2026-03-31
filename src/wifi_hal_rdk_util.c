@@ -163,6 +163,13 @@ static int move_radio_capability(wifi_radio_capabilities_t *tmp_cap, wifi_radio_
     for (j=0 ; j<tmp_cap->numcountrySupported ; j++) {
         tmp_cap->countrySupported[j] = cap->countrySupported[j];
     }
+    // Copy HT and VHT capability fields
+    tmp_cap->ht_capab = cap->ht_capab;
+    memcpy(tmp_cap->mcs_set, cap->mcs_set, HT_MCS_SET_LEN);
+    tmp_cap->ampdu_params = cap->ampdu_params;
+    tmp_cap->vht_capab = cap->vht_capab;
+    memcpy(tmp_cap->vht_mcs_set, cap->vht_mcs_set, VHT_MCS_SET_LEN);
+
     // Copy HE (WiFi6) and EHT (WiFi7) capability fields
     tmp_cap->wifi6_supported = cap->wifi6_supported;
     memcpy(tmp_cap->he_phy_cap, cap->he_phy_cap, HE_MAX_PHY_CAPAB_SIZE);
@@ -635,3 +642,23 @@ int wifi_convert_freq_band_to_radio_index(int band, int *radio_index)
     }
     return status;
 }
+
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
+void wifi_get_mld_eml_cap(const u16 mld_cap, const u16 eml_cap, wifi_multi_link_modes_t *mode_val, BOOL *tid_neg)
+{
+    if (mode_val)
+        *mode_val = 0;
+
+    if (tid_neg)
+        *tid_neg = !!(mld_cap & EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_NEG_SUPP_MSK);
+    if (mode_val && ((mld_cap & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK) > 0))
+        *mode_val |= STR;
+    if (mode_val && (eml_cap & EHT_ML_EML_CAPA_EMLMR_SUPP))
+        *mode_val |= eMLMR;
+    if (mode_val && (eml_cap & EHT_ML_EML_CAPA_EMLSR_SUPP))
+        *mode_val |= eMLSR;
+
+    /* FIXME the NSTR is basic MLO mode, with enhanced EMLSR if supported assume supported always */
+    // *mode_val |= NSTR;
+}
+#endif //(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
