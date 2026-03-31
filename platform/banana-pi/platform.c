@@ -35,6 +35,7 @@
 #define NEW_LINE '\n'
 #define MAX_BUF_SIZE 128
 #define MAX_CMD_SIZE 1024
+#define BPI_LEN_64 64
 #define BPI_LEN_32 32
 #define BPI_LEN_16 16
 #define BPI_LEN_8 8
@@ -576,6 +577,24 @@ static int get_sta_list(wifi_interface_info_t *interface, sta_list_t *sta_list)
     return 0;
 }
 
+static void set_wifi_standard_from_rate(struct nlattr **rate, char *cli_OperatingStandard)
+{
+#if defined(NL80211_RATE_INFO_EHT_MCS) && defined(CONFIG_IEEE80211BE)
+    if (rate[NL80211_RATE_INFO_EHT_MCS]) {
+        snprintf(cli_OperatingStandard, BPI_LEN_64, "be");
+    } else
+#endif
+    if (rate[NL80211_RATE_INFO_HE_MCS]) {
+        snprintf(cli_OperatingStandard, BPI_LEN_64, "ax");
+    } else if (rate[NL80211_RATE_INFO_VHT_MCS]) {
+        snprintf(cli_OperatingStandard, BPI_LEN_64, "ac");
+    } else if (rate[NL80211_RATE_INFO_MCS]) {
+        snprintf(cli_OperatingStandard, BPI_LEN_64, "n");
+    } else {
+        cli_OperatingStandard[0] = '\0';
+    }
+}
+
 static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
 {
     wifi_associated_dev3_t *dev = (wifi_associated_dev3_t *)arg;
@@ -589,7 +608,13 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
                 [NL80211_STA_INFO_RX_PACKETS] = { .type = NLA_U32 },
                 [NL80211_STA_INFO_TX_PACKETS] = { .type = NLA_U32 },
                 [NL80211_STA_INFO_TX_FAILED] = { .type = NLA_U32 },
+                [NL80211_STA_INFO_TX_RETRIES] = { .type = NLA_U32 },
                 [NL80211_STA_INFO_CONNECTED_TIME] = { .type = NLA_U32 },
+                [NL80211_STA_INFO_TX_BITRATE] = { .type = NLA_NESTED },
+                [NL80211_STA_INFO_RX_BITRATE] = { .type = NLA_NESTED },
+                [NL80211_STA_INFO_STA_FLAGS] = { .minlen = sizeof(struct nl80211_sta_flag_update) },
+                [NL80211_STA_INFO_RX_DROP_MISC] = { .type = NLA_U64 },
+                [NL80211_STA_INFO_SIGNAL] = { .type = NLA_U8 },
     };
     struct nlattr *rate[NL80211_RATE_INFO_MAX + 1];
     static struct nla_policy rate_policy[NL80211_RATE_INFO_MAX + 1] = {
@@ -633,16 +658,34 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
         dev->cli_ErrorsSent = nla_get_u32(stats[NL80211_STA_INFO_TX_FAILED]);
     }
 
+    if (stats[NL80211_STA_INFO_RX_DROP_MISC]) {
+        dev->cli_RxErrors = nla_get_u64(stats[NL80211_STA_INFO_RX_DROP_MISC]);
+    }
+
+    if (stats[NL80211_STA_INFO_TX_RETRIES]) {
+        dev->cli_RetransCount = nla_get_u32(stats[NL80211_STA_INFO_TX_RETRIES]);
+    }
+
+    if (stats[NL80211_STA_INFO_SIGNAL]) {
+        dev->cli_RSSI = (int8_t)nla_get_u8(stats[NL80211_STA_INFO_SIGNAL]);
+    }
+
     if (stats[NL80211_STA_INFO_TX_BITRATE] &&
         nla_parse_nested(rate, NL80211_RATE_INFO_MAX, stats[NL80211_STA_INFO_TX_BITRATE], rate_policy) == 0) {
         if (rate[NL80211_RATE_INFO_BITRATE32]){
             dev->cli_LastDataDownlinkRate = nla_get_u32(rate[NL80211_RATE_INFO_BITRATE32]) * 100;
         }
+        set_wifi_standard_from_rate(rate, dev->cli_OperatingStandard);
     }
+
     if (stats[NL80211_STA_INFO_RX_BITRATE] &&
         nla_parse_nested(rate, NL80211_RATE_INFO_MAX, stats[NL80211_STA_INFO_RX_BITRATE], rate_policy) == 0) {
         if (rate[NL80211_RATE_INFO_BITRATE32]) {
                 dev->cli_LastDataUplinkRate = nla_get_u32(rate[NL80211_RATE_INFO_BITRATE32]) * 100;
+        }
+        // Wi-Fi Standard fallback from RX bitrate
+        if (dev->cli_OperatingStandard[0] == '\0') {
+            set_wifi_standard_from_rate(rate, dev->cli_OperatingStandard);
         }
     }
 
