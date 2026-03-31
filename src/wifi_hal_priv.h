@@ -462,6 +462,11 @@ typedef struct sta_mlo_params {
 } sta_mlo_params_t;
 #endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
 
+struct txpwr_context {
+    ULONG *tx_power;
+    int radio_index;
+};
+
 typedef struct wifi_interface_info_t {
     char name[32];
     char bridge[32];
