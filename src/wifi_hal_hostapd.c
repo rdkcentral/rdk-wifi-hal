@@ -641,11 +641,13 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
                     break;
             }
             conf->sae_require_mfp = 1;
+            conf->beacon_prot = 1;
             break;
 
         case NO_MGMT_FRAME_PROTECTION:
         default:
             conf->sae_require_mfp = 0;
+            conf->beacon_prot = 0;
             break;
     }
     if(sec->mode == wifi_security_mode_wpa3_compatibility) {
@@ -667,8 +669,8 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
     }
 #endif
 
-    wifi_hal_dbg_print("%s:%d: security:%d mfp:%d wpa_key_mgmt:%d 11w:%d\n",
-                       __func__, __LINE__, sec->mode, sec->mfp, conf->wpa_key_mgmt, conf->ieee80211w);
+    wifi_hal_dbg_print("%s:%d: security:%d mfp:%d wpa_key_mgmt:%d 11w:%d beacon_prot: %d\n",
+                       __func__, __LINE__, sec->mode, sec->mfp, conf->wpa_key_mgmt, conf->ieee80211w, conf->beacon_prot);
   
     if (conf->wpa_key_mgmt != -1) {
         const int is_ieee802_1x = !!((WPA_KEY_MGMT_IEEE8021X | WPA_KEY_MGMT_IEEE8021X_SHA256) & conf->wpa_key_mgmt);
@@ -1200,6 +1202,11 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     if (update_security_config(&vap->u.bss_info.security, conf) == -1) {
         wifi_hal_error_print("%s:%d:update_security_config failed \n", __func__, __LINE__);
         return RETURN_ERR;
+    }
+    if (conf->beacon_prot) {
+        radio->driver_data.extended_capa[10] |= 0x10; /* Bit 84 - Beacon Protection Enabled */
+    } else {
+        radio->driver_data.extended_capa[10] &= ~0x10; /* Bit 84 - Beacon Protection Enabled */
     }
 #if 0
 #ifdef CONFIG_IEEE80211W
