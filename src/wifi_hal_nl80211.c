@@ -19640,7 +19640,6 @@ static int get_radio_txpwr_handler(struct nl_msg *msg, void *arg)
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     struct txpwr_context *ctx = (struct txpwr_context *)arg;
     unsigned long *tx_pwr_dbm = ctx->tx_power;
-    int requested_index = ctx->radio_index;
 
     if (nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL) <
         0) {
@@ -19666,6 +19665,7 @@ static int get_radio_txpwr_handler(struct nl_msg *msg, void *arg)
     if (!have_txpwr && tb[NL80211_ATTR_MLO_LINKS]) {
         struct nlattr *link;
         int rem;
+        int requested_index = ctx->radio_index;
 
         nla_for_each_nested(link, tb[NL80211_ATTR_MLO_LINKS], rem) {
             struct nlattr *ltb[NL80211_ATTR_MAX + 1];
