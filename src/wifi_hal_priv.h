@@ -455,6 +455,11 @@ typedef struct ie_info {
 } wifi_ie_info_t;
 #endif
 
+struct txpwr_context {
+    ULONG *tx_power;
+    int radio_index;
+};
+
 typedef struct wifi_interface_info_t {
     char name[32];
     char bridge[32];

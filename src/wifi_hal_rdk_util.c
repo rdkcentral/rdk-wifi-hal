@@ -410,6 +410,9 @@ int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg
     case wifi_encryption_tkip:
     case wifi_encryption_aes:
     case wifi_encryption_aes_tkip:
+#ifdef CONFIG_IEEE80211BE
+    case wifi_encryption_aes_gcmp256:
+#endif /* CONFIG_IEEE80211BE */
         break;
     default:
         ret = RETURN_ERR;
