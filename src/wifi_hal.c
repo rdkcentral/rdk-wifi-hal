@@ -46,6 +46,8 @@
 
 #define MAC_ADDRESS_LEN 6
 
+#define EASYMESH_OFF_FLAG "/nvram/rdkb_user_easymesh_off"
+
 #ifdef CONFIG_WIFI_EMULATOR
 #define RADIO_INDEX_ASSERT_RC(radioIndex, retcode) \
     do { \
@@ -284,6 +286,12 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     }
 #endif
 
+#if defined EASY_MESH_NODE
+if (access(EASYMESH_OFF_FLAG,F_OK) == 0) {
+    hal->wifi_prop.colocated_mode = -1;
+    wifi_hal_info_print("%s:%d: %s file exists, easymesh is disabled\n", __func__, __LINE__, EASYMESH_OFF_FLAG);
+}
+else{
     /* Read the al_mac address from EM_CFG_FILE */
     ret = json_parse_string(EM_CFG_FILE, "Al_MAC_ADDR", al_ctrl_mac, sizeof(al_ctrl_mac));
     if (ret == 0) {
@@ -332,6 +340,8 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
             __func__, __LINE__, EM_CFG_FILE, ret);
         hal->wifi_prop.colocated_mode = -1;
     }
+} //if EASYMESH_OFF_FLAG doesn't exist
+#endif
 
     wifi_hal_info_print("%s:%d: serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s "
                         "al_mac_addr=%s colocated_mode:%d\n",
