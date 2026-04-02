@@ -17195,12 +17195,16 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     size_t seq_len = params->seq_len;
     const u8 *key = params->key;
     size_t key_len = params->key_len;
-    // int vlan_id = params->vlan_id;
     enum key_flag key_flag = params->key_flag;
-#ifdef CONFIG_GENERIC_MLO
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
     int link_id = params->link_id;
 #endif // CONFIG_GENERIC_MLO
 #endif // HOSTAPD_VERSION >= 210
+
+    if (check_key_flag(key_flag)) {
+        wifi_hal_dbg_print("%s:%d: invalid key_flag", __func__, __LINE__);
+        return -EINVAL;
+    }
 
     interface = (wifi_interface_info_t *)priv;
     vap = &interface->vap_info;
@@ -17210,60 +17214,58 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     //wifi_hal_dbg_print("%s:%d: key Info: index:%d length:%d alg:%s\n", __func__, __LINE__, key_idx, key_len, wpa_alg_to_string(alg));
     //my_print_hex_dump(key_len, key);
 
-    ret = -ENOBUFS;
+    ret = -ENOMEM;
     key_msg = nlmsg_alloc();
     if (!key_msg)
         return ret;
 
 #if HOSTAPD_VERSION >= 210
-	if ((key_flag & KEY_FLAG_PAIRWISE_MASK) ==
-	    KEY_FLAG_PAIRWISE_RX_TX_MODIFY) {
-		wpa_printf(MSG_DEBUG,
-			   "nl80211: SET_KEY (pairwise RX/TX modify)");
+    if ((key_flag & KEY_FLAG_PAIRWISE_MASK) ==
+        KEY_FLAG_PAIRWISE_RX_TX_MODIFY) {
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_NEW_KEY);
         if (msg == NULL) {
             wifi_hal_dbg_print("%s:%d:Failed to allocate nl80211 message\n", __func__, __LINE__);
-            goto fail2;
+            goto free_key_msg;
         }
-	} else if (alg == WPA_ALG_NONE && (key_flag & KEY_FLAG_RX_TX)) {
-		wifi_hal_dbg_print("%s:%d invalid key_flag to delete key", __func__, __LINE__);
-		ret = -EINVAL;
-		goto fail2;
-	} else
+    } else if (alg == WPA_ALG_NONE && (key_flag & KEY_FLAG_RX_TX)) {
+        wifi_hal_dbg_print("%s:%d invalid key_flag to delete key", __func__, __LINE__);
+        ret = -EINVAL;
+        goto free_key_msg;
+    } else
 #endif// HOSTAPD_VERSION >= 210
     if (alg == WPA_ALG_NONE) {
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_DEL_KEY);
         if (msg == NULL) {
             wifi_hal_dbg_print("%s:%d:Failed to allocate nl80211 message\n", __func__, __LINE__);
-            goto fail2;
+            goto free_key_msg;
         }
-	} else {
+    } else {
         suite = wpa_alg_to_cipher_suite(alg, key_len);
         if (suite == 0) {
             wifi_hal_error_print("%s:%d: Failed to get cipher suite for alg:%s\n", __func__, __LINE__, wpa_alg_to_string(alg));
             ret = -EINVAL;
-            goto fail2;
+            goto free_key_msg;
         }
 
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_NEW_KEY);
         if (msg == NULL) {
             wifi_hal_dbg_print("%s:%d:Failed to allocate nl80211 message\n", __func__, __LINE__);
-            goto fail2;
+            goto free_key_msg;
         }
 
         if (nla_put(key_msg, NL80211_KEY_DATA, key_len, key) ||
             nla_put_u32(key_msg, NL80211_KEY_CIPHER, suite))
-            goto fail;
+            goto free_msg;
 
         if (seq && seq_len) {
             if (nla_put(key_msg, NL80211_KEY_SEQ, seq_len, seq))
-                goto fail;
+                goto free_msg;
         }
     }
 
     if (addr && !is_broadcast_ether_addr(addr)) {
         if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr))
-            goto fail;
+            goto free_msg;
 
 #if HOSTAPD_VERSION >= 210
         if ((key_flag & KEY_FLAG_PAIRWISE_MASK) == KEY_FLAG_PAIRWISE_RX ||
@@ -17271,14 +17273,14 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
             if (nla_put_u8(key_msg, NL80211_KEY_MODE, key_flag == KEY_FLAG_PAIRWISE_RX
                                ? NL80211_KEY_NO_TX
                                : NL80211_KEY_SET_TX))
-                goto fail;
+                goto free_msg;
         } else if ((key_flag & KEY_FLAG_GROUP_MASK) == KEY_FLAG_GROUP_RX) {
             if (nla_put_u32(key_msg, NL80211_KEY_TYPE, NL80211_KEYTYPE_GROUP))
-                goto fail;
+                goto free_msg;
         } else if (!(key_flag & KEY_FLAG_PAIRWISE)) {
             wifi_hal_dbg_print("%s:%d: key_flag missing PAIRWISE when setting " "a pairwise key\n", __func__, __LINE__);
             ret = -EINVAL;
-            goto fail;
+            goto free_msg;
         } else if (alg == WPA_ALG_WEP && (key_flag & KEY_FLAG_RX_TX) == KEY_FLAG_RX_TX) {
             wifi_hal_dbg_print("%s:%d:unicast WEP key\n", __func__, __LINE__);
             skip_set_key = 0;
@@ -17293,7 +17295,7 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     } else if ((key_flag & KEY_FLAG_PAIRWISE) || !(key_flag & KEY_FLAG_GROUP)) {
         wifi_hal_dbg_print("%s:%d:invalid key_flag for a broadcast key\n", __func__, __LINE__);
         ret = -EINVAL;
-        goto fail;
+        goto free_msg;
     } else {
         wifi_hal_dbg_print("%s:%d:Broadcast key\n", __func__, __LINE__);
         if (key_flag & KEY_FLAG_DEFAULT)
@@ -17302,7 +17304,7 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
 
     if (nla_put_u8(key_msg, NL80211_KEY_IDX, key_idx) ||
         nla_put_nested(msg, NL80211_ATTR_KEY, key_msg))
-        goto fail;
+        goto free_msg;
     nl80211_nlmsg_clear(key_msg);
     nlmsg_free(key_msg);
     key_msg = NULL;
@@ -17312,12 +17314,6 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
         nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id);
     }
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
-
-    // if (vlan_id) {
-    // 	wpa_printf(MSG_DEBUG, "nl80211: VLAN ID %d", vlan_id);
-    // 	if (nla_put_u16(msg, NL80211_ATTR_VLAN_ID, vlan_id))
-    // 		goto fail;
-    // }
 
     if ((ret = nl80211_send_and_recv(msg, NULL, (void *)-1, NULL, NULL))) {
         wifi_hal_error_print("%s:%d: Failed new key: %d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
@@ -17340,10 +17336,10 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_KEY);
     if (!msg)
-        goto fail2;
+        goto free_key_msg;
 
     if (nla_put_u8(key_msg, NL80211_KEY_IDX, key_idx))
-        goto fail;
+        goto free_msg;
 #if HOSTAPD_VERSION >= 210
     if (nla_put_flag(key_msg, wpa_alg_bip(alg)
                                   ? (key_idx == 6 || key_idx == 7
@@ -17357,26 +17353,26 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
                               ? NL80211_ATTR_KEY_DEFAULT_MGMT
                               : NL80211_ATTR_KEY_DEFAULT))
 #endif //HOSTAPD_VERSION >= 210
-        goto fail;
+        goto free_msg;
 
     if (addr && is_broadcast_ether_addr(addr)) {
         struct nlattr *types;
 
         types = nla_nest_start(key_msg, NL80211_KEY_DEFAULT_TYPES);
         if (!types || nla_put_flag(key_msg, NL80211_KEY_DEFAULT_TYPE_MULTICAST))
-            goto fail;
+            goto free_msg;
         nla_nest_end(key_msg, types);
     } else if (addr) {
         struct nlattr *types;
 
         types = nla_nest_start(key_msg, NL80211_KEY_DEFAULT_TYPES);
         if (!types || nla_put_flag(key_msg, NL80211_KEY_DEFAULT_TYPE_UNICAST))
-            goto fail;
+            goto free_msg;
         nla_nest_end(key_msg, types);
     }
 
     if (nla_put_nested(msg, NL80211_ATTR_KEY, key_msg))
-        goto fail;
+        goto free_msg;
     nl80211_nlmsg_clear(key_msg);
     nlmsg_free(key_msg);
     key_msg = NULL;
@@ -17388,12 +17384,6 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     }
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
-    // if (vlan_id) {
-    // 	wpa_printf(MSG_DEBUG, "nl80211: VLAN ID %d", vlan_id);
-    // 	if (nla_put_u16(msg, NL80211_ATTR_VLAN_ID, vlan_id))
-    // 		goto fail;
-    // }
-
     if ((ret = nl80211_send_and_recv(msg, NULL, (void *)-1, NULL, NULL))) {
         wifi_hal_error_print("%s:%d: Failed to set key: %d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
         return ret;
@@ -17403,10 +17393,10 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
 
     return 0;
 
-fail:
+free_msg:
     nl80211_nlmsg_clear(msg);
     nlmsg_free(msg);
-fail2:
+free_key_msg:
     nl80211_nlmsg_clear(key_msg);
     nlmsg_free(key_msg);
     return ret;

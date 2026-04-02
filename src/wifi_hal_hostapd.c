@@ -1207,6 +1207,13 @@ int update_hostap_bss(wifi_interface_info_t *interface)
         wifi_hal_error_print("%s:%d:update_security_config failed \n", __func__, __LINE__);
         return RETURN_ERR;
     }
+    if (radio->driver_data.extended_capa) {
+        if (conf->beacon_prot) {
+            radio->driver_data.extended_capa[10] |= 0x10; /* Bit 84 - Beacon Protection Enabled */
+        } else {
+            radio->driver_data.extended_capa[10] &= ~0x10; /* Bit 84 - Beacon Protection Enabled */
+        }
+    }
 #if 0
 #ifdef CONFIG_IEEE80211W
     bss->ieee80211w = vap->u.bss_info.mfp;

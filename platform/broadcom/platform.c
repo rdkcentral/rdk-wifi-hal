@@ -2236,11 +2236,6 @@ static void set_ap_beacon_protection(wifi_radio_info_t *radio, int apIndex)
     hapd = &interface->u.ap.hapd;
     wifi_hal_dbg_print("%s:%d: %s: set beacon protection %d\n", __func__, __LINE__, interface->name, hapd->conf->beacon_prot);
 
-    if (hapd->conf->beacon_prot) {
-        radio->driver_data.extended_capa[10] |= 0x10; /* Bit 84 - Beacon Protection Enabled */
-    } else {
-        radio->driver_data.extended_capa[10] &= ~0x10; /* Bit 84 - Beacon Protection Enabled */
-    }
     v_secure_system("wl -i %s bcnprot enable %d", interface->name, hapd->conf->beacon_prot);
 }
 
