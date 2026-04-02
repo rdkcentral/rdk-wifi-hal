@@ -14329,6 +14329,18 @@ int wifi_drv_set_operstate(void *priv, int state)
         }
     }
 #ifndef EAPOL_OVER_NL
+    if (vap->vap_mode == wifi_vap_mode_sta &&
+        vap->u.sta_info.ignite_enabled &&
+        g_wifi_hal.ignite_sta_sock_fd > 0) {
+        interface->u.sta.sta_sock_fd = g_wifi_hal.ignite_sta_sock_fd;
+        g_wifi_hal.ignite_sta_sock_fd_count++;
+        wifi_hal_info_print("%s:%d: Ignite STA reusing shared socket: "
+            "intf:%s sock_fd:%d fd_count:%d\n",
+            __func__, __LINE__, interface->name,
+            g_wifi_hal.ignite_sta_sock_fd, g_wifi_hal.ignite_sta_sock_fd_count);
+        goto configured;
+    }
+
 #ifndef CONFIG_WIFI_EMULATOR
     if (vap->vap_mode == wifi_vap_mode_ap) {
         sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
@@ -14393,6 +14405,14 @@ int wifi_drv_set_operstate(void *priv, int state)
         interface->u.ap.br_sock_fd = sock_fd;
     } else if (vap->vap_mode == wifi_vap_mode_sta) {
         interface->u.sta.sta_sock_fd = sock_fd;
+        if (vap->u.sta_info.ignite_enabled) {
+            g_wifi_hal.ignite_sta_sock_fd = sock_fd;
+            g_wifi_hal.ignite_sta_sock_fd_count = 1;
+            wifi_hal_info_print("%s:%d: Ignite STA created shared socket: "
+                "intf:%s sock_fd:%d bind_to:%s fd_count:%d\n",
+                __func__, __LINE__, interface->name, sock_fd,
+                ifname, g_wifi_hal.ignite_sta_sock_fd_count);
+        }
     } else {
         close(sock_fd);
     }
@@ -14404,6 +14424,7 @@ int wifi_drv_set_operstate(void *priv, int state)
         }
     }
 #endif // EAPOL_OVER_NL
+configured:
     interface->bridge_configured = true;
     interface->vap_configured = true;
     wifi_hal_info_print("%s:%d: Exit, interface:%s bridge:%s driver configured for 802.11\n",
