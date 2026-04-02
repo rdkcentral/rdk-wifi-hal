@@ -3208,6 +3208,13 @@ int nl80211_remove_from_bridge(const char *if_name)
 
     device = rtnl_link_get_by_name(link_cache, if_name);
 
+    if (device == NULL) {
+        wifi_hal_error_print("%s:%d: Interface %s not found in cache\n", __func__, __LINE__, if_name);
+        nl_cache_free(link_cache);
+        nl_socket_free(sk);
+        return -1;
+    }
+
     if (rtnl_link_release(sk, device)) {
         wifi_hal_error_print("%s:%d:Unable to release interface:%s \n", __func__, __LINE__, if_name);
         nl_cache_free(link_cache);
@@ -17156,9 +17163,9 @@ u8 *wifi_drv_get_ap_channel_report_ie(void *priv, u8 *eid)
             u8 op_class, channel;
             if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap) {
                 interface_iter = hash_map_get_next(temp_radio->interface_map, interface_iter);
-	            continue;
-	        }
-	        hapd = &interface_iter->u.ap.hapd;
+                continue;
+            }
+            hapd = &interface_iter->u.ap.hapd;
 
             if (hapd->iface == NULL || hapd->iconf == NULL ||
                 ieee80211_freq_to_channel_ext(hapd->iface->freq, hapd->iconf->secondary_channel,
@@ -17168,8 +17175,9 @@ u8 *wifi_drv_get_ap_channel_report_ie(void *priv, u8 *eid)
             }
             *eid++ = WLAN_EID_AP_CHANNEL_REPORT;
             *eid++ = 2;
-            *eid++ = temp_radio->oper_param.operatingClass;
-            *eid++ = temp_radio->oper_param.channel;
+            *eid++ = op_class;
+            *eid++ = channel;
+            break;
         }
     }
 

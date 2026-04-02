@@ -1013,6 +1013,8 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     char param_name[NVRAM_NAME_SIZE];
     char cmd[BUFLEN_128];
     wifi_radio_info_t *radio;
+    bool is_radio_apply_required = false;
+
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
         wifi_hal_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
@@ -1068,20 +1070,35 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         return 0;
     }
 
+    if (radio->oper_param.transmitPower != operationParam->transmitPower) {
+        if (wifi_setRadioTransmitPower(index, operationParam->transmitPower) != RETURN_OK)  {
+            wifi_hal_error_print("%s:%d: Failed to set transmitpower : %d for radio index:%d\n",
+                    __func__, __LINE__, operationParam->transmitPower, index);
+            return RETURN_ERR;
+        }
+        is_radio_apply_required = true;
+    }
+
     if (radio->oper_param.countryCode != operationParam->countryCode) {
         memset(temp_buff, 0 ,sizeof(temp_buff));
         get_coutry_str_from_code(operationParam->countryCode, temp_buff);
         if (wifi_setRadioCountryCode(index, temp_buff) != RETURN_OK) {
-            wifi_hal_dbg_print("%s:%d Failure in setting country code as %s in radio index %d\n", __FUNCTION__, __LINE__, temp_buff, index);
+            wifi_hal_error_print("%s:%d Failure in setting country code as %s in radio index %d\n", __FUNCTION__, __LINE__, temp_buff, index);
             return -1;
         }
+        is_radio_apply_required = true;
+    }
 
+    if (is_radio_apply_required == true) {
         if (wifi_applyRadioSettings(index) != RETURN_OK) {
-            wifi_hal_dbg_print("%s:%d Failure in applying Radio settings in radio index %d\n", __FUNCTION__, __LINE__, index);
+            wifi_hal_error_print("%s:%d Failure in applying Radio settings in radio index %d\n", __FUNCTION__, __LINE__, index);
             return -1;
         }
+    }
 
-        //Updating nvram param
+
+    if (radio->oper_param.countryCode != operationParam->countryCode) {
+        //Updating nvram param for country code
         memset(param_name, 0 ,sizeof(param_name));
         sprintf(param_name, "wl%d_country_code", index);
         set_string_nvram_param(param_name, temp_buff);
@@ -4038,18 +4055,19 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
     static const u8 he_mcs[HE_MAX_MCS_CAPAB_SIZE] = { 0xaa, 0xff, 0xaa, 0xff };
     static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x1b, 0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || RDKB_ONE_WIFI_PROD)
+#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT ||
+       // SKYSR213_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
 #if defined(TCXB7_PORT) || defined(TCHCBRV2_PORT) || defined(SKYSR213_PORT) || defined(RDKB_ONE_WIFI_PROD)
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x0f, 0x03, 0x95,
         0x18, 0x00, 0xcc, 0x00 };
 #endif // TCXB7_PORT || TCHCBRV2_PORT || SKYSR213_PORT || RDKB_ONE_WIFI_PROD
-#if defined(XB10_PORT)
+#if defined(XB10_PORT) || defined(TCXB8_PORT)
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x42, 0xc0, 0x02, 0x03, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
-#elif defined(TCXB8_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
+#elif defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x02, 0x03, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
-#endif // TCXB8_PORT || SCXER10_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
+#endif // SCXER10_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
 #if defined(SCXER10_PORT)
     static const u8 eht_phy_cap[EHT_PHY_CAPAB_LEN] = { 0x2c, 0x00, 0x03, 0xe0, 0x00, 0xe7, 0x00,
         0x7e, 0x00 };
@@ -4142,10 +4160,10 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x6f, 0x1b, 0x95,
         0x18, 0x00, 0xcc, 0x00 };
 #endif // TCXB7_PORT || TCHCBRV2_PORT || SKYSR213_PORT
-#if defined(XB10_PORT)
+#if defined(XB10_PORT) || defined(TCXB8_PORT)
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x42, 0xc0, 0x02, 0x1b, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
-#elif defined(TCXB8_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
+#elif defined(SCXER10_PORT) || defined(SCXF10_PORT)
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x02, 0x1b, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
 #endif // TCXB8_PORT || SCXER10_PORT || SCXF10_PORT
@@ -4238,7 +4256,7 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
     defined(SCXF10_PORT)
     static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
-#if defined(XB10_PORT)
+#if defined(XB10_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT)
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x42, 0xc0, 0x02, 0x1b, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
 #else
@@ -4340,6 +4358,21 @@ int platform_get_radio_caps(wifi_radio_index_t index)
                     EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_ALL_TO_ONE) |
                 ((0 << 4) & EHT_ML_MLD_CAPA_SRS_SUPP) |
                 ((MAX_NUM_MLD_LINKS - 1) & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK));
+
+    /* FIXME: NSTR capability disabled by default */
+    if (radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa
+        & EHT_ML_EML_CAPA_EMLMR_SUPP)
+        radio->capab.mldOperationalCap |= eMLMR;
+    if (radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa
+        & EHT_ML_EML_CAPA_EMLSR_SUPP)
+        radio->capab.mldOperationalCap |= eMLSR;
+    if ((radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops
+        & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK) > 0)
+        radio->capab.mldOperationalCap |= STR;
+    if ((radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops
+        & EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_NEG_SUPP_MSK) > 0)
+        radio->capab.TIDLinkMapNegotiation = TRUE;
+
 #endif /* CONFIG_IEEE80211BE */
 
     for (interface = hash_map_get_first(radio->interface_map); interface != NULL;
