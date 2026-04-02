@@ -40,7 +40,6 @@
 #include <netpacket/packet.h>
 #include <netlink/route/link/bridge.h>
 #include "wifi_hal.h"
-#include "wifi_hal_ap.h"
 #include "wifi_hal_priv.h"
 #include "wpa_auth_i.h"
 #include "driver_nl80211.h"
@@ -110,7 +109,6 @@ static unsigned char llc_info[] = {0xaa, 0xaa, 0x03, 0x00,0x00,0x00,0x88,0x8e};
 static int scan_info_handler(struct nl_msg *msg, void *arg);
 static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface);
 void recv_data_frame(wifi_interface_info_t *interface);
-int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx);
 
 
 #ifndef FEATURE_SINGLE_PHY
