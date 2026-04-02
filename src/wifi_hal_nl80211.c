@@ -14338,6 +14338,7 @@ int wifi_drv_set_operstate(void *priv, int state)
         vap->u.sta_info.ignite_enabled &&
         g_wifi_hal.ignite_sta_sock_fd > 0) {
         interface->u.sta.sta_sock_fd = g_wifi_hal.ignite_sta_sock_fd;
+        interface->data_frames_registered = 1;
         g_wifi_hal.ignite_sta_sock_fd_count++;
         wifi_hal_info_print("%s:%d: Ignite STA reusing shared socket: "
             "intf:%s sock_fd:%d fd_count:%d\n",
@@ -14408,8 +14409,10 @@ int wifi_drv_set_operstate(void *priv, int state)
 
     if (vap->vap_mode == wifi_vap_mode_ap) {
         interface->u.ap.br_sock_fd = sock_fd;
+        interface->data_frames_registered = 1;
     } else if (vap->vap_mode == wifi_vap_mode_sta) {
         interface->u.sta.sta_sock_fd = sock_fd;
+        interface->data_frames_registered = 1;
         if (vap->u.sta_info.ignite_enabled) {
             g_wifi_hal.ignite_sta_sock_fd = sock_fd;
             g_wifi_hal.ignite_sta_sock_fd_count = 1;

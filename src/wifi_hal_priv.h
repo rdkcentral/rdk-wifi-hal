@@ -472,6 +472,7 @@ typedef struct wifi_interface_info_t {
     char   pin[64];
     int beacon_set;
     int mgmt_frames_registered;
+    int data_frames_registered;
     int spurious_frames_registered;
     int bss_frames_registered;
     hash_map_t  *acl_map;
