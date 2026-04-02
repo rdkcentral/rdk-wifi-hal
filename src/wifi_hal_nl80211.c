@@ -13085,6 +13085,7 @@ int wifi_drv_if_remove(void *priv, enum wpa_driver_if_type type, const char *ifn
                 }
                 interface->u.sta.sta_sock_fd = 0;
             }
+            interface->data_frames_registered = 0;
         }
 
         interface->vap_configured = false;
