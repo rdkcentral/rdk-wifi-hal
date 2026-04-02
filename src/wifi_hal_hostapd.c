@@ -1521,11 +1521,19 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         interface->name, vap->u.bss_info.preassoc.basic_data_transmit_rates, vap->u.bss_info.preassoc.supported_data_transmit_rates);
     if ((strlen (vap->u.bss_info.preassoc.basic_data_transmit_rates) > 0) && strcmp(vap->u.bss_info.preassoc.basic_data_transmit_rates, "disabled")) {
         snprintf(basic_buf, sizeof(basic_buf), "%s", vap->u.bss_info.preassoc.basic_data_transmit_rates);
-        convert_string_to_int(&preassoc_basic_rates,basic_buf);
+     if (convert_string_to_int(&preassoc_basic_rates, basic_buf) < 0) {
+         wifi_hal_info_print("%s:%d: Failed to convert basic rates, using defaults\n",
+             __func__, __LINE__);
+         preassoc_basic_rates = NULL;
+     }
     }
     if ((strlen (vap->u.bss_info.preassoc.supported_data_transmit_rates) > 0) && strcmp(vap->u.bss_info.preassoc.supported_data_transmit_rates, "disabled")) {
       snprintf(supp_buf, sizeof(supp_buf), "%s", vap->u.bss_info.preassoc.supported_data_transmit_rates);
-      convert_string_to_int(&preassoc_supp_rates,supp_buf);
+       if (convert_string_to_int(&preassoc_supp_rates, supp_buf) < 0) {
+           wifi_hal_info_print("%s:%d: Failed to convert supported rates, using defaults\n",
+               __func__, __LINE__);
+           preassoc_supp_rates = NULL;
+       }
     }
     
     switch (radio->oper_param.band) {
@@ -1587,6 +1595,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     if ((strlen (vap->u.bss_info.preassoc.supported_data_transmit_rates) > 0) && strcmp(vap->u.bss_info.preassoc.supported_data_transmit_rates, "disabled")) {
         if(iface->current_cac_rates) {
             os_free(iface->current_cac_rates);
+            iface->current_cac_rates = NULL;
         }
         iface->current_cac_rates = os_calloc(mode->num_rates, sizeof(struct hostapd_rate_data));
         if (!iface->current_cac_rates) {
@@ -1601,8 +1610,15 @@ int update_hostap_iface(wifi_interface_info_t *interface)
             }
             return RETURN_ERR;
         }
+       /* current_rates must always be valid — if convert failed and
+        * preassoc_supp_rates is NULL, the rate loop falls back to current_rates */
+       iface->current_rates = iface->current_cac_rates;   
     }
     else {
+        if (iface->current_cac_rates) {
+            os_free(iface->current_cac_rates);
+            iface->current_cac_rates = NULL;
+        }
         iface->current_rates = radio->rate_data[band];
     }
     wifi_hal_info_print("%s:%d: Interface: %s band: %d mode:%p (%d) has %d rates\n", __func__,
