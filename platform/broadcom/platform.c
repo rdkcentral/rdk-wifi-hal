@@ -2218,6 +2218,32 @@ static int set_ap_bss_color_value(int apIndex, uint32_t bssColor)
     return 0;
 }
 
+static void set_ap_beacon_protection(wifi_radio_info_t *radio, int apIndex)
+{
+    wifi_interface_info_t *interface;
+    struct hostapd_data *hapd;
+
+    if (radio->driver_data.extended_capa == NULL ||
+        !(radio->driver_data.capa.flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION))
+        return;
+
+    interface = get_interface_by_vap_index(apIndex);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get interface for ap index: %d\n", __func__,
+            __LINE__, apIndex);
+        return;
+    }
+    hapd = &interface->u.ap.hapd;
+    wifi_hal_dbg_print("%s:%d: %s: set beacon protection %d\n", __func__, __LINE__, interface->name, hapd->conf->beacon_prot);
+
+    if (hapd->conf->beacon_prot) {
+        radio->driver_data.extended_capa[10] |= 0x10; /* Bit 84 - Beacon Protection Enabled */
+    } else {
+        radio->driver_data.extended_capa[10] &= ~0x10; /* Bit 84 - Beacon Protection Enabled */
+    }
+    v_secure_system("wl -i %s bcnprot enable %d", interface->name, hapd->conf->beacon_prot);
+}
+
 int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 {
     wifi_hal_dbg_print("%s:%d: Enter radio index:%d\n", __func__, __LINE__, r_index);
@@ -2468,6 +2494,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             wifi_setApManagementFramePowerControl(map->vap_array[index].vap_index, map->vap_array[index].u.bss_info.mgmtPowerControl);
 
             set_ap_bss_color_value(map->vap_array[index].vap_index, iconf->he_op.he_bss_color_disabled ? 0 : iconf->he_op.he_bss_color);
+            set_ap_beacon_protection(radio, map->vap_array[index].vap_index);
         } else if (map->vap_array[index].vap_mode == wifi_vap_mode_sta) {
 
             prepare_param_name(param_name, interface_name, "_akm");
@@ -4228,6 +4255,8 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     radio->driver_data.extended_capa_mask = malloc(sizeof(ext_cap));
     memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
+
+    radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_BEACON_PROTECTION;
 #endif // XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT
 
 // To reset the bss transition bit under extended capabilities, since its based on 2GHz vap configuration from OneWiFi.
@@ -4328,6 +4357,8 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     radio->driver_data.extended_capa_mask = malloc(sizeof(ext_cap));
     memcpy(radio->driver_data.extended_capa_mask, ext_cap, sizeof(ext_cap));
     radio->driver_data.extended_capa_len = sizeof(ext_cap);
+
+    radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_BEACON_PROTECTION;
 #endif // XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT
 
 // To reset the bss transition bit under extended capabilities, since its based on 5GHz vap configuration from OneWiFi.
@@ -4417,7 +4448,7 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 eht_mcs[] = { 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
 #endif /* HOSTAPD_VERSION >= 211 */
     struct hostapd_iface *iface = &interface->u.ap.iface;
-    radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD;
+    radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_AP_UAPSD | WPA_DRIVER_FLAGS_BEACON_PROTECTION;
 
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     free(radio->driver_data.extended_capa);
