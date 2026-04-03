@@ -181,8 +181,7 @@ void prepare_interface_fdset(wifi_hal_priv_t *priv)
     wifi_interface_info_t *interface;
     unsigned int i;
 #ifndef EAPOL_OVER_NL
-    wifi_vap_info_t *vap;    
-    int sock_fd;
+    wifi_vap_info_t *vap;
 #endif
 
     FD_ZERO(&priv->drv_rfds);
