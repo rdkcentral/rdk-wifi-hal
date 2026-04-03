@@ -287,7 +287,11 @@ int test_data_from_pcap(frame_test_arg_t *arg)
 
 
     while ((sz = fread(&pkt_hdr, 1, sizeof(wireshark_pkthdr_t), fp)) == sizeof(wireshark_pkthdr_t)) {
-     memset(tmp, 0, 4096);
+     if (pkt_hdr.caplen == 0 || pkt_hdr.caplen > sizeof(tmp)) {
+        fclose(fp);
+        return RETURN_ERR;
+     }
+     memset(tmp, 0, sizeof(tmp));
      sz = fread(tmp, 1, pkt_hdr.caplen, fp);
      
      if (sz == pkt_hdr.caplen) {
@@ -320,7 +324,7 @@ int test_data_from_pcapng(frame_test_arg_t *arg)
     section_header_block_t sblock;
     interface_description_block_t   iblock;
     enhanced_packet_block_t eblock;
-    size_t sz;
+    size_t sz, payload_len;
     unsigned char tmp[4096];
     unsigned int frames_parsed = 0, valid_frames_parsed = 0;
        wifi_direction_t        dir;
@@ -342,9 +346,16 @@ int test_data_from_pcapng(frame_test_arg_t *arg)
       return RETURN_ERR;
     }
 
-    memset(tmp, 0, 4096);
-    sz = fread(tmp, 1, sblock.block_len - sizeof(section_header_block_t), fp);
-    if (sz != sblock.block_len - sizeof(section_header_block_t)) {
+    payload_len = sblock.block_len - sizeof(section_header_block_t);
+
+    if (sblock.block_len < sizeof(section_header_block_t) || payload_len > sizeof(tmp)) {
+      fclose(fp);
+      return RETURN_ERR;
+    }
+
+    memset(tmp, 0, sizeof(tmp));
+    sz = fread(tmp, 1, payload_len, fp);
+    if (sz != payload_len) {
       fclose(fp);
       return RETURN_ERR;
     }
@@ -355,20 +366,36 @@ int test_data_from_pcapng(frame_test_arg_t *arg)
       return RETURN_ERR;
     }
 
-    memset(tmp, 0, 4096);
-    sz = fread(tmp, 1, iblock.block_len - sizeof(interface_description_block_t), fp);
-    if (sz != iblock.block_len - sizeof(interface_description_block_t)) {
+    payload_len = iblock.block_len - sizeof(interface_description_block_t);
+
+    if (iblock.block_len < sizeof(interface_description_block_t) || payload_len > sizeof(tmp)) {
+      fclose(fp);
+      return RETURN_ERR;
+    }
+
+    memset(tmp, 0, sizeof(tmp));
+    sz = fread(tmp, 1, payload_len, fp);
+    if (sz != payload_len) {
       fclose(fp);
       return RETURN_ERR;
     }
 
 
     while ((sz = fread(&eblock, 1, sizeof(enhanced_packet_block_t), fp)) == sizeof(enhanced_packet_block_t)) {
-        memset(tmp, 0, 4096);
-        sz = fread(tmp, 1, eblock.block_len - sizeof(enhanced_packet_block_t), fp);
+        payload_len = eblock.block_len - sizeof(enhanced_packet_block_t);
+        if (eblock.block_len < sizeof(enhanced_packet_block_t) || payload_len > sizeof(tmp)) {
+            fclose(fp);
+            return RETURN_ERR;
+        }
+        memset(tmp, 0, sizeof(tmp));
+        sz = fread(tmp, 1, payload_len, fp);
       
-        if (sz == (eblock.block_len - sizeof(enhanced_packet_block_t))) {
+        if (sz == payload_len) {
             if ((frames_parsed >= (arg->first_frame_num - 1)) && (frames_parsed <= (arg->last_frame_num - 1))) {
+                if (eblock.caplen == 0 || eblock.caplen > sizeof(tmp)) {
+                       fclose(fp);
+                       return RETURN_ERR;
+                }
                 if (parse_frame(tmp, eblock.caplen, arg, &dir) == RETURN_OK) {
                        valid_frames_parsed++;
                        printf("%s:%d: Accepted frame number:%d Direction:%s\n", __func__, __LINE__, frames_parsed + 1, (dir == wifi_direction_uplink) ? "Uplink":"Downlink");

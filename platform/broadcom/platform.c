@@ -19,6 +19,8 @@
 
 #include <stddef.h>
 #include "wifi_hal.h"
+#define MAX_EMU_NEIGHBOR_AP_COUNT 64
+
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
 #include "typedefs.h"
 #include "bcmwifi_channels.h"
@@ -231,11 +233,11 @@ unsigned int convert_radioindex_to_bcmband(unsigned int radioIndex)
     return UINT_MAX;
 }
 
-void convert_from_channellist_to_chspeclist(unsigned int bw, unsigned int band,wifi_channels_list_t chanlist, char* output_chanlist)
+void convert_from_channellist_to_chspeclist(unsigned int bw, unsigned int band, const wifi_channels_list_t *chanlist, char* output_chanlist)
 {
-    int channel_list[chanlist.num_channels];
-    memcpy(channel_list,chanlist.channels_list,sizeof(channel_list));
-    for(int i=0;i<chanlist.num_channels;i++)
+    int channel_list[chanlist->num_channels];
+    memcpy(channel_list,chanlist->channels_list,sizeof(channel_list));
+    for(int i=0;i<chanlist->num_channels;i++)
     {
         char buff[8];
         chanspec_t chspec = wf_channel2chspec(channel_list[i],bw,band);
@@ -328,6 +330,11 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
         sem_post(sem);
         sem_close(sem);
         return RETURN_ERR;
+    }
+    if (neighbor_header.neighbor_count > MAX_EMU_NEIGHBOR_AP_COUNT) {
+        wifi_hal_stats_info_print("%s:%d: Invalid neighbor_count %u,reset into 64\n", __func__,
+            __LINE__, neighbor_header.neighbor_count);
+        neighbor_header.neighbor_count = MAX_EMU_NEIGHBOR_AP_COUNT;
     }
 
     combined_data = malloc(
@@ -925,7 +932,7 @@ static int enable_spect_management(int radio_index, int enable)
     return 0;
 }
 
-int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, wifi_channels_list_t chanlist, char* buff)
+int platform_get_chanspec_list(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, const wifi_channels_list_t *chanlist, char* buff)
 {
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     unsigned int bw = convert_channelBandwidth_to_bcmwifibandwidth(bandwidth);
@@ -1003,7 +1010,7 @@ INT wifi_sendActionFrame(INT apIndex, mac_address_t MacAddr, UINT frequency, UCH
 
 int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
-    if ((index < 0) || (operationParam == NULL)) {
+    if (operationParam == NULL) {
         wifi_hal_dbg_print("%s:%d Invalid Argument \n", __FUNCTION__, __LINE__);
         return -1;
     }
@@ -3103,7 +3110,10 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
     }
 
     sta_list->macs = calloc(sta_list->num, sizeof(mac_address_t));
-
+    if (sta_list->macs == NULL) {
+        wifi_hal_stats_error_print("%s:%d Memory allocation failed\n", __func__, __LINE__);
+        goto error;
+    }
     if (tb_vendor[RDK_VENDOR_ATTR_STA_LIST] == NULL) {
         wifi_hal_stats_error_print("%s:%d STA list data is missing\n", __func__, __LINE__);
         goto error;
@@ -3134,8 +3144,10 @@ static int get_sta_list_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 
 error:
-    free(sta_list->macs);
-    sta_list->macs = NULL;
+    if (sta_list->macs != NULL) {
+        free(sta_list->macs);
+        sta_list->macs = NULL;
+    }
     sta_list->num = 0;
     return NL_SKIP;
 }

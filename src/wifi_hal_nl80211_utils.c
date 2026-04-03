@@ -39,6 +39,7 @@
 #include "wifi_hal.h"
 #include "wifi_hal_priv.h"
 #include <cjson/cJSON.h>
+#include <limits.h>
 
 static wifi_interface_name_idex_map_t *interface_index_map = NULL;
 
@@ -2077,7 +2078,7 @@ int get_mac_address (char *intf_name,  mac_address_t mac)
     }
 
     ifr.ifr_addr.sa_family = AF_INET;
-    strcpy(ifr.ifr_name, intf_name);
+    snprintf(ifr.ifr_name, IFNAMSIZ, "%s", intf_name);
     if (ioctl(sock, SIOCGIFHWADDR, &ifr) != 0) {
         close(sock);
         return RETURN_ERR;
@@ -2284,14 +2285,14 @@ int get_radio_variant_str_from_int(unsigned int variant, char *variant_str)
 
     for (index = 0; index < ARRAY_SIZE(wifi_variant_Map); index++) {
         if ((variant & wifi_variant_Map[index].enum_val) && (strlen(temp_variant_str) == 0)) {
-            strcpy(temp_variant_str, wifi_variant_Map[index].str_val);
+            snprintf(temp_variant_str, sizeof(temp_variant_str), "%s", wifi_variant_Map[index].str_val);
         } else if (variant & wifi_variant_Map[index].enum_val) {
-            strcat(temp_variant_str, ",");
-            strcat(temp_variant_str, wifi_variant_Map[index].str_val);
+            strncat(temp_variant_str, ",", sizeof(temp_variant_str) - strlen(temp_variant_str) - 1);
+            strncat(temp_variant_str, wifi_variant_Map[index].str_val, sizeof(temp_variant_str) - strlen(temp_variant_str) - 1);
         }
     }
 
-    strncpy(variant_str, temp_variant_str, strlen(temp_variant_str));
+    snprintf(variant_str, strlen(temp_variant_str) + 1, "%s", temp_variant_str);
 
     return RETURN_OK;
 }
@@ -4849,17 +4850,26 @@ static inline int json_parse_interface_map(cJSON *json)
     tmp_intf_idx_map = NULL;
     tmp_radio_interface_map = NULL;
 
-    if (!((tmp_intf_idx_map = malloc(sizeof(*tmp_intf_idx_map) * interface_idx_map_size)) &&
-            (tmp_radio_interface_map = malloc(
-                 sizeof(*tmp_radio_interface_map) * radio_interface_map_size)))) {
-        wifi_hal_error_print("%s:%d: Failed to allocate interface_idx_map(%d - %u "
-                             "bytes) or radio_interface_map_size(%d - %u bytes)\n",
-            __func__, __LINE__, !!tmp_intf_idx_map, interface_idx_map_size,
-            !!tmp_radio_interface_map, radio_interface_map_size);
+    if (interface_idx_map_size == 0 || radio_interface_map_size == 0) {
+        wifi_hal_error_print("%s:%d: No interfaces or radios present\n", __func__, __LINE__);
+        return -1;
+    }
 
-        free(tmp_radio_interface_map);
+    tmp_intf_idx_map = calloc(1, sizeof(*tmp_intf_idx_map) * interface_idx_map_size);
+    if (tmp_intf_idx_map == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate interface_idx_map(%d - %u bytes)\n",
+            __func__, __LINE__, !!tmp_intf_idx_map, interface_idx_map_size);
+
+        return -1;
+    }
+
+    tmp_radio_interface_map = calloc(1,
+                 sizeof(*tmp_radio_interface_map) * radio_interface_map_size);
+    if (tmp_radio_interface_map == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate radio_interface_map_size(%d - %u bytes)\n",
+            __func__, __LINE__, !!tmp_radio_interface_map, radio_interface_map_size);
+
         free(tmp_intf_idx_map);
-
         return -1;
     }
 
@@ -4969,6 +4979,10 @@ static inline int init_json_interface_map(void)
 
     fseek(fp, 0, SEEK_END);
     len = ftell(fp);
+    if (len == UINT_MAX) {
+        fclose(fp);
+        return -1;
+    }
     fseek(fp, 0, SEEK_SET);
 
     ret = -1;
