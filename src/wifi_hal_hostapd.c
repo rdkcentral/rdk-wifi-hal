@@ -3049,7 +3049,6 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
                     sec->mode == wifi_security_mode_wpa3_enterprise) {
                 update_eapol_method(interface, sec->u.radius.eap_type);
                 interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
-                interface->u.sta.wpa_eapol_config.identity = (unsigned char *)&sec->u.radius.identity;
                 interface->u.sta.wpa_eapol_config.identity_len = strlen(sec->u.radius.identity);
                 interface->u.sta.wpa_eapol_config.password = (unsigned char *)&sec->u.radius.key;
                 interface->u.sta.wpa_eapol_config.password_len = strlen(sec->u.radius.key);
