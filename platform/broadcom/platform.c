@@ -3411,6 +3411,8 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
         [RDK_VENDOR_ATTR_STA_INFO_RX_ERRORS] = {. type = NLA_U64 },
         [RDK_VENDOR_ATTR_STA_INFO_MLD_MAC] = {.type = NLA_BINARY, .minlen = ETHER_ADDR_LEN},
         [RDK_VENDOR_ATTR_STA_INFO_MLD_ENAB] = {.type = NLA_U8},
+        [RDK_VENDOR_ATTR_STA_INFO_POWER_SAVE] = {.type = NLA_U8},
+        [RDK_VENDOR_ATTR_STA_INFO_PS_SLEEP_TIME_MS] = {.type = NLA_U32},
     };
     wifi_associated_dev3_t *stats = arg;
 
@@ -3600,6 +3602,15 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     } else {
         memset(stats->cli_MLDAddr, 0, sizeof(stats->cli_MLDAddr));
     }
+    
+    if (tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_POWER_SAVE]) {
+        stats->cli_PowerSaveMode = nla_get_u8(tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_POWER_SAVE]);
+    }
+
+    if (tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_PS_SLEEP_TIME_MS]) {
+        stats->cli_sleepTime = nla_get_u32(tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_PS_SLEEP_TIME_MS]);
+    }
+
 
     wifi_hal_stats_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu\n", __func__, __LINE__, 
             stats->cli_DataFramesSentAck, stats->cli_DataFramesSentNoAck,
@@ -3623,9 +3634,9 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
     stats->cli_PacketsSent = stats->cli_DataFramesSentAck + stats->cli_DataFramesSentNoAck;
 
-    wifi_hal_stats_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu\n", __func__, __LINE__, 
+    wifi_hal_stats_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu cli_PowerSaveMode=%d cli_sleepTime:%d\n", __func__, __LINE__, 
             stats->cli_DataFramesSentAck, stats->cli_DataFramesSentNoAck,
-            stats->cli_PacketsSent, stats->cli_BytesSent);
+            stats->cli_PacketsSent, stats->cli_BytesSent, stats->cli_PowerSaveMode,stats->cli_sleepTime);
 
     return NL_SKIP;
 }
