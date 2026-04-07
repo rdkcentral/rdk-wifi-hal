@@ -223,6 +223,22 @@ extern "C" {
 #define SSID_MAX_LEN                32
 #define ACS_MAX_VECTOR_LEN  (256 * 7) /* Max Possible non operable (Exclude) chanspecs in a radio is 256*/
 
+#ifndef FEATURE_SINGLE_PHY
+#define RNR_NAP_HDR 4u
+#define RNR_FREQ_CAP 64u
+typedef struct {
+    uint32_t freq[RNR_FREQ_CAP];
+    unsigned int nfreq;
+    uint32_t ssid_crc;
+    bool have_ssid;
+    bool scan_started;
+    ssid_t   ssid;
+} rnr_scan_t;
+#endif //FEATURE_SINGLE_PHY
+
+#define DWELL_TIME_PATH "/nvram/wifi_dwell_time"
+#define DEFAULT_DWELL_TIME_MS 50
+
 #if HOSTAPD_VERSION >= 211
 #define CHANWIDTH_320MHZ CONF_OPER_CHWIDTH_320MHZ
 #endif /* HOSTAPD_VERSION >= 211 */
@@ -512,6 +528,10 @@ typedef struct {
     bool radio_presence; //True for ECO mode Active radio, false for ECO mode power down sleeping radio
     bool radar_detected;
     bool configuration_in_progress;
+#ifndef FEATURE_SINGLE_PHY
+    rnr_scan_t rnr;
+    bool rnr_enabled;
+#endif //FEATURE_SINGLE_PHY
 } wifi_radio_info_t;
 
 typedef wifi_vap_name_t wifi_vap_type_t;
@@ -600,6 +620,12 @@ typedef struct {
     pthread_mutex_t hapd_lock;
     hash_map_t *mgt_frame_rate_limit_hashmap;
     wifi_hal_mgt_frame_rate_limit_t mgt_frame_rate_limit;
+#ifdef CONFIG_GENERIC_MLO
+    unsigned int mld_count;
+    struct hostapd_mld **mld_array;
+#endif
+    int ignite_sta_sock_fd;
+    int ignite_sta_sock_fd_count;
 } wifi_hal_priv_t;
 
 extern wifi_hal_priv_t g_wifi_hal;
@@ -791,6 +817,19 @@ int wifi_rrm_send_beacon_resp(unsigned int ap_index, wifi_neighbor_ap2_t *bss, u
                             unsigned int num_count);
 int wifi_hal_parse_rm_beacon_request(unsigned int apIndex, char* buff, size_t len,
     wifi_hal_rrm_request_t *req);
+
+#ifndef FEATURE_SINGLE_PHY
+void wifi_hal_rnr_init(wifi_radio_index_t radio_index, const char *ssid);
+uint32_t rnr_crc32(const uint8_t *p, size_t n);
+bool rnr_is_6ghz_opclass(uint8_t opclass);
+bool rnr_freq_add(rnr_scan_t *rnr, uint32_t f);
+unsigned int rnr_ssid_offset(uint8_t ilen);
+bool rnr_tbtt_match(const uint8_t *set, uint8_t cnt, uint8_t ilen, unsigned int ssid_off,
+    uint32_t crc);
+wifi_interface_info_t *rnr_sta6(void);
+int rnr_scan6(wifi_radio_info_t *radio, int dwell_time);
+#endif //FEATURE_SINGLE_PHY
+int get_dwell_time(void);
 wifi_radio_info_t *get_radio_by_index(wifi_radio_index_t index);
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index);
 wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index);
@@ -960,6 +999,15 @@ int wifi_hal_purgeScanResult(unsigned int vap_index, unsigned char *sta_mac);
 void get_wifi_interface_info_map(wifi_interface_name_idex_map_t *interface_map);
 void get_radio_interface_info_map(radio_interface_mapping_t *radio_interface_map);
 unsigned int get_sizeof_interfaces_index_map(void);
+u32 get_wpa_version(wifi_security_modes_t mode);
+bool is_wpa3_192bit_mode(const struct wpa_auth_config *wpa_conf);
+void get_cipher_suites(wifi_security_modes_t mode, wifi_encryption_method_t encr,
+    const struct wpa_auth_config *wpa_conf, u32 *pairwise, u32 *group);
+enum nl80211_mfp get_mfp_mode(wifi_security_modes_t mode, int configured_mfp);
+u32 get_akm_suite(int wpa_key_mgmt, wifi_security_modes_t mode);
+enum nl80211_auth_type get_auth_type(wifi_security_modes_t mode, u32 akm_suite);
+int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *security,
+const struct wpa_auth_config *wpa_conf, wifi_vap_info_t *vap);
 int validate_radio_operation_param(wifi_radio_operationParam_t *param);
 int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg, int len);
 int is_backhaul_interface(wifi_interface_info_t *interface);
