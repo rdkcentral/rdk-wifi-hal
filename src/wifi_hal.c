@@ -1618,6 +1618,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     wifi_vap_info_t *vap;
     platform_pre_create_vap_t pre_set_vap_params_fn;
     platform_create_vap_t set_vap_params_fn;
+    platform_set_beacon_prot_t set_vap_beacon_prot_fn;
     unsigned int i;
     char msg[2048];
     int ret = RETURN_OK;
@@ -1952,14 +1953,24 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
 #endif // NL80211_ACL
             re_configure_steering_mac_list(interface);
-        }
-        if (vap->vap_mode == wifi_vap_mode_ap) {
+
             wifi_hal_info_print("%s:%d: vap index:%d set power:%d\n",  __func__, __LINE__,
                 vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             if (wifi_setApManagementFramePowerControl(vap->vap_index,
                 vap->u.bss_info.mgmtPowerControl) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d: vap index:%d failed to set power %d\n", __func__,
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
+            }
+
+            {FILE *out = fopen("/tmp/log11.txt", "a");fprintf(out, "%s:%d radio %s is BEACON CAPA FLAGS???? %llX\n", __func__, __LINE__,
+                    radio->name, interface->u.ap.iface.drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION); fflush(out);}
+            if ((set_vap_beacon_prot_fn = get_platform_set_beacon_prot_fn()) != NULL &&
+                    interface->u.ap.iface.drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION) {
+                wifi_hal_info_print("%s:%d: vap index:%d set beacon prot: %d\n", __func__, __LINE__,
+                        vap->vap_index, interface->u.ap.conf.beacon_prot);
+                {FILE *out = fopen("/tmp/log11.txt", "a");fprintf(out, "%s:%d: vap index:%d set beacon prot: %d\n", __func__, __LINE__,
+                        vap->vap_index, interface->u.ap.conf.beacon_prot); fflush(out);}
+                set_vap_beacon_prot_fn(vap->vap_index, interface->u.ap.conf.beacon_prot);
             }
         }
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
