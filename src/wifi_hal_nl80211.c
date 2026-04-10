@@ -17184,6 +17184,7 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     struct nl_msg *key_msg = NULL;
     unsigned int suite;
     int ret;
+    int key_type;
     wifi_vap_info_t *vap;
 
     interface = (wifi_interface_info_t *)priv;
@@ -17218,10 +17219,10 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
         return -1;
     }
 
-    nla_put(key_msg, NL80211_ATTR_KEY_DATA, key_len, key);
-    nla_put_u32(key_msg, NL80211_ATTR_KEY_CIPHER, suite);
+    nla_put(key_msg, NL80211_KEY_DATA, key_len, key);
+    nla_put_u32(key_msg, NL80211_KEY_CIPHER, suite);
     if (seq && seq_len) {
-        nla_put(key_msg, NL80211_ATTR_KEY_SEQ, seq_len, seq);
+        nla_put(key_msg, NL80211_KEY_SEQ, seq_len, seq);
     }
 
     if (addr && !is_broadcast_ether_addr(addr)) {
@@ -17238,12 +17239,13 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
             nlmsg_free(msg);
             nl80211_nlmsg_clear(key_msg);
             nlmsg_free(key_msg);
+            return -1;
         }
         nla_put_flag(key_msg, NL80211_KEY_DEFAULT_TYPE_MULTICAST);
         nla_nest_end(key_msg, types);
     }
 
-    if (nla_put_u8(key_msg, NL80211_ATTR_KEY_IDX, key_idx) ||
+    if (nla_put_u8(key_msg, NL80211_KEY_IDX, key_idx) ||
             nla_put_nested(msg, NL80211_ATTR_KEY, key_msg)) {
         nl80211_nlmsg_clear(msg);
         nlmsg_free(msg);
@@ -17279,13 +17281,13 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
         return -1;
     }
 
-    nla_put_u8(key_msg, NL80211_ATTR_KEY_IDX, key_idx);
+    nla_put_u8(key_msg, NL80211_KEY_IDX, key_idx);
     nla_put_flag(key_msg, (alg == WPA_ALG_IGTK ||
                 alg == WPA_ALG_BIP_GMAC_128 ||
                 alg == WPA_ALG_BIP_GMAC_256 ||
                 alg == WPA_ALG_BIP_CMAC_256) ?
-            NL80211_ATTR_KEY_DEFAULT_MGMT :
-            NL80211_ATTR_KEY_DEFAULT);
+            NL80211_KEY_DEFAULT_MGMT :
+            NL80211_KEY_DEFAULT);
 
     if (addr && is_broadcast_ether_addr(addr)) {
         struct nlattr *types;
@@ -17296,6 +17298,7 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
             nlmsg_free(msg);
             nl80211_nlmsg_clear(key_msg);
             nlmsg_free(key_msg);
+            return -1;
         }
         nla_put_flag(key_msg, NL80211_KEY_DEFAULT_TYPE_MULTICAST);
         nla_nest_end(key_msg, types);
@@ -17330,10 +17333,10 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     }
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
-    nla_put(key_msg, NL80211_ATTR_KEY_DATA, params->key_len, params->key);
-    nla_put_u32(key_msg, NL80211_ATTR_KEY_CIPHER, suite);
+    nla_put(key_msg, NL80211_KEY_DATA, params->key_len, params->key);
+    nla_put_u32(key_msg, NL80211_KEY_CIPHER, suite);
     if (params->seq && params->seq_len) {
-        nla_put(key_msg, NL80211_ATTR_KEY_SEQ, params->seq_len, params->seq);
+        nla_put(key_msg, NL80211_KEY_SEQ, params->seq_len, params->seq);
     }
 
     if (params->addr && !is_broadcast_ether_addr(params->addr)) {
@@ -17365,7 +17368,7 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
       if (params->key_flag & KEY_FLAG_DEFAULT)
         skip_set_key = 0;
     }
-    if (nla_put_u8(key_msg, NL80211_ATTR_KEY_IDX, params->key_idx) ||
+    if (nla_put_u8(key_msg, NL80211_KEY_IDX, params->key_idx) ||
             nla_put_nested(msg, NL80211_ATTR_KEY, key_msg)) {
         nl80211_nlmsg_clear(msg);
         nlmsg_free(msg);
@@ -17405,12 +17408,15 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     }
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
-    nla_put_u8(key_msg, NL80211_ATTR_KEY_IDX, params->key_idx);
-    nla_put_flag(key_msg, wpa_alg_bip(params->alg) ?
-                 (params->key_idx == 6 || params->key_idx == 7 ?
-                  NL80211_KEY_DEFAULT_BEACON :
-                  NL80211_ATTR_KEY_DEFAULT_MGMT) :
-                 NL80211_ATTR_KEY_DEFAULT);
+    nla_put_u8(key_msg, NL80211_KEY_IDX, params->key_idx);
+
+    if (interface->u.ap.iface.drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION &&
+            (params->key_idx == 6 || params->key_idx == 7)) {
+        key_type = NL80211_KEY_DEFAULT_BEACON;
+    } else {
+        key_type = wpa_alg_bip(params->alg) ? NL80211_KEY_DEFAULT_MGMT : NL80211_KEY_DEFAULT;
+    }
+    nla_put_flag(key_msg, key_type);
 
     if (params->addr && is_broadcast_ether_addr(params->addr)) {
         struct nlattr *types;
@@ -17421,6 +17427,7 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
             nlmsg_free(msg);
             nl80211_nlmsg_clear(key_msg);
             nlmsg_free(key_msg);
+            return -1;
         }
         nla_put_flag(key_msg, NL80211_KEY_DEFAULT_TYPE_MULTICAST);
         nla_nest_end(key_msg, types);
@@ -17434,8 +17441,9 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
             nlmsg_free(msg);
             nl80211_nlmsg_clear(key_msg);
             nlmsg_free(key_msg);
+            return -1;
         }
-        nla_put_flag(key_msg, NL80211_KEY_DEFAULT_TYPE_MULTICAST);
+        nla_put_flag(key_msg, NL80211_KEY_DEFAULT_TYPE_UNICAST);
         nla_nest_end(key_msg, types);
     }
 
