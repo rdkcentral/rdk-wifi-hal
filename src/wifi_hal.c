@@ -1962,14 +1962,10 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             }
 
-            {FILE *out = fopen("/tmp/log11.txt", "a");fprintf(out, "%s:%d radio %s is BEACON CAPA FLAGS???? %llX\n", __func__, __LINE__,
-                    radio->name, interface->u.ap.iface.drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION); fflush(out);}
             if ((set_vap_beacon_prot_fn = get_platform_set_beacon_prot_fn()) != NULL &&
                     interface->u.ap.iface.drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION) {
                 wifi_hal_info_print("%s:%d: vap index:%d set beacon prot: %d\n", __func__, __LINE__,
                         vap->vap_index, interface->u.ap.conf.beacon_prot);
-                {FILE *out = fopen("/tmp/log11.txt", "a");fprintf(out, "%s:%d: vap index:%d set beacon prot: %d\n", __func__, __LINE__,
-                        vap->vap_index, interface->u.ap.conf.beacon_prot); fflush(out);}
                 set_vap_beacon_prot_fn(vap->vap_index, interface->u.ap.conf.beacon_prot);
             }
         }
