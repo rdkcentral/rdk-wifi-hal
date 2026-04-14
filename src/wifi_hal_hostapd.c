@@ -2035,6 +2035,10 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
     iconf->ap_table_expiration_time = 60;
     iconf->track_sta_max_age = 180;
 
+#if defined(BANANA_PI_PORT) && HOSTAPD_VERSION >= 211
+    iconf->no_ht_coex = 1;
+#endif // BANANA_PI_PORT && HOSTAPD_VERSION >= 211
+
     iconf->acs = 0;
     iconf->acs_ch_list.num = 0;
 #ifdef CONFIG_ACS
@@ -2043,6 +2047,9 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
 #endif /* CONFIG_ACS */
 
 #ifdef CONFIG_IEEE80211AX
+#if defined(BANANA_PI_PORT) && HOSTAPD_VERSION >= 211
+    iconf->he_phy_capab.he_ldpc = 1;
+#endif // BANANA_PI_PORT && HOSTAPD_VERSION >= 211
     iconf->he_op.he_rts_threshold = 0;
     iconf->he_op.he_default_pe_duration = 4;
 #if HOSTAPD_VERSION >= 210
@@ -2239,6 +2246,23 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
 int update_hostap_interface_params(wifi_interface_info_t *interface)
 {
     int ret = RETURN_ERR;
+
+#ifdef CONFIG_GENERIC_MLO
+    if (wifi_hal_is_mld_enabled(interface)) {
+        wifi_interface_info_t *first_interface = wifi_hal_get_first_mld_interface(interface);
+
+        if (first_interface != interface) {
+            wifi_hal_info_print("%s:%d: interface:%s link id:%d set ssid:%s\n", __func__, __LINE__,
+                wifi_hal_get_interface_name(interface), wifi_hal_get_mld_link_id(interface),
+                first_interface->vap_info.u.bss_info.ssid);
+            /* The kernel requires the same SSID for all links in MLD */
+            strncpy(interface->vap_info.u.bss_info.ssid, first_interface->vap_info.u.bss_info.ssid,
+                sizeof(interface->vap_info.u.bss_info.ssid) - 1);
+            interface->vap_info.u.bss_info.ssid[sizeof(interface->vap_info.u.bss_info.ssid) - 1] =
+                '\0';
+        }
+    }
+#endif /* CONFIG_GENERIC_MLO */
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     // initialize the default params
@@ -2455,10 +2479,17 @@ static int wpa_sm_sta_ether_send(void *ctx, const u8 *dest, u16 proto, const u8 
 #if HOSTAPD_VERSION >= 210 //2.10
         int encrypt;
         mac_addr_str_t mac_str;
+#ifdef CONFIG_GENERIC_MLO
+        int link_id = wifi_hal_get_mld_link_id(interface);
+#else
+        int link_id = -1;
+#endif // CONFIG_GENERIC_MLO
+
         encrypt = interface->u.sta.wpa_sm && wpa_sm_has_ptk_installed(interface->u.sta.wpa_sm);
         wifi_hal_info_print("%s:%d: Sending eapol via control port to sta:%s on interface:%s encrypt:%d\n", __func__, __LINE__,
             to_mac_str(dest, mac_str), interface->name, encrypt);
-        if ((ret = nl80211_tx_control_port(interface, dest, ETH_P_EAPOL, buf, len, !encrypt))) {
+        if ((ret = nl80211_tx_control_port(interface, dest, ETH_P_EAPOL, buf, len, !encrypt,
+                 link_id))) {
             wifi_hal_error_print("%s:%d: eapol send failed\n", __func__, __LINE__);
             return -1;
         }
@@ -3161,6 +3192,7 @@ static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
     return ret;
 }
 
+#ifndef CONFIG_GENERIC_MLO
 #ifdef CONFIG_IEEE80211BE
 #if HOSTAPD_VERSION >= 211
 static int set_mld_shared_resources(struct hostapd_data *hapd)
@@ -3198,14 +3230,17 @@ static void clear_mld_shared_resources(struct hostapd_data *hapd)
 }
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif /* CONFIG_IEEE80211BE */
+#endif /* CONFIG_GENERIC_MLO */
 
 void deinit_bss(struct hostapd_data *hapd)
 {
+#ifndef CONFIG_GENERIC_MLO
 #ifdef CONFIG_IEEE80211BE
 #if HOSTAPD_VERSION >= 211
     clear_mld_shared_resources(hapd);
 #endif
 #endif
+#endif /* CONFIG_GENERIC_MLO */
     hostapd_bss_deinit_no_free(hapd);
     hostapd_free_hapd_data(hapd);
 }
@@ -3238,6 +3273,7 @@ int start_bss(wifi_interface_info_t *interface)
         wifi_hal_error_print("%s:%d: vap:%s:%d create is failed:%d csa status:%d\n", __func__,
             __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
     }
+#ifndef CONFIG_GENERIC_MLO
 #ifdef CONFIG_IEEE80211BE
 #if HOSTAPD_VERSION >= 211
     ret = set_mld_shared_resources(hapd);
@@ -3247,6 +3283,7 @@ int start_bss(wifi_interface_info_t *interface)
     }
 #endif
 #endif
+#endif /* CONFIG_GENERIC_MLO */
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     return ret;

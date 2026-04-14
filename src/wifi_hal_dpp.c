@@ -2563,7 +2563,7 @@ INT wifi_dppProcessAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
         return RETURN_ERR;
     }
 
-    if (status != STATUS_OK) {
+    if (status != WIFI_STATUS_OK) {
         // return authentication failure for now
 		dpp_ctx->enrollee_status = RESPONDER_STATUS_AUTH_FAILURE;
         return RETURN_ERR;
@@ -2795,7 +2795,7 @@ INT wifi_dppSendConfigResponse(wifi_device_dpp_context_t *ctx)
     wifi_dppConfigResponseFrame_t    *config_response_frame;
     wifi_dpp_session_data_t *data = NULL;
 	wifi_dpp_instance_t *instance;
-    unsigned char buff[2048], dpp_status = STATUS_OK;
+    unsigned char buff[2048], dpp_status = WIFI_STATUS_OK;
     wifi_tlv_t *tlv;
     unsigned int tlv_len = 0, wrapped_len = 0;
 
@@ -2971,7 +2971,7 @@ wifi_dppSendAuthCnf(wifi_device_dpp_context_t *ctx)
     unsigned char keyasn1[1024];
     unsigned char keyhash[SHA512_DIGEST_LENGTH];
     const unsigned char *key;
-    unsigned char buff[2048], dpp_status = STATUS_OK;
+    unsigned char buff[2048], dpp_status = WIFI_STATUS_OK;
     unsigned int tlv_len = 0, wrapped_len = 0;
     int asn1len;
     wifi_dppPublicActionFrame_t    *public_action_frame;
