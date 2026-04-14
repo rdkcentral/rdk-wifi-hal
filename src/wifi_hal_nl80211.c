@@ -5861,6 +5861,11 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
         g_wifi_hal.num_radios++;
     }
 
+    // Channel Scan Capabilities
+    radio->capab.boot_only = 1;         // default: boot only
+    radio->capab.scan_impact = 0x02;    // default: time slicing
+    radio->capab.min_scan_interval = 20; // default: 20 seconds
+
     if (tb[NL80211_ATTR_WIPHY]) {
         radio->index = phy_index;
         radio->capab.index = radio->index;
@@ -5892,8 +5897,26 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
         capa->max_sched_scan_plan_interval =
             nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_INTERVAL]);
 
+
+        unsigned int hw_limit = nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_INTERVAL]);
+        
+        /* If the hardware can't support a 20s gap in its
+         * internal scan plans, we adjust the capability down.
+         */
+        if (hw_limit < radio->capab.min_scan_interval) {
+            radio->capab.min_scan_interval = hw_limit;
+        }
+
         capa->max_sched_scan_plan_iterations =
             nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_ITERATIONS]);
+    }
+
+    // scan_impact from feature flags
+    if (tb[NL80211_ATTR_FEATURE_FLAGS]) {
+        u32 flags = nla_get_u32(tb[NL80211_ATTR_FEATURE_FLAGS]);
+        if (flags & NL80211_FEATURE_SCAN_FLUSH) {
+            radio->capab.scan_impact = 0x00; // no impact
+        }
     }
 
     if (tb[NL80211_ATTR_MAX_MATCH_SETS]) {
@@ -5971,6 +5994,10 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
                 break;
             case NL80211_CMD_UPDATE_FT_IES:
                 radio->driver_data.update_ft_ies_supported = 1;
+                break;
+            case NL80211_CMD_TRIGGER_SCAN:
+                // on-demand scan supported
+                radio->capab.boot_only = 0;
                 break;
             }
         }
@@ -8309,7 +8336,7 @@ Exit:
     return 0;
 }
 
-INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_band)
+INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band nl_band)
 {
     struct hostapd_hw_modes *hw_mode;
     wifi_radio_capabilities_t *capability = NULL;
@@ -8423,6 +8450,30 @@ INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_b
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif /* CONFIG_IEEE80211BE */
 
+    /* Populate E-4 op class channel table by iterating hostapd's global_op_class[]
+     * sentinel-terminated table directly - no redundant re-lookup needed. */
+    capability->num_op_class_entries = 0;
+    for (const struct oper_class_map *op = global_op_class;
+         op->op_class != 0 && capability->num_op_class_entries < MAX_OP_CLASS_ENTRIES; op++) {
+        unsigned int idx = capability->num_op_class_entries;
+        unsigned char count = 0;
+        for (u8 ch = op->min_chan;
+             ch <= op->max_chan && count < MAX_CHANNELS_PER_OP_CLASS;
+             ch += op->inc) {
+            capability->op_class_ch_list[idx].channels[count++] = ch;
+        }
+        if (count == 0) {
+            continue;
+        }
+        capability->op_class_ch_list[idx].op_class     = op->op_class;
+        capability->op_class_ch_list[idx].num_channels = count;
+        capability->num_op_class_entries++;
+        wifi_hal_dbg_print("%s:%d: op_class_ch_list[%u]: op_class=%u channels=%u\n",
+            __func__, __LINE__, idx, op->op_class, count);
+    }
+    wifi_hal_dbg_print("%s:%d: total op_class_ch_list entries populated: %u\n",
+        __func__, __LINE__, capability->num_op_class_entries);
+
     wifi_hal_info_print("%s:%d: Successfully retrieved radio capabilities for nlband:%d\n",
         __func__, __LINE__, nl_band);
     return RETURN_OK;
@@ -8518,9 +8569,9 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
     }
 
     // Also copy to radio cap
-    int rc = wifi_getRadioCapabilityData(radio, nl_band);
+    int rc = wifi_get_radio_capability_data(radio, nl_band);
     if (rc != RETURN_OK) {
-        wifi_hal_dbg_print("%s: wifi_getRadioCapabilityData failed for band %d, rc=%d\n",
+        wifi_hal_dbg_print("%s: get radio capability failed for band %d, rc=%d\n",
                         __func__, nl_band, rc);
     }
 
