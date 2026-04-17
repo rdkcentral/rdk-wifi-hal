@@ -1488,6 +1488,24 @@ wifi_country_radio_op_class_t other_op_class = {
     }
 };
 
+const char *
+get_vap_ssid(wifi_vap_info_t *vap)
+{
+    return (vap->u.sta_info.ignite_enabled) ? vap->u.sta_info.repurposed_ssid : vap->u.sta_info.ssid;
+}
+
+const char *
+get_vap_bridge_name(wifi_vap_info_t *vap)
+{
+    return (vap->u.sta_info.ignite_enabled) ? vap->repurposed_bridge_name : vap->bridge_name;
+}
+
+unsigned int
+get_vap_security_mode(wifi_vap_info_t *vap, wifi_vap_security_t *sec)
+{
+     return (vap->u.sta_info.ignite_enabled) ? vap->u.sta_info.security.repurposed_mode : vap->u.sta_info.security.mode;
+}
+
 unsigned int get_sizeof_interfaces_index_map(void) {
 #ifdef CONFIG_WIFI_EMULATOR
     unsigned int count = 0;
@@ -2524,37 +2542,14 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
         break;
 
     case wifi_encryption_aes:
-#ifdef CONFIG_IEEE80211BE
-        {
-            const wifi_interface_info_t * const interface = get_interface_by_vap_index(vap_index);
-            if (NULL == interface) {
-                wifi_hal_error_print("%s:%d NULL pointer!\n", __FUNCTION__, __LINE__);
-                return RETURN_ERR;
-            }
-            unsigned char has_gcmp256 = 0;
-            if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
-                const wifi_security_modes_t security_mode = interface->vap_info.u.bss_info.security.mode;
-                switch (security_mode) {
-                case wifi_security_mode_wpa3_personal:
-                case wifi_security_mode_wpa3_transition:
-                case wifi_security_mode_wpa3_enterprise:
-                case wifi_security_mode_wpa3_compatibility:
-                    has_gcmp256 = !interface->u.ap.conf.disable_11be;
-                    break;
-                default:
-                    break;
-                }
-            }
-            if (has_gcmp256) {
-                strcpy(encryption_mode_str, "aes+gcmp256");
-            } else {
-                strcpy(encryption_mode_str, "aes");
-            }
-        }
-#else
         strcpy(encryption_mode_str, "aes");
-#endif /* CONFIG_IEEE80211BE */
         break;
+
+#ifdef CONFIG_IEEE80211BE
+    case wifi_encryption_aes_gcmp256:
+        strcpy(encryption_mode_str, "aes+gcmp256");
+        break;
+#endif /* CONFIG_IEEE80211BE */
 
     case wifi_encryption_aes_tkip:
         strcpy(encryption_mode_str, "tkip+aes");
@@ -2648,6 +2643,12 @@ void get_cipher_suites(wifi_security_modes_t mode, wifi_encryption_method_t encr
     }
 
     switch (encr) {
+#ifdef CONFIG_IEEE80211BE
+    case wifi_encryption_aes_gcmp256:
+        *pairwise = RSN_CIPHER_SUITE_GCMP_256;
+        *group = RSN_CIPHER_SUITE_CCMP;
+        break;
+#endif
     case wifi_encryption_aes:
         *pairwise = RSN_CIPHER_SUITE_CCMP;
         *group = RSN_CIPHER_SUITE_CCMP;
@@ -2809,19 +2810,21 @@ enum nl80211_auth_type get_auth_type(wifi_security_modes_t mode, u32 akm_suite)
 }
 
 int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *security,
-    const struct wpa_auth_config *wpa_conf)
+    const struct wpa_auth_config *wpa_conf, wifi_vap_info_t *vap)
 {
     u32 ver, pairwise_cipher, group_cipher, akm_suite;
     enum nl80211_mfp mfp;
     enum nl80211_auth_type auth_type;
     int ret;
+    int security_mode;
 
     if (!msg || !security || !wpa_conf) {
         wifi_hal_error_print("%s:%d: Invalid parameters\n", __func__, __LINE__);
         return -1;
     }
+    security_mode = get_vap_security_mode(vap, security);
 
-    if (security->mode == wifi_security_mode_none) {
+    if (security_mode == wifi_security_mode_none) {
         if ((ret = nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM)) < 0) {
             wifi_hal_error_print("%s:%d: Failed to set auth type: %d\n", __func__, __LINE__, ret);
             return ret;
@@ -2830,14 +2833,14 @@ int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *se
         return 0;
     }
 
-    ver = get_wpa_version(security->mode);
+    ver = get_wpa_version(security_mode);
     if ((ret = nla_put_u32(msg, NL80211_ATTR_WPA_VERSIONS, ver)) < 0) {
         wifi_hal_error_print("%s:%d: Failed to set WPA version: %d\n", __func__, __LINE__, ret);
         return ret;
     }
     wifi_hal_info_print("%s:%d: WPA version: 0x%x\n", __func__, __LINE__, ver);
 
-    get_cipher_suites(security->mode, security->encr, wpa_conf, &pairwise_cipher, &group_cipher);
+    get_cipher_suites(security_mode, security->encr, wpa_conf, &pairwise_cipher, &group_cipher);
 
     if ((ret = nla_put_u32(msg, NL80211_ATTR_CIPHER_SUITES_PAIRWISE, pairwise_cipher)) < 0) {
         wifi_hal_error_print("%s:%d: Failed to set pairwise cipher: %d\n", __func__, __LINE__, ret);
@@ -2852,7 +2855,7 @@ int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *se
     wifi_hal_info_print("%s:%d: Cipher - Pairwise: 0x%x, Group: 0x%x\n", __func__, __LINE__,
         pairwise_cipher, group_cipher);
 
-    akm_suite = get_akm_suite(wpa_conf->wpa_key_mgmt, security->mode);
+    akm_suite = get_akm_suite(wpa_conf->wpa_key_mgmt, security_mode);
     if (akm_suite != 0) {
         if ((ret = nla_put_u32(msg, NL80211_ATTR_AKM_SUITES, akm_suite)) < 0) {
             wifi_hal_error_print("%s:%d: Failed to set AKM suite: %d\n", __func__, __LINE__, ret);
@@ -2865,14 +2868,14 @@ int configure_nl80211_security(struct nl_msg *msg, const wifi_vap_security_t *se
         return -1;
     }
 
-    auth_type = get_auth_type(security->mode, akm_suite);
+    auth_type = get_auth_type(security_mode, akm_suite);
     if ((ret = nla_put_u32(msg, NL80211_ATTR_AUTH_TYPE, auth_type)) < 0) {
         wifi_hal_error_print("%s:%d: Failed to set auth type: %d\n", __func__, __LINE__, ret);
         return ret;
     }
     wifi_hal_info_print("%s:%d: Auth type: %d\n", __func__, __LINE__, auth_type);
 
-    mfp = get_mfp_mode(security->mode, wpa_conf->ieee80211w);
+    mfp = get_mfp_mode(security_mode, wpa_conf->ieee80211w);
     if (mfp != NL80211_MFP_NO) {
         if ((ret = nla_put_u32(msg, NL80211_ATTR_USE_MFP, mfp)) < 0) {
             wifi_hal_error_print("%s:%d: Failed to set MFP: %d\n", __func__, __LINE__, ret);
@@ -2930,6 +2933,114 @@ int pick_akm_suite(int sel)
         return -1;
     }
 }
+
+int get_dwell_time(void)
+{
+    FILE *fp = NULL;
+    int dwell_time = DEFAULT_DWELL_TIME_MS;
+
+    fp = fopen(DWELL_TIME_PATH, "r");
+    if (fp == NULL) {
+        return dwell_time;
+    }
+    fscanf(fp, "%d", &dwell_time);
+    fclose(fp);
+    return dwell_time;
+}
+
+#ifndef FEATURE_SINGLE_PHY
+uint32_t rnr_crc32(const uint8_t *p, size_t n)
+{
+    uint32_t c = 0xFFFFFFFFu;
+    size_t i, b;
+
+    for (i = 0; i < n; i++) {
+        c ^= p[i];
+        for (b = 0; b < 8; b++)
+            c = (c >> 1) ^ ((c & 1u) ? 0xEDB88320u : 0u);
+    }
+    return c ^ 0xFFFFFFFFu;
+}
+
+bool rnr_is_6ghz_opclass(uint8_t oc)
+{
+    switch (oc) {
+    case 131:
+    case 132:
+    case 133:
+    case 134:
+    case 135:
+    case 136:
+    case 137:
+        return true;
+    default:
+        return false;
+    }
+}
+bool rnr_freq_add(rnr_scan_t *rnr, uint32_t f)
+{
+    unsigned int i;
+
+    if (rnr == NULL || rnr->nfreq >= RNR_FREQ_CAP)
+        return false;
+
+    for (i = 0; i < rnr->nfreq; i++) {
+        if (rnr->freq[i] == f)
+            return false;
+    }
+    rnr->freq[rnr->nfreq++] = f;
+    return true;
+}
+
+unsigned int rnr_ssid_offset(uint8_t ilen)
+{
+    switch (ilen) {
+    case 5:
+    case 6:
+        return 1;
+    case 11:
+    case 12:
+    case 13:
+    case 16:
+        return 7;
+    default:
+        return 0;
+    }
+}
+
+bool rnr_tbtt_match(const uint8_t *set, uint8_t cnt, uint8_t ilen, unsigned int ssid_off,
+    uint32_t crc)
+{
+    uint8_t i;
+
+    for (i = 0; i < cnt; i++) {
+        uint32_t ss;
+        memcpy(&ss, set + (size_t)i * ilen + ssid_off, sizeof(ss));
+        if (ss == crc)
+            return true;
+    }
+    return false;
+}
+
+wifi_interface_info_t *rnr_sta6(void)
+{
+    unsigned int r;
+    wifi_interface_info_t *ifc;
+
+    for (r = 0; r < g_wifi_hal.num_radios; r++) {
+        if (g_wifi_hal.radio_info[r].oper_param.band != WIFI_FREQUENCY_6_BAND)
+            continue;
+        ifc = hash_map_get_first(g_wifi_hal.radio_info[r].interface_map);
+        while (ifc) {
+            if (ifc->vap_info.vap_mode == wifi_vap_mode_sta)
+                return ifc;
+            ifc = hash_map_get_next(g_wifi_hal.radio_info[r].interface_map, ifc);
+        }
+        return NULL;
+    }
+    return NULL;
+}
+#endif // FEATURE_SINGLE_PHY
 
 INT get_coutry_str_from_code(wifi_countrycode_type_t code, char *country)
 {
@@ -3121,6 +3232,7 @@ int convert_enum_beaconrate_to_int(wifi_bitrate_t rates)
     }
 }
 
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
 /* US/CA: Check if global operating class matches bandwidth */
 static bool matches_bandwidth_us(unsigned int global_op_class, wifi_channelBandwidth_t bw)
 {
@@ -3295,6 +3407,7 @@ static bool matches_bandwidth_for_country(unsigned int global_op_class, wifi_cha
     /* Default to global for all other countries */
     return matches_bandwidth_global(global_op_class, bw);
 }
+#endif
 
 int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
 {
@@ -3345,7 +3458,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
     // Search country-specific op_class table: match channel AND bandwidth
     for (i = 0; i < ARRAY_SZ(cc_op_class.op_class); i++) {
         op_class = &cc_op_class.op_class[i];
-
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
         // Skip invalid/empty entries (not all countries use all 19 slots)
         if (op_class->op_class == 0 || op_class->global_op_class == 0) {
             continue;
@@ -3356,7 +3469,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
                 cc_op_class.cc)) {
             continue;
         }
-
+#endif
         // Check if requested channel is in this op_class
         for (j = 0; j < op_class->num; j++) {
             if (op_class->ch_list[j] == param->channel) {
@@ -3372,7 +3485,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
     // Fallback: search global op_class table: match channel AND bandwidth
     for (i = 0; i < ARRAY_SZ(other_op_class.op_class); i++) {
         op_class = &other_op_class.op_class[i];
-
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
         // Skip invalid/empty entries
         if (op_class->op_class == 0 || op_class->global_op_class == 0) {
             continue;
@@ -3383,7 +3496,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
                 param->countryCode)) {
             continue;
         }
-
+#endif
         // Check if requested channel is in this op_class
         for (j = 0; j < op_class->num; j++) {
             if (op_class->ch_list[j] == param->channel) {
@@ -5024,7 +5137,9 @@ void re_configure_steering_mac_list(wifi_interface_info_t *interface)
                 steering_set_acl_mode(vap->vap_index, wifi_mac_filter_mode_black_list);
             }
             key = to_mac_str(ptr->mac_addr, sta_mac_str);
-            wifi_hal_addApAclDevice(ptr->vap_index, key);
+            if (wifi_hal_addApAclDevice(ptr->vap_index, key) != RETURN_OK) {
+                wifi_hal_info_print("%s:%d: wifi_hal_addApAclDevice id failed vap_index:%d\n", __func__, __LINE__, ptr->vap_index);
+            }
         }
         ptr = hash_map_get_next(interface->bm_sta_map, ptr);
     }
@@ -5783,7 +5898,8 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info
                 continue;
             }
 
-            if (interface_iter->index != interface->index) {
+            if (interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_id !=
+                interface->vap_info.u.bss_info.mld_info.common_info.mld_id) {
                 continue;
             }
 
