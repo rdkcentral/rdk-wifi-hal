@@ -767,7 +767,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
     conf->rdkb_eap_request_timeout = sec->eap_req_timeout;
     conf->rdkb_eap_request_retries = sec->eap_req_retries;
 #endif
-    if (conf->ieee802_1x || is_open_sec_radius_auth(sec) || conf->mdu) {
+    if (conf->ieee802_1x || is_open_sec_radius_auth(sec) || (conf->mdu && sec->repurposed_radius.ip[0] != '\0')) {
         wifi_radius_settings_t *radius_cfg;
         if (conf->mdu) {
             radius_cfg = &sec->repurposed_radius;
