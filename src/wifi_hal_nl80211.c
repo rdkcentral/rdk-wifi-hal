@@ -9988,6 +9988,12 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     interface->wpa_s.current_bss->ssid_len = strlen(backhaul->ssid);
     memcpy(interface->wpa_s.current_bss->bssid, backhaul->bssid, ETH_ALEN);
     memcpy(interface->wpa_s.current_ssid->bssid, backhaul->bssid, ETH_ALEN);
+#ifdef CONFIG_IEEE80211BE
+    if (security->encr == wifi_encryption_aes_gcmp256) {
+        interface->wpa_s.current_ssid->pairwise_cipher = WPA_CIPHER_CCMP | WPA_CIPHER_GCMP_256;
+        interface->wpa_s.current_ssid->group_cipher = WPA_CIPHER_CCMP;
+    } else
+#endif
     if (security->encr == wifi_encryption_aes) {
         interface->wpa_s.current_ssid->pairwise_cipher = WPA_CIPHER_CCMP;
         interface->wpa_s.current_ssid->group_cipher = WPA_CIPHER_CCMP;
@@ -10252,6 +10258,12 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             wpa_conf.wpa_group = WPA_CIPHER_NONE;
             wpa_conf.rsn_pairwise = WPA_CIPHER_NONE;
         } else {
+#ifdef CONFIG_IEEE80211BE
+            if (security->encr == wifi_encryption_aes_gcmp256) {
+                wpa_conf.wpa_group = WPA_CIPHER_CCMP;
+                wpa_conf.rsn_pairwise = WPA_CIPHER_GCMP_256;
+            } else
+#endif
             if (security->encr == wifi_encryption_aes) {
                 wpa_conf.wpa_group = WPA_CIPHER_CCMP;
                 wpa_conf.rsn_pairwise = WPA_CIPHER_CCMP;
@@ -10814,8 +10826,14 @@ static void parse_rsn(const uint8_t type, uint8_t len, const uint8_t *data,
                 bss->sec_mode = add_wpa3(bss->sec_mode);
                 bss->enc_method = wifi_encryption_aes;
                 break;
+#ifdef CONFIG_IEEE80211BE
+            case RSN_CIPHER_SUITE_GCMP_256:
+                bss->sec_mode = add_wpa3(bss->sec_mode);
+                bss->enc_method = wifi_encryption_aes_gcmp256;
+                break;
+#endif
             default:
-                // unsupported combination (can be exteneded in future)
+                // unsupported combination (can be extended in future)
                 break;
         }
         len -= 4; data += 4;
@@ -10855,8 +10873,14 @@ static void parse_rsn(const uint8_t type, uint8_t len, const uint8_t *data,
                     bss->sec_mode = add_wpa3(bss->sec_mode);
                     bss->enc_method = wifi_encryption_aes;
                     break;
+#ifdef CONFIG_IEEE80211BE
+                case RSN_CIPHER_SUITE_GCMP_256:
+                    bss->sec_mode = add_wpa3(bss->sec_mode);
+                    bss->enc_method = wifi_encryption_aes_gcmp256;
+                    break;
+#endif
                 default:
-                    // unsupported combination (can be exteneded in future)
+                    // unsupported combination (can be extended in future)
                     break;
             }
             len -= 4; data += 4;
@@ -10897,7 +10921,7 @@ static void parse_rsn(const uint8_t type, uint8_t len, const uint8_t *data,
                     bss->sec_mode = add_enterprise(bss->sec_mode);
                     break;
                 default:
-                    // unsupported combination (can be exteneded in future)
+                    // unsupported combination (can be extended in future)
                     break;
             }
             len -= 4; data += 4;
