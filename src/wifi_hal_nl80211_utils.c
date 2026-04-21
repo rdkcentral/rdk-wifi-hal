@@ -2604,6 +2604,12 @@ void get_cipher_suites(wifi_security_modes_t mode, wifi_encryption_method_t encr
     }
 
     switch (encr) {
+#ifdef CONFIG_IEEE80211BE
+    case wifi_encryption_aes_gcmp256:
+        *pairwise = RSN_CIPHER_SUITE_GCMP_256;
+        *group = RSN_CIPHER_SUITE_CCMP;
+        break;
+#endif
     case wifi_encryption_aes:
         *pairwise = RSN_CIPHER_SUITE_CCMP;
         *group = RSN_CIPHER_SUITE_CCMP;
