@@ -1933,7 +1933,7 @@ static bool is_wifi_hal_rate_limit_block(unsigned short stype, mac_address_t mac
         timeout = RATE_LIMIT_BASE_TIMEOUT * (1 << entry->penalty_multiplier);
         if (timeout > rl->cooldown_time)
             timeout = rl->cooldown_time;
-        else
+        else if (entry->violation_count >= RATE_LIMIT_MAX_VIOLATION)
             entry->penalty_multiplier++;
     } else {
         /* HARD BLOCK */
@@ -1943,6 +1943,9 @@ static bool is_wifi_hal_rate_limit_block(unsigned short stype, mac_address_t mac
 block:
     if (entry->violation_count < RATE_LIMIT_MAX_VIOLATION) {
         entry->violation_count++;
+        entry->packet_count = 0;
+        entry->activity_mask = 0;
+        entry->avg_rssi = 0;
         wifi_hal_info_print(
             "%s:%d: client: %s rate limit:%d violation, violation count: %u, allow\n",
             __func__, __LINE__, to_mac_str(mac, mac_str), rl->rate_limit, entry->violation_count);
