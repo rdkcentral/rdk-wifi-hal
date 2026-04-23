@@ -42,6 +42,10 @@
 #include "config_supplicant.h"
 #endif
 
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+extern void supplicant_event(void *ctx, enum wpa_event_type event_type, union wpa_event_data *data);
+#endif
+
 int no_seq_check(struct nl_msg *msg, void *arg)
 {
     return NL_OK;
@@ -183,7 +187,9 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     event.disassoc_info.addr = mac;
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        if (interface->wpa_s.wpa != NULL) {
+            supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        }
 #endif
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
@@ -640,12 +646,52 @@ static void nl80211_new_scan_results_event(wifi_interface_info_t *interface, str
         wifi_hal_stats_info_print("%s:%d: [SCAN] attribute scan_ssids not present\n", __func__, __LINE__);
     }
 
+    // Update HAL's internal scan results (for HAL API calls)
     nl80211_get_scan_results(interface);
+
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
+        interface->vap_info.u.sta_info.valid_bh_credentials == FALSE) {
+        union wpa_event_data event;
+        struct scan_info *info;
+
+        os_memset(&event, 0, sizeof(event));
+        info = &event.scan_info;
+        info->aborted = 0;  // Scan completed successfully
+        info->external_scan = 0;  // Not an external scan
+
+        // Parse scan SSIDs if available
+        if (tb[NL80211_ATTR_SCAN_SSIDS]) {
+            int ssid_idx = 0;
+            nla_for_each_nested(nl, tb[NL80211_ATTR_SCAN_SSIDS], rem) {
+                if (ssid_idx < WPAS_MAX_SCAN_SSIDS) {
+                    struct wpa_driver_scan_ssid *s = &info->ssids[info->num_ssids];
+                    s->ssid = nla_data(nl);
+                    s->ssid_len = nla_len(nl);
+                    info->num_ssids++;
+                    ssid_idx++;
+                }
+            }
+        }
+
+        supplicant_event(&interface->wpa_s, EVENT_SCAN_RESULTS, &event);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] Notified wpa_supplicant of scan results\n", __func__, __LINE__);
+    }
+#endif
 }
 
 static void nl80211_new_trigger_scan_event(wifi_interface_info_t *interface, struct nlattr **tb)
 {
     wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan started for interface '%s'\n", __func__, __LINE__, interface->name);
+
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+    // For station interfaces in WPS path (valid_bh_credentials not set), notify wpa_supplicant that scan has started
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
+        interface->vap_info.u.sta_info.valid_bh_credentials == FALSE) {
+        supplicant_event(&interface->wpa_s, EVENT_SCAN_STARTED, NULL);
+        wifi_hal_stats_dbg_print("%s:%d: [SCAN] Notified wpa_supplicant of scan start\n", __func__, __LINE__);
+    }
+#endif
 }
 
 static void nl80211_new_scan_aborted_event(wifi_interface_info_t *interface, struct nlattr **tb)
@@ -722,7 +768,8 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         wifi_hal_error_print("%s:%d: mac attribute absent\n", __func__, __LINE__);
         return;
     } else {
-        memcpy(mac, nla_data(tb[NL80211_ATTR_MAC]), nla_len(tb[NL80211_ATTR_MAC]));
+        /* Copy MAC address - use ETH_ALEN to prevent buffer overflow if nla_len > 6 */
+        memcpy(mac, nla_data(tb[NL80211_ATTR_MAC]), ETH_ALEN);
         wifi_hal_dbg_print("%s:%d: Connect indication for %s\n", __func__, __LINE__,
             to_mac_str(mac, mac_str));
 
@@ -861,7 +908,8 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
         wifi_hal_error_print("%s:%d: mac attribute absent\n", __func__, __LINE__);
         return;
     } else {
-        memcpy(mac, nla_data(tb[NL80211_ATTR_MAC]), nla_len(tb[NL80211_ATTR_MAC]));
+        /* Copy MAC address - use ETH_ALEN to prevent buffer overflow if nla_len > 6 */
+        memcpy(mac, nla_data(tb[NL80211_ATTR_MAC]), ETH_ALEN);
         wifi_hal_dbg_print("%s:%d: Disconnect indication for %s\n", __func__, __LINE__,
             to_mac_str(mac, mac_str));
 
