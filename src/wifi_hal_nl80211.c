@@ -56,7 +56,9 @@
 #endif
 #include <linux/filter.h>
 #include <fcntl.h>
+#if defined(BANANA_PI_PORT)
 #include <linux/sched.h>
+#endif
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
 #include <sys/mman.h>
@@ -4012,7 +4014,7 @@ error:
 int get_vap_state(const char *ifname, short *flags)
 {
     struct ifreq ifr;
-    int fd, res;
+    int fd, res = -1;
 
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
     ifr.ifr_name[IFNAMSIZ - 1] = '\0';
@@ -4021,16 +4023,15 @@ int get_vap_state(const char *ifname, short *flags)
 #if defined(BANANA_PI_PORT)
     int current_ns_fd = -1;
     int target_ns_fd = -1;
-    int result = -1;
     current_ns_fd = open("/proc/self/ns/net", O_RDONLY);
 
     target_ns_fd = open("/var/run/netns/default", O_RDONLY);
     if (current_ns_fd == -1 || target_ns_fd == -1) {
-        perror("Failed to open namespace handles");
+        wifi_hal_error_print("%s:%d Failed to open namespace handles\n", __func__, __LINE__);
         goto cleanup;
     }
     if (setns(target_ns_fd, CLONE_NEWNET) != 0) {
-        perror("Failed to setns to default");
+        wifi_hal_error_print("%s:%d Failed to setns to default\n", __func__, __LINE__);
         goto cleanup;
     }
 #endif
