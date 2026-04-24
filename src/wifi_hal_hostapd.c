@@ -2667,6 +2667,9 @@ static int wpa_sm_sta_mlme_setprotection(void *ctx, const u8 *addr,
 static void wpa_sm_sta_cancel_auth_timeout(void *ctx)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
+    wifi_interface_info_t *interface;
+    interface = (wifi_interface_info_t *)ctx;
+    wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
 }
 
 static int wpa_sm_sta_key_mgmt_set_pmk(void *ctx, const u8 *pmk,

@@ -127,6 +127,8 @@ extern void wpa_bss_flush_by_age(struct wpa_supplicant *wpa_s, int age);
 extern void hostapd_wpa_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
 extern void supplicant_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
 extern void (*wpa_supplicant_event)(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
+extern void l2_packet_deinit(struct l2_packet_data *l2);
+extern void wpa_supplicant_cancel_auth_timeout(struct wpa_supplicant *wpa_s);
 #endif
 #ifdef CONFIG_WIFI_EMULATOR
 extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
@@ -744,6 +746,23 @@ INT wifi_hal_wps_event(wifi_wps_event_t data)
                 // Set valid_bh_credentials to 1
                 vap->u.sta_info.valid_bh_credentials = TRUE;
                 wifi_hal_info_print("%s:%d: Set valid_bh_credentials=1 for vap_index %d\n", __func__, __LINE__, vap->vap_index);
+
+                /* Tear down WPS wpa_supplicant's l2_packet to stop it from
+                 * independently receiving EAPOL frames on the interface.
+                 * A stale retransmitted msg 3 received via this socket would
+                 * re-arm the auth timeout and de-authorize the STA after 10s.
+                 */
+                wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
+                if (interface->wpa_s.l2) {
+                    l2_packet_deinit(interface->wpa_s.l2);
+                    interface->wpa_s.l2 = NULL;
+                }
+                if (interface->wpa_s.l2_br) {
+                    l2_packet_deinit(interface->wpa_s.l2_br);
+                    interface->wpa_s.l2_br = NULL;
+                }
+                wpa_supplicant_event = hostapd_wpa_event;
+                wifi_hal_info_print("%s:%d: WPS l2_packet cleaned up, switched to hostapd_wpa_event\n", __func__, __LINE__);
             } else {
                 wifi_hal_error_print("%s:%d: current_ssid is NULL, cannot save credentials\n", __func__, __LINE__);
             }
