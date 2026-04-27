@@ -725,11 +725,13 @@ void platform_mld_update(wifi_vap_info_t *vap)
     int i, mld_unit = -1, vapidx = -1;
     wifi_mld_common_info_t *mld_cmn = &vap->u.bss_info.mld_info.common_info;
 
-    wifi_hal_info_print("### %s: %s radio=%d vap_index=%d enable %d mld: enable=%d unit=%d linkid=%d apply=%d ###\n",
+    wifi_hal_info_print("### %s: %s radio=%d vap_index=%d enable %d mld: enable=%d unit=%d linkid=%d apply=%d excluded=%d ###\n",
         __func__, vap->vap_name, vap->radio_index, vap->vap_index, vap->u.bss_info.enabled,
-        mld_cmn->mld_enable, mld_cmn->mld_id, mld_cmn->mld_link_id, mld_cmn->mld_apply);
+        mld_cmn->mld_enable, mld_cmn->mld_id, mld_cmn->mld_link_id, mld_cmn->mld_apply,
+        mld_cmn->mld_link_excluded);
 
-    if (vap->u.bss_info.enabled && mld_cmn->mld_enable && mld_cmn->mld_id < MLD_UNIT_COUNT) {
+    if (vap->u.bss_info.enabled && mld_cmn->mld_enable && !mld_cmn->mld_link_excluded &&
+        mld_cmn->mld_id < MLD_UNIT_COUNT) {
         mld_unit = mld_cmn->mld_id;
         vapidx = mld_vapidx[mld_unit][vap->radio_index];
         if (vapidx != vap->vap_index) {
@@ -5327,7 +5329,8 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
 
     old_mld_link_id = hapd->mld_link_id;
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
-    mld_ap = vap->u.bss_info.enabled && (!conf->disable_11be && (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
+    mld_ap = vap->u.bss_info.enabled && (!conf->disable_11be && (hapd->mld_link_id < MAX_NUM_MLD_LINKS))
+        && !mld_conf->mld_link_excluded;
     nvram_update_wl_bss_mlo_mode(conf->iface, mld_ap ? mld_conf->mld_enable : 0, &nvram_changed);
     if (nvram_changed) {
         wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
@@ -5365,9 +5368,11 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
             mlo_remove_link(hapd);
             hapd->mld = NULL;
 #if defined(MLO_ENAB)
-            if (!vap->u.bss_info.enabled) {
+            if (!vap->u.bss_info.enabled || mld_conf->mld_link_excluded) {
                 /* In case VAP was part of MLO we need to update driver about disabled MLO VAP here,
-                 * because nl80211_drv_mlo_msg(called from start_bss) is not called when VAP is disabled
+                 * because nl80211_drv_mlo_msg(called from start_bss) is not called when VAP is disabled.
+                 * Also called when VAP is excluded from MLO group due to config mismatch, to ensure
+                 * the driver removes the link even if start_bss does not propagate the change.
                  */
                 nl80211_send_mld_vap_disable(interface);
             }
