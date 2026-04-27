@@ -99,6 +99,10 @@
 #define CSA_COUNT 20
 #endif
 
+#if defined(CONFIG_WIFI_EMULATOR)
+#define CCI_SIM_CLI_COUNT_SYS_ENTRY "onewifi_suite_sim_cli_count"
+#endif
+
 #if defined(WIFI_EMULATOR_CHANGE) ||  defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
 static unsigned char eapol_qos_info[] = {0x88,0x02,0x3c,0x00,0x04,0xf0,0x21,0x5f,0x03,0x7c,0xe2,0xdb,0xd1,0xe4,0xdf,0x53,0xe2,0xdb,0xd1,0xe4,0xdf,0x53,0x10,0x00,0x05,0x00};
 
@@ -7201,6 +7205,12 @@ int init_nl80211()
     wifi_radio_info_t *radio;
     char thread_id[24];
     wifi_netlink_thread_info_t *core_thread_socket = NULL;
+#ifdef CONFIG_WIFI_EMULATOR
+    char buf[64] = { 0 };
+    int sim_client_count = 0;
+    FILE *fp = NULL;
+    char cmd[128] = { 0 };
+#endif
 
     core_thread_socket = create_nl80211_socket();
 
@@ -7342,7 +7352,25 @@ int init_nl80211()
         return -1;
     }
 
+#ifndef CONFIG_WIFI_EMULATOR
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
+#else
+    snprintf(cmd, sizeof(cmd), "syscfg get %s", CCI_SIM_CLI_COUNT_SYS_ENTRY);
+    fp = popen(cmd, "r");
+    if (fp != NULL) {
+        if (fgets(buf, sizeof(buf), fp) != NULL && buf[0] != '\0') {
+            sim_client_count = atoi(buf);
+        }
+        pclose(fp);
+    }
+
+    if ((sim_client_count <= 0) || (sim_client_count > 300)) {
+        sim_client_count = g_wifi_hal.num_radios;
+    }
+    wifi_hal_dbg_print("%s:%d: Simulated client count from syscfg is %d\n", __func__, __LINE__,
+        sim_client_count);
+    for (i = 0; i < sim_client_count; i++) {
+#endif
         radio = &g_wifi_hal.radio_info[i];
 
 #if defined(CONFIG_HW_CAPABILITIES)
