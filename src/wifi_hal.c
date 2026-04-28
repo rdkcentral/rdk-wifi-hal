@@ -1751,7 +1751,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         wifi_hal_info_print("%s:%d: interface:%s radio configured:%d radio enabled:%d\n",
             __func__, __LINE__, interface_name, radio->configured, radio->oper_param.enable);
+#ifdef BANANA_PI_PORT
+        if (radio->oper_param.enable &&
+            ((vap->vap_mode == wifi_vap_mode_sta) || radio->configured)) {
+#else
         if (radio->configured && radio->oper_param.enable) {
+#endif /* BANANA_PI_PORT */
             wifi_hal_info_print("%s:%d: interface:%s set up\n", __func__, __LINE__,
                 interface_name);
             if (nl80211_interface_enable(interface_name, true) != 0) {
@@ -1903,7 +1908,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             nl80211_set_mac(interface);
             nl80211_interface_enable(interface->name, true);
 #endif
+#ifdef BANANA_PI_PORT
+        if (radio->oper_param.enable &&
+            ((vap->vap_mode == wifi_vap_mode_sta) || radio->configured)) {
+#else
             if (radio->configured && radio->oper_param.enable) {
+#endif /* BANANA_PI_PORT */
                 wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
                     __LINE__, interface_name);
                 wifi_drv_set_operstate(interface, 1);

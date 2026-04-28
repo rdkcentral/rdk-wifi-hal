@@ -5307,7 +5307,7 @@ static inline int json_parse_interface_map(cJSON *json)
     unsigned int interface_idx_map_size;
     unsigned int r_idx;
     unsigned int i_idx;
-    cJSON_bool valid;
+    cJSON_bool valid = false;
 
     phy_list = cJSON_GetObjectItem(json, "PhyList");
     if (!cJSON_IsArray(phy_list)) {
@@ -5749,6 +5749,10 @@ bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface)
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         return interface->vap_info.u.bss_info.mld_info.common_info.mld_enable;
+#if defined(CONFIG_IEEE80211BE) && defined(BANANA_PI_PORT)
+    } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        return (interface->mlo_params.valid_links > 0);
+#endif /* CONFIG_IEEE80211BE & BANANA_PI_PORT*/
     }
 
     return false;
@@ -5850,6 +5854,10 @@ uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         return interface->vap_info.u.bss_info.mld_info.common_info.mld_addr;
+#if defined(CONFIG_IEEE80211BE) && defined(BANANA_PI_PORT)
+    } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        return interface->wpa_s.own_addr;
+#endif /* CONFIG_IEEE80211BE & BANANA_PI_PORT*/
     }
 
     return NULL;
@@ -5866,6 +5874,10 @@ int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t
         memcpy(interface->vap_info.u.bss_info.mld_info.common_info.mld_addr, mac,
             sizeof(mac_address_t));
         return 0;
+#if defined(CONFIG_IEEE80211BE) && defined(BANANA_PI_PORT)
+    } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        memcpy(interface->wpa_s.own_addr, mac, ETH_ALEN);
+#endif /* CONFIG_IEEE80211BE & BANANA_PI_PORT*/
     }
 
     return -1;
