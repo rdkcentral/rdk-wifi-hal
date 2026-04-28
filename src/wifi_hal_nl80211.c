@@ -56,6 +56,9 @@
 #endif
 #include <linux/filter.h>
 #include <fcntl.h>
+#if defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+#include <linux/sched.h>
+#endif
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
 #include <sys/mman.h>
@@ -1933,7 +1936,7 @@ static bool is_wifi_hal_rate_limit_block(unsigned short stype, mac_address_t mac
         timeout = RATE_LIMIT_BASE_TIMEOUT * (1 << entry->penalty_multiplier);
         if (timeout > rl->cooldown_time)
             timeout = rl->cooldown_time;
-        else
+        else if (entry->violation_count >= RATE_LIMIT_MAX_VIOLATION)
             entry->penalty_multiplier++;
     } else {
         /* HARD BLOCK */
@@ -1943,6 +1946,9 @@ static bool is_wifi_hal_rate_limit_block(unsigned short stype, mac_address_t mac
 block:
     if (entry->violation_count < RATE_LIMIT_MAX_VIOLATION) {
         entry->violation_count++;
+        entry->packet_count = 0;
+        entry->activity_mask = 0;
+        entry->avg_rssi = 0;
         wifi_hal_info_print(
             "%s:%d: client: %s rate limit:%d violation, violation count: %u, allow\n",
             __func__, __LINE__, to_mac_str(mac, mac_str), rl->rate_limit, entry->violation_count);
@@ -4008,12 +4014,27 @@ error:
 int get_vap_state(const char *ifname, short *flags)
 {
     struct ifreq ifr;
-    int fd, res;
+    int fd, res = -1;
 
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
     ifr.ifr_name[IFNAMSIZ - 1] = '\0';
     wifi_hal_dbg_print("%s:%d interface name = '%s'\n", __func__, __LINE__, ifr.ifr_name);
 
+#if defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+    int current_ns_fd = -1;
+    int target_ns_fd = -1;
+    current_ns_fd = open("/proc/self/ns/net", O_RDONLY);
+
+    target_ns_fd = open("/var/run/netns/default", O_RDONLY);
+    if (current_ns_fd == -1 || target_ns_fd == -1) {
+        wifi_hal_error_print("%s:%d Failed to open namespace handles\n", __func__, __LINE__);
+        goto cleanup;
+    }
+    if (setns(target_ns_fd, CLONE_NEWNET) != 0) {
+        wifi_hal_error_print("%s:%d Failed to setns to default\n", __func__, __LINE__);
+        goto cleanup;
+    }
+#endif
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         wifi_hal_error_print("%s %d socket error %s\n", __func__, __LINE__, strerror(errno));
         return -1;
@@ -4025,7 +4046,16 @@ int get_vap_state(const char *ifname, short *flags)
         wifi_hal_error_print("%s:%d ioctl failed: (%d) %s\n", __func__, __LINE__, res, strerror(errno));
     }
     close(fd);
-
+#if defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+cleanup:
+    if (current_ns_fd != -1) {
+        setns(current_ns_fd, CLONE_NEWNET);
+        close(current_ns_fd);
+    }
+    if (target_ns_fd != -1) {
+        close(target_ns_fd);
+    }
+#endif
     *flags = ifr.ifr_flags;
 
     return res;
@@ -11362,7 +11392,9 @@ static void parse_bss_load(const uint8_t type, uint8_t len, const uint8_t *data,
     (void)len;
     (void)ie_buffer;
 
+    bss->bss_load_element_present = 1;
     bss->chan_utilization = ((unsigned)data[2] * 100) / 255;
+    bss->station_cnt = (unsigned)data[0] | ((unsigned)data[1] << 8);
 }
 
 static void parse_extension_tag(const uint8_t type, uint8_t len, const uint8_t *data,
