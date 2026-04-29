@@ -724,7 +724,11 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             case wifi_security_mode_wpa3_transition:
             case wifi_security_mode_wpa3_enterprise:
             case wifi_security_mode_enhanced_open:
-                conf->wpa_pairwise |= (conf->disable_11be ? 0 : WPA_CIPHER_GCMP_256);
+                if (!conf->disable_11be) {
+                    conf->wpa_pairwise |= WPA_CIPHER_GCMP_256;
+                    conf->group_cipher = WPA_CIPHER_GCMP_256;
+                    conf->group_mgmt_cipher = WPA_CIPHER_BIP_GMAC_256;
+                }
                 break;
             case wifi_security_mode_wpa3_compatibility:
                 /* GCMP-256 is advertised via rsn_pairwise_rsno_2 in RSNO2 IE only;
