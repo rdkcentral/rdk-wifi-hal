@@ -20994,10 +20994,10 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .get_sta_measurements = wifi_drv_get_sta_measurements,
 #endif // CONFIG_USE_HOSTAP_BTM_PATCH
 #endif // CONFIG_VENDOR_COMMANDS
-#if !defined(PLATFORM_LINUX)
+#if !defined(PLATFORM_LINUX) && !defined(BANANA_PI_PORT)
     .radius_eap_failure = wifi_drv_send_radius_eap_failure,
     .radius_fallback_failover = wifi_drv_send_radius_fallback_and_failover,
-#endif // CONFIG_VENDOR_COMMANDS
+#endif /* !PLATFORM_LINUX & !BANANA_PI_PORT */
 #ifdef CMXB7_PORT
     .set_chan_dfs_state = nl80211_set_channel_dfs_state,
 #endif
@@ -21013,7 +21013,9 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     .get_ap_channel_report_ie = wifi_drv_get_ap_channel_report_ie,
 #endif //defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+#ifndef BANANA_PI_PORT
     .get_handshake_status = wifi_drv_get_handshake_status,
+#endif /* !BANANA_PI_PORT */
 #endif /* HOSTAPD_VERSION >= 210 */
 #if HOSTAPD_VERSION >= 211 // 2.11
     .link_add = wifi_drv_link_add,
