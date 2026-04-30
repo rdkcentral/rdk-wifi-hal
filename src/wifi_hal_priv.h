@@ -1370,7 +1370,10 @@ platform_get_RegDomain_t get_platform_get_RegDomain_fn();
 
 INT wifi_hal_wps_event(wifi_wps_event_t data);
 INT wifi_hal_get_default_wps_pin(char *pin);
-
+#ifdef UWM_EXT_WPS_SUPPORT
+INT wifi_wpsStaEvent_callback_register(wifi_wps_sta_event_callback_t callback);
+wifi_wps_sta_event_callback_t wifi_hal_get_wps_sta_event_callback(void);
+#endif
 
 typedef unsigned long bitmap_type;
 #define BITS_PER_ULONG (sizeof(bitmap_type) * 8)

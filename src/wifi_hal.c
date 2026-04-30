@@ -43,6 +43,11 @@
 #ifdef BANANA_PI_PORT
 #include "wpa_supplicant/config.h"
 #endif
+#ifdef UWM_EXT_WPS_SUPPORT
+#include "wps_supplicant.h"
+#include "eap_common/eap_wsc_common.h"
+#include "common/defs.h"
+#endif
 
 #define MAC_ADDRESS_LEN 6
 
@@ -102,6 +107,29 @@
 static int g_fd_arr[MAX_VAP] = {0};
 static int g_IfIdx_arr[MAX_VAP] = {0};
 static unsigned char g_vapSmac[MAX_VAP][MAC_ADDRESS_LEN] = {'\0'};
+#ifdef UWM_EXT_WPS_SUPPORT
+#define DEFAULT_BSS_MAX_COUNT 200
+#define DEFAULT_BSS_EXPIRATION_AGE 180
+#define DEFAULT_BSS_EXPIRATION_SCAN_COUNT 2
+
+static wifi_wps_sta_event_callback_t g_wps_sta_event_callback = NULL;
+
+static int init_wps_wpa_supplicant(wifi_interface_info_t *interface);
+extern int wpa_supplicant_init_wpa(struct wpa_supplicant *wpa_s);
+extern void random_init(const char *entropy_file);
+extern int wpa_supplicant_driver_init(struct wpa_supplicant *wpa_s);
+extern int wpa_bss_init(struct wpa_supplicant *wpa_s);
+extern int eap_register_methods(void);
+extern int wpas_wps_init(struct wpa_supplicant *wpa_s);
+extern int wpa_supplicant_init_eapol(struct wpa_supplicant *wpa_s);
+extern void wpa_sm_set_eapol(struct wpa_sm *sm, struct eapol_sm *eapol);
+extern void wpa_bss_flush_by_age(struct wpa_supplicant *wpa_s, int age);
+extern void hostapd_wpa_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
+extern void supplicant_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
+extern void (*wpa_supplicant_event)(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
+extern void l2_packet_deinit(struct l2_packet_data *l2);
+extern void wpa_supplicant_cancel_auth_timeout(struct wpa_supplicant *wpa_s);
+#endif
 #ifdef CONFIG_WIFI_EMULATOR
 extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
 #endif
@@ -109,6 +137,8 @@ extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
 #if !defined(CMXB7_PORT)
 wifi_hal_priv_t g_wifi_hal;
 #endif
+int deinit_wpa_supplicant(wifi_interface_info_t *interface);
+int init_wpa_supplicant(wifi_interface_info_t *interface);
 
 INT wifi_hal_getInterfaceMap(wifi_interface_name_idex_map_t *if_map, unsigned int max_entries,
     unsigned int *if_map_size)
@@ -368,6 +398,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
 INT wifi_hal_setApWpsButtonPush(INT ap_index)
 {
+
     wifi_hal_info_print("%s:%d: WPS Push Button for radio index %d\n", __func__, __LINE__, ap_index);
 
     wifi_hal_nl80211_wps_pbc(ap_index);
@@ -659,13 +690,109 @@ INT wifi_hal_get_default_wps_pin(char *pin)
 
 INT wifi_hal_wps_event(wifi_wps_event_t data)
 {
-    platform_wps_event_t platform_wps_event_fn;
-    if ((platform_wps_event_fn = get_platform_wps_event_fn()) != NULL) {
-        wifi_hal_dbg_print("%s:%d: platform wps event callback triggered\n", __func__, __LINE__);
-        return (platform_wps_event_fn(data));
+#ifdef UWM_EXT_WPS_SUPPORT
+    wifi_interface_info_t *interface;
+    struct wpa_ssid *ssid;
+    wifi_vap_info_t *vap;
+    wifi_wps_sta_event_callback_t callback;
+
+    wifi_hal_dbg_print("%s:%d: WPS event:%d for vap_index:%d\n", __func__, __LINE__, data.event, data.vap_index);
+
+    // Move event type checking data->event with WPS_EV_SUCCESS to wifi_hal_wps_event
+    if (data.event == WPS_EV_SUCCESS) {
+        interface = get_interface_by_vap_index(data.vap_index);
+        if (interface == NULL) {
+            wifi_hal_error_print("%s:%d: Interface not found for vap_index %d\n", __func__, __LINE__, data.vap_index);
+            return RETURN_ERR;
+        }
+
+        vap = &interface->vap_info;
+
+        // Check if this is a station interface
+        if (vap->vap_mode == wifi_vap_mode_sta) {
+            // Access credentials from current_ssid
+            ssid = interface->wpa_s.current_ssid;
+            if (ssid != NULL) {
+                // Extract SSID
+                if (ssid->ssid && ssid->ssid_len > 0) {
+                    memset(vap->u.sta_info.ssid, 0, sizeof(vap->u.sta_info.ssid));
+                    memcpy(vap->u.sta_info.ssid, ssid->ssid, ssid->ssid_len);
+                    wifi_hal_info_print("%s:%d: Saved SSID to vap_info: %s\n", __func__, __LINE__, vap->u.sta_info.ssid);
+                }
+
+                // Extract passphrase or PSK
+                if (ssid->passphrase) {
+                    size_t len = strlen(ssid->passphrase);
+                    if (len > 0) {
+                        memset(vap->u.sta_info.security.u.key.key, 0, sizeof(vap->u.sta_info.security.u.key.key));
+                        strncpy((char *)vap->u.sta_info.security.u.key.key, ssid->passphrase, len);
+                        wifi_hal_info_print("%s:%d: Saved passphrase to vap_info (length: %zu)\n", __func__, __LINE__, len);
+                    }
+                } else if (ssid->psk_set) {
+                    // Convert PSK to hex string
+                    char psk_hex[65] = {0};
+                    int i;
+                    for (i = 0; i < 32 && i < 32; i++) {
+                        snprintf(psk_hex + i * 2, 3, "%02x", ssid->psk[i]);
+                    }
+                    size_t len = strlen(psk_hex);
+                    if (len > 0 && len < sizeof(vap->u.sta_info.security.u.key.key)) {
+                        memset(vap->u.sta_info.security.u.key.key, 0, sizeof(vap->u.sta_info.security.u.key.key));
+                        strncpy((char *)vap->u.sta_info.security.u.key.key, psk_hex, len);
+                        wifi_hal_info_print("%s:%d: Saved PSK (hex) to vap_info\n", __func__, __LINE__);
+                    }
+                }
+
+                // Set valid_bh_credentials to 1
+                vap->u.sta_info.valid_bh_credentials = TRUE;
+                wifi_hal_info_print("%s:%d: Set valid_bh_credentials=1 for vap_index %d\n", __func__, __LINE__, vap->vap_index);
+
+                /* Tear down WPS wpa_supplicant's l2_packet to stop it from
+                 * independently receiving EAPOL frames on the interface.
+                 * A stale retransmitted msg 3 received via this socket would
+                 * re-arm the auth timeout and de-authorize the STA after 10s.
+                 */
+                wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
+                if (interface->wpa_s.l2) {
+                    l2_packet_deinit(interface->wpa_s.l2);
+                    interface->wpa_s.l2 = NULL;
+                }
+                if (interface->wpa_s.l2_br) {
+                    l2_packet_deinit(interface->wpa_s.l2_br);
+                    interface->wpa_s.l2_br = NULL;
+                }
+                wpa_supplicant_event = hostapd_wpa_event;
+                wifi_hal_info_print("%s:%d: WPS l2_packet cleaned up, switched to hostapd_wpa_event\n", __func__, __LINE__);
+            } else {
+                wifi_hal_error_print("%s:%d: current_ssid is NULL, cannot save credentials\n", __func__, __LINE__);
+            }
+
+            // Call platform_wps_event function - to update credentials in file
+            platform_wps_event_t platform_wps_event_fn;
+            if ((platform_wps_event_fn = get_platform_wps_event_fn()) != NULL) {
+                wifi_hal_dbg_print("%s:%d: platform wps event callback triggered\n", __func__, __LINE__);
+                platform_wps_event_fn(data);
+            }
+
+            // Call the registered callback from wps event
+            callback = wifi_hal_get_wps_sta_event_callback();
+            if (callback != NULL && data.event == WPS_EV_SUCCESS) {
+                wifi_hal_dbg_print("%s:%d: Calling registered WPS STA event callback\n", __func__, __LINE__);
+                callback(data.vap_index, data.event);
+            }
+       }
+	   return RETURN_OK;
     }
 
+#else
+     platform_wps_event_t platform_wps_event_fn;
+     if ((platform_wps_event_fn = get_platform_wps_event_fn()) != NULL) {
+         wifi_hal_dbg_print("%s:%d: platform wps event callback triggered\n", __func__, __LINE__);
+         return (platform_wps_event_fn(data));
+     }
+#endif
     return RETURN_ERR;
+
 }
 
 INT wifi_hal_hostApGetErouter0Mac(char *out)
@@ -1142,14 +1269,70 @@ INT wifi_hal_sm_deinit(INT vap_index)
         return RETURN_ERR;
     }
 
+    // Deinitialize WPA state machine and EAPOL
+    // Note: interface->u.sta.wpa_sm points to interface->wpa_s.wpa (set in init_wpa_supplicant)
     if (interface->u.sta.wpa_sm != NULL) {
-        eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
-        interface->u.sta.wpa_sm->eapol = NULL;
+        // Deinitialize EAPOL state machine first
+        if (interface->u.sta.wpa_sm->eapol != NULL) {
+            eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
+            interface->u.sta.wpa_sm->eapol = NULL;
+        }
+        // Deinitialize WPA state machine
         wpa_sm_deinit(interface->u.sta.wpa_sm);
         interface->u.sta.wpa_sm = NULL;
     }
+    // Also clear interface->wpa_s.wpa and interface->wpa_s.eapol to ensure consistency
+    interface->wpa_s.wpa = NULL;
+    interface->wpa_s.eapol = NULL;
     return RETURN_OK;
 }
+
+
+
+#ifdef UWM_EXT_WPS_SUPPORT
+/**
+ * Deinitialize and reinitialize wpa_supplicant for a station interface
+ * This function is used when WPS credentials are received and we need to
+ * restart wpa_supplicant with the new credentials
+ *
+ * @param vap_index VAP index of the station interface
+ * @return RETURN_OK on success, RETURN_ERR on failure
+ */
+INT wifi_hal_sm_reinit(INT vap_index)
+{
+    wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: interface for vap index:%d not found\n", __func__, __LINE__,
+            vap_index);
+        return RETURN_ERR;
+    }
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_sta) {
+        wifi_hal_error_print("%s:%d: interface for vap index:%d is not a station interface\n", __func__, __LINE__,
+            vap_index);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d: Deinitializing wpa_supplicant for vap_index %d\n", __func__, __LINE__, vap_index);
+    // Deinitialize wpa_supplicant
+    if (deinit_wpa_supplicant(interface) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: Failed to deinitialize wpa_supplicant\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d: Reinitializing wpa_supplicant for vap_index %d\n", __func__, __LINE__, vap_index);
+
+    // Reinitialize wpa_supplicant
+    if (init_wpa_supplicant(interface) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: Failed to reinitialize wpa_supplicant\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d: Successfully reinitialized wpa_supplicant for vap_index %d\n", __func__, __LINE__, vap_index);
+
+    return RETURN_OK;
+}
+#endif
 
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
 {
@@ -1305,9 +1488,254 @@ struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface)
     return &interface->current_ssid_info;
 }
 
+#ifdef UWM_EXT_WPS_SUPPORT
+
+
+static void init_oem_sta_config(wifi_interface_info_t *interface)
+{
+    struct wpa_config *conf;
+    wifi_device_info_t device_info;
+
+    conf = interface->wpa_s.conf;
+    if (conf == NULL) {
+        wifi_hal_error_print("%s:%d: wpa_config is NULL\n", __func__, __LINE__);
+        return;
+    }
+
+    device_info = get_device_info_details();
+
+    // Allocate and populate device_name
+    if (conf->device_name == NULL) {
+        conf->device_name = os_strdup(device_info.device_name);
+        if (conf->device_name == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to allocate device_name\n", __func__, __LINE__);
+            return;
+        }
+    } else {
+        os_free(conf->device_name);
+        conf->device_name = os_strdup(device_info.device_name);
+    }
+
+    // Allocate and populate manufacturer
+    if (conf->manufacturer == NULL) {
+        conf->manufacturer = os_strdup(device_info.manufacturer);
+        if (conf->manufacturer == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to allocate manufacturer\n", __func__, __LINE__);
+            return;
+        }
+    } else {
+        os_free(conf->manufacturer);
+        conf->manufacturer = os_strdup(device_info.manufacturer);
+    }
+
+    // Allocate and populate model_name
+    if (conf->model_name == NULL) {
+        conf->model_name = os_strdup(device_info.model_name);
+        if (conf->model_name == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to allocate model_name\n", __func__, __LINE__);
+            return;
+        }
+    } else {
+        os_free(conf->model_name);
+        conf->model_name = os_strdup(device_info.model_name);
+    }
+
+    // Allocate and populate model_number
+    if (conf->model_number == NULL) {
+        conf->model_number = os_strdup(device_info.model_number);
+        if (conf->model_number == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to allocate model_number\n", __func__, __LINE__);
+            return;
+        }
+    } else {
+        os_free(conf->model_number);
+        conf->model_number = os_strdup(device_info.model_number);
+    }
+
+    // Allocate and populate serial_number
+    if (conf->serial_number == NULL) {
+        conf->serial_number = os_strdup(device_info.serial_number);
+        if (conf->serial_number == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to allocate serial_number\n", __func__, __LINE__);
+            return;
+        }
+    } else {
+        os_free(conf->serial_number);
+        conf->serial_number = os_strdup(device_info.serial_number);
+    }
+
+    // Generate UUID based on MAC address if not already set
+    if (is_nil_uuid(conf->uuid)) {
+        uuid_gen_mac_addr(interface->mac, conf->uuid);
+        wifi_hal_dbg_print("%s:%d: Generated UUID based on MAC address\n", __func__, __LINE__);
+    }
+
+    // Set device_type to "6-0050F204-5" for extender station
+    if (wps_dev_type_str2bin("6-0050F204-5", conf->device_type)) {
+        wifi_hal_dbg_print("%s:%d: WPS, invalid device_type\n", __func__, __LINE__);
+    }
+
+    // Set config_methods to support push button
+    if (conf->config_methods == NULL) {
+        conf->config_methods = os_strdup("push_button");
+        if (conf->config_methods == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to allocate config_methods\n", __func__, __LINE__);
+            return;
+        }
+    }
+
+    wifi_hal_info_print("%s:%d: WPS STA config initialized: device_name=%s, manufacturer=%s, model_name=%s\n",
+        __func__, __LINE__, conf->device_name, conf->manufacturer, conf->model_name);
+}
+
+/**
+ * Initialize WPS functionality for wpa_supplicant
+ * This function contains all WPS-related initialization code that was previously
+ * in init_wpa_supplicant under the backhaul_credentials_loaded check
+ */
+static int init_wps_wpa_supplicant(wifi_interface_info_t *interface)
+{
+    struct wpa_global *global = NULL;
+    struct wpa_radio *radio = NULL;
+
+    /* Set drv_priv to interface pointer so driver callbacks can access it */
+    dl_list_init(&interface->wpa_s.bss);
+    dl_list_init(&interface->wpa_s.radio_list);  // Initialize radio_list for radio_add_work
+    dl_list_init(&interface->wpa_s.drv_signal_override);  // Initialize drv_signal_override list to prevent crashes in wpa_drv_get_scan_results
+    interface->wpa_s.conf->ap_scan = DEFAULT_AP_SCAN;  // DEFAULT_AP_SCAN = 1 (normal scan mode)
+
+
+    // Set bss_max_count to prevent premature BSS entry removal during scan processing
+    interface->wpa_s.conf->bss_max_count = DEFAULT_BSS_MAX_COUNT;
+    interface->wpa_s.conf->bss_expiration_age = DEFAULT_BSS_EXPIRATION_AGE;
+    interface->wpa_s.conf->bss_expiration_scan_count = DEFAULT_BSS_EXPIRATION_SCAN_COUNT;
+
+
+    // Initialize minimal wpa_global structure to prevent NULL pointer dereference
+    // in notification callbacks (e.g., wpas_notify_network_added)
+    if (interface->wpa_s.global == NULL) {
+        global = (struct wpa_global *)malloc(sizeof(struct wpa_global));
+        if (global == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to allocate wpa_global\n", __func__, __LINE__);
+            return RETURN_ERR;
+        }
+        memset(global, 0, sizeof(struct wpa_global));
+        dl_list_init(&global->p2p_srv_bonjour);
+        dl_list_init(&global->p2p_srv_upnp);
+        global->p2p_group_formation = NULL;  // Critical: must be NULL for non-P2P interfaces
+        interface->wpa_s.global = global;
+        wifi_hal_dbg_print("%s:%d: Initialized minimal wpa_global structure\n", __func__, __LINE__);
+    }
+
+    // Initialize wpa_radio structure for radio_add_work (needed for scanning)
+    if (interface->wpa_s.radio == NULL) {
+        radio = (struct wpa_radio *)malloc(sizeof(struct wpa_radio));
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to allocate wpa_radio\n", __func__, __LINE__);
+            return RETURN_ERR;
+        }
+        memset(radio, 0, sizeof(struct wpa_radio));
+        dl_list_init(&radio->ifaces);
+        dl_list_init(&radio->work);
+        radio->num_active_works = 0;
+        radio->external_scan_req_interface = NULL;
+        // Use interface name as radio name (or empty if not available)
+        if (interface->name) {
+            os_strlcpy(radio->name, interface->name, sizeof(radio->name));
+        } else {
+            radio->name[0] = '\0';
+        }
+        // Add interface to radio's ifaces list
+        dl_list_add(&radio->ifaces, &interface->wpa_s.radio_list);
+        interface->wpa_s.radio = radio;
+        wifi_hal_dbg_print("%s:%d: Initialized wpa_radio structure for interface %s\n",
+            __func__, __LINE__, interface->name ? interface->name : "unknown");
+    }
+
+    // Set interface name (required for scan operations and driver callbacks)
+    if (interface->name) {
+        os_strlcpy(interface->wpa_s.ifname, interface->name, sizeof(interface->wpa_s.ifname));
+    } else {
+        interface->wpa_s.ifname[0] = '\0';
+    }
+
+    interface->wpa_s.disconnected = 1;
+
+    // Initialize WPA state machine (required for scan and connection operations)
+    if (wpa_supplicant_init_wpa(&interface->wpa_s) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to initialize WPA state machine\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    interface->u.sta.wpa_sm = interface->wpa_s.wpa;
+
+    random_init(NULL);  // NULL = use default entropy source
+
+    if (interface->wpa_s.global != NULL) {
+        interface->wpa_s.next = interface->wpa_s.global->ifaces;
+        interface->wpa_s.global->ifaces = &interface->wpa_s;
+    }
+
+    // Initialize driver interface (MAC address setup, etc.)
+    if (wpa_supplicant_driver_init(&interface->wpa_s) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to initialize driver interface\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    wifi_hal_dbg_print("%s:%d: Driver interface initialized\n", __func__, __LINE__);
+
+    // Initialize BSS table properly (required for scan results processing)
+    if (wpa_bss_init(&interface->wpa_s) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to initialize BSS table\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    wifi_hal_dbg_print("%s:%d: BSS table initialized\n", __func__, __LINE__);
+
+    // Initialize WPS configuration for station mode
+    init_oem_sta_config(interface);
+    (void) eap_register_methods();
+
+    if (wpas_wps_init(&interface->wpa_s) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to initialize WPS\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    wifi_hal_info_print("%s:%d: WPS initialized successfully\n", __func__, __LINE__);
+
+    if (wpa_supplicant_init_eapol(&interface->wpa_s) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to initialize EAPOL state machine\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    wpa_sm_set_eapol(interface->wpa_s.wpa, interface->wpa_s.eapol);
+    wifi_hal_dbg_print("%s:%d: EAPOL state machine initialized and linked to WPA SM\n", __func__, __LINE__);
+
+    return RETURN_OK;
+}
+
+#endif
+
 int deinit_wpa_supplicant(wifi_interface_info_t *interface)
 {
     wifi_hal_info_print("%s:%d: deinit wpa supplicant params\n", __func__, __LINE__);
+
+#ifdef UWM_EXT_WPS_SUPPORT
+    // Unlink interface from global->ifaces list before cleanup (similar to wpa_supplicant_remove_iface)
+    if (interface->wpa_s.global != NULL && interface->wpa_s.global->ifaces != NULL) {
+        struct wpa_supplicant *wpa_s, *prev = NULL;
+
+        // Find and remove this interface from the list
+        for (wpa_s = interface->wpa_s.global->ifaces; wpa_s; prev = wpa_s, wpa_s = wpa_s->next) {
+            if (wpa_s == &interface->wpa_s) {
+                if (prev) {
+                    prev->next = wpa_s->next;
+                } else {
+                    // This was the first interface in the list
+                    interface->wpa_s.global->ifaces = wpa_s->next;
+                }
+                interface->wpa_s.next = NULL;  // Clear next pointer
+                break;
+            }
+        }
+    }
+#endif
+
     if (interface->wpa_s.p2pdev != NULL) {
         free(interface->wpa_s.p2pdev);
         interface->wpa_s.p2pdev = NULL;
@@ -1323,12 +1751,47 @@ int deinit_wpa_supplicant(wifi_interface_info_t *interface)
         interface->wpa_s.current_bss = NULL;
     }
 
+#ifdef UWM_EXT_WPS_SUPPORT
+    // Free the wpa_radio structure if it was allocated
+    if (interface->wpa_s.radio != NULL) {
+        // Remove interface from radio's ifaces list before freeing
+        dl_list_del(&interface->wpa_s.radio_list);
+        // Only free radio if no other interfaces are using it
+        // For simplicity, we'll free it - in a real scenario, we'd check if other interfaces exist
+        free(interface->wpa_s.radio);
+        interface->wpa_s.radio = NULL;
+    }
+
+    // Free the wpa_global structure if it was allocated
+    if (interface->wpa_s.global != NULL) {
+        free(interface->wpa_s.global);
+        interface->wpa_s.global = NULL;
+    }
+#endif
+
     memset(&interface->wpa_s, 0, sizeof(struct wpa_supplicant));
     return RETURN_OK;
 }
 
 int init_wpa_supplicant(wifi_interface_info_t *interface)
 {
+#ifdef UWM_EXT_WPS_SUPPORT
+    // Check if valid_bh_credentials is set for station mode
+    bool need_wps_init = false;
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta)
+    {
+        wifi_vap_info_t *vap = &interface->vap_info;
+        if (vap->u.sta_info.valid_bh_credentials == FALSE) {
+            need_wps_init = true;
+            wifi_hal_info_print("%s:%d: valid_bh_credentials not set for STA vap_index %d, WPS onboarding required\n",
+                __func__, __LINE__, vap->vap_index);
+        } else {
+            wifi_hal_info_print("%s:%d: valid_bh_credentials is set for STA vap_index %d (SSID=%s), skipping WPS initialization\n",
+                __func__, __LINE__, vap->vap_index, vap->u.sta_info.ssid);
+        }
+    }
+#endif
+
     interface->wpa_s.drv_flags |= WPA_DRIVER_FLAGS_SAE;
     interface->wpa_s.drv_flags |= WPA_DRIVER_FLAGS_SME;
     if (interface->wpa_s.p2pdev == NULL) {
@@ -1368,8 +1831,32 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
 #else
     interface->wpa_s.driver = &g_wpa_driver_nl80211_ops;
 #endif
+    interface->wpa_s.drv_priv = interface;
     dl_list_init(&interface->wpa_s.bss);
     dl_list_init(&interface->wpa_s.bss_tmp_disallowed);
+
+
+#ifdef UWM_EXT_WPS_SUPPORT
+    if (need_wps_init)
+    {
+        wpa_supplicant_event = supplicant_event;
+        wifi_hal_dbg_print("%s:%d: Set wpa_supplicant_event to supplicant_event for station mode\n", __func__, __LINE__);
+	if (init_wps_wpa_supplicant(interface) != RETURN_OK)
+	    {
+		wifi_hal_error_print("%s:%d: Failed to initialize WPS wpa_supplicant\n", __func__, __LINE__);
+		return RETURN_ERR;
+	}
+    }
+    else
+    {
+        if (wpa_supplicant_event != hostapd_wpa_event)
+        {
+            wpa_supplicant_event = hostapd_wpa_event;
+            wifi_hal_dbg_print("%s:%d: Set wpa_supplicant_event to hostapd_wpa_event (credentials already loaded)\n", __func__, __LINE__);
+        }
+    }
+#endif /* UWM_EXT_WPS_SUPPORT */
+
     wifi_hal_info_print("%s:%d: wpa supplicant params init success\n", __func__, __LINE__);
 
     return RETURN_OK;
@@ -4708,6 +5195,21 @@ INT wifi_wpsEvent_callback_register(wifi_wpsEvent_callback func)
 
     return RETURN_OK;
 }
+
+#ifdef UWM_EXT_WPS_SUPPORT
+INT wifi_wpsStaEvent_callback_register(wifi_wps_sta_event_callback_t callback)
+{
+    g_wps_sta_event_callback = callback;
+    wifi_hal_info_print("%s:%d: WPS STA event callback registered\n", __func__, __LINE__);
+    return RETURN_OK;
+}
+
+/* Function to get WPS STA event callback (for platform.c) */
+wifi_wps_sta_event_callback_t wifi_hal_get_wps_sta_event_callback(void)
+{
+    return g_wps_sta_event_callback;
+}
+#endif
 
 INT wifi_hal_analytics_callback_register(wifi_analytics_callback l_callback_cb)
 {
