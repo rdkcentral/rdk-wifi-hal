@@ -143,7 +143,7 @@ static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
 static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map);
-static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char *chspec, wifi_radio_index_t index);
+static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char *chspec, wifi_radio_index_t index, size_t len);
 int sta_disassociated(int ap_index, char *mac, int reason);
 int sta_deauthenticated(int ap_index, char *mac, int reason);
 int sta_associated(int ap_index, wifi_associated_dev_t *associated_dev);
@@ -298,7 +298,7 @@ static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map)
 int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_array,
     uint *data_count)
 {
-    FILE *fp;
+    int fd = -1;
     char file_path[64];
     sem_t *sem;
     emu_neighbor_stats_t neighbor_header;
@@ -308,9 +308,6 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     wifi_hal_stats_dbg_print("%s:%d: Entered with radio_index = %u\n", __func__, __LINE__, radio_index);
     snprintf(file_path, sizeof(file_path), "/dev/shm/wifi_neighbor_ap_emu_%u", radio_index);
 
-    if (access(file_path, F_OK) != 0) {
-        return RETURN_OK;
-    }
 
     sem = sem_open(SEM_NAME, 0);
     if (sem == SEM_FAILED) {
@@ -325,17 +322,22 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
         return RETURN_ERR;
     }
 
-    fp = fopen(file_path, "rb");
-    if (fp == NULL) {
+    fd = open(file_path, O_RDONLY | O_NOFOLLOW);
+    if (fd < 0) {
+        if (errno == ENOENT) {
+            sem_post(sem);
+            sem_close(sem);
+            return RETURN_ERR;
+        }
         wifi_hal_stats_error_print("%s:%d: Failed to open file\n", __func__, __LINE__);
         sem_post(sem);
         sem_close(sem);
         return RETURN_ERR;
     }
 
-    if (fread(&neighbor_header, sizeof(emu_neighbor_stats_t), 1, fp) != 1) {
+    if (read(fd, &neighbor_header, sizeof(emu_neighbor_stats_t)) != sizeof(emu_neighbor_stats_t)) {
         wifi_hal_stats_error_print("%s:%d: Failed to read header data\n", __func__, __LINE__);
-        fclose(fp);
+        close(fd);
         sem_post(sem);
         sem_close(sem);
         return RETURN_ERR;
@@ -351,7 +353,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
     if (combined_data == NULL) {
         wifi_hal_stats_error_print("%s:%d: Memory allocation for combined_data failed\n", __func__,
             __LINE__);
-        fclose(fp);
+        close(fd);
         sem_post(sem);
         sem_close(sem);
         return RETURN_ERR;
@@ -362,11 +364,11 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
         free(*neighbor_ap_array);
     }
 
-    if (fread(combined_data + existing_count, sizeof(wifi_neighbor_ap2_t),
-            neighbor_header.neighbor_count, fp) != neighbor_header.neighbor_count) {
+    if (read(fd, combined_data + existing_count, sizeof(wifi_neighbor_ap2_t) * 
+            neighbor_header.neighbor_count) != (ssize_t)(sizeof(wifi_neighbor_ap2_t) * neighbor_header.neighbor_count)) {
         wifi_hal_stats_error_print("%s:%d: Failed to read neighbor data:\n", __func__, __LINE__);
         free(combined_data);
-        fclose(fp);
+        close(fd);
         sem_post(sem);
         sem_close(sem);
         return RETURN_ERR;
@@ -378,7 +380,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
         wifi_hal_stats_error_print("%s:%d: Memory allocation for neighbor_ap_array failed\n", __func__,
             __LINE__);
         free(combined_data);
-        fclose(fp);
+        close(fd);
         sem_post(sem);
         sem_close(sem);
         return RETURN_ERR;
@@ -393,7 +395,7 @@ int get_emu_neighbor_stats(uint radio_index, wifi_neighbor_ap2_t **neighbor_ap_a
         wifi_hal_stats_error_print("%s:%d: Failed to release semaphore\n", __func__, __LINE__);
     }
 
-    fclose(fp);
+    close(fd);
     sem_close(sem);
     return RETURN_OK;
 }
@@ -442,10 +444,11 @@ int sta_associated(int ap_index, wifi_associated_dev_t *associated_dev)
 
 void prepare_param_name(char *dest, char *interface_name, char *prefix)
 {
-    memset(dest, 0, strlen(dest));
+    if (dest == NULL || interface_name == NULL || prefix == NULL) {
+        return;
+    }
 
-    strncpy(dest, interface_name, strlen(interface_name));
-    strcat(dest, prefix);
+    snprintf(dest, NVRAM_NAME_SIZE, "%s%s", interface_name, prefix);
 }
 
 void set_decimal_nvram_param(char *param_name, unsigned int value)
@@ -1216,7 +1219,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 	        char *buff = nvram_get(cmd);
             if(buff != NULL && (strcmp(buff,"") != 0))
             {
-                sprintf(chanbuff, "acs_cli2 -i wl%d set acs_excl_chans %s &", index, buff);
+                snprintf(chanbuff, sizeof(chanbuff), "acs_cli2 -i wl%d set acs_excl_chans %s &", index, buff);
                 system(chanbuff);
             }
 
@@ -1225,20 +1228,20 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
             char *weight_string = generate_channel_weight_string(index, operationParam->channel);
             if (weight_string != NULL) {
                 set_string_nvram_param(cmd, weight_string);
-                sprintf(cmd, "acs_cli2 -i wl%d set acs_channel_weights %s &", index, weight_string);
+                snprintf(chanbuff, sizeof(chanbuff), "acs_cli2 -i wl%d set acs_channel_weights %s &", index, weight_string);
                 free(weight_string);
                 system(cmd);
             }
 
             /* Run acsd2 autochannel */
             memset(cmd, 0 ,sizeof(cmd));
-            sprintf(cmd, "acs_cli2 -i wl%d autochannel &", index);
+            snprintf(cmd, sizeof(cmd), "acs_cli2 -i wl%d autochannel &", index);
             system(cmd);
         }
         else {
             /* Set acsd2 disabled mode */
             wifi_hal_dbg_print("%s():%d Disabling autoChannel in radio index %d\n", __FUNCTION__, __LINE__, index);
-            sprintf(cmd, "acs_cli2 -i wl%d mode 0 &", index);
+            snprintf(cmd, sizeof(cmd), "acs_cli2 -i wl%d mode 0 &", index);
             system(cmd);
         }
     }
@@ -1790,7 +1793,7 @@ static char *channel_width_to_string_convert(wifi_channelBandwidth_t channelWidt
     }
 }
 
-static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char *chspec, wifi_radio_index_t index)
+static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char *chspec, wifi_radio_index_t index, size_t len)
 {
     char *sideband = "";
     char *band = "";
@@ -1808,14 +1811,14 @@ static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char
         band = "6g";
     }
     if (operationParam->channelWidth == WIFI_CHANNELBANDWIDTH_20MHZ) {
-        sprintf(chspec, "%s%d", band, operationParam->channel);
+        snprintf(chspec, len, "%s%d", band, operationParam->channel);
     }
     else if ((operationParam->channelWidth == WIFI_CHANNELBANDWIDTH_40MHZ) && (operationParam->band != WIFI_FREQUENCY_6_BAND)) {
         sideband = (get_control_side_band(index, operationParam)) == 1 ? "l" : "u";
-        sprintf(chspec, "%d%s", operationParam->channel, sideband);
+        snprintf(chspec, len, "%d%s", operationParam->channel, sideband);
     }
     else {
-        sprintf(chspec, "%s%d/%s", band, operationParam->channel, bw);
+        snprintf(chspec, len, "%s%d/%s", band, operationParam->channel, bw);
     }
     return 0;
 }
@@ -1848,7 +1851,7 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
         sprintf(param_name, "wl%d_channel", index);
         set_decimal_nvram_param(param_name, operationParam->channel);
 
-        get_chanspec_string(operationParam, chspecbuf, index);
+        get_chanspec_string(operationParam, chspecbuf, index, sizeof(chspecbuf));
         memset(param_name, 0 ,sizeof(param_name));
         sprintf(param_name, "wl%d_chanspec", index);
         set_string_nvram_param(param_name, chspecbuf);
@@ -2388,9 +2391,9 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             memset(temp_buff, 0 ,sizeof(temp_buff));
             prepare_param_name(param_name, interface_name, "_wps_mode");
             if (map->vap_array[index].u.bss_info.wps.enable) {
-                strcpy(temp_buff, "enabled");
+                snprintf(temp_buff, sizeof(temp_buff), "%s", "enabled");
             } else {
-                strcpy(temp_buff, "disabled");
+                snprintf(temp_buff, sizeof(temp_buff), "%s", "disabled");
             }
             set_string_nvram_param(param_name, temp_buff);
 
@@ -4794,7 +4797,7 @@ void platform_set_csa(wifi_radio_index_t index, wifi_radio_operationParam_t *ope
 {
     char chanspec[32] = {'\0'};
 
-    get_chanspec_string(operationParam, chanspec, index);
+    get_chanspec_string(operationParam, chanspec, index, sizeof(chanspec));
     if (platform_is_same_chanspec(index, chanspec) == false) {
         bool bss_up;
         wifi_radio_info_t *radio;
@@ -4817,7 +4820,7 @@ void platform_set_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t
     char new_chanspec[32] = {'\0'};
 
     /* construct target chanspec */
-    get_chanspec_string(operationParam, new_chanspec, index);
+    get_chanspec_string(operationParam, new_chanspec, index, sizeof(new_chanspec));
 
     /* compare current cchanspec to target chanspec */
     if (platform_is_same_chanspec(index, new_chanspec) == false) {

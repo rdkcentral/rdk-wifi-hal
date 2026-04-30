@@ -115,6 +115,11 @@ INT start_receiving_test_frames()
         if (retval == 0) {
             continue;
         } else if (retval == -1) {
+            if (errno == EINTR) {
+                continue;
+            }
+            wifi_rdk_hal_dbg_print("%s:%d: select failed err:%d\n", __func__, __LINE__, errno);
+            exit = true;
             continue;
         }
 
@@ -124,6 +129,11 @@ INT start_receiving_test_frames()
         //wifi_rdk_hal_dbg_print("%s:%d:Socket signaled Receiving data from socket\n", __func__, __LINE__);
 
         if ((ret = recvfrom(sockfd, msg, 1024, 0, (struct sockaddr *)&saddr, &slen)) < 0) {
+            if (errno == EINTR || errno == EAGAIN) {
+                continue;
+            }
+            wifi_rdk_hal_dbg_print("%s:%d: recvfrom failed err:%d\n", __func__, __LINE__, errno);
+            exit = true;
             continue;
         }
 
@@ -219,7 +229,7 @@ void wifi_rdk_hal_dbg_print(char *format, ...)
         return;
     }
     get_formatted_time(buff);
-    strcat(buff, " ");
+    strncat(buff, " ", sizeof(buff) - strlen(buff) - 1);
 
     va_start(list, format);
     vsprintf(&buff[strlen(buff)], format, list);

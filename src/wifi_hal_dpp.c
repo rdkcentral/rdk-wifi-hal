@@ -118,7 +118,7 @@ void wifi_dpp_dbg_print(char *format, ...)
     }
 
     get_formatted_time(buff);
-    strcat(buff, " ");
+    strncat(buff, " ", sizeof(buff) - strlen(buff) - 1);
 
     va_start(list, format);
     vsprintf(&buff[strlen(buff)], format, list);
@@ -664,7 +664,7 @@ int dpp_build_connector(wifi_device_dpp_context_t *dpp_ctx, char* connector, boo
     return conn_len;
 }
 
-void dpp_build_config(wifi_device_dpp_context_t *ctx, char* str)
+void dpp_build_config(wifi_device_dpp_context_t *ctx, char* str, size_t len)
 {
  	char *out;
 	char reconfig_connector[1024];
@@ -745,7 +745,7 @@ void dpp_build_config(wifi_device_dpp_context_t *ctx, char* str)
         {
             printf("%s\n",out);
             /*let input string have json */
-            strcpy(str, out);
+            snprintf(str, len, "%s", out);
             free(out);
         }
 	
@@ -927,25 +927,27 @@ hkdf (const EVP_MD *h, int skip,
          */
         ctr++;
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
-        HMAC_Init_ex(&ctx, prk, prklen, h, NULL);
-        HMAC_Update(&ctx, digest, digestlen);
+        if (!HMAC_Init_ex(&ctx, prk, prklen, h, NULL) || !HMAC_Update(&ctx, digest, digestlen))
+            break;
 #else
-        HMAC_Init_ex(ctx, prk, prklen, h, NULL);
-        HMAC_Update(ctx, digest, digestlen);
+        if (!HMAC_Init_ex(ctx, prk, prklen, h, NULL) || !HMAC_Update(ctx, digest, digestlen))
+            break;
 #endif
         if (info && (infolen != 0)) {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
-            HMAC_Update(&ctx, info, infolen);
+            if (!HMAC_Update(&ctx, info, infolen))
+                break;
 #else
-            HMAC_Update(ctx, info, infolen);
+            if (!HMAC_Update(ctx, info, infolen))
+                break;
 #endif
         }
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
-        HMAC_Update(&ctx, &ctr, sizeof(unsigned char));
-        HMAC_Final(&ctx, digest, &digestlen);
+        if (!HMAC_Update(&ctx, &ctr, sizeof(unsigned char)) ||  HMAC_Final(&ctx, digest, &digestlen))
+            break;
 #else
-        HMAC_Update(ctx, &ctr, sizeof(unsigned char));
-        HMAC_Final(ctx, digest, &digestlen);
+        if (!HMAC_Update(ctx, &ctr, sizeof(unsigned char)) || HMAC_Final(ctx, digest, &digestlen))
+            break;
 #endif
         if ((len + digestlen) > okmlen) {
             memcpy(okm + len, digest, okmlen - len);
@@ -1137,7 +1139,7 @@ set_config_frame_wrapped_data(unsigned char *ptr, unsigned int non_wrapped_len, 
 
     if (NULL != dpp_ctx) {
 	    memset(json, 0, 1024);
-	    dpp_build_config(dpp_ctx, json);
+	    dpp_build_config(dpp_ctx, json, sizeof(json));
         tlv = set_tlv((unsigned char*)tlv, wifi_dpp_attrib_id_config_object, strlen(json), json);
         wrapped_len += (4 + strlen(json));
     }
@@ -1751,13 +1753,13 @@ int wifi_dppCreateReconfigContext(unsigned int ap_index, char *net_access_key, w
 
 	switch (EC_GROUP_get_curve_name(EC_KEY_get0_group(instance->key))) {
         case NID_X9_62_prime256v1:
-			strcpy(instance->crv, "P-256");
+			snprintf(instance->crv, sizeof(instance->crv), "%s", "P-256");
             break;
         case NID_secp384r1:
-			strcpy(instance->crv, "P-384");
+			snprintf(instance->crv, sizeof(instance->crv), "%s", "P-384");
             break;
         case NID_secp521r1:
-			strcpy(instance->crv, "P-521");
+			snprintf(instance->crv, sizeof(instance->crv), "%s", "P-521");
             break;
         default:
         	return RETURN_ERR;
@@ -1895,15 +1897,15 @@ int wifi_dppCreateCSignIntance(unsigned int ap_index, char *c_sign_key, wifi_dpp
 
 	switch (EC_GROUP_get_curve_name(EC_KEY_get0_group(instance->key))) {
         case NID_X9_62_prime256v1:
-			strcpy(instance->alg, "ES256");
+			snprintf(instance->alg, sizeof(instance->alg), "%s", "ES256");
 			bnlen = 32;
             break;
         case NID_secp384r1:
-			strcpy(instance->alg, "ES384");
+			snprintf(instance->alg, sizeof(instance->alg), "%s", "ES384");
 			bnlen = 48;
             break;
         case NID_secp521r1:
-			strcpy(instance->alg, "ES521");
+			snprintf(instance->alg, sizeof(instance->alg), "%s", "ES521");
 			bnlen = 66;
             break;
         default:
@@ -3405,6 +3407,11 @@ static void *wifi_dppTestFrameHandler(void *arg)
         if (retval == 0) {
             continue;
         } else if (retval == -1) {
+            if (errno == EINTR) {
+                continue;
+            }
+            wifi_dpp_dbg_print("%s:%d: select failed err:%d\n", __func__, __LINE__, errno);
+            exit = true;
             continue;
         }
 
@@ -3414,6 +3421,11 @@ static void *wifi_dppTestFrameHandler(void *arg)
     	wifi_dpp_dbg_print("%s:%d:Socket signaled Receiving data from socket\n", __func__, __LINE__);
         
         if ((ret = recvfrom(sockfd, msg, 1024, 0, (struct sockaddr *)&saddr, &slen)) < 0) {
+            if (errno == EINTR || errno == EAGAIN) {
+                continue;
+            }
+            wifi_dpp_dbg_print("%s:%d: recvfrom failed err:%d\n", __func__, __LINE__, errno);
+            exit = true;
             continue;
         }
 

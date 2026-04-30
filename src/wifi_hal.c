@@ -178,7 +178,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     if (len != 0 && output[len - 1] == '\n') {
         output[len - 1] = '\0';
     }
-    strcpy(hal->wifi_prop.serialNo,output);
+    snprintf(hal->wifi_prop.serialNo, sizeof(hal->wifi_prop.serialNo), "%s", output);
 
     memset(output, '\0', sizeof(output));
 #if defined (_PLATFORM_BANANAPI_R4_)
@@ -193,8 +193,8 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     if (len != 0 && output[len - 1] == '\n') {
         output[len - 1] = '\0';
     }
-    strcpy(hal->wifi_prop.manufacturerModel,output);
-    strcpy(hal->wifi_prop.manufacturer,output);
+    snprintf(hal->wifi_prop.manufacturerModel, sizeof(hal->wifi_prop.manufacturerModel), "%s", output);
+    snprintf(hal->wifi_prop.manufacturer, sizeof(hal->wifi_prop.manufacturer), "%s", output);
 
     memset(output, '\0', sizeof(output));
     _syscmd("grep 'imagename:' /version.txt | cut -d ':' -f2 ", output, sizeof(output));
@@ -207,7 +207,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     if (len != 0 && output[len - 1] == '\n') {
         output[len - 1] = '\0';
     }
-    strcpy(hal->wifi_prop.software_version, output);
+    snprintf(hal->wifi_prop.software_version, sizeof(hal->wifi_prop.software_version), "%s", output);
 
     // CM mac
     memset(output, '\0', sizeof(output));
@@ -668,12 +668,14 @@ INT wifi_hal_wps_event(wifi_wps_event_t data)
     return RETURN_ERR;
 }
 
+#define DEFAULT_EROUTER0_MAC "01:23:12:44:65:ab"
+
 INT wifi_hal_hostApGetErouter0Mac(char *out)
 {
     if (out == NULL) {
         return RETURN_ERR;
     }
-    strcpy(out, "01:23:12:44:65:ab");
+    snprintf(out, sizeof(DEFAULT_EROUTER0_MAC), "%s", DEFAULT_EROUTER0_MAC);
     return RETURN_OK;
 }
 
@@ -2711,7 +2713,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
             continue;
         }
         sprintf(tmp_str, "%d ", freq_list[freq_num]);
-        strcat(chan_list_str, tmp_str);
+        strncat(chan_list_str, tmp_str, sizeof(chan_list_str)-strlen(chan_list_str)-1);
 
 	freq_num++;
     }
@@ -2724,7 +2726,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
         return RETURN_ERR;
     }
     
-    strcpy(ssid_list[0], get_vap_ssid(vap));
+    snprintf(ssid_list[0], sizeof(ssid_list[0]), "%s", get_vap_ssid(vap));
     wifi_hal_stats_info_print("%s:%d: Scan Frequencies:%s \n", __func__, __LINE__, chan_list_str);
 
     pthread_mutex_lock(&interface->scan_info_mutex);
