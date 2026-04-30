@@ -725,9 +725,9 @@ void platform_mld_update(wifi_vap_info_t *vap)
     int i, mld_unit = -1, vapidx = -1;
     wifi_mld_common_info_t *mld_cmn = &vap->u.bss_info.mld_info.common_info;
 
-    wifi_hal_info_print("### %s: %s radio=%d vap_index=%d enable %d mld: enable=%d unit=%d linkid=%d apply=%d ###\n",
+    wifi_hal_info_print("### %s: %s radio=%d vap_index=%d enable %d mld: enable=%d unit=%d linkid=%d ###\n",
         __func__, vap->vap_name, vap->radio_index, vap->vap_index, vap->u.bss_info.enabled,
-        mld_cmn->mld_enable, mld_cmn->mld_id, mld_cmn->mld_link_id, mld_cmn->mld_apply);
+        mld_cmn->mld_enable, mld_cmn->mld_id, mld_cmn->mld_link_id);
 
     if (vap->u.bss_info.enabled && mld_cmn->mld_enable && mld_cmn->mld_id < MLD_UNIT_COUNT) {
         mld_unit = mld_cmn->mld_id;
@@ -4981,9 +4981,9 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
         set_mld_mac = TRUE;
 
     wifi_hal_dbg_print(
-        "%s:%d iface:%s - mld_ap:%d mld_enab:%d mld_unit:%u mld_link_id:%u mld_addr:%s apply:%d\n", __func__,
-        __LINE__, conf->iface, params->mld_ap, mld_enable, get_mld_unit(conf), params->mld_link_id, mld_addr,
-        apply);
+        "%s:%d iface:%s - mld_ap:%d mld_enab:%d mld_unit:%u mld_link_id:%u mld_addr:%s apply:%d set_mld_mac:%d\n",
+        __func__, __LINE__, conf->iface, params->mld_ap, mld_enable, get_mld_unit(conf), params->mld_link_id,
+        mld_addr, apply, set_mld_mac);
 
     /*
      * message format
