@@ -10626,9 +10626,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                                     __func__, MAC2STR(sta_mld_mac));
             }
 
-            unsigned char temp_mld_mac[ETH_ALEN];
-            memcpy(temp_mld_mac, vap->u.sta_info.mac, ETH_ALEN);
             // INJECT PARTNER MAC ADDRESSES FOR SAE HASHING
+            unsigned char temp_mac[ETH_ALEN];
             for (int i = 0; i < MAX_NUM_MLD_LINKS; i++) {
                 if (!(interface->mlo_params.valid_links & BIT(i))) continue;
 
@@ -10639,13 +10638,11 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                 /* sme_sm->mlo.links[i].addr = STA link MAC for link i.
                  * We only have the assoc link's STA MAC. Partner link
                  * STA MACs are unknown in single-link mode — leave zeros. */
-                temp_mld_mac[ETH_ALEN - 2]++;
-                memcpy(interface->wpa_s.wpa->mlo.links[i].addr,
-                    temp_mld_mac, ETH_ALEN);
-                memcpy(interface->u.sta.wpa_sm->mlo.links[i].addr,
-                    temp_mld_mac, ETH_ALEN);
-                memcpy(interface->wpa_s.links[i].addr,
-                    temp_mld_mac, ETH_ALEN);
+                memcpy(temp_mac, vap->u.sta_info.mac, ETH_ALEN);
+                temp_mac[ETH_ALEN - 2] += i + 1;
+                memcpy(interface->wpa_s.wpa->mlo.links[i].addr, temp_mac, ETH_ALEN);
+                memcpy(interface->u.sta.wpa_sm->mlo.links[i].addr, temp_mac, ETH_ALEN);
+                memcpy(interface->wpa_s.links[i].addr, temp_mac, ETH_ALEN);
 
                 wifi_hal_info_print("%s: sm link[%d]: STA=" MACSTR " AP=" MACSTR "\n",
                                     __func__, i,
