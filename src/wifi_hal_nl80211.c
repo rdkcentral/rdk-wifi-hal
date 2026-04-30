@@ -5203,7 +5203,10 @@ static void wiphy_info_ext_feature_flags(wifi_radio_info_t *radio,
 
     ext_features = nla_data(tb);
     len = nla_len(tb);
-
+    wifi_hal_dbg_print("%s:%d: ifname: %s ext_features len=%d features: \n", __func__, __LINE__, radio->name, len);
+    for (int i = 0; i < len; i++) {
+        wifi_hal_dbg_print("%s:%d: ifname: %s\t\t%02x\n", __func__, __LINE__, radio->name, ext_features[i]);
+    }
     if (ext_feature_isset(ext_features, len, NL80211_EXT_FEATURE_VHT_IBSS)) {
         capa->flags |= WPA_DRIVER_FLAGS_VHT_IBSS;
     }
@@ -5332,7 +5335,10 @@ static void wiphy_info_ext_feature_flags(wifi_radio_info_t *radio,
 
     if (ext_feature_isset(ext_features, len,
                   NL80211_EXT_FEATURE_BEACON_PROTECTION)) {
+        wifi_hal_dbg_print("%s:%d: ifname: %s NL80211_EXT_FEATURE_BEACON_PROTECTION is presented\n", __func__, __LINE__, radio->name);
         capa->flags |= WPA_DRIVER_FLAGS_BEACON_PROTECTION;
+    } else {
+        wifi_hal_dbg_print("%s:%d: ifname: %s NL80211_EXT_FEATURE_BEACON_PROTECTION is NOT presented\n", __func__, __LINE__, radio->name);
     }
 
     if (ext_feature_isset(ext_features, len,
@@ -17191,9 +17197,9 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     vap = &interface->vap_info;
 
     wifi_hal_dbg_print("%s:%d: ifname:%s vap_index:%d\n", __func__, __LINE__, interface->name, vap->vap_index);
-    //wifi_hal_dbg_print("%s:%d: ifname: %s\n", __func__, __LINE__, interface->name);
-    //wifi_hal_dbg_print("%s:%d: key Info: index:%d length:%d alg:%s\n", __func__, __LINE__, key_idx, key_len, wpa_alg_to_string(alg));
-    //my_print_hex_dump(key_len, key);
+    wifi_hal_dbg_print("%s:%d: ifname: %s\n", __func__, __LINE__, interface->name);
+    wifi_hal_dbg_print("%s:%d: key Info: index:%d length:%ld alg:%s\n", __func__, __LINE__, params->key_idx, params->key_len, wpa_alg_to_string(params->alg));
+    // my_print_hex_dump(key_len, key);
 
 #if HOSTAPD_VERSION < 210 //2.10
     if (alg == WPA_ALG_NONE) {
