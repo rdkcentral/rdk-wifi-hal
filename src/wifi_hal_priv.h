@@ -453,6 +453,22 @@ typedef struct ie_info {
     uint8_t *buff;
     size_t  buff_len;
 } wifi_ie_info_t;
+
+#ifdef CONFIG_IEEE80211BE
+#ifndef MAX_NUM_MLD_LINKS
+#define MAX_NUM_MLD_LINKS 16
+#endif /* MAX_NUM_MLD_LINKS */
+typedef struct sta_mlo_params {
+    const uint8_t mld_addr[ETH_ALEN];
+    uint16_t valid_links;
+    uint8_t assoc_link_id;
+    struct {
+        int freq;
+        uint8_t addr[ETH_ALEN];
+        uint8_t bssid[ETH_ALEN];
+    } mld_links[MAX_NUM_MLD_LINKS];
+} sta_mlo_params_t;
+#endif /* CONFIG_IEEE80211BE */
 #endif
 
 struct txpwr_context {
@@ -517,6 +533,7 @@ typedef struct wifi_interface_info_t {
     hash_map_t *scan_info_ap_map[2];
     pthread_mutex_t scan_info_mutex;
     pthread_mutex_t scan_info_ap_mutex;
+    pthread_mutex_t scan_cmd_mutex;
     uint8_t scan_has_results;
 
     /* BTM support */
@@ -534,6 +551,9 @@ typedef struct wifi_interface_info_t {
 #endif
     char mld_name[32];
     bool in_reconf;
+#if defined(CONFIG_IEEE80211BE) && defined(BANANA_PI_PORT)
+    struct sta_mlo_params mlo_params;
+#endif /* CONFIG_IEEE80211BE & BANANA_PI_PORT*/
 } wifi_interface_info_t;
 
 #define MAX_RATES   16
@@ -969,6 +989,7 @@ int     nl80211_interface_enable(const char *ifname, bool enable);
 int     nl80211_retry_interface_enable(wifi_interface_info_t *interface, bool enable);
 void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *event);
 int     nl80211_connect_sta(wifi_interface_info_t *interface);
+int     init_wpa_supplicant(wifi_interface_info_t *interface);
 
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 int     nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
