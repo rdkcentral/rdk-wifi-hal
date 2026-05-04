@@ -6355,6 +6355,7 @@ void interface_free(wifi_interface_info_t *interface)
     pthread_mutex_destroy(&interface->scan_info_mutex);
     pthread_mutex_destroy(&interface->scan_info_ap_mutex);
     pthread_mutex_destroy(&interface->scan_state_mutex);
+    pthread_mutex_destroy(&interface->scan_cmd_mutex);
 
     // WARN!! What about others allocated structures inside the 'interface'? Is it memory leak?
     free(interface);
@@ -6518,6 +6519,7 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
             }
             // update vap mode , Default values are not yet applied 
             update_vap_mode(interface);
+            pthread_mutex_init(&interface->scan_cmd_mutex, NULL);
         }
     }
 
@@ -10165,6 +10167,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 
             nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, backhaul->bssid);
 
+            pthread_mutex_lock(&interface->scan_cmd_mutex);
             if (nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL) == 0) {
                 usleep(150000); // 150ms wait for probe response
                 nl80211_get_scan_results(interface);
@@ -10172,7 +10175,6 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                 mac_addr_str_t bssid_str_key;
                 char *key = to_mac_str(backhaul->bssid, bssid_str_key);
 
-                pthread_mutex_lock(&interface->scan_info_mutex);
                 wifi_bss_info_t *cached_bss = hash_map_get(interface->scan_info_map, key);
 
                 if (cached_bss && cached_bss->ie_len > 0) {
@@ -10222,8 +10224,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                         }
                     }
                 }
-                pthread_mutex_unlock(&interface->scan_info_mutex);
             }
+            pthread_mutex_unlock(&interface->scan_cmd_mutex);
         }
     } else {
         wifi_hal_dbg_print("%s:%d: MLD not detected.\n", __func__, __LINE__);
@@ -10293,6 +10295,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             nla_put(msg, 1, strlen(backhaul->ssid), backhaul->ssid);
             nla_nest_end(msg, ssids);
 
+            pthread_mutex_lock(&interface->scan_cmd_mutex);
             if (nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL) == 0) {
                 usleep(200000); /* 200ms — partner links may need longer */
                 nl80211_get_scan_results(interface);
@@ -10302,6 +10305,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                 wifi_hal_error_print("%s: Phase2 scan failed — partner links may ENOENT\n",
                                      __func__);
             }
+            pthread_mutex_unlock(&interface->scan_cmd_mutex);
         }
     } else {
         wifi_hal_dbg_print("%s:%d: No Phase2 scanning, valid links: 0x%x\n",
@@ -11110,7 +11114,9 @@ int nl80211_start_scan(wifi_interface_info_t *interface, uint flags,
         }
     }
 
+    pthread_mutex_lock(&interface->scan_cmd_mutex);
     ret = nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
+    pthread_mutex_unlock(&interface->scan_cmd_mutex);
     if (ret) {
         wifi_hal_stats_error_print("%s:%d: [SCAN] TRIGGER_SCAN command failed: ret=%d (%s)\n", __func__, __LINE__, ret, strerror(-ret));
         return -1;

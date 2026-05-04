@@ -533,6 +533,7 @@ typedef struct wifi_interface_info_t {
     hash_map_t *scan_info_ap_map[2];
     pthread_mutex_t scan_info_mutex;
     pthread_mutex_t scan_info_ap_mutex;
+    pthread_mutex_t scan_cmd_mutex;
     uint8_t scan_has_results;
 
     /* BTM support */
