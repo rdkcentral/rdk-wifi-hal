@@ -8459,7 +8459,11 @@ INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band n
             capability->eht_op_chwidth = (UCHAR)chwidth;
 
             switch (chwidth) {
-            case CONF_OPER_CHWIDTH_USE_HT:  /* 20 or 40 MHz */
+            case CONF_OPER_CHWIDTH_USE_HT:  /* 20 or 40 MHz: seg0=40MHz center or 0 for 20 */
+                /* Mirror hostapd_eid_eht_operation(): ccfs0 = seg0 ? seg0 : channel */
+                capability->eht_op_ccfs0 = seg0 ? seg0 : channel;
+                capability->eht_op_ccfs1 = 0;
+                break;
             case CONF_OPER_CHWIDTH_80MHZ:
                 capability->eht_op_ccfs0 = seg0;
                 capability->eht_op_ccfs1 = 0;
