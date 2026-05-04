@@ -23,6 +23,7 @@
 
 #include <stdint.h>
 #include <utils/includes.h>
+#include <linux/version.h>
 #include "utils/common.h"
 #include "utils/eloop.h"
 #include "utils/uuid.h"
@@ -1320,18 +1321,9 @@ INT platform_set_radio_mld_bonding(wifi_radio_info_t *radio);
 INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_t *interface);
 #endif
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
+#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
 extern bool (*g_eht_event_notify)(wifi_interface_info_t *interface);
 int platform_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
-#if defined(KERNEL_NO_320MHZ_SUPPORT)
-void platform_switch_channel(wifi_interface_info_t *interface, struct csa_settings *settings);
-void platform_config_eht_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
-bool platform_is_bss_up(char* ifname);
-void platform_bss_enable(char* ifname, bool enable);
-enum nl80211_chan_width platform_get_bandwidth(wifi_interface_info_t *interface);
-void platform_set_csa(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
-void platform_set_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam, bool b_check_radio);
-#endif
 #endif
 
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
