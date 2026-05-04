@@ -1714,6 +1714,49 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 
     hostapd_set_oper_centr_freq_seg0_idx(interface->u.ap.hapd.iconf, seg0);
 
+    /*
+     * Write CCFS0/CCFS1 back into oper_param.channelSecondary[] so that
+     * upper layers can read them without needing access to hostapd iconf.
+     *
+     * Hostapd iconf seg0_idx convention:
+     *   20 MHz  : not used (primary channel is its own center)
+     *   40/80   : center of the 40/80 MHz channel
+     *   160 MHz : center of the FULL 160 MHz channel  (CCFS1 per 802.11be spec)
+     *   320 MHz : center of the FULL 320 MHz channel  (CCFS1 per 802.11be spec)
+     *
+     * 802.11be CCFS0 is the primary segment center; derived as seg0 ± 8
+     * (160 MHz) or seg0 ± 16 (320 MHz).
+     * CCFS1 is the full wider channel center (0 for ≤80 MHz).
+     */
+    switch (param->channelWidth) {
+    case WIFI_CHANNELBANDWIDTH_20MHZ:
+        param->numSecondaryChannels = 0;
+        break;
+    case WIFI_CHANNELBANDWIDTH_40MHZ:
+    case WIFI_CHANNELBANDWIDTH_80MHZ:
+        param->channelSecondary[0] = seg0;   /* CCFS0 = center of 40/80 MHz */
+        param->numSecondaryChannels = 1;
+        break;
+    case WIFI_CHANNELBANDWIDTH_160MHZ:
+    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
+        /* CCFS0 = primary 80 MHz center = seg0 ± 8 from full 160 MHz center */
+        param->channelSecondary[0] = (param->channel < seg0) ? seg0 - 8 : seg0 + 8;
+        param->channelSecondary[1] = seg0;   /* CCFS1 = full 160 MHz center */
+        param->numSecondaryChannels = 2;
+        break;
+#ifdef CONFIG_IEEE80211BE
+    case WIFI_CHANNELBANDWIDTH_320MHZ:
+        /* CCFS0 = primary 160 MHz center = seg0 ± 16 from full 320 MHz center */
+        param->channelSecondary[0] = (param->channel < seg0) ? seg0 - 16 : seg0 + 16;
+        param->channelSecondary[1] = seg0;   /* CCFS1 = full 320 MHz center */
+        param->numSecondaryChannels = 2;
+        break;
+#endif /* CONFIG_IEEE80211BE */
+    default:
+        param->numSecondaryChannels = 0;
+        break;
+    }
+
     global_op_class = (unsigned int) country_to_global_op_class(country, (unsigned char)param->operatingClass);
     wifi_hal_info_print("%s:%d:interface name:%s country:%s op class:%d global op class:%d channel:%d frequency:%d center_freq1:%d\n", __func__, __LINE__, 
         interface->name, country, param->operatingClass, global_op_class, param->channel, iface->freq, cf1);

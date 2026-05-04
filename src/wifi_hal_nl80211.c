@@ -17840,6 +17840,35 @@ int prim_interface_set_freq(wifi_radio_info_t *radio, wifi_interface_info_t *int
     hostapd_set_oper_centr_freq_seg1_idx(interface->u.ap.hapd.iconf, 0);
     hostapd_set_oper_centr_freq_seg0_idx(interface->u.ap.hapd.iconf, seg0);
 
+    /* Write CCFS0/CCFS1 back into oper_param.channelSecondary[] — see
+     * update_hostap_iface() for the full convention description. */
+    switch (bw) {
+    case WIFI_CHANNELBANDWIDTH_20MHZ:
+        param->numSecondaryChannels = 0;
+        break;
+    case WIFI_CHANNELBANDWIDTH_40MHZ:
+    case WIFI_CHANNELBANDWIDTH_80MHZ:
+        param->channelSecondary[0] = seg0;
+        param->numSecondaryChannels = 1;
+        break;
+    case WIFI_CHANNELBANDWIDTH_160MHZ:
+    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
+        param->channelSecondary[0] = (channel < seg0) ? seg0 - 8 : seg0 + 8;
+        param->channelSecondary[1] = seg0;
+        param->numSecondaryChannels = 2;
+        break;
+#ifdef CONFIG_IEEE80211BE
+    case WIFI_CHANNELBANDWIDTH_320MHZ:
+        param->channelSecondary[0] = (channel < seg0) ? seg0 - 16 : seg0 + 16;
+        param->channelSecondary[1] = seg0;
+        param->numSecondaryChannels = 2;
+        break;
+#endif /* CONFIG_IEEE80211BE */
+    default:
+        param->numSecondaryChannels = 0;
+        break;
+    }
+
     res = hostapd_set_freq(&interface->u.ap.hapd, interface->u.ap.hapd.iconf->hw_mode, freq,
                 channel,
                 interface->u.ap.hapd.iconf->enable_edmg,
@@ -18022,6 +18051,35 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
     hostapd_set_oper_centr_freq_seg1_idx(interface->u.ap.hapd.iconf, seg1);
     hostapd_set_oper_centr_freq_seg0_idx(interface->u.ap.hapd.iconf, seg0);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+    /* Write CCFS0/CCFS1 back into oper_param.channelSecondary[] — see
+     * update_hostap_iface() for the full convention description. */
+    switch (radio->oper_param.channelWidth) {
+    case WIFI_CHANNELBANDWIDTH_20MHZ:
+        param->numSecondaryChannels = 0;
+        break;
+    case WIFI_CHANNELBANDWIDTH_40MHZ:
+    case WIFI_CHANNELBANDWIDTH_80MHZ:
+        param->channelSecondary[0] = seg0;
+        param->numSecondaryChannels = 1;
+        break;
+    case WIFI_CHANNELBANDWIDTH_160MHZ:
+    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
+        param->channelSecondary[0] = (param->channel < seg0) ? seg0 - 8 : seg0 + 8;
+        param->channelSecondary[1] = seg0;
+        param->numSecondaryChannels = 2;
+        break;
+#ifdef CONFIG_IEEE80211BE
+    case WIFI_CHANNELBANDWIDTH_320MHZ:
+        param->channelSecondary[0] = (param->channel < seg0) ? seg0 - 16 : seg0 + 16;
+        param->channelSecondary[1] = seg0;
+        param->numSecondaryChannels = 2;
+        break;
+#endif /* CONFIG_IEEE80211BE */
+    default:
+        param->numSecondaryChannels = 0;
+        break;
+    }
 
     wifi_hal_info_print("%s:%d iface_freq:%d freq:%d freq1:%d chan:%u seg0:%u sec_chan_offset:%d opclass:%u \n",__FUNCTION__, __LINE__, interface->u.ap.iface.freq, freq, freq1,
                          radio->oper_param.channel, seg0, sec_chan_offset, radio->oper_param.operatingClass);
