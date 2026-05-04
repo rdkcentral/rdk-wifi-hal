@@ -1714,6 +1714,16 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 
     hostapd_set_oper_centr_freq_seg0_idx(interface->u.ap.hapd.iconf, seg0);
 
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    /* Refresh EHT operation capability fields now that iconf->channel and
+     * seg0_idx are set.  wifi_get_radio_capability_data() runs earlier during
+     * hw-feature discovery when iconf is not yet configured, so the EHT oper
+     * fields (control/ccfs0/ccfs1) would be zero without this call. */
+    wifi_update_eht_oper_capability(radio);
+#endif
+#endif
+
     global_op_class = (unsigned int) country_to_global_op_class(country, (unsigned char)param->operatingClass);
     wifi_hal_info_print("%s:%d:interface name:%s country:%s op class:%d global op class:%d channel:%d frequency:%d center_freq1:%d\n", __func__, __LINE__, 
         interface->name, country, param->operatingClass, global_op_class, param->channel, iface->freq, cf1);

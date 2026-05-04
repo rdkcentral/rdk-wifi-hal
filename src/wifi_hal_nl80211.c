@@ -8339,6 +8339,80 @@ Exit:
     return 0;
 }
 
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+/**
+ * wifi_update_eht_oper_capability() - refresh EHT operation fields in radio capab.
+ *
+ * Called after hostapd iconf has been fully configured (channel + seg0 set),
+ * i.e. from update_hostap_iface() and after channel-switch events.  Also
+ * called from wifi_get_radio_capability_data() but at that point iconf may
+ * not yet be configured, so a second call here is required.
+ */
+void wifi_update_eht_oper_capability(wifi_radio_info_t *radio)
+{
+    wifi_radio_capabilities_t *capability = &radio->capab;
+
+    if (!capability->wifi7_supported) {
+        return;
+    }
+
+    wifi_interface_info_t *prim_iface = get_primary_interface(radio);
+    if (prim_iface == NULL) {
+        wifi_hal_dbg_print("%s:%d: no primary interface, cannot update EHT oper capab\n",
+            __func__, __LINE__);
+        return;
+    }
+
+    struct hostapd_config *iconf = prim_iface->u.ap.hapd.iconf;
+    u8 seg0    = hostapd_get_oper_centr_freq_seg0_idx(iconf);
+    enum oper_chan_width chwidth = hostapd_get_oper_chwidth(iconf);
+    u8 channel = (u8)iconf->channel;
+
+    if (channel == 0) {
+        wifi_hal_dbg_print("%s:%d: iconf->channel=0, iface not yet configured\n",
+            __func__, __LINE__);
+        return;
+    }
+
+    capability->eht_op_chwidth = (UCHAR)chwidth;
+
+    switch (chwidth) {
+    case CONF_OPER_CHWIDTH_USE_HT:
+        capability->eht_op_ccfs0    = seg0 ? seg0 : channel;
+        capability->eht_op_ccfs1    = 0;
+        capability->eht_op_control  = seg0 ? EHT_OPER_CHANNEL_WIDTH_40MHZ
+                                           : EHT_OPER_CHANNEL_WIDTH_20MHZ;
+        break;
+    case CONF_OPER_CHWIDTH_80MHZ:
+        capability->eht_op_ccfs0    = seg0;
+        capability->eht_op_ccfs1    = 0;
+        capability->eht_op_control  = EHT_OPER_CHANNEL_WIDTH_80MHZ;
+        break;
+    case CONF_OPER_CHWIDTH_160MHZ:
+        capability->eht_op_ccfs0    = (channel < seg0) ? seg0 - 8 : seg0 + 8;
+        capability->eht_op_ccfs1    = seg0;
+        capability->eht_op_control  = EHT_OPER_CHANNEL_WIDTH_160MHZ;
+        break;
+    case CONF_OPER_CHWIDTH_320MHZ:
+        capability->eht_op_ccfs0    = (channel < seg0) ? seg0 - 16 : seg0 + 16;
+        capability->eht_op_ccfs1    = seg0;
+        capability->eht_op_control  = EHT_OPER_CHANNEL_WIDTH_320MHZ;
+        break;
+    default:
+        capability->eht_op_ccfs0    = seg0 ? seg0 : channel;
+        capability->eht_op_ccfs1    = 0;
+        capability->eht_op_control  = EHT_OPER_CHANNEL_WIDTH_20MHZ;
+        break;
+    }
+
+    wifi_hal_dbg_print("%s:%d: EHT oper updated: chwidth=%d control=%u ccfs0=%u ccfs1=%u\n",
+        __func__, __LINE__, chwidth, capability->eht_op_control,
+        capability->eht_op_ccfs0, capability->eht_op_ccfs1);
+}
+#endif /* HOSTAPD_VERSION >= 211 */
+#endif /* CONFIG_IEEE80211BE */
+
 INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band nl_band)
 {
     struct hostapd_hw_modes *hw_mode;
@@ -8442,58 +8516,11 @@ INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band n
         wpa_hexdump(MSG_MSGDUMP, "EHT MCS", eht_cap->mcs, sizeof(eht_cap->mcs));
         wpa_hexdump(MSG_MSGDUMP, "EHT ppet", eht_cap->ppet, sizeof(eht_cap->ppet));
 
-        /* Extract EHT Operation parameters from the primary interface's
-         * hostapd iconf.  These reflect the current operating channel width
-         * and center-frequency segment indices as set by hostapd at BSS-init
-         * or after a channel switch.  Mirrors the convention used by
-         * hostapd_eid_eht_operation(): iconf seg0_idx carries the full wider
-         * channel center for 160/320 MHz (= CCFS1 per 802.11be), so CCFS0 is
-         * derived as seg0_idx ± 8 (160 MHz) or ± 16 (320 MHz). */
-        wifi_interface_info_t *prim_iface = get_primary_interface(radio);
-        if (prim_iface != NULL) {
-            struct hostapd_config *iconf = prim_iface->u.ap.hapd.iconf;
-            u8 seg0 = hostapd_get_oper_centr_freq_seg0_idx(iconf);
-            enum oper_chan_width chwidth = hostapd_get_oper_chwidth(iconf);
-            u8 channel = (u8)iconf->channel;
-
-            capability->eht_op_chwidth = (UCHAR)chwidth;
-
-            switch (chwidth) {
-            case CONF_OPER_CHWIDTH_USE_HT:  /* 20 or 40 MHz: seg0=40MHz center or 0 for 20 */
-                /* Mirror hostapd_eid_eht_operation(): ccfs0 = seg0 ? seg0 : channel */
-                capability->eht_op_ccfs0 = seg0 ? seg0 : channel;
-                capability->eht_op_ccfs1 = 0;
-                /* 40 MHz when seg0 set (non-zero implies secondary channel exists) */
-                capability->eht_op_control = seg0 ? EHT_OPER_CHANNEL_WIDTH_40MHZ
-                                                  : EHT_OPER_CHANNEL_WIDTH_20MHZ;
-                break;
-            case CONF_OPER_CHWIDTH_80MHZ:
-                capability->eht_op_ccfs0 = seg0;
-                capability->eht_op_ccfs1 = 0;
-                capability->eht_op_control = EHT_OPER_CHANNEL_WIDTH_80MHZ;
-                break;
-            case CONF_OPER_CHWIDTH_160MHZ:
-                /* seg0 = full 160 MHz center (CCFS1); derive CCFS0 */
-                capability->eht_op_ccfs0 = (channel < seg0) ? seg0 - 8 : seg0 + 8;
-                capability->eht_op_ccfs1 = seg0;
-                capability->eht_op_control = EHT_OPER_CHANNEL_WIDTH_160MHZ;
-                break;
-            case CONF_OPER_CHWIDTH_320MHZ:
-                /* seg0 = full 320 MHz center (CCFS1); derive CCFS0 */
-                capability->eht_op_ccfs0 = (channel < seg0) ? seg0 - 16 : seg0 + 16;
-                capability->eht_op_ccfs1 = seg0;
-                capability->eht_op_control = EHT_OPER_CHANNEL_WIDTH_320MHZ;
-                break;
-            default:
-                capability->eht_op_ccfs0 = seg0 ? seg0 : channel;
-                capability->eht_op_ccfs1 = 0;
-                capability->eht_op_control = EHT_OPER_CHANNEL_WIDTH_20MHZ;
-                break;
-            }
-            wifi_hal_dbg_print("%s:%d: EHT oper: chwidth=%d control=%u ccfs0=%u ccfs1=%u\n",
-                __func__, __LINE__, chwidth, capability->eht_op_control,
-                capability->eht_op_ccfs0, capability->eht_op_ccfs1);
-        }
+        /* EHT oper fields (chwidth, ccfs0, ccfs1, control) are refreshed by
+         * wifi_update_eht_oper_capability() which is called from
+         * update_hostap_iface() after iconf is fully configured.  Attempt the
+         * refresh here too in case the primary iface is already up. */
+        wifi_update_eht_oper_capability(radio);
     } else {
         wifi_hal_dbg_print("%s:%d: EHT capabilities not supported or not populated for band %d\n",
             __func__, __LINE__, nl_band);
