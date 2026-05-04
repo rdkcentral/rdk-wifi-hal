@@ -8441,6 +8441,48 @@ INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band n
         wpa_hexdump(MSG_MSGDUMP, "EHT Phy cap", eht_cap->phy_cap, sizeof(eht_cap->phy_cap));
         wpa_hexdump(MSG_MSGDUMP, "EHT MCS", eht_cap->mcs, sizeof(eht_cap->mcs));
         wpa_hexdump(MSG_MSGDUMP, "EHT ppet", eht_cap->ppet, sizeof(eht_cap->ppet));
+
+        /* Extract EHT Operation parameters from the primary interface's
+         * hostapd iconf.  These reflect the current operating channel width
+         * and center-frequency segment indices as set by hostapd at BSS-init
+         * or after a channel switch.  Mirrors the convention used by
+         * hostapd_eid_eht_operation(): iconf seg0_idx carries the full wider
+         * channel center for 160/320 MHz (= CCFS1 per 802.11be), so CCFS0 is
+         * derived as seg0_idx ± 8 (160 MHz) or ± 16 (320 MHz). */
+        wifi_interface_info_t *prim_iface = get_primary_interface(radio);
+        if (prim_iface != NULL) {
+            struct hostapd_config *iconf = prim_iface->u.ap.hapd.iconf;
+            u8 seg0 = hostapd_get_oper_centr_freq_seg0_idx(iconf);
+            enum oper_chan_width chwidth = hostapd_get_oper_chwidth(iconf);
+            u8 channel = (u8)iconf->channel;
+
+            capability->eht_op_chwidth = (UCHAR)chwidth;
+
+            switch (chwidth) {
+            case CONF_OPER_CHWIDTH_USE_HT:  /* 20 or 40 MHz */
+            case CONF_OPER_CHWIDTH_80MHZ:
+                capability->eht_op_ccfs0 = seg0;
+                capability->eht_op_ccfs1 = 0;
+                break;
+            case CONF_OPER_CHWIDTH_160MHZ:
+                /* seg0 = full 160 MHz center (CCFS1); derive CCFS0 */
+                capability->eht_op_ccfs0 = (channel < seg0) ? seg0 - 8 : seg0 + 8;
+                capability->eht_op_ccfs1 = seg0;
+                break;
+            case CONF_OPER_CHWIDTH_320MHZ:
+                /* seg0 = full 320 MHz center (CCFS1); derive CCFS0 */
+                capability->eht_op_ccfs0 = (channel < seg0) ? seg0 - 16 : seg0 + 16;
+                capability->eht_op_ccfs1 = seg0;
+                break;
+            default:
+                capability->eht_op_ccfs0 = seg0 ? seg0 : channel;
+                capability->eht_op_ccfs1 = 0;
+                break;
+            }
+            wifi_hal_dbg_print("%s:%d: EHT oper: chwidth=%d seg0=%u ccfs0=%u ccfs1=%u\n",
+                __func__, __LINE__, chwidth, seg0,
+                capability->eht_op_ccfs0, capability->eht_op_ccfs1);
+        }
     } else {
         wifi_hal_dbg_print("%s:%d: EHT capabilities not supported or not populated for band %d\n",
             __func__, __LINE__, nl_band);
@@ -8449,6 +8491,9 @@ INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band n
         memset(capability->eht_phy_cap, 0, EHT_PHY_CAPAB_LEN);
         memset(capability->eht_mcs, 0, EHT_MCS_NSS_CAPAB_LEN);
         memset(capability->eht_ppet, 0, EHT_PPE_THRESH_CAPAB_LEN);
+        capability->eht_op_chwidth = 0;
+        capability->eht_op_ccfs0 = 0;
+        capability->eht_op_ccfs1 = 0;
     }
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif /* CONFIG_IEEE80211BE */
@@ -17840,35 +17885,6 @@ int prim_interface_set_freq(wifi_radio_info_t *radio, wifi_interface_info_t *int
     hostapd_set_oper_centr_freq_seg1_idx(interface->u.ap.hapd.iconf, 0);
     hostapd_set_oper_centr_freq_seg0_idx(interface->u.ap.hapd.iconf, seg0);
 
-    /* Write CCFS0/CCFS1 back into oper_param.channelSecondary[] — see
-     * update_hostap_iface() for the full convention description. */
-    switch (bw) {
-    case WIFI_CHANNELBANDWIDTH_20MHZ:
-        param->numSecondaryChannels = 0;
-        break;
-    case WIFI_CHANNELBANDWIDTH_40MHZ:
-    case WIFI_CHANNELBANDWIDTH_80MHZ:
-        param->channelSecondary[0] = seg0;
-        param->numSecondaryChannels = 1;
-        break;
-    case WIFI_CHANNELBANDWIDTH_160MHZ:
-    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
-        param->channelSecondary[0] = (channel < seg0) ? seg0 - 8 : seg0 + 8;
-        param->channelSecondary[1] = seg0;
-        param->numSecondaryChannels = 2;
-        break;
-#ifdef CONFIG_IEEE80211BE
-    case WIFI_CHANNELBANDWIDTH_320MHZ:
-        param->channelSecondary[0] = (channel < seg0) ? seg0 - 16 : seg0 + 16;
-        param->channelSecondary[1] = seg0;
-        param->numSecondaryChannels = 2;
-        break;
-#endif /* CONFIG_IEEE80211BE */
-    default:
-        param->numSecondaryChannels = 0;
-        break;
-    }
-
     res = hostapd_set_freq(&interface->u.ap.hapd, interface->u.ap.hapd.iconf->hw_mode, freq,
                 channel,
                 interface->u.ap.hapd.iconf->enable_edmg,
@@ -18051,35 +18067,6 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
     hostapd_set_oper_centr_freq_seg1_idx(interface->u.ap.hapd.iconf, seg1);
     hostapd_set_oper_centr_freq_seg0_idx(interface->u.ap.hapd.iconf, seg0);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-
-    /* Write CCFS0/CCFS1 back into oper_param.channelSecondary[] — see
-     * update_hostap_iface() for the full convention description. */
-    switch (radio->oper_param.channelWidth) {
-    case WIFI_CHANNELBANDWIDTH_20MHZ:
-        param->numSecondaryChannels = 0;
-        break;
-    case WIFI_CHANNELBANDWIDTH_40MHZ:
-    case WIFI_CHANNELBANDWIDTH_80MHZ:
-        param->channelSecondary[0] = seg0;
-        param->numSecondaryChannels = 1;
-        break;
-    case WIFI_CHANNELBANDWIDTH_160MHZ:
-    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
-        param->channelSecondary[0] = (param->channel < seg0) ? seg0 - 8 : seg0 + 8;
-        param->channelSecondary[1] = seg0;
-        param->numSecondaryChannels = 2;
-        break;
-#ifdef CONFIG_IEEE80211BE
-    case WIFI_CHANNELBANDWIDTH_320MHZ:
-        param->channelSecondary[0] = (param->channel < seg0) ? seg0 - 16 : seg0 + 16;
-        param->channelSecondary[1] = seg0;
-        param->numSecondaryChannels = 2;
-        break;
-#endif /* CONFIG_IEEE80211BE */
-    default:
-        param->numSecondaryChannels = 0;
-        break;
-    }
 
     wifi_hal_info_print("%s:%d iface_freq:%d freq:%d freq1:%d chan:%u seg0:%u sec_chan_offset:%d opclass:%u \n",__FUNCTION__, __LINE__, interface->u.ap.iface.freq, freq, freq1,
                          radio->oper_param.channel, seg0, sec_chan_offset, radio->oper_param.operatingClass);

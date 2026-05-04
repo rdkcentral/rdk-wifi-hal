@@ -951,56 +951,6 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
     }
 
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-
-    /*
-     * Populate oper_param.channelSecondary[] from the kernel-reported center
-     * frequencies so upper layers (e.g. EasyMesh EHT Operation TLV) can read
-     * CCFS0/CCFS1 without direct access to hostapd iconf.
-     *
-     * nl80211 NL80211_ATTR_CENTER_FREQ1 (cf1 → seg0_idx) convention:
-     *   20 MHz           : not set / equals primary channel center
-     *   40/80 MHz        : center of the 40/80 MHz channel  → CCFS0
-     *   160/320 MHz      : center of the FULL wider channel → CCFS1 per
-     *                      802.11be spec; CCFS0 derived as seg0_idx ± 8 (160)
-     *                      or ± 16 (320).
-     *
-     * NL80211_ATTR_CENTER_FREQ2 (cf2 → seg1_idx) is only non-zero for
-     * 80+80 MHz (the second 80 MHz segment center).
-     */
-    wifi_radio_operationParam_t *param = &radio->oper_param;
-    switch (hal_channel_width) {
-    case WIFI_CHANNELBANDWIDTH_20MHZ:
-        param->numSecondaryChannels = 0;
-        break;
-    case WIFI_CHANNELBANDWIDTH_40MHZ:
-    case WIFI_CHANNELBANDWIDTH_80MHZ:
-        param->channelSecondary[0] = seg0_idx;   /* CCFS0 = center of 40/80 MHz */
-        param->numSecondaryChannels = 1;
-        break;
-    case WIFI_CHANNELBANDWIDTH_160MHZ:
-        /* cf1 = full 160 MHz center (CCFS1); CCFS0 = primary 80 MHz center */
-        param->channelSecondary[0] = (channel < seg0_idx) ? seg0_idx - 8 : seg0_idx + 8;
-        param->channelSecondary[1] = seg0_idx;
-        param->numSecondaryChannels = 2;
-        break;
-    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
-        /* cf1 = first 80 MHz center, cf2 = second 80 MHz center */
-        param->channelSecondary[0] = seg0_idx;
-        param->channelSecondary[1] = seg1_idx;
-        param->numSecondaryChannels = 2;
-        break;
-#ifdef CONFIG_IEEE80211BE
-    case WIFI_CHANNELBANDWIDTH_320MHZ:
-        /* cf1 = full 320 MHz center (CCFS1); CCFS0 = primary 160 MHz center */
-        param->channelSecondary[0] = (channel < seg0_idx) ? seg0_idx - 16 : seg0_idx + 16;
-        param->channelSecondary[1] = seg0_idx;
-        param->numSecondaryChannels = 2;
-        break;
-#endif /* CONFIG_IEEE80211BE */
-    default:
-        param->numSecondaryChannels = 0;
-        break;
-    }
 }
 
 static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, struct nlattr **tb, wifi_chan_eventType_t wifi_chan_event_type)

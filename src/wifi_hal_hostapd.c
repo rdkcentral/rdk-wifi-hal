@@ -1714,40 +1714,6 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 
     hostapd_set_oper_centr_freq_seg0_idx(interface->u.ap.hapd.iconf, seg0);
 
-    /*
-     * Populate oper_param.channelSecondary[] so upper layers can read
-     * CCFS0/CCFS1 (per 802.11be spec) without needing hostapd iconf access.
-     * Here cf1 carries the full-channel center for 160/320 MHz (CCFS1),
-     * and the primary-segment center (CCFS0) is derived as ± 8 / ± 16.
-     * There is no cf2 at BSS-init time; 80+80 falls back to seg0 for both.
-     */
-    switch (param->channelWidth) {
-    case WIFI_CHANNELBANDWIDTH_20MHZ:
-        param->numSecondaryChannels = 0;
-        break;
-    case WIFI_CHANNELBANDWIDTH_40MHZ:
-    case WIFI_CHANNELBANDWIDTH_80MHZ:
-        param->channelSecondary[0] = seg0;
-        param->numSecondaryChannels = 1;
-        break;
-    case WIFI_CHANNELBANDWIDTH_160MHZ:
-    case WIFI_CHANNELBANDWIDTH_80_80MHZ:
-        param->channelSecondary[0] = (param->channel < seg0) ? seg0 - 8 : seg0 + 8;
-        param->channelSecondary[1] = seg0;
-        param->numSecondaryChannels = 2;
-        break;
-#ifdef CONFIG_IEEE80211BE
-    case WIFI_CHANNELBANDWIDTH_320MHZ:
-        param->channelSecondary[0] = (param->channel < seg0) ? seg0 - 16 : seg0 + 16;
-        param->channelSecondary[1] = seg0;
-        param->numSecondaryChannels = 2;
-        break;
-#endif /* CONFIG_IEEE80211BE */
-    default:
-        param->numSecondaryChannels = 0;
-        break;
-    }
-
     global_op_class = (unsigned int) country_to_global_op_class(country, (unsigned char)param->operatingClass);
     wifi_hal_info_print("%s:%d:interface name:%s country:%s op class:%d global op class:%d channel:%d frequency:%d center_freq1:%d\n", __func__, __LINE__, 
         interface->name, country, param->operatingClass, global_op_class, param->channel, iface->freq, cf1);
