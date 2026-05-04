@@ -356,6 +356,52 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
         radio_band = get_band_info_from_rdk_radio_index(i);
         cap = &hal->wifi_prop.radiocap[i];
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+        /* Refresh EHT oper fields in radio->capab from the current iconf state
+         * so that radiocap[] always reflects the live channel/width regardless
+         * of when getHalCapability is called relative to setRadioOperatingParameters.
+         * Only update when the channel is non-zero (i.e. after first config). */
+        {
+            wifi_interface_info_t *pi = get_primary_interface(radio);
+            if (pi != NULL && pi->u.ap.hapd.iconf != NULL &&
+                    pi->u.ap.hapd.iconf->channel != 0) {
+                u8 seg0 = hostapd_get_oper_centr_freq_seg0_idx(pi->u.ap.hapd.iconf);
+                enum oper_chan_width chwidth = hostapd_get_oper_chwidth(pi->u.ap.hapd.iconf);
+                u8 ch = (u8)pi->u.ap.hapd.iconf->channel;
+                radio->capab.eht_op_chwidth = (UCHAR)chwidth;
+                switch (chwidth) {
+                case CONF_OPER_CHWIDTH_USE_HT:
+                    radio->capab.eht_op_ccfs0   = seg0 ? seg0 : ch;
+                    radio->capab.eht_op_ccfs1   = 0;
+                    radio->capab.eht_op_control = seg0 ? EHT_OPER_CHANNEL_WIDTH_40MHZ
+                                                       : EHT_OPER_CHANNEL_WIDTH_20MHZ;
+                    break;
+                case CONF_OPER_CHWIDTH_80MHZ:
+                    radio->capab.eht_op_ccfs0   = seg0;
+                    radio->capab.eht_op_ccfs1   = 0;
+                    radio->capab.eht_op_control = EHT_OPER_CHANNEL_WIDTH_80MHZ;
+                    break;
+                case CONF_OPER_CHWIDTH_160MHZ:
+                    radio->capab.eht_op_ccfs0   = (ch < seg0) ? seg0 - 8 : seg0 + 8;
+                    radio->capab.eht_op_ccfs1   = seg0;
+                    radio->capab.eht_op_control = EHT_OPER_CHANNEL_WIDTH_160MHZ;
+                    break;
+                case CONF_OPER_CHWIDTH_320MHZ:
+                    radio->capab.eht_op_ccfs0   = (ch < seg0) ? seg0 - 16 : seg0 + 16;
+                    radio->capab.eht_op_ccfs1   = seg0;
+                    radio->capab.eht_op_control = EHT_OPER_CHANNEL_WIDTH_320MHZ;
+                    break;
+                default:
+                    radio->capab.eht_op_ccfs0   = ch;
+                    radio->capab.eht_op_ccfs1   = 0;
+                    radio->capab.eht_op_control = EHT_OPER_CHANNEL_WIDTH_20MHZ;
+                    break;
+                }
+            }
+        }
+#endif /* HOSTAPD_VERSION >= 211 */
+#endif /* CONFIG_IEEE80211BE */
         memcpy((unsigned char *)cap, (unsigned char *)&radio->capab, sizeof(wifi_radio_capabilities_t));
         adjust_radio_capability_band(cap, radio_band);
     }
