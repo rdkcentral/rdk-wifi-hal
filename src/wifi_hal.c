@@ -1052,75 +1052,6 @@ try_hostap_config_update:
         goto reload_config;
     }
 
-#ifdef CONFIG_IEEE80211BE
-#if HOSTAPD_VERSION >= 211
-    /* Update EHT operation capability fields after channel/width are applied.
-     * operationParam carries the real channel; compute seg0 from center-freq
-     * helpers (same as update_hostap_iface) and update radio->capab directly.
-     * This runs every time setRadioOperatingParameters is called so that
-     * radiocap[] (snapshotted by getHalCapability) stays in sync. */
-    {
-        char country[4] = { 0 };
-        get_coutry_str_from_oper_params(operationParam, country);
-        u8 ch = (u8)operationParam->channel;
-        u8 seg0_ch = 0;
-        int cf1_hz = 0;
-
-        switch (operationParam->channelWidth) {
-        case WIFI_CHANNELBANDWIDTH_40MHZ: {
-            /* CCFS0 = primary ± 2 channels; derive secondary offset from iconf or
-             * country/op-class lookup if iconf not yet initialized. */
-            wifi_interface_info_t *pi = get_primary_interface(radio);
-            int sec = (pi && pi->u.ap.hapd.iconf) ? pi->u.ap.hapd.iconf->secondary_channel : 0;
-            if (sec == 0) {
-                int freq = ieee80211_chan_to_freq(country, operationParam->operatingClass, (int)ch);
-                sec = get_sec_channel_offset(radio, freq);
-            }
-            seg0_ch = (u8)(ch + (sec >= 0 ? 2 : -2));
-            radio->capab.eht_op_chwidth  = CONF_OPER_CHWIDTH_USE_HT;
-            radio->capab.eht_op_ccfs0    = seg0_ch;
-            radio->capab.eht_op_ccfs1    = 0;
-            radio->capab.eht_op_control  = EHT_OPER_CHANNEL_WIDTH_40MHZ;
-            break;
-        }
-        case WIFI_CHANNELBANDWIDTH_80MHZ:
-            cf1_hz = get_bw80_center_freq(operationParam, country);
-            ieee80211_freq_to_chan(cf1_hz, &seg0_ch);
-            radio->capab.eht_op_chwidth  = CONF_OPER_CHWIDTH_80MHZ;
-            radio->capab.eht_op_ccfs0    = seg0_ch;
-            radio->capab.eht_op_ccfs1    = 0;
-            radio->capab.eht_op_control  = EHT_OPER_CHANNEL_WIDTH_80MHZ;
-            break;
-        case WIFI_CHANNELBANDWIDTH_160MHZ:
-            cf1_hz = get_bw160_center_freq(operationParam, country);
-            ieee80211_freq_to_chan(cf1_hz, &seg0_ch);  /* seg0_ch = full 160 center (CCFS1) */
-            radio->capab.eht_op_chwidth  = CONF_OPER_CHWIDTH_160MHZ;
-            radio->capab.eht_op_ccfs0    = (ch < seg0_ch) ? seg0_ch - 8 : seg0_ch + 8;
-            radio->capab.eht_op_ccfs1    = seg0_ch;
-            radio->capab.eht_op_control  = EHT_OPER_CHANNEL_WIDTH_160MHZ;
-            break;
-        case WIFI_CHANNELBANDWIDTH_320MHZ:
-            cf1_hz = get_bw320_center_freq(operationParam, country);
-            ieee80211_freq_to_chan(cf1_hz, &seg0_ch);  /* seg0_ch = full 320 center (CCFS1) */
-            radio->capab.eht_op_chwidth  = CONF_OPER_CHWIDTH_320MHZ;
-            radio->capab.eht_op_ccfs0    = (ch < seg0_ch) ? seg0_ch - 16 : seg0_ch + 16;
-            radio->capab.eht_op_ccfs1    = seg0_ch;
-            radio->capab.eht_op_control  = EHT_OPER_CHANNEL_WIDTH_320MHZ;
-            break;
-        default:  /* 20 MHz */
-            radio->capab.eht_op_chwidth  = CONF_OPER_CHWIDTH_USE_HT;
-            radio->capab.eht_op_ccfs0    = ch;
-            radio->capab.eht_op_ccfs1    = 0;
-            radio->capab.eht_op_control  = EHT_OPER_CHANNEL_WIDTH_20MHZ;
-            break;
-        }
-        wifi_hal_dbg_print("%s:%d: EHT oper capab: chwidth=%d control=%u ccfs0=%u ccfs1=%u\n",
-            __func__, __LINE__, radio->capab.eht_op_chwidth, radio->capab.eht_op_control,
-            radio->capab.eht_op_ccfs0, radio->capab.eht_op_ccfs1);
-    }
-#endif /* HOSTAPD_VERSION >= 211 */
-#endif /* CONFIG_IEEE80211BE */
-
     if (nl80211_update_wiphy(radio) != 0) {
         wifi_hal_error_print("%s:%d:Failed to update radio\n", __func__, __LINE__);
         goto reload_config;
@@ -3231,16 +3162,7 @@ static int decode_bss_info_to_neighbor_ap_info(wifi_neighbor_ap2_t *ap, const wi
 
     // - ap_DTIMPeriod
     ap->ap_DTIMPeriod = bss->dtim_period;
-  
-    /*
-     * Channel Utilization (CU) may be derived from multiple sources (e.g., BSS Load IE
-     * or other scan attributes like NL80211_BSS_CU). Populate ap_ChannelUtilization
-     * unconditionally to preserve legacy behavior and avoid dropping valid CU when
-     * the BSS Load IE is absent.
-     *
-     * Only BSS Load specific fields (bss_load_element_present, ap_StaCount) are gated
-     * on the presence of the BSS Load IE.
-     */
+    // - ap_ChannelUtilization
     ap->ap_ChannelUtilization = bss->chan_utilization;
 
     // - bss_load_element 

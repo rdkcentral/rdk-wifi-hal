@@ -1714,6 +1714,48 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 
     hostapd_set_oper_centr_freq_seg0_idx(interface->u.ap.hapd.iconf, seg0);
 
+#ifdef CONFIG_IEEE80211BE
+#if HOSTAPD_VERSION >= 211
+    {
+        enum oper_chan_width chwidth = hostapd_get_oper_chwidth(interface->u.ap.hapd.iconf);
+        u8 eht_channel = (u8)interface->u.ap.hapd.iconf->channel;
+
+        radio->capab.eht_op_chwidth = (UCHAR)chwidth;
+        switch (chwidth) {
+        case CONF_OPER_CHWIDTH_USE_HT:
+            radio->capab.eht_op_ccfs0   = seg0 ? seg0 : eht_channel;
+            radio->capab.eht_op_ccfs1   = 0;
+            radio->capab.eht_op_control = seg0 ? EHT_OPER_CHANNEL_WIDTH_40MHZ
+                                               : EHT_OPER_CHANNEL_WIDTH_20MHZ;
+            break;
+        case CONF_OPER_CHWIDTH_80MHZ:
+            radio->capab.eht_op_ccfs0   = seg0;
+            radio->capab.eht_op_ccfs1   = 0;
+            radio->capab.eht_op_control = EHT_OPER_CHANNEL_WIDTH_80MHZ;
+            break;
+        case CONF_OPER_CHWIDTH_160MHZ:
+            radio->capab.eht_op_ccfs0   = (eht_channel < seg0) ? seg0 - 8 : seg0 + 8;
+            radio->capab.eht_op_ccfs1   = seg0;
+            radio->capab.eht_op_control = EHT_OPER_CHANNEL_WIDTH_160MHZ;
+            break;
+        case CONF_OPER_CHWIDTH_320MHZ:
+            radio->capab.eht_op_ccfs0   = (eht_channel < seg0) ? seg0 - 16 : seg0 + 16;
+            radio->capab.eht_op_ccfs1   = seg0;
+            radio->capab.eht_op_control = EHT_OPER_CHANNEL_WIDTH_320MHZ;
+            break;
+        default:
+            radio->capab.eht_op_ccfs0   = seg0 ? seg0 : eht_channel;
+            radio->capab.eht_op_ccfs1   = 0;
+            radio->capab.eht_op_control = EHT_OPER_CHANNEL_WIDTH_20MHZ;
+            break;
+        }
+        wifi_hal_dbg_print("%s:%d: EHT oper capab updated: chwidth=%d control=%u ccfs0=%u ccfs1=%u\n",
+            __func__, __LINE__, chwidth, radio->capab.eht_op_control,
+            radio->capab.eht_op_ccfs0, radio->capab.eht_op_ccfs1);
+    }
+#endif /* HOSTAPD_VERSION >= 211 */
+#endif /* CONFIG_IEEE80211BE */
+
     global_op_class = (unsigned int) country_to_global_op_class(country, (unsigned char)param->operatingClass);
     wifi_hal_info_print("%s:%d:interface name:%s country:%s op class:%d global op class:%d channel:%d frequency:%d center_freq1:%d\n", __func__, __LINE__, 
         interface->name, country, param->operatingClass, global_op_class, param->channel, iface->freq, cf1);
