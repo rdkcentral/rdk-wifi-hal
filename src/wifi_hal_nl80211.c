@@ -5476,11 +5476,10 @@ static void wiphy_info_ext_feature_flags(wifi_radio_info_t *radio,
         capa->flags2 |= WPA_DRIVER_FLAGS2_OCV;
     }
 
-    /* XXX: is not present in nl80211_copy.h, maybe needs to be fixed
     if (ext_feature_isset(ext_features, len,
                   NL80211_EXT_FEATURE_RADAR_BACKGROUND)) {
-        capa->flags2 |= WPA_DRIVER_RADAR_BACKGROUND;
-    }*/
+        capa->flags2 |= WPA_DRIVER_FLAGS2_RADAR_BACKGROUND;
+    }
 }
 
 static unsigned int probe_resp_offload_support(int supp_protocols)
@@ -5885,6 +5884,10 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 #endif
         radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
         memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
+        // Set Channel Scan Capability defaults only
+        radio->capab.boot_only = 1;         // default: boot only
+        radio->capab.scan_impact = WIFI_SCAN_IMPACT_TIME_SLICING;    // default: time slicing
+        radio->capab.min_scan_interval = 20; // default: 20 seconds
         g_wifi_hal.num_radios++;
     }
 
@@ -5918,6 +5921,13 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 
         capa->max_sched_scan_plan_interval =
             nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_INTERVAL]);
+
+        /* If the hardware can't support a 20s gap in its
+         * internal scan plans, we adjust the capability down. */
+        if (capa->max_sched_scan_plan_interval < radio->capab.min_scan_interval) {
+            radio->capab.min_scan_interval =
+                capa->max_sched_scan_plan_interval;
+        }
 
         capa->max_sched_scan_plan_iterations =
             nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_ITERATIONS]);
@@ -6172,6 +6182,26 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
+
+    if (tb[NL80211_ATTR_FEATURE_FLAGS]) {
+        u32 flags = nla_get_u32(tb[NL80211_ATTR_FEATURE_FLAGS]);
+        if (flags & NL80211_FEATURE_SCAN_FLUSH) {
+            radio->capab.scan_impact = WIFI_SCAN_IMPACT_NONE;
+        }
+    }
+
+    if (tb[NL80211_ATTR_SUPPORTED_COMMANDS]) {
+        struct nlattr *nl_cmd;
+        int i;
+
+        nla_for_each_nested(nl_cmd, tb[NL80211_ATTR_SUPPORTED_COMMANDS], i) {
+            if (nla_get_u32(nl_cmd) == NL80211_CMD_TRIGGER_SCAN) {
+                radio->capab.boot_only = 0; /* on-demand scan supported */
+                break;
+            }
+        }
+    }
+
     if (tb[NL80211_ATTR_WDEV]) {
         radio->dev_id = nla_get_u64(tb[NL80211_ATTR_WDEV]);
     }
@@ -8344,7 +8374,7 @@ Exit:
     return 0;
 }
 
-INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_band)
+INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band nl_band)
 {
     struct hostapd_hw_modes *hw_mode;
     wifi_radio_capabilities_t *capability = NULL;
@@ -8446,6 +8476,61 @@ INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_b
         wpa_hexdump(MSG_MSGDUMP, "EHT Phy cap", eht_cap->phy_cap, sizeof(eht_cap->phy_cap));
         wpa_hexdump(MSG_MSGDUMP, "EHT MCS", eht_cap->mcs, sizeof(eht_cap->mcs));
         wpa_hexdump(MSG_MSGDUMP, "EHT ppet", eht_cap->ppet, sizeof(eht_cap->ppet));
+
+        /* Extract EHT Operation parameters from the primary interface's
+         * hostapd iconf.  These reflect the current operating channel width
+         * and center-frequency segment indices as set by hostapd at BSS-init
+         * or after a channel switch.  Mirrors the convention used by
+         * hostapd_eid_eht_operation(): iconf seg0_idx carries the full wider
+         * channel center for 160/320 MHz (= CCFS1 per 802.11be), so CCFS0 is
+         * derived as seg0_idx ± 8 (160 MHz) or ± 16 (320 MHz). */
+        wifi_interface_info_t *prim_iface = get_primary_interface(radio);
+        if (prim_iface != NULL) {
+            struct hostapd_config *iconf = prim_iface->u.ap.hapd.iconf;
+            u8 seg0 = hostapd_get_oper_centr_freq_seg0_idx(iconf);
+            enum oper_chan_width chwidth = hostapd_get_oper_chwidth(iconf);
+            u8 channel = (u8)iconf->channel;
+
+            capability->eht_op_chwidth = (UCHAR)chwidth;
+            wifi_hal_dbg_print("%s:%d: EHT oper from hostapd iconf: chwidth=%d seg0=%u channel=%u\n",
+                __func__, __LINE__, chwidth, seg0, channel);
+
+            switch (chwidth) {
+            case CONF_OPER_CHWIDTH_USE_HT:  /* 20 or 40 MHz: seg0=40MHz center or 0 for 20 */
+                /* Mirror hostapd_eid_eht_operation(): ccfs0 = seg0 ? seg0 : channel */
+                capability->eht_op_ccfs0 = seg0 ? seg0 : channel;
+                capability->eht_op_ccfs1 = 0;
+                /* 40 MHz when seg0 set (non-zero implies secondary channel exists) */
+                capability->eht_op_control = seg0 ? EHT_OPER_CHANNEL_WIDTH_40MHZ
+                                                  : EHT_OPER_CHANNEL_WIDTH_20MHZ;
+                break;
+            case CONF_OPER_CHWIDTH_80MHZ:
+                capability->eht_op_ccfs0 = seg0;
+                capability->eht_op_ccfs1 = 0;
+                capability->eht_op_control = EHT_OPER_CHANNEL_WIDTH_80MHZ;
+                break;
+            case CONF_OPER_CHWIDTH_160MHZ:
+                /* seg0 = full 160 MHz center (CCFS1); derive CCFS0 */
+                capability->eht_op_ccfs0 = (channel < seg0) ? seg0 - 8 : seg0 + 8;
+                capability->eht_op_ccfs1 = seg0;
+                capability->eht_op_control = EHT_OPER_CHANNEL_WIDTH_160MHZ;
+                break;
+            case CONF_OPER_CHWIDTH_320MHZ:
+                /* seg0 = full 320 MHz center (CCFS1); derive CCFS0 */
+                capability->eht_op_ccfs0 = (channel < seg0) ? seg0 - 16 : seg0 + 16;
+                capability->eht_op_ccfs1 = seg0;
+                capability->eht_op_control = EHT_OPER_CHANNEL_WIDTH_320MHZ;
+                break;
+            default:
+                capability->eht_op_ccfs0 = seg0 ? seg0 : channel;
+                capability->eht_op_ccfs1 = 0;
+                capability->eht_op_control = EHT_OPER_CHANNEL_WIDTH_20MHZ;
+                break;
+            }
+            wifi_hal_dbg_print("%s:%d: EHT oper: chwidth=%d control=%u ccfs0=%u ccfs1=%u\n",
+                __func__, __LINE__, chwidth, capability->eht_op_control,
+                capability->eht_op_ccfs0, capability->eht_op_ccfs1);
+        }
     } else {
         wifi_hal_dbg_print("%s:%d: EHT capabilities not supported or not populated for band %d\n",
             __func__, __LINE__, nl_band);
@@ -8454,9 +8539,62 @@ INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_b
         memset(capability->eht_phy_cap, 0, EHT_PHY_CAPAB_LEN);
         memset(capability->eht_mcs, 0, EHT_MCS_NSS_CAPAB_LEN);
         memset(capability->eht_ppet, 0, EHT_PPE_THRESH_CAPAB_LEN);
+        capability->eht_op_chwidth = 0;
+        capability->eht_op_ccfs0 = 0;
+        capability->eht_op_ccfs1 = 0;
+        capability->eht_op_control = 0;
     }
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif /* CONFIG_IEEE80211BE */
+
+    capability->zeroDFSSupported =
+        (radio->driver_data.capa.flags2 & WPA_DRIVER_FLAGS2_RADAR_BACKGROUND) ? TRUE : FALSE;
+    wifi_hal_dbg_print("%s:%d:  capability, zeroDFSSupported=%u\n",
+            __func__, __LINE__, capability->zeroDFSSupported);
+    /* Populate E-4 op class channel table by iterating hostapd's global_op_class[]
+     * sentinel-terminated table directly - no redundant re-lookup needed.
+     * Filter entries to only those matching this radio's nl_band so that each
+     * radio carries only its own op classes (2.4/5/6/60 GHz). */
+    capability->num_op_class_entries = 0;
+    for (const struct oper_class_map *op = global_op_class;
+         op->op_class != 0 && capability->num_op_class_entries < MAX_OP_CLASS_ENTRIES; op++) {
+        /* Band filter: keep only op classes that belong to nl_band. */
+        if (op->mode == HOSTAPD_MODE_IEEE80211B || op->mode == HOSTAPD_MODE_IEEE80211G) {
+            if (nl_band != NL80211_BAND_2GHZ)
+                continue;
+        } else if (op->mode == HOSTAPD_MODE_IEEE80211A) {
+            /* Op classes 131-137 are 6 GHz (UHB); all others with this mode are 5 GHz. */
+            int op_is_6ghz = (op->op_class >= 131 && op->op_class <= 137);
+            int band_is_6ghz = (nl_band == NL80211_BAND_6GHZ);
+            if (op_is_6ghz != band_is_6ghz)
+                continue;
+            if (nl_band != NL80211_BAND_5GHZ && nl_band != NL80211_BAND_6GHZ)
+                continue;
+        } else if (op->mode == HOSTAPD_MODE_IEEE80211AD) {
+            if (nl_band != NL80211_BAND_60GHZ)
+                continue;
+        } else {
+            continue;
+        }
+
+        unsigned int idx = capability->num_op_class_entries;
+        unsigned char count = 0;
+        for (unsigned int ch = (unsigned int)op->min_chan;
+             ch <= (unsigned int)op->max_chan && count < MAX_CHANNELS_PER_OP_CLASS;
+             ch += op->inc) {
+            capability->op_class_ch_list[idx].channels[count++] = (unsigned char)ch;
+        }
+        if (count == 0) {
+            continue;
+        }
+        capability->op_class_ch_list[idx].op_class     = op->op_class;
+        capability->op_class_ch_list[idx].num_channels = count;
+        capability->num_op_class_entries++;
+        wifi_hal_dbg_print("%s:%d: op_class_ch_list[%u]: op_class=%u channels=%u\n",
+            __func__, __LINE__, idx, op->op_class, count);
+    }
+    wifi_hal_dbg_print("%s:%d: total op_class_ch_list entries populated: %u\n",
+        __func__, __LINE__, capability->num_op_class_entries);
 
     wifi_hal_info_print("%s:%d: Successfully retrieved radio capabilities for nlband:%d\n",
         __func__, __LINE__, nl_band);
@@ -8553,9 +8691,9 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
     }
 
     // Also copy to radio cap
-    int rc = wifi_getRadioCapabilityData(radio, nl_band);
+    int rc = wifi_get_radio_capability_data(radio, nl_band);
     if (rc != RETURN_OK) {
-        wifi_hal_dbg_print("%s: wifi_getRadioCapabilityData failed for band %d, rc=%d\n",
+        wifi_hal_dbg_print("%s: get radio capability failed for band %d, rc=%d\n",
                         __func__, nl_band, rc);
     }
 
