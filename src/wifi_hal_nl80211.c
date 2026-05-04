@@ -8463,28 +8463,35 @@ INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band n
                 /* Mirror hostapd_eid_eht_operation(): ccfs0 = seg0 ? seg0 : channel */
                 capability->eht_op_ccfs0 = seg0 ? seg0 : channel;
                 capability->eht_op_ccfs1 = 0;
+                /* 40 MHz when seg0 set (non-zero implies secondary channel exists) */
+                capability->eht_op_control = seg0 ? EHT_OPER_CHANNEL_WIDTH_40MHZ
+                                                  : EHT_OPER_CHANNEL_WIDTH_20MHZ;
                 break;
             case CONF_OPER_CHWIDTH_80MHZ:
                 capability->eht_op_ccfs0 = seg0;
                 capability->eht_op_ccfs1 = 0;
+                capability->eht_op_control = EHT_OPER_CHANNEL_WIDTH_80MHZ;
                 break;
             case CONF_OPER_CHWIDTH_160MHZ:
                 /* seg0 = full 160 MHz center (CCFS1); derive CCFS0 */
                 capability->eht_op_ccfs0 = (channel < seg0) ? seg0 - 8 : seg0 + 8;
                 capability->eht_op_ccfs1 = seg0;
+                capability->eht_op_control = EHT_OPER_CHANNEL_WIDTH_160MHZ;
                 break;
             case CONF_OPER_CHWIDTH_320MHZ:
                 /* seg0 = full 320 MHz center (CCFS1); derive CCFS0 */
                 capability->eht_op_ccfs0 = (channel < seg0) ? seg0 - 16 : seg0 + 16;
                 capability->eht_op_ccfs1 = seg0;
+                capability->eht_op_control = EHT_OPER_CHANNEL_WIDTH_320MHZ;
                 break;
             default:
                 capability->eht_op_ccfs0 = seg0 ? seg0 : channel;
                 capability->eht_op_ccfs1 = 0;
+                capability->eht_op_control = EHT_OPER_CHANNEL_WIDTH_20MHZ;
                 break;
             }
-            wifi_hal_dbg_print("%s:%d: EHT oper: chwidth=%d seg0=%u ccfs0=%u ccfs1=%u\n",
-                __func__, __LINE__, chwidth, seg0,
+            wifi_hal_dbg_print("%s:%d: EHT oper: chwidth=%d control=%u ccfs0=%u ccfs1=%u\n",
+                __func__, __LINE__, chwidth, capability->eht_op_control,
                 capability->eht_op_ccfs0, capability->eht_op_ccfs1);
         }
     } else {
@@ -8498,6 +8505,7 @@ INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band n
         capability->eht_op_chwidth = 0;
         capability->eht_op_ccfs0 = 0;
         capability->eht_op_ccfs1 = 0;
+        capability->eht_op_control = 0;
     }
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif /* CONFIG_IEEE80211BE */
