@@ -987,18 +987,10 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         ch_type = nla_get_u32(tb[NL80211_ATTR_WIPHY_CHANNEL_TYPE]);
     }
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
-    if (radio && radio->oper_param.band == WIFI_FREQUENCY_6_BAND) { 
-        bw = platform_get_bandwidth(interface);
-    } else {
-#endif
+
     if(tb[NL80211_ATTR_CHANNEL_WIDTH]) {
         bw = nla_get_u32(tb[NL80211_ATTR_CHANNEL_WIDTH]);
     }
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-    }
-#endif
 
     if(tb[NL80211_ATTR_CENTER_FREQ1]) {
         cf1 = nla_get_u32(tb[NL80211_ATTR_CENTER_FREQ1]);
@@ -1159,7 +1151,7 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     radio->prev_channel = channel;
     radio->prev_channelWidth = l_channel_width;
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
+#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
 /*  XER10-530
     XER10 needs to go through 'wl' commands to enable/disable the EHT.
     It will generate a notify event from driver and the platform EHT function
