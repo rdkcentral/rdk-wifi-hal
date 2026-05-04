@@ -171,6 +171,17 @@ typedef enum {
 #endif //defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
 
 #define RATE_LIMIT_HASH_MAP_SIZE 200
+#define RATE_LIMIT_BASE_TIMEOUT 5
+#define RATE_LIMIT_MAX_VIOLATION 5
+#define RATE_LIMIT_RSSI_THRESHOLD -80
+
+#define RL_AUTH       (1 << 0)
+#define RL_ASSOC      (1 << 1)
+#define RL_REASSOC    (1 << 2)
+#define RL_AUTH_OK    (1 << 3)
+#define RL_ASSOC_OK   (1 << 4)
+#define RL_EAP_START  (1 << 5)
+#define RL_FATAL_ERR  (1 << 6)
 
 typedef struct rate_limit_entry {
     mac_address_t mac;
@@ -178,6 +189,10 @@ typedef struct rate_limit_entry {
     time_t window_start;
     time_t blocked_until;
     time_t last_activity;
+    uint8_t violation_count;
+    uint8_t activity_mask;
+    uint8_t penalty_multiplier;
+    int16_t avg_rssi;
 } rate_limit_entry_t;
 
 void prepare_interface_fdset(wifi_hal_priv_t *priv)
@@ -977,18 +992,23 @@ static rate_limit_entry_t *wifi_hal_rate_limit_entry_get(mac_address_t mac)
     return entry;
 }
 
-static bool is_wifi_hal_rate_limit_block(unsigned short stype, mac_address_t mac)
+static bool is_wifi_hal_rate_limit_block(unsigned short stype, mac_address_t mac, int rssi)
 {
     time_t time_now;
     mac_addr_str_t mac_str;
     rate_limit_entry_t *entry;
     wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
+    int timeout = 0;
+    bool is_progressive = false;
 
     if (!rl->enabled || rl->rate_limit <= 0 || rl->window_size <= 0 || rl->cooldown_time <= 0) {
         return false;
     }
 
-    if (stype != WLAN_FC_STYPE_AUTH && stype != WLAN_FC_STYPE_DEAUTH) {
+    if (stype != WLAN_FC_STYPE_AUTH &&
+        stype != WLAN_FC_STYPE_DEAUTH &&
+        stype != WLAN_FC_STYPE_ASSOC_REQ &&
+        stype != WLAN_FC_STYPE_REASSOC_REQ) {
         return false;
     }
 
@@ -1006,20 +1026,77 @@ static bool is_wifi_hal_rate_limit_block(unsigned short stype, mac_address_t mac
 
     if (difftime(time_now, entry->window_start) >= rl->window_size) {
         entry->packet_count = 0;
+        entry->activity_mask = 0;
+        entry->avg_rssi = 0;
         entry->window_start = time_now;
     }
 
+    // wait for 5 iterations of hard block behavior
+    if (entry->activity_mask & RL_FATAL_ERR)
+    {
+        entry->packet_count = rl->rate_limit;
+        timeout = rl->cooldown_time;
+        wifi_hal_info_print("%s:%d: client: %s definitive AP Assoc/Auth reject detected\n",
+            __func__, __LINE__, to_mac_str(mac, mac_str));
+        goto block;
+    }
+
+    if (stype == WLAN_FC_STYPE_AUTH)
+        entry->activity_mask |= RL_AUTH;
+    else if (stype == WLAN_FC_STYPE_ASSOC_REQ)
+        entry->activity_mask |= RL_ASSOC;
+    else if (stype == WLAN_FC_STYPE_REASSOC_REQ)
+        entry->activity_mask |= RL_REASSOC;
+
+    if (rssi < -1 && rssi > -100) {
+        if (!entry->avg_rssi)
+            entry->avg_rssi = rssi;
+        else
+            entry->avg_rssi = (entry->avg_rssi + rssi) / 2;
+    }
+
     if (entry->packet_count < rl->rate_limit) {
-        entry->packet_count++;
+        if (stype == WLAN_FC_STYPE_AUTH || stype == WLAN_FC_STYPE_DEAUTH)
+            entry->packet_count++;
         return false;
     }
 
-    wifi_hal_info_print(
-        "%s:%d: blocked frame type:%d from:%s due to rate limit:%d frames per %d sec for %d sec\n",
-        __func__, __LINE__, stype, to_mac_str(mac, mac_str), rl->rate_limit, rl->window_size,
-        rl->cooldown_time);
+    //after 5 iterations
+    is_progressive = (entry->activity_mask & RL_EAP_START) ||
+        (entry->avg_rssi <= RATE_LIMIT_RSSI_THRESHOLD) ||
+        ((entry->activity_mask & RL_AUTH) &&
+        (entry->activity_mask & (RL_ASSOC | RL_REASSOC)) &&
+        (entry->activity_mask & (RL_AUTH_OK | RL_ASSOC_OK)));
 
-    entry->blocked_until = time_now + rl->cooldown_time;
+    if (is_progressive) {
+        /* SOFT BACKOFF */
+        timeout = RATE_LIMIT_BASE_TIMEOUT * (1 << entry->penalty_multiplier);
+        if (timeout > rl->cooldown_time)
+            timeout = rl->cooldown_time;
+        else if (entry->violation_count >= RATE_LIMIT_MAX_VIOLATION)
+            entry->penalty_multiplier++;
+    } else {
+        /* HARD BLOCK */
+        timeout = rl->cooldown_time;
+    }
+
+block:
+    if (entry->violation_count < RATE_LIMIT_MAX_VIOLATION) {
+        entry->violation_count++;
+        entry->packet_count = 0;
+        entry->activity_mask = 0;
+        entry->avg_rssi = 0;
+        wifi_hal_info_print(
+            "%s:%d: client: %s rate limit:%d violation, violation count: %u, allow\n",
+            __func__, __LINE__, to_mac_str(mac, mac_str), rl->rate_limit, entry->violation_count);
+        return false;
+    }
+    entry->blocked_until = time_now + timeout;
+
+    wifi_hal_info_print(
+        "%s:%d: blocked frame type:%d from:%s due to rate limit:%d frames per %d sec for %d sec, %s block\n",
+        __func__, __LINE__, stype, to_mac_str(mac, mac_str), rl->rate_limit, rl->window_size, timeout,
+        is_progressive ? "soft" : "hard");
 
     return true;
 }
@@ -1116,7 +1193,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     fc = le_to_host16(mgmt->frame_control);
     stype = WLAN_FC_GET_STYPE(fc);
 
-    if (is_wifi_hal_rate_limit_block(stype, sta)) {
+    if (is_wifi_hal_rate_limit_block(stype, sta, sig_dbm)) {
         return 0;
     }
 
@@ -2213,6 +2290,13 @@ void recv_data_frame(wifi_interface_info_t *interface)
                             "reply counter:%d\n",
             __func__, __LINE__, to_mac_str(eth_hdr->src, src_mac_str), to_mac_str(eth_hdr->dest, dst_mac_str), interface->name,
             is_eapol_m4((uint8_t *)hdr, buflen) ? 4 : 2, get_eapol_reply_counter((uint8_t *)hdr, buflen));
+
+        wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
+        if (rl->enabled && rl->rate_limit > 0 && rl->window_size > 0 && rl->cooldown_time > 0) {
+            rate_limit_entry_t *entry = wifi_hal_rate_limit_entry_get(sta);
+            if (entry)
+                entry->activity_mask |= RL_EAP_START;
+        }
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_EAPOL_RX, &event);
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -11534,6 +11618,49 @@ int wifi_drv_read_sta_data(void *priv,
     return 0;
 }
 
+/* Authentication & Association Status Codes (IEEE 802.11) */
+#define WLAN_STATUS_SUCCESS                        0
+#define WLAN_STATUS_CAPABILITY_MISMATCH            10  /* Fatal: Hardware/Standard mismatch */
+#define WLAN_STATUS_UNSUPPORTED_AUTH_ALG           18  /* Fatal: AP doesn't do this method */
+#define WLAN_STATUS_ROBUST_MGMT_POLICY_VIOLATION   31  /* Fatal: MFP (802.11w) required */
+#define WLAN_STATUS_REQUEST_DECLINED               37  /* Fatal: ACL/Blacklist/RADIUS Deny */
+#define WLAN_STATUS_INVALID_RSN_IE_CAP             40  /* Fatal: Malformed/Unsupported RSN */
+#define WLAN_STATUS_INVALID_AKMP                   43  /* Fatal: WPA2 vs WPA3 mismatch */
+#define WLAN_STATUS_INVALID_CIPHER                 45  /* Fatal: Prohibited Cipher (e.g. TKIP) */
+
+static void ratelimit_rc_status_check(mac_address_t mac, u16 sc, u16 fc) {
+    wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
+    rate_limit_entry_t *entry = NULL;
+    if (!rl->enabled || rl->rate_limit <= 0 || rl->window_size <= 0 || rl->cooldown_time <= 0)
+        return;
+    if (!(entry = wifi_hal_rate_limit_entry_get(mac)))
+        return;
+
+    switch (WLAN_FC_GET_STYPE(fc)) {
+        case WLAN_FC_STYPE_AUTH:
+            if (sc == WLAN_STATUS_SUCCESS)
+                entry->activity_mask |= RL_AUTH_OK;
+            else if (sc == WLAN_STATUS_UNSUPPORTED_AUTH_ALG)
+                entry->activity_mask |= RL_FATAL_ERR;
+
+            break;
+        case WLAN_FC_STYPE_ASSOC_RESP:
+        case WLAN_FC_STYPE_REASSOC_RESP:
+            if (sc == WLAN_STATUS_SUCCESS)
+                entry->activity_mask |= RL_ASSOC_OK;
+            else if (sc == WLAN_STATUS_ROBUST_MGMT_POLICY_VIOLATION ||
+                sc == WLAN_STATUS_REQUEST_DECLINED ||
+                sc == WLAN_STATUS_INVALID_RSN_IE_CAP ||
+                sc == WLAN_STATUS_INVALID_AKMP ||
+                sc == WLAN_STATUS_INVALID_CIPHER ||
+                sc == WLAN_STATUS_CAPABILITY_MISMATCH ||
+                sc == WLAN_STATUS_UNSUPPORTED_AUTH_ALG)
+                entry->activity_mask |= RL_FATAL_ERR;
+
+            break;
+    }
+}
+
 #ifdef HOSTAPD_2_11 //2.11
 int wifi_drv_send_mlme(void *priv, const u8 *data,
                       size_t data_len,int noack,
@@ -11610,6 +11737,7 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
                 to_mac_str(mgmt->da, dst_mac_str), le_to_host16(mgmt->u.auth.auth_alg),
                 le_to_host16(mgmt->u.auth.auth_transaction),
                 le_to_host16(mgmt->u.auth.status_code));
+                ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.auth.status_code), fc);
             break;
         case WLAN_FC_STYPE_ASSOC_RESP:
             wifi_hal_info_print("%s:%d: interface:%s send assoc resp frame from:%s to:%s cap:0x%x "
@@ -11618,6 +11746,7 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
                 to_mac_str(mgmt->da, dst_mac_str), le_to_host16(mgmt->u.assoc_resp.capab_info),
                 le_to_host16(mgmt->u.assoc_resp.aid) & 0x3fff,
                 le_to_host16(mgmt->u.assoc_resp.status_code));
+                ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.assoc_resp.status_code), fc);
             break;
         case WLAN_FC_STYPE_REASSOC_RESP:
             wifi_hal_info_print("%s:%d: interface:%s send reassoc resp frame from:%s to:%s "
@@ -11626,6 +11755,7 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
                 to_mac_str(mgmt->da, dst_mac_str), le_to_host16(mgmt->u.assoc_resp.capab_info),
                 le_to_host16(mgmt->u.assoc_resp.aid) & 0x3fff,
                 le_to_host16(mgmt->u.assoc_resp.status_code));
+                ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.assoc_resp.status_code), fc);
             break;
         case WLAN_FC_STYPE_DISASSOC:
             wifi_hal_info_print("%s:%d: interface:%s send disassoc frame from:%s to:%s sc:%d\n",
