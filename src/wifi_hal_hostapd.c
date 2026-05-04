@@ -43,6 +43,8 @@
 #define MACF      "%02x:%02x:%02x:%02x:%02x:%02x"
 #define MAC_TO_MACF(addr)    addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]
 #define RADIUS_FALLBACK_TIMER_IN_SECS   12*60*60
+#define RADIUS_SHARED_SECRET_MAX_LEN 64
+#define WPA_PASSPHRASE_MAX_LEN 256
 
 extern const struct wpa_driver_ops g_wpa_driver_nl80211_ops;
 
@@ -98,7 +100,7 @@ void init_radius_config(wifi_interface_info_t *interface)
         conf->radius->num_acct_servers = 0;
 
         conf->nas_identifier = interface->u.ap.nas_identifier;
-        conf->ssid.wpa_passphrase = calloc(1, 256);
+        conf->ssid.wpa_passphrase = calloc(1, WPA_PASSPHRASE_MAX_LEN);
 #ifdef CONFIG_WPS
         conf->config_methods = config_methods;
         conf->ap_pin = calloc(1, WPS_PIN_SIZE);
@@ -345,7 +347,7 @@ void init_oem_config(wifi_interface_info_t *interface)
     conf->model_url = (char *)&interface->model_url;
     conf->fw_version = malloc(strlen(interface->firmware_version) + 1);
     if (conf->fw_version != NULL) {
-        strcpy(conf->fw_version, interface->firmware_version);
+        snprintf(conf->fw_version, strlen(interface->firmware_version) + 1, "%s", interface->firmware_version);
     }
 
     if(wps_dev_type_str2bin("6-0050F204-1", conf->device_type)) {
@@ -785,7 +787,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         }
 
         if (conf->radius->auth_servers == NULL) {
-            static const unsigned int shared_secret_chunk = 64;
+            static const unsigned int shared_secret_chunk = RADIUS_SHARED_SECRET_MAX_LEN;
             struct hostapd_radius_server *servers;
             char *shared_secrets = NULL;
 
@@ -846,7 +848,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 #endif //CONFIG_IPV6
 #endif //WIFI_HAL_VERSION_3_PHASE2
 
-        strcpy(conf->radius->auth_servers[0].shared_secret, radius_cfg->key);
+        snprintf(conf->radius->auth_servers[0].shared_secret, RADIUS_SHARED_SECRET_MAX_LEN, "%s", radius_cfg->key);
         conf->radius->auth_servers[0].shared_secret_len = strlen(conf->radius->auth_servers[0].shared_secret);
         conf->radius->auth_servers[0].port = radius_cfg->port;
         
@@ -874,7 +876,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 #endif //CONFIG_IPV6
 #endif //WIFI_HAL_VERSION_3_PHASE2
 
-        strcpy(conf->radius->auth_servers[1].shared_secret, radius_cfg->s_key);
+        snprintf(conf->radius->auth_servers[1].shared_secret, RADIUS_SHARED_SECRET_MAX_LEN, "%s", radius_cfg->s_key);
         conf->radius->auth_servers[1].shared_secret_len = strlen(conf->radius->auth_servers[1].shared_secret);
         conf->radius->auth_servers[1].port = radius_cfg->s_port;
 
@@ -929,7 +931,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 
         if (!is_open_sec(sec)) {
             // set wpa passphrase security key and indication flag
-            strcpy(conf->ssid.wpa_passphrase, sec->u.key.key);
+            snprintf(conf->ssid.wpa_passphrase, WPA_PASSPHRASE_MAX_LEN, "%s", sec->u.key.key);
             conf->ssid.wpa_passphrase_set = true;
             conf->osen = 0;
         }

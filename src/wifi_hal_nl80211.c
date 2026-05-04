@@ -4838,7 +4838,7 @@ skip:   found = 0;
         ieee80211_freq_to_chan(chan->freq, &channel);
         channels->channels_list[i] = channel;
         snprintf(channel_str, sizeof(channel_str), "%u ", channels->channels_list[i]);
-        strcat(channels_str, channel_str);
+        strncat(channels_str, channel_str, sizeof(channels_str) - strlen(channels_str) - 1);
         chan++;
     }
     wifi_hal_dbg_print("%s:%d: Freq Band: %s for radio: %d num channels: %d channels:\n%s\n",

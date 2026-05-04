@@ -2145,7 +2145,7 @@ int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *inte
             (phy_index == map->phy_index)) {
             vap->radio_index = map->rdk_radio_index;
             vap->vap_index = map->index;
-            strcpy(vap->vap_name, map->vap_name);
+            snprintf(vap->vap_name, sizeof(vap->vap_name), "%s", map->vap_name);
             vap->vap_mode = is_wifi_hal_vap_mesh_sta(vap->vap_index) ? wifi_vap_mode_sta :
                                                                        wifi_vap_mode_ap;
             return 0;
@@ -2573,8 +2573,8 @@ INT get_coutry_str_from_oper_params(wifi_radio_operationParam_t *operParams, cha
     memset(tmp_environment_str, 0, sizeof(tmp_environment_str));
    
     // Default country as "USI"
-    strcpy(tmp_countrycode_str, "US");
-    strcpy(tmp_environment_str, "I");
+    snprintf(tmp_countrycode_str, sizeof(tmp_countrycode_str), "%s", "US");
+    snprintf(tmp_environment_str, sizeof(tmp_environment_str), "%s", "I");
 
     for (index = 0; index < ARRAY_SZ(wifi_country_map); index++) {
         if (wifi_country_map[index].countryCode == operParams->countryCode) {
@@ -3049,7 +3049,7 @@ INT get_coutry_str_from_code(wifi_countrycode_type_t code, char *country)
 
     for (index = 0; index < ARRAY_SZ(wifi_country_map); index++) {
         if (wifi_country_map[index].countryCode == code) {
-            strcpy(country, wifi_country_map[index].countryStr);
+            snprintf(country, sizeof(wifi_country_map[index].countryStr), "%s", wifi_country_map[index].countryStr);
             value_updated = true;
             break;
         }
@@ -3057,7 +3057,7 @@ INT get_coutry_str_from_code(wifi_countrycode_type_t code, char *country)
 
     if (value_updated == false) {
         //Copy default value
-        strcpy(country, "US");
+        snprintf(country, sizeof("US"), "%s", "US");
     }
     return RETURN_OK;
 }
@@ -4560,7 +4560,11 @@ void update_ecomode_radio_capabilities(wifi_radio_info_t *radio)
     }
 
     radio->capab.index = radio->index;
-    sprintf(radio->capab.ifaceName, "%s", radio->name);
+    {
+        char temp_name[sizeof(radio->name)];
+        snprintf(temp_name, sizeof(temp_name), "%s", radio->name);
+        snprintf(radio->capab.ifaceName, sizeof(radio->capab.ifaceName), "%s", temp_name);
+    }
     radio->capab.numSupportedFreqBand = 1;
 
     interface = hash_map_get_first(radio->interface_map);
@@ -5656,7 +5660,7 @@ int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
         if (strncmp(interface_index_map[index].interface_name, ifname, strlen(ifname)) == 0) {
             switch (colocated_mode) {
             case 0:
-                strcpy((char *)interface_index_map[index].vap_name, "mesh_sta_");
+                snprintf((char *)interface_index_map[index].vap_name, sizeof(interface_index_map[index].vap_name), "%s", "mesh_sta_");
                 concat_band_to_vap_name((char *)interface_index_map[index].vap_name,
                     interface_index_map[index].rdk_radio_index);
                 break;
@@ -5669,7 +5673,7 @@ int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
                 }
                 /* If only one VAP in collocated mode, configure it as mesh_back_haul */
                 if (vap_count == 1) {
-                    strcpy((char *)interface_index_map[index].vap_name, "mesh_backhaul_");
+                    snprintf((char *)interface_index_map[index].vap_name, sizeof(interface_index_map[index].vap_name), "%s", "mesh_backhaul_");
                     concat_band_to_vap_name((char *)interface_index_map[index].vap_name,
                         interface_index_map[index].rdk_radio_index);
                 }
