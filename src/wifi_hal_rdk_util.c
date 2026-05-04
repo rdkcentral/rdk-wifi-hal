@@ -182,6 +182,10 @@ static int move_radio_capability(wifi_radio_capabilities_t *tmp_cap, wifi_radio_
     memcpy(tmp_cap->eht_phy_cap, cap->eht_phy_cap, EHT_PHY_CAPAB_LEN);
     memcpy(tmp_cap->eht_mcs, cap->eht_mcs, EHT_MCS_NSS_CAPAB_LEN);
     memcpy(tmp_cap->eht_ppet, cap->eht_ppet, EHT_PPE_THRESH_CAPAB_LEN);
+    tmp_cap->eht_op_control = cap->eht_op_control;
+    tmp_cap->eht_op_chwidth = cap->eht_op_chwidth;
+    tmp_cap->eht_op_ccfs0 = cap->eht_op_ccfs0;
+    tmp_cap->eht_op_ccfs1 = cap->eht_op_ccfs1;
     tmp_cap->boot_only = cap->boot_only;
     tmp_cap->scan_impact = cap->scan_impact;
     tmp_cap->min_scan_interval = cap->min_scan_interval;
