@@ -194,7 +194,7 @@ int adjust_radio_capability_band(wifi_radio_capabilities_t *cap, unsigned int ra
     unsigned int i = 0;
 
     memset(&tmp_cap, 0, sizeof(wifi_radio_capabilities_t));
-    for (i = 0; i <= cap->numSupportedFreqBand; i++) {
+    for (i = 0; i < MAX_NUM_FREQ_BAND; i++) {
         // The driver reports 5G low and high bands as 5G band. We fix the band based on VAP name.
         if (cap->band[i] == WIFI_FREQUENCY_5_BAND && (radio_band == WIFI_FREQUENCY_5H_BAND ||
             radio_band == WIFI_FREQUENCY_5L_BAND)) {
