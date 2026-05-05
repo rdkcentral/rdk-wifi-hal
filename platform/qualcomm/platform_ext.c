@@ -1595,10 +1595,12 @@ static void parse_iwcustom_buffer(const void *buf, unsigned int len)
                     iwp = data - IW_EV_POINT_OFF;
                     data += IW_EV_POINT_LEN - IW_EV_POINT_OFF;
                     switch (iwp->flags) {
+                    case IEEE80211_EV_PRECAC_STARTED:
                     case IEEE80211_EV_CAC_STARTED:
                         radio_channel_param.sub_event = WIFI_EVENT_RADAR_CAC_STARTED;
                         process_event_to_onewifi(ifname, radio_channel_param, data, iwp->length);
                         break;
+                    case IEEE80211_EV_PRECAC_COMPLETED:
                     case IEEE80211_EV_CAC_COMPLETED:
                         radio_channel_param.sub_event = WIFI_EVENT_RADAR_CAC_FINISHED;
                         process_event_to_onewifi(ifname, radio_channel_param, data, iwp->length);

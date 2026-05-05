@@ -1,0 +1,22 @@
+##########################################
+Date: Jan 12, 2026 1:00 PM
+From: 
+Subject: Increase get station buffer size. Default 4K page size cannot accommodate STA info
+  with multiple links.
+Source: Comcast
+License: GPL-2.0
+Upstream-Status: Pending
+Signed-off-by: Bogdan Bogush <bogdan.bogush@comcast.com>
+Re-Created-by: Rakhil P E <rakhilpe001@gmail.com>
+##########################################
+--- ./build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mac80211-regular/backports-6.16/net/wireless/nl80211.c.orig	2026-03-27 12:57:25.875526001 +0530
++++ ./build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mac80211-regular/backports-6.16/net/wireless/nl80211.c	2026-03-27 12:58:55.731266001 +0530
+@@ -7680,7 +7680,7 @@
+ 		return err;
+ 	}
+ 
+-	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
++	msg = nlmsg_new(SKB_WITH_OVERHEAD(8192UL) - NLMSG_HDRLEN, GFP_KERNEL);
+ 	if (!msg) {
+ 		cfg80211_sinfo_release_content(&sinfo);
+ 		return -ENOMEM;

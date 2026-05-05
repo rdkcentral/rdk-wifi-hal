@@ -4201,13 +4201,10 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x0f, 0x03, 0x95,
         0x18, 0x00, 0xcc, 0x00 };
 #endif // TCXB7_PORT || TCHCBRV2_PORT || SKYSR213_PORT || RDKB_ONE_WIFI_PROD
-#if defined(XB10_PORT) || defined(TCXB8_PORT)
+#if defined(XB10_PORT) || defined(TCXB8_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x42, 0xc0, 0x02, 0x03, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
-#elif defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
-    static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x02, 0x03, 0x95,
-        0x00, 0x00, 0xcc, 0x00 };
-#endif // SCXER10_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
+#endif //XB10_PORT || TCXB8_PORT || SCXER10_PORT || SCXF10_PORT
 #if defined(SCXER10_PORT)
     static const u8 eht_phy_cap[EHT_PHY_CAPAB_LEN] = { 0x2c, 0x00, 0x03, 0xe0, 0x00, 0xe7, 0x00,
         0x7e, 0x00 };
@@ -4301,13 +4298,10 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x6f, 0x1b, 0x95,
         0x18, 0x00, 0xcc, 0x00 };
 #endif // TCXB7_PORT || TCHCBRV2_PORT || SKYSR213_PORT
-#if defined(XB10_PORT) || defined(TCXB8_PORT)
+#if defined(XB10_PORT) || defined(TCXB8_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x42, 0xc0, 0x02, 0x1b, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
-#elif defined(SCXER10_PORT) || defined(SCXF10_PORT)
-    static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x02, 0x1b, 0x95,
-        0x00, 0x00, 0xcc, 0x00 };
-#endif // TCXB8_PORT || SCXER10_PORT || SCXF10_PORT
+#endif // TCXB8_PORT || SCXER10_PORT || SCXF10_PORT || XB10_PORT
 #if defined(SCXER10_PORT)
     static const u8 eht_phy_cap[EHT_PHY_CAPAB_LEN] = { 0x2c, 0x00, 0x1b, 0xe0, 0x00, 0xe7, 0x00,
         0x7e, 0x00 };
@@ -4394,21 +4388,15 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 ext_cap[] = { 0x84, 0x00, 0x48, 0x02, 0x01, 0x00, 0x40, 0x40, 0x00, 0x40,
         0x21 };
 #endif // XB10_PORT || SCXER10_PORT || SCXF10_PORT
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
-    defined(SCXF10_PORT)
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
     static const u8 he_mac_cap[HE_MAX_MAC_CAPAB_SIZE] = { 0x05, 0x00, 0x18, 0x12, 0x00, 0x10 };
-#if defined(XB10_PORT) || defined(TCXB7_PORT) || defined(TCXB8_PORT)
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x42, 0xc0, 0x02, 0x1b, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
-#else
-    static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x02, 0x1b, 0x95,
-        0x00, 0x00, 0xcc, 0x00 };
-#endif
     static const u8 he_mcs[HE_MAX_MCS_CAPAB_SIZE] = { 0xaa, 0xff, 0xaa, 0xff, 0xaa, 0xff, 0xaa,
         0xff };
     static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x7b, 0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71,
         0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || SCXF10_PORT
+#endif // TCXB8_PORT || XB10_PORT || SCXER10_PORT || SCXF10_PORT
 #if defined(SCXER10_PORT)
     static const u8 eht_phy_cap[EHT_PHY_CAPAB_LEN] = { 0x2e, 0x00, 0x00, 0x60, 0x00, 0xe7, 0x00,
         0x0e, 0x00 };
@@ -4435,8 +4423,7 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
         radio->driver_data.extended_capa[2] &= 0xF7;
     }
     for (int i = 0; i < iface->num_hw_features; i++) {
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
-    defined(SCXF10_PORT)
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT)
         memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mac_cap, he_mac_cap,
             sizeof(he_mac_cap));
         memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].phy_cap, he_phy_cap,
@@ -4444,7 +4431,7 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
         memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].mcs, he_mcs, sizeof(he_mcs));
         memcpy(iface->hw_features[i].he_capab[IEEE80211_MODE_AP].ppet, he_ppet, sizeof(he_ppet));
         iface->hw_features[i].he_capab[IEEE80211_MODE_AP].he_6ghz_capa = 0x06bd;
-#endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT
+#endif // TCXB8_PORT || XB10_PORT || SCXER10_PORT || defined(SCXF10_PORT)
 
 // XER-10 uses old kernel that does not support EHT cap NL parameters
 #if defined(SCXER10_PORT)
@@ -4500,19 +4487,15 @@ int platform_get_radio_caps(wifi_radio_index_t index)
                 ((0 << 4) & EHT_ML_MLD_CAPA_SRS_SUPP) |
                 ((MAX_NUM_MLD_LINKS - 1) & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK));
 
-    /* FIXME: NSTR capability disabled by default */
-    if (radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa
-        & EHT_ML_EML_CAPA_EMLMR_SUPP)
-        radio->capab.mldOperationalCap |= eMLMR;
-    if (radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa
-        & EHT_ML_EML_CAPA_EMLSR_SUPP)
-        radio->capab.mldOperationalCap |= eMLSR;
-    if ((radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops
-        & EHT_ML_MLD_CAPA_MAX_NUM_SIM_LINKS_MASK) > 0)
-        radio->capab.mldOperationalCap |= STR;
-    if ((radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops
-        & EHT_ML_MLD_CAPA_TID_TO_LINK_MAP_NEG_SUPP_MSK) > 0)
-        radio->capab.TIDLinkMapNegotiation = TRUE;
+#if (HOSTAPD_VERSION >= 211)
+        wifi_multi_link_modes_t mld_oper_cap = 0;
+        BOOL tid_negotiation = false;
+        wifi_get_mld_eml_cap(radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops,
+            radio->driver_data.iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa,
+            &mld_oper_cap, &tid_negotiation);
+        radio->capab.TIDLinkMapNegotiation = tid_negotiation;
+        radio->capab.mldOperationalCap = mld_oper_cap;
+#endif
 
 #endif /* CONFIG_IEEE80211BE */
 
@@ -4913,8 +4896,6 @@ void platform_bss_enable(char* ifname, bool enable)
 #ifdef CONFIG_IEEE80211BE
 
 static struct hostapd_mld g_mlo_mld[MLD_UNIT_COUNT] = {0};
-static struct hostapd_mld g_slo_mld[MAX_VAP] = {0};
-
 extern void hostapd_bss_link_deinit(struct hostapd_data *hapd);
 
 /*
@@ -5108,6 +5089,7 @@ static unsigned char platform_get_link_id_for_radio_index(unsigned int radio_ind
     return res;
 }
 
+#if 0
 static unsigned char platform_iface_is_mlo_ap(const char *iface)
 {
     char name[32 + sizeof("_bss_mlo_mode")];
@@ -5121,6 +5103,7 @@ static unsigned char platform_iface_is_mlo_ap(const char *iface)
     wifi_hal_dbg_print("%s:%d mld_ap:%u for the iface:%s\n", __func__, __LINE__, res, iface);
     return res;
 }
+#endif
 
 static void nvram_update_wl_mlo_apply(const char *iface, unsigned char mlo_apply, int *nvram_changed)
 {
@@ -5220,23 +5203,6 @@ static struct hostapd_mld *get_mlo_mld(unsigned char mld_unit, char *mac)
     return &g_mlo_mld[mld_unit];
 }
 
-static struct hostapd_mld *get_slo_mld(wifi_vap_index_t vap_index, char *mac)
-{
-    if (vap_index >= MAX_VAP) {
-        wifi_hal_error_print("%s:%d: vap_index:%d out of range (max vap_index: %d)!\n", __func__,
-            __LINE__, vap_index, MAX_VAP - 1);
-        return NULL;
-    }
-
-    if (g_slo_mld[vap_index].name[0] == '\0') {
-        /* Not initialized yet - Initializing it during the first usage */
-        dl_list_init(&g_slo_mld[vap_index].links);
-        snprintf(g_slo_mld[vap_index].name, sizeof(g_slo_mld[vap_index].name), "slo_mld_id_%u",
-            vap_index);
-    }
-    memcpy(g_slo_mld[vap_index].mld_addr, mac, ETH_ALEN);
-    return &g_slo_mld[vap_index];
-}
 
 /**
  * @brief Add MLO link and reorganize links to be main link (link_id 0) first_bss
@@ -5344,29 +5310,23 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
 
     old_mld_link_id = hapd->mld_link_id;
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
-    mld_ap = vap->u.bss_info.enabled && (!conf->disable_11be && (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
-    nvram_update_wl_bss_mlo_mode(conf->iface, mld_ap ? mld_conf->mld_enable : 0, &nvram_changed);
+    mld_ap = vap->u.bss_info.enabled && (!conf->disable_11be && mld_conf->mld_enable &&
+        (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
+    nvram_update_wl_bss_mlo_mode(conf->iface, mld_ap, &nvram_changed);
     if (nvram_changed) {
         wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
         nvram_commit();
     }
 
     if (mld_ap) {
-        unsigned char is_mlo_ap;
-
         conf->mld_ap = mld_ap;
-        is_mlo_ap = platform_iface_is_mlo_ap(conf->iface);
-        if (is_mlo_ap) {
-            set_mld_unit(conf, mld_conf->mld_id);
-            new_mld = get_mlo_mld(get_mld_unit(conf), mld_conf->mld_addr);
-            /*
-             * NOTE: For MLO, we need to enable okc=1, or disable_pmksa_caching=1, otherwise there
-             * will be problems with PMKID for link AP
-             */
-            conf->okc = 1;
-        } else {
-            new_mld = get_slo_mld(vap->vap_index, hapd->own_addr);
-        }
+        set_mld_unit(conf, mld_conf->mld_id);
+        new_mld = get_mlo_mld(get_mld_unit(conf), mld_conf->mld_addr);
+        /*
+            * NOTE: For MLO, we need to enable okc=1, or disable_pmksa_caching=1, otherwise there
+            * will be problems with PMKID for link AP
+            */
+        conf->okc = 1;
         if (hapd->mld != new_mld || old_mld_link_id != hapd->mld_link_id) {
             if (hapd->mld)
                 mlo_remove_link(hapd);
@@ -5374,9 +5334,9 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
             mlo_add_link(hapd);
         }
 
-        wifi_hal_dbg_print("%s:%d: Setup of first (%d) link (%u) BSS of %s %s for VAP %s\n",
+        wifi_hal_dbg_print("%s:%d: Setup of first (%d) link (%u) BSS of MLO %s for VAP %s\n",
             __func__, __LINE__, hostapd_mld_is_first_bss(hapd), hapd->mld_link_id,
-            (is_mlo_ap ? "MLO" : "SLO"), hapd->mld->name, vap->vap_name);
+            hapd->mld->name, vap->vap_name);
     } else {
         if (hapd->mld) {
             mlo_remove_link(hapd);

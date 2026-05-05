@@ -2740,7 +2740,7 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     }
 #endif //FEATURE_SINGLE_PHY
 
-    return (nl80211_start_scan(interface, NL80211_SCAN_FLAG_COLOCATED_6GHZ, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+    return (nl80211_start_scan(interface, NL80211_SCAN_FLAG_COLOCATED_6GHZ | NL80211_SCAN_FLAG_FLUSH, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
 }
 
 /*****************************/
@@ -3162,11 +3162,26 @@ static int decode_bss_info_to_neighbor_ap_info(wifi_neighbor_ap2_t *ap, const wi
 
     // - ap_DTIMPeriod
     ap->ap_DTIMPeriod = bss->dtim_period;
-    // - ap_ChannelUtilization
+  
+    /*
+     * Channel Utilization (CU) may be derived from multiple sources (e.g., BSS Load IE
+     * or other scan attributes like NL80211_BSS_CU). Populate ap_ChannelUtilization
+     * unconditionally to preserve legacy behavior and avoid dropping valid CU when
+     * the BSS Load IE is absent.
+     *
+     * Only BSS Load specific fields (bss_load_element_present, ap_StaCount) are gated
+     * on the presence of the BSS Load IE.
+     */
     ap->ap_ChannelUtilization = bss->chan_utilization;
 
-    wifi_hal_stats_dbg_print("%s:%d: [SCAN] bssid: %s, ssid: %s, channel: %d, noise: %d\n",
-        __func__, __LINE__, ap->ap_BSSID, ap->ap_SSID, ap->ap_Channel, ap->ap_Noise);
+    // - bss_load_element 
+    if (bss->bss_load_element_present) {
+        ap->bss_load_element_present = bss->bss_load_element_present;
+        ap->ap_StaCount = bss->station_cnt;
+    }
+
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] bssid: %s, ssid: %s, channel: %d, noise: %d station_cnt %u\n",
+        __func__, __LINE__, ap->ap_BSSID, ap->ap_SSID, ap->ap_Channel, ap->ap_Noise, ap->ap_StaCount);
 
     return ret;
 }
