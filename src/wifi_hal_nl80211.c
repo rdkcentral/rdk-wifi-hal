@@ -22019,7 +22019,7 @@ int wifi_drv_commit(void *priv)
     return 0;
 }
 
-#if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+#if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) || defined(BANANA_PI_PORT)
 #define WIFI_DFS_CHAN_FIRST  52
 #define WIFI_DFS_CHAN_LAST  144
 #define WIFI_DFS_EVAC_CHAN_5L    44   /* Default evacuation channel for 5/5L band (UNII-1) */
@@ -22062,7 +22062,7 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
 
     *oper_centr_freq_seg0_idx = 0;
     *oper_centr_freq_seg1_idx = 0;
-    *secondary_channel        = 0;
+    *secondary_channel = 0;
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (radio == NULL) {
@@ -22090,7 +22090,7 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
         }
     }
 
-#if HOSTAPD_VERSION >= 210 // 2.10
+#if HOSTAPD_VERSION >= 210
     chan = dfs_get_valid_channel(&interface->u.ap.iface, secondary_channel,
                                     oper_centr_freq_seg0_idx,
                                     oper_centr_freq_seg1_idx,
@@ -22105,9 +22105,10 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
     wifi_hal_info_print("%s:%d: [DFS]: hostapd selected channel %u\n", __func__, __LINE__, chan->chan);
     return chan->chan;
 }
-#endif /* defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) */
+#endif /* defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) || \
+          defined(BANANA_PI_PORT) */
 
-#if defined(CMXB7_PORT)
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
 //To set a channel in the primary interface of the radio
 int prim_interface_set_freq(wifi_radio_info_t *radio, wifi_interface_info_t *interface, int freq, u8 channel, int sec_chan_offset, int ht_enabled, int bw, int cf1, char *country)
 {
@@ -22184,7 +22185,7 @@ int nl80211_interface_reenable(wifi_radio_info_t *radio, int freq)
     dfs_interface = hash_map_get_first(radio->interface_map);
 
     while(dfs_interface != NULL) {
-        if(dfs_interface->bss_started && !dfs_interface->interface_status) {
+        if(dfs_interface->bss_started && dfs_interface->vap_initialized) {
             if(nl80211_interface_enable(dfs_interface->name, true)) {
                 hostapd_set_state(&dfs_interface->u.ap.iface, HAPD_IFACE_DISABLED);
             } else {
@@ -22216,9 +22217,9 @@ int nl80211_interface_reenable(wifi_radio_info_t *radio, int freq)
 
     return 0;
 }
-#endif /* defined(CMXB7_PORT) */
+#endif /* defined(CMXB7_PORT) || defined(BANANA_PI_PORT) */
 
-#if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) || defined(QCOM_ATH12K_PORT)
+#if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) || defined(BANANA_PI_PORT) || defined(QCOM_ATH12K_PORT)
 //To Notify OneWiFi about channel change
 int dfs_chan_change_event(int radio_index, u8 channel, int bw, u8 op_class) {
     wifi_channel_change_event_t radio_channel_param;
@@ -22238,7 +22239,7 @@ int dfs_chan_change_event(int radio_index, u8 channel, int bw, u8 op_class) {
 
     return 0;
 }
-#endif /* CMXB7_PORT || FEATURE_HOSTAP_MGMT_FRAME_CTRL || QCOM_ATH12K_PORT */
+#endif /* CMXB7_PORT || FEATURE_HOSTAP_MGMT_FRAME_CTRL || QCOM_ATH12K_PORT || defined(BANANA_PI_PORT) */
 
 //To Disable and enable primary interface of the radio
 int reenable_prim_interface(wifi_radio_info_t *radio) {
@@ -22269,7 +22270,7 @@ int reenable_prim_interface(wifi_radio_info_t *radio) {
 //Initiates the call to start CAC. Takes 1 min for CAC to complete
 int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
 {
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
     wifi_interface_info_t *interface, *dfs_interface;
     int sec_chan_offset = 0, freq = 5180, freq1 = -1;
     char country[8];
@@ -22340,17 +22341,36 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
 
     update_hostap_iface(interface);
 
+    interface->in_reconf = true;
+    nl80211_enable_ap(interface, false);
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    deinit_bss(&interface->u.ap.hapd);
+    if (interface->u.ap.hapd.conf != NULL && interface->u.ap.hapd.conf->ssid.wpa_psk != NULL
+        && !interface->u.ap.hapd.conf->ssid.wpa_psk->next) {
+        hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+    interface->in_reconf = false;
+
     dfs_interface = hash_map_get_first(radio->interface_map);
     while(dfs_interface != NULL) {
         if ( dfs_interface->bss_started && dfs_interface->vap_initialized) {
-            nl80211_enable_ap(interface, false);
+            if (dfs_interface == interface) {
+                dfs_interface = hash_map_get_next(radio->interface_map, dfs_interface);
+                continue;
+            }
+#ifdef BANANA_PI_PORT
+            //We cannot disable netdev, so manually bring the other VAPs
+            //to a proper noop state during DFS.
+            dfs_interface->in_reconf = true;
+            res = nl80211_enable_ap(dfs_interface, false);
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-            deinit_bss(&interface->u.ap.hapd);
-            if (interface->u.ap.hapd.conf != NULL && interface->u.ap.hapd.conf->ssid.wpa_psk != NULL && !interface->u.ap.hapd.conf->ssid.wpa_psk->next)
-                hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
+            hostapd_free_stas(&dfs_interface->u.ap.hapd);
             pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-
+            dfs_interface->in_reconf = false;
+#else
             res = nl80211_interface_enable(dfs_interface->name, false);
+#endif
             if(!res) {
                 hostapd_set_state(&dfs_interface->u.ap.iface, HAPD_IFACE_DISABLED);
                 wifi_hal_info_print("%s:%d interface:%s Disabled for CAC \n",__FUNCTION__, __LINE__, dfs_interface->name);
@@ -22375,6 +22395,12 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
         nl80211_dfs_cac_started(interface, freq, radio->iconf.ieee80211n, sec_chan_offset, radio->oper_param.channelWidth,
                                 hostapd_get_oper_chwidth(interface->u.ap.hapd.iconf), freq1, 0);
         return RETURN_OK;
+    } else if (res == 1) {
+        wifi_hal_error_print("nl80211-%s:%d CAC is not needed, channel is available \n", __func__, __LINE__);
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        interface->u.ap.iface.cac_started = 0;
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return 1;
     } else {
         wifi_hal_error_print("nl80211-%s:%d hostapd_handle_dfs Failed \n", __func__, __LINE__);
         goto Fail;
@@ -22390,17 +22416,21 @@ Fail:
     wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d \n", radio_param.channel, seg0, seg1, sec_chan_offset);
     if( wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, &radio_param) ) {
         wifi_hal_error_print("nl80211-%s:%d wifi_hal_setRadioOperatingParameters Failed \n", __func__, __LINE__);
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        interface->u.ap.iface.cac_started = 0;
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
     }
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     interface->u.ap.iface.cac_started = 0;
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #endif
-    return RETURN_ERR;
+    return RETURN_OK;
 }
 
 int set_freq_and_interface_enable(wifi_interface_info_t *interface, wifi_radio_info_t *radio) {
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
     int sec_chan_offset = 0, freq = 5180, cf1 = 0, ht_enabled = 0;
     char country[8];
 
@@ -22412,10 +22442,13 @@ int set_freq_and_interface_enable(wifi_interface_info_t *interface, wifi_radio_i
     interface->u.ap.hapd.iface->conf->channel = radio->oper_param.channel;
     interface->u.ap.hapd.iface->freq = freq;
 
-    wifi_hal_info_print("%s:%d name:%s freq:%d sec_chan:%d bandwidth:%d chan:%u \n", __func__, __LINE__,
-            interface->name, freq, sec_chan_offset, radio->oper_param.channelWidth, radio->oper_param.channel);
+    wifi_hal_info_print(
+        "%s:%d name:%s freq:%d sec_chan:%d bandwidth:%d chan:%u, cf1:%d, ht_enabled:%d \n",
+        __func__, __LINE__, interface->name, freq, sec_chan_offset, radio->oper_param.channelWidth,
+        radio->oper_param.channel, cf1, ht_enabled);
 
     update_hostap_config_params(radio);
+
     if(( prim_interface_set_freq(radio, interface, freq, radio->oper_param.channel, sec_chan_offset, ht_enabled, radio->oper_param.channelWidth, cf1, country) )) {
         wifi_hal_error_print("nl80211-%s:%d prim_interface_set_freq Failed \n", __func__, __LINE__);
         return RETURN_ERR;
@@ -22425,7 +22458,24 @@ int set_freq_and_interface_enable(wifi_interface_info_t *interface, wifi_radio_i
         wifi_hal_error_print("nl80211-%s:%d nl80211_interface_reenable Failed \n", __func__, __LINE__);
         return RETURN_ERR;
     }
+#ifdef BANANA_PI_PORT
+    hostapd_set_state(&interface->u.ap.iface, HAPD_IFACE_ENABLED);
+    if (interface->vap_initialized && interface->vap_info.u.bss_info.enabled) {
 
+        if (start_bss(interface) < 0) {
+            wifi_hal_error_print("%s:%d start_bss Failed \n", __func__, __LINE__);
+            return RETURN_ERR;
+        }
+
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        if (ieee802_11_set_beacon(&interface->u.ap.hapd)) {
+            wifi_hal_error_print("%s:%d ieee802_11_set_beacon Failed \n", __func__, __LINE__);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+            return RETURN_ERR;
+        }
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+    }
+#endif
     dfs_chan_change_event(interface->vap_info.radio_index, radio->oper_param.channel, radio->oper_param.channelWidth, radio->oper_param.operatingClass);
 #endif
     return RETURN_OK;
@@ -22438,7 +22488,7 @@ int nl80211_dfs_cac_started(wifi_interface_info_t *interface, int freq, int ht_e
     wifi_hal_info_print("%s:%d name:%s freq:%d cf1:%d cf2:%d sec_chan:%d bandwidth:%d bw:%d ht_enabled:%d \n", __func__, __LINE__,
                 interface->name, freq, cf1, cf2, sec_chan_offset, bandwidth, bw, ht_enabled);
 
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
     wifi_device_callbacks_t *callbacks;
     wifi_channel_change_event_t radio_channel_param;
     wifi_radio_info_t *radio =  NULL;
@@ -22471,8 +22521,8 @@ int nl80211_dfs_cac_started(wifi_interface_info_t *interface, int freq, int ht_e
 int nl80211_dfs_radar_cac_aborted(wifi_interface_info_t *interface, int freq, int ht_enabled,
                                int sec_chan_offset, int bandwidth, int bw, int cf1, int cf2)
 {
-#ifdef CMXB7_PORT
     wifi_radio_info_t *radio;
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
     wifi_radio_operationParam_t radio_param;
     u8 oper_centr_freq_seg0_idx = 0;
     u8 oper_centr_freq_seg1_idx = 0;
@@ -22505,6 +22555,7 @@ int nl80211_dfs_radar_cac_aborted(wifi_interface_info_t *interface, int freq, in
     if( wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, &radio_param) ) {
         wifi_hal_error_print("nl80211-%s:%d wifi_hal_setRadioOperatingParameters Failed \n", __func__, __LINE__);
     }
+
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     interface->u.ap.iface.cac_started = 0;
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -22512,7 +22563,6 @@ int nl80211_dfs_radar_cac_aborted(wifi_interface_info_t *interface, int freq, in
     if (update_channel_flags() != 0) {
         wifi_hal_error_print("%s:%d update_channel_flags failed \n", __func__, __LINE__);
     }
-
 #endif
     return 0;
 }
@@ -22521,7 +22571,7 @@ int nl80211_dfs_radar_cac_aborted(wifi_interface_info_t *interface, int freq, in
 int nl80211_dfs_radar_cac_finished(wifi_interface_info_t *interface, int freq, int ht_enabled,
                                int sec_chan_offset, int bandwidth, int bw, int cf1, int cf2)
 {
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
     wifi_radio_info_t *radio;
     wifi_radio_operationParam_t radio_param;
     u8 channel;
@@ -22535,18 +22585,31 @@ int nl80211_dfs_radar_cac_finished(wifi_interface_info_t *interface, int freq, i
     radio_param.channel = channel;
     radio_param.channelWidth = bandwidth;
 
-    if( wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, &radio_param) ) {
-        wifi_hal_error_print("nl80211-%s:%d wifi_hal_setRadioOperatingParameters Failed \n", __func__, __LINE__);
+    //Check for surprises, such as puncturing or 80+80, just log the details
+    if (radio->oper_param.channelWidth != bandwidth || radio->oper_param.channel != channel) {
+        wifi_hal_error_print("%s:%d: CAC finished params differ: event ch:%u bw:%d cf1:%d cf2:%d, stored ch:%u bw:%d\n",
+            __func__, __LINE__, channel, bandwidth, cf1, cf2,
+            radio->oper_param.channel, radio->oper_param.channelWidth);
     }
+
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     interface->u.ap.iface.cac_started = 0;
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
+    interface->cac_finished = true;
+
+    if (wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, &radio_param)) {
+        wifi_hal_error_print("nl80211-%s:%d wifi_hal_setRadioOperatingParameters Failed \n",
+            __func__, __LINE__);
+    }
+
+    interface->cac_finished = false;
+
     if (update_channel_flags() != 0) {
         wifi_hal_error_print("%s:%d update_channel_flags failed \n", __func__, __LINE__);
     }
-#endif
 
+#endif
     return 0;
 }
 
@@ -22555,7 +22618,7 @@ int nl80211_dfs_radar_cac_finished(wifi_interface_info_t *interface, int freq, i
 int nl80211_dfs_pre_cac_expired (wifi_interface_info_t *interface, int freq, int ht_enabled,
                                int sec_chan_offset, int bandwidth, int bw, int cf1, int cf2)
 {
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
     if (update_channel_flags() != 0) {
         wifi_hal_error_print("%s:%d update_channel_flags failed \n", __func__, __LINE__);
     }
@@ -22571,7 +22634,7 @@ int nl80211_dfs_nop_finished (wifi_interface_info_t *interface, int freq, int ht
 {
     wifi_hal_info_print("%s:%d name:%s freq:%d cf1:%d cf2:%d sec_chan:%d bandwidth:%d ht_enabled:%d \n", __func__, __LINE__,
                 interface->name, freq, cf1, cf2, sec_chan_offset, bw, ht_enabled);
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
     if (update_channel_flags() != 0) {
         wifi_hal_error_print("%s:%d update_channel_flags failed \n", __func__, __LINE__);
     }
@@ -22643,7 +22706,7 @@ static int nl80211_dfs_xle_disconnect_backhaul_sta(wifi_radio_info_t *radio,
 int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int ht_enabled,
                                int sec_chan_offset, int bandwidth, int bw, int cf1, int cf2)
 {
-#if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+#if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) || defined(BANANA_PI_PORT)
     wifi_radio_info_t *radio;
     wifi_radio_operationParam_t *radio_param = NULL;
     u8 oper_centr_freq_seg0_idx = 0;
@@ -22675,11 +22738,11 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
         return 0;
     }
 
-#if defined(CMXB7_PORT)
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
     if (!interface->u.ap.iface.dfs_cac_ms) {
         return 0;
     }
-#endif /* defined(CMXB7_PORT) */
+#endif /* defined(CMXB7_PORT) || defined(BANANA_PI_PORT) */
 
     radio->radar_detected = true;
 
