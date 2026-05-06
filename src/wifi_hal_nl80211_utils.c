@@ -6347,6 +6347,24 @@ int restart_interface(wifi_interface_info_t *interface)
     return 0;
 }
 
+bool is_dfs_channel(wifi_radio_operationParam_t *operationParam)
+{
+    const int dfs_start_chan = 52, dfs_end_chan = 144;
+    const int dfs_start_chan_160mhz = 36, dfs_end_chan_160mhz = 128;
+    if (operationParam->band >= WIFI_FREQUENCY_5_BAND && operationParam->band <= WIFI_FREQUENCY_5H_BAND) {
+        if (operationParam->channelWidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
+            if ((operationParam->channel >= dfs_start_chan_160mhz) && (operationParam->channel <= dfs_end_chan_160mhz)) {
+                return true;
+            }
+        } else {
+            if ((operationParam->channel >= dfs_start_chan) && (operationParam->channel <= dfs_end_chan)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
 static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
 {

@@ -2034,11 +2034,9 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
                     interface = hash_map_get_next(radio->interface_map, interface);
                 }
             }
-
             return NL_SKIP;
         }
 #endif /* CONFIG_GENERIC_MLO */
-
         if (interface != NULL) {
             wifi_hal_dbg_print("%s:%d: event registered - processing for %s event %d\n", __func__,
                 __LINE__, interface->name, gnlh->cmd);

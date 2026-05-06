@@ -729,10 +729,6 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     bool is_channel_changed;
     int ret;
 
-#ifdef CMXB7_PORT
-    int dfs_start_chan = 52, dfs_end_chan = 144;
-#endif
-
     RADIO_INDEX_ASSERT(index);
     NULL_PTR_ASSERT(operationParam);
 
@@ -949,23 +945,31 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         goto Exit;
     }
 
-#ifdef CMXB7_PORT
-    if( primary_interface->u.ap.iface.cac_started && ((operationParam->channel >= dfs_start_chan) && (operationParam->channel <= dfs_end_chan)) && (radio->oper_param.channel == operationParam->channel) &&
-      ( radio->oper_param.channelWidth == operationParam->channelWidth ) ) {
-        wifi_hal_info_print("%s:%d: Setting  primary interface with channel:%u \n", __func__, __LINE__, radio->oper_param.channel);
+    is_channel_changed = radio->oper_param.channel != operationParam->channel ||
+        radio->oper_param.channelWidth != operationParam->channelWidth;
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
+        //Generic DFS handling with hostapd
+        if (is_dfs_channel(operationParam) && is_channel_changed == false) {
+            if (primary_interface->cac_finished) {
+                primary_interface->cac_finished = false;
+                if( set_freq_and_interface_enable(primary_interface, radio) ) {
+                    goto reload_config;
+                }
+                goto Exit;
+            }
 
-        if (memcmp((unsigned char *)&radio->oper_param, (unsigned char *)operationParam, sizeof(wifi_radio_operationParam_t)) != 0) {
-            wifi_hal_error_print("%s:%d: CAC is running for DFS Channel:%u. Wait for CAC to be over \n", __func__, __LINE__, operationParam->channel);
-            free(old_operationParam);
-            old_operationParam = NULL;
-            return RETURN_ERR;
+            //Second request came in - either with some changed adjacent params or an a replica of existing one
+            if (primary_interface->u.ap.iface.cac_started) {
+                wifi_hal_error_print("%s:%d: CAC is running for DFS Channel:%u. Wait for CAC to be over \n", __func__, __LINE__, operationParam->channel);
+                if (memcmp((unsigned char *)&radio->oper_param, (unsigned char *)operationParam, sizeof(wifi_radio_operationParam_t)) == 0) {
+                    goto Exit;
+                } else {
+                    free(old_operationParam);
+                    old_operationParam = NULL;
+                    return RETURN_ERR;
+                }
+            }
         }
-
-        if( set_freq_and_interface_enable(primary_interface, radio) ) {
-            goto reload_config;
-        }
-        goto Exit;
-    }
 #endif
 
     if (radio->oper_param.DfsEnabled != operationParam->DfsEnabled) {
@@ -976,8 +980,6 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         }
     }
 
-    is_channel_changed = radio->oper_param.channel != operationParam->channel ||
-        radio->oper_param.channelWidth != operationParam->channelWidth;
     if (radio->configured && radio->oper_param.enable && is_channel_changed) {
         radio->oper_param.channel = operationParam->channel;
         radio->oper_param.operatingClass = operationParam->operatingClass;
@@ -995,41 +997,39 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         memcpy(radio->oper_param.channel_map, operationParam->channel_map,
             sizeof(radio->oper_param.channel_map));
 
-#ifdef CMXB7_PORT
-        if( ((radio->oper_param.band == WIFI_FREQUENCY_5_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5H_BAND))) {
-            if( !primary_interface->u.ap.iface.cac_started && ((operationParam->channel >= dfs_start_chan && operationParam->channel <= dfs_end_chan) || (operationParam->channelWidth == WIFI_CHANNELBANDWIDTH_160MHZ)) ) {
-                wifi_hal_info_print("%s:%d: Starting CAC for DFS Channel:%u \n", __func__, __LINE__, operationParam->channel );
-                if(nl80211_start_dfs_cac(radio)) {
-                    wifi_hal_error_print("%s:%d: Error starting CAC \n", __func__, __LINE__);
-                    goto reload_config;
-                }
-               goto Exit;
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
+        if (!primary_interface->u.ap.iface.cac_started && (is_dfs_channel(operationParam))) {
+            wifi_hal_info_print("%s:%d: Starting CAC for DFS Channel:%u \n", __func__, __LINE__, operationParam->channel);
+            if(nl80211_start_dfs_cac(radio)) {
+                wifi_hal_error_print("%s:%d: Error starting CAC \n", __func__, __LINE__);
+                goto reload_config;
             }
+            goto Exit;
+        }
 
-            if( primary_interface->u.ap.iface.cac_started ) {
-                int cac_start = 0;
-                pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-                primary_interface->u.ap.iface.cac_started = cac_start;
-                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        if (primary_interface->u.ap.iface.cac_started) {
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            primary_interface->u.ap.iface.cac_started = 0;
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-                if(primary_interface->u.ap.iface.dfs_cac_ms)
-                    reenable_prim_interface(radio);
+            // This will effectively abort CAC
+            if (primary_interface->u.ap.iface.dfs_cac_ms)
+                reenable_prim_interface(radio);
 
-                if( !(operationParam->channel >= dfs_start_chan && operationParam->channel <= dfs_end_chan) && !(operationParam->channelWidth == WIFI_CHANNELBANDWIDTH_160MHZ) ) {
-                    wifi_hal_info_print("%s:%d: Setting channel:%u on 5GHz Radio\n", __func__, __LINE__, radio->oper_param.channel);
-                    if( set_freq_and_interface_enable(primary_interface, radio) ) {
-                        goto reload_config;
-                    }
-                    goto Exit;
-                }
-
-                wifi_hal_info_print("%s:%d: Starting CAC for DFS Channel:%u \n", __func__, __LINE__, operationParam->channel );
-                if(nl80211_start_dfs_cac(radio)) {
-                    wifi_hal_error_print("%s:%d: Error starting CAC \n", __func__, __LINE__);
+            if (!is_dfs_channel(operationParam)) {
+                wifi_hal_info_print("%s:%d: Setting channel:%u on 5GHz Radio\n", __func__, __LINE__, radio->oper_param.channel);
+                if( set_freq_and_interface_enable(primary_interface, radio) ) {
                     goto reload_config;
                 }
                 goto Exit;
             }
+
+            wifi_hal_info_print("%s:%d: Starting CAC for DFS Channel:%u \n", __func__, __LINE__, operationParam->channel);
+            if (nl80211_start_dfs_cac(radio)) {
+                wifi_hal_error_print("%s:%d: Error starting CAC \n", __func__, __LINE__);
+                goto reload_config;
+            }
+            goto Exit;
         }
 #endif
         if (memcmp((unsigned char *)&radio->oper_param, (unsigned char *)operationParam, sizeof(wifi_radio_operationParam_t)) == 0) {
