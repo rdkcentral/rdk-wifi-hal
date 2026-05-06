@@ -718,7 +718,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     bool is_channel_changed;
     int ret;
 
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
     int dfs_start_chan = 52, dfs_end_chan = 144;
 #endif
 
@@ -895,7 +895,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         goto Exit;
     }
 
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
     if( primary_interface->u.ap.iface.cac_started && ((operationParam->channel >= dfs_start_chan) && (operationParam->channel <= dfs_end_chan)) && (radio->oper_param.channel == operationParam->channel) &&
       ( radio->oper_param.channelWidth == operationParam->channelWidth ) ) {
         wifi_hal_info_print("%s:%d: Setting  primary interface with channel:%u \n", __func__, __LINE__, radio->oper_param.channel);
