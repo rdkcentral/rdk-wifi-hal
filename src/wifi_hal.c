@@ -4069,7 +4069,12 @@ INT wifi_hal_setRMBeaconRequest(UINT apIndex,
 
     // (13)
     if (in_req->channelReportPresent) {
-        ap_ch_rep_len = MAX_CHANNELS;
+        /* Count valid channels from the zero-terminated channelReport.channels array and pass the correct length to wifi_rrm_send_beacon_req() */
+        ap_ch_rep_len = 0;
+        while (ap_ch_rep_len < MAX_CHANNELS_REPORT &&
+               in_req->channelReport.channels[ap_ch_rep_len] != 0) {
+            ap_ch_rep_len++;
+        }
         ap_ch_rep_p = in_req->channelReport.channels;
     }
 

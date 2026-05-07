@@ -1307,8 +1307,13 @@ int wifi_hal_parse_rm_beaon_report(unsigned int apIndex, char *buff, size_t len,
             ie[3], ie[4]);
 
         if (ie[3] != MEASUREMENT_REPORT_MODE_ACCEPT) {
-            wifi_hal_dbg_print("%s:%d: Invalid report\n", __func__, __LINE__);
-            return RETURN_ERR;
+            /* STA refused/incapable/late — skip this element but continue so
+             * the caller receives an empty (size=0) report instead of an error.
+             * This allows a Beacon Metrics Response with no entries to be sent. */
+            wifi_hal_dbg_print("%s:%d: Non-zero report mode 0x%x (refused/incapable/late), skipping element\n",
+                __func__, __LINE__, ie[3]);
+            pos = ie + ie[1] + 2;
+            continue;
         }
         /* Report type */
         switch (ie[4]) {
