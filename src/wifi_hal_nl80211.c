@@ -76,7 +76,8 @@
 #include "wpa_supplicant/config.h"
 #endif
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD) || \
+    (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 #include <rdk_nl80211_hal.h>
 #endif
 
@@ -6938,6 +6939,8 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
             associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkID = link_id;
             associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_RSSI = rssi;
             associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_Valid = true;
+            memcpy(associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkAddress,
+                link->peer_addr, sizeof(associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkAddress));
             link_idx++;
             has_link_stats = true;
         }
@@ -8365,15 +8368,6 @@ Exit:
 
                 interface->beacon_set = 0;
                 start_bss(interface);
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-                if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
-                    if (platform_is_bss_up(wifi_hal_get_interface_name(interface))) {
-                        wifi_hal_error_print("%s:%d %s BSS is down. Bringing it up.\n", __func__,
-                            __LINE__, wifi_hal_get_interface_name(interface));
-                        platform_bss_enable(wifi_hal_get_interface_name(interface), true);
-                    }
-                }               
-#endif
             }
             interface = hash_map_get_next(radio->interface_map, interface);
         }
@@ -8657,7 +8651,7 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
     return RETURN_OK;
 }
 
-#if defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
 {
     wifi_hal_dbg_print("%s:%d: Setting AMSDU for interface->name=%s\n", __func__, __LINE__,
@@ -8704,7 +8698,7 @@ int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
     }
     return RETURN_OK;
 }
-#elif defined(SCXER10_PORT)
+#elif defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
 int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
 {
     return platform_set_amsdu_tid(interface, amsdu_tid);
@@ -10537,19 +10531,10 @@ static int conn_get_interface_handler(struct nl_msg *msg, void *arg)
             {
                 ieee80211_freq_to_chan(nla_get_u32(tb[NL80211_ATTR_WIPHY_FREQ]), &channel);
             }
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-           radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
-            if (radio && radio->oper_param.band == WIFI_FREQUENCY_6_BAND){
-                bw = platform_get_bandwidth(interface);
-            } else {
-#endif
             if (tb[NL80211_ATTR_CHANNEL_WIDTH])
             {
                 bw = nla_get_u32(tb[NL80211_ATTR_CHANNEL_WIDTH]);
             }
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-            }
-#endif
         }
     }
     switch (bw) {
@@ -12519,12 +12504,6 @@ int wifi_drv_switch_channel(void *priv, struct csa_settings *settings)
 
     nla_nest_end(msg, beacon_csa);
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-    if (settings->freq_params.eht_enabled && (settings->freq_params.freq >= MIN_FREQ_MHZ_6G) && (settings->freq_params.freq <= MAX_FREQ_MHZ_6G)) {
-        platform_switch_channel(interface, settings);
-        ret = 0;
-    } else
-#endif
     ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
     if (ret) {
         wifi_hal_info_print("nl80211: switch_channel failed err=%d (%s)\n", ret, strerror(-ret));
@@ -16542,13 +16521,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     ret = nl80211_send_and_recv(msg, beacon_info_handler, &g_wifi_hal, NULL, NULL);
     if (ret != 0) {
         wifi_hal_error_print("%s:%d: Failed to set beacon parameter for interface: %s error: %d(%s)\n", __func__, __LINE__, interface->name, ret, strerror(-ret));
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-        if(radio->oper_param.channelWidth != WIFI_CHANNELBANDWIDTH_320MHZ) {
-#endif
         return -1;
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-        }
-#endif
     }
 #ifdef EAPOL_OVER_NL
     }
