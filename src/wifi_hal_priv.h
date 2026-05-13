@@ -854,7 +854,7 @@ INT wifi_hal_post_init(wifi_vap_info_map_t *vap_map);
 INT wifi_hal_ssid_init(char *ssid, int vap_index);
 INT wifi_hal_keypassphrase_init(char *password, int vap_index);
 INT wifi_hal_wps_pin_init(char *pin);
-INT wifi_hal_hostApGetErouter0Mac(char *out);
+INT wifi_hal_hostApGetErouter0Mac(char *out, size_t out_len);
 INT wifi_hal_send_mgmt_frame_response(int ap_index, int type, int status, int status_code, uint8_t *frame, uint8_t *mac, int len, int rssi);
 void wifi_hal_deauth(int vap_index, int status, uint8_t *mac);
 INT wifi_hal_getInterfaceMap(wifi_interface_name_idex_map_t *if_map, unsigned int max_entries,

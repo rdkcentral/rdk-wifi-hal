@@ -410,13 +410,25 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         // We'll debug out the info though, for programmer convenience.
         
         char tmp[256] = "";
-        sprintf(tmp, "%s:%d:", __func__, __LINE__);
-        if (addr) sprintf(tmp + strlen(tmp), " MAC: "MACSTR",", MAC2STR((u8*)nla_data(addr)));
-        if (cookie) sprintf(tmp + strlen(tmp), " cookie: %llu,", (unsigned long long)nla_get_u64(cookie));
-        if (ack) sprintf(tmp + strlen(tmp), " ack: %d,", nla_get_flag(ack));
+        int ret;
+        int len = snprintf(tmp, sizeof(tmp), "%s:%d:", __func__, __LINE__);
         
-        sprintf(tmp + strlen(tmp), " type: %d, stype: %d",
-                WLAN_FC_GET_TYPE(fc), WLAN_FC_GET_STYPE(fc));
+        if (addr && len > 0 && len < (int)sizeof(tmp)) {
+            ret = snprintf(tmp + len, sizeof(tmp) - len, " MAC: "MACSTR",", MAC2STR((u8*)nla_data(addr)));
+            if (ret > 0) len += ret; else len = -1;
+        }
+        if (cookie && len > 0 && len < (int)sizeof(tmp)) {
+            ret = snprintf(tmp + len, sizeof(tmp) - len, " cookie: %llu,", (unsigned long long)nla_get_u64(cookie));
+            if (ret > 0) len += ret; else len = -1;
+        }
+        if (ack && len > 0 && len < (int)sizeof(tmp)) {
+            ret = snprintf(tmp + len, sizeof(tmp) - len, " ack: %d,", nla_get_flag(ack));
+            if (ret > 0) len += ret; else len = -1;
+        }
+        if (len > 0 && len < (int)sizeof(tmp)) {
+            snprintf(tmp + len, sizeof(tmp) - len, " type: %d, stype: %d",
+                    WLAN_FC_GET_TYPE(fc), WLAN_FC_GET_STYPE(fc));
+        }
         
         wifi_hal_dbg_print("%s\n", tmp);
 
