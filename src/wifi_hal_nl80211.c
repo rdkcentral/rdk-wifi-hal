@@ -76,7 +76,8 @@
 #include "wpa_supplicant/config.h"
 #endif
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD) || \
+    (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 #include <rdk_nl80211_hal.h>
 #endif
 
@@ -3369,6 +3370,11 @@ void recv_link_status()
                 return;
             }
 
+            if (interface && (int)interface->vap_info.vap_index < 0) {
+                wifi_hal_dbg_print("%s:%d: Interface %s is not VAP\n", __func__, __LINE__, interface->name);
+                return;
+            }
+
             if (ifi->ifi_flags & IFF_UP) {
                 status = true;
             } else {
@@ -5476,11 +5482,12 @@ static void wiphy_info_ext_feature_flags(wifi_radio_info_t *radio,
         capa->flags2 |= WPA_DRIVER_FLAGS2_OCV;
     }
 
-    /* XXX: is not present in nl80211_copy.h, maybe needs to be fixed
+#ifdef WPA_DRIVER_FLAGS2_RADAR_BACKGROUND
     if (ext_feature_isset(ext_features, len,
                   NL80211_EXT_FEATURE_RADAR_BACKGROUND)) {
-        capa->flags2 |= WPA_DRIVER_RADAR_BACKGROUND;
-    }*/
+        capa->flags2 |= WPA_DRIVER_FLAGS2_RADAR_BACKGROUND;
+    }
+#endif /* WPA_DRIVER_FLAGS2_RADAR_BACKGROUND */
 }
 
 static unsigned int probe_resp_offload_support(int supp_protocols)
@@ -5885,6 +5892,10 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 #endif
         radio = &g_wifi_hal.radio_info[g_wifi_hal.num_radios];
         memset((unsigned char *)radio, 0, sizeof(wifi_radio_info_t));
+        // Set Channel Scan Capability defaults only
+        radio->capab.boot_only = 1;         // default: boot only
+        radio->capab.scan_impact = WIFI_SCAN_IMPACT_TIME_SLICING;    // default: time slicing
+        radio->capab.min_scan_interval = 20; // default: 20 seconds
         g_wifi_hal.num_radios++;
     }
 
@@ -5918,6 +5929,13 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 
         capa->max_sched_scan_plan_interval =
             nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_INTERVAL]);
+
+        /* If the hardware can't support a 20s gap in its
+         * internal scan plans, we adjust the capability down. */
+        if (capa->max_sched_scan_plan_interval < radio->capab.min_scan_interval) {
+            radio->capab.min_scan_interval =
+                capa->max_sched_scan_plan_interval;
+        }
 
         capa->max_sched_scan_plan_iterations =
             nla_get_u32(tb[NL80211_ATTR_MAX_SCAN_PLAN_ITERATIONS]);
@@ -5998,6 +6016,9 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
                 break;
             case NL80211_CMD_UPDATE_FT_IES:
                 radio->driver_data.update_ft_ies_supported = 1;
+                break;
+            case NL80211_CMD_TRIGGER_SCAN:
+                radio->capab.boot_only = 0; /* on-demand scan supported */
                 break;
             }
         }
@@ -6172,6 +6193,28 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
+
+    if (tb[NL80211_ATTR_FEATURE_FLAGS]) {
+        u32 flags = nla_get_u32(tb[NL80211_ATTR_FEATURE_FLAGS]);
+        if (flags & NL80211_FEATURE_SCAN_FLUSH) {
+            radio->capab.scan_impact = WIFI_SCAN_IMPACT_NONE;
+        }
+    }
+
+#if !defined(CONFIG_HW_CAPABILITIES) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+    if (tb[NL80211_ATTR_SUPPORTED_COMMANDS]) {
+        struct nlattr *nl_cmd;
+        int i;
+
+        nla_for_each_nested(nl_cmd, tb[NL80211_ATTR_SUPPORTED_COMMANDS], i) {
+            if (nla_get_u32(nl_cmd) == NL80211_CMD_TRIGGER_SCAN) {
+                radio->capab.boot_only = 0; /* on-demand scan supported */
+                break;
+            }
+        }
+    }
+#endif /* !CONFIG_HW_CAPABILITIES && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
+
     if (tb[NL80211_ATTR_WDEV]) {
         radio->dev_id = nla_get_u64(tb[NL80211_ATTR_WDEV]);
     }
@@ -8323,15 +8366,6 @@ Exit:
 
                 interface->beacon_set = 0;
                 start_bss(interface);
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-                if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
-                    if (platform_is_bss_up(wifi_hal_get_interface_name(interface))) {
-                        wifi_hal_error_print("%s:%d %s BSS is down. Bringing it up.\n", __func__,
-                            __LINE__, wifi_hal_get_interface_name(interface));
-                        platform_bss_enable(wifi_hal_get_interface_name(interface), true);
-                    }
-                }               
-#endif
             }
             interface = hash_map_get_next(radio->interface_map, interface);
         }
@@ -8344,7 +8378,7 @@ Exit:
     return 0;
 }
 
-INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_band)
+INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band nl_band)
 {
     struct hostapd_hw_modes *hw_mode;
     wifi_radio_capabilities_t *capability = NULL;
@@ -8458,6 +8492,59 @@ INT wifi_getRadioCapabilityData(wifi_radio_info_t *radio, enum nl80211_band nl_b
 #endif /* HOSTAPD_VERSION >= 211 */
 #endif /* CONFIG_IEEE80211BE */
 
+#ifdef WPA_DRIVER_FLAGS2_RADAR_BACKGROUND
+    capability->zeroDFSSupported =
+        (radio->driver_data.capa.flags2 & WPA_DRIVER_FLAGS2_RADAR_BACKGROUND) ? TRUE : FALSE;
+#else
+    capability->zeroDFSSupported = FALSE;
+#endif /* WPA_DRIVER_FLAGS2_RADAR_BACKGROUND */
+    wifi_hal_dbg_print("%s:%d:  capability, zeroDFSSupported=%u\n",
+            __func__, __LINE__, capability->zeroDFSSupported);
+    /* Populate E-4 op class channel table by iterating hostapd's global_op_class[]
+     * sentinel-terminated table directly - no redundant re-lookup needed.
+     * Filter entries to only those matching this radio's nl_band so that each
+     * radio carries only its own op classes (2.4/5/6/60 GHz). */
+    capability->num_op_class_entries = 0;
+    for (const struct oper_class_map *op = global_op_class;
+         op->op_class != 0 && capability->num_op_class_entries < MAX_OP_CLASS_ENTRIES; op++) {
+        /* Band filter: keep only op classes that belong to nl_band. */
+        if (op->mode == HOSTAPD_MODE_IEEE80211B || op->mode == HOSTAPD_MODE_IEEE80211G) {
+            if (nl_band != NL80211_BAND_2GHZ)
+                continue;
+        } else if (op->mode == HOSTAPD_MODE_IEEE80211A) {
+            /* Op classes 131-137 are 6 GHz (UHB); all others with this mode are 5 GHz. */
+            int op_is_6ghz = (op->op_class >= 131 && op->op_class <= 137);
+            int band_is_6ghz = (nl_band == NL80211_BAND_6GHZ);
+            if (op_is_6ghz != band_is_6ghz)
+                continue;
+            if (nl_band != NL80211_BAND_5GHZ && nl_band != NL80211_BAND_6GHZ)
+                continue;
+        } else if (op->mode == HOSTAPD_MODE_IEEE80211AD) {
+            if (nl_band != NL80211_BAND_60GHZ)
+                continue;
+        } else {
+            continue;
+        }
+
+        unsigned int idx = capability->num_op_class_entries;
+        unsigned char count = 0;
+        for (unsigned int ch = (unsigned int)op->min_chan;
+             ch <= (unsigned int)op->max_chan && count < MAX_CHANNELS_PER_OP_CLASS;
+             ch += op->inc) {
+            capability->op_class_ch_list[idx].channels[count++] = (unsigned char)ch;
+        }
+        if (count == 0) {
+            continue;
+        }
+        capability->op_class_ch_list[idx].op_class     = op->op_class;
+        capability->op_class_ch_list[idx].num_channels = count;
+        capability->num_op_class_entries++;
+        wifi_hal_dbg_print("%s:%d: op_class_ch_list[%u]: op_class=%u channels=%u\n",
+            __func__, __LINE__, idx, op->op_class, count);
+    }
+    wifi_hal_dbg_print("%s:%d: total op_class_ch_list entries populated: %u\n",
+        __func__, __LINE__, capability->num_op_class_entries);
+
     wifi_hal_info_print("%s:%d: Successfully retrieved radio capabilities for nlband:%d\n",
         __func__, __LINE__, nl_band);
     return RETURN_OK;
@@ -8553,16 +8640,16 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
     }
 
     // Also copy to radio cap
-    int rc = wifi_getRadioCapabilityData(radio, nl_band);
+    int rc = wifi_get_radio_capability_data(radio, nl_band);
     if (rc != RETURN_OK) {
-        wifi_hal_dbg_print("%s: wifi_getRadioCapabilityData failed for band %d, rc=%d\n",
+        wifi_hal_dbg_print("%s: get radio capability failed for band %d, rc=%d\n",
                         __func__, nl_band, rc);
     }
 
     return RETURN_OK;
 }
 
-#if defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(TCXB8_PORT) || defined(XB10_PORT) || (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
 {
     wifi_hal_dbg_print("%s:%d: Setting AMSDU for interface->name=%s\n", __func__, __LINE__,
@@ -8609,7 +8696,7 @@ int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
     }
     return RETURN_OK;
 }
-#elif defined(SCXER10_PORT)
+#elif defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
 int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
 {
     return platform_set_amsdu_tid(interface, amsdu_tid);
@@ -10442,19 +10529,10 @@ static int conn_get_interface_handler(struct nl_msg *msg, void *arg)
             {
                 ieee80211_freq_to_chan(nla_get_u32(tb[NL80211_ATTR_WIPHY_FREQ]), &channel);
             }
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-           radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
-            if (radio && radio->oper_param.band == WIFI_FREQUENCY_6_BAND){
-                bw = platform_get_bandwidth(interface);
-            } else {
-#endif
             if (tb[NL80211_ATTR_CHANNEL_WIDTH])
             {
                 bw = nla_get_u32(tb[NL80211_ATTR_CHANNEL_WIDTH]);
             }
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-            }
-#endif
         }
     }
     switch (bw) {
@@ -12424,12 +12502,6 @@ int wifi_drv_switch_channel(void *priv, struct csa_settings *settings)
 
     nla_nest_end(msg, beacon_csa);
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-    if (settings->freq_params.eht_enabled && (settings->freq_params.freq >= MIN_FREQ_MHZ_6G) && (settings->freq_params.freq <= MAX_FREQ_MHZ_6G)) {
-        platform_switch_channel(interface, settings);
-        ret = 0;
-    } else
-#endif
     ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
     if (ret) {
         wifi_hal_info_print("nl80211: switch_channel failed err=%d (%s)\n", ret, strerror(-ret));
@@ -16447,13 +16519,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     ret = nl80211_send_and_recv(msg, beacon_info_handler, &g_wifi_hal, NULL, NULL);
     if (ret != 0) {
         wifi_hal_error_print("%s:%d: Failed to set beacon parameter for interface: %s error: %d(%s)\n", __func__, __LINE__, interface->name, ret, strerror(-ret));
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-        if(radio->oper_param.channelWidth != WIFI_CHANNELBANDWIDTH_320MHZ) {
-#endif
         return -1;
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-        }
-#endif
     }
 #ifdef EAPOL_OVER_NL
     }
