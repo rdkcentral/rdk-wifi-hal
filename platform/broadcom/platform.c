@@ -4534,6 +4534,22 @@ int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
     return RETURN_OK;
 }
 
+int platform_set_beacon_prot(uint apIndex, bool isEnabled)
+{
+    wifi_interface_info_t *interface;
+
+    interface = get_interface_by_vap_index(apIndex);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get interface for ap index: %d\n", __func__,
+            __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+    wifi_hal_dbg_print("%s:%d: %s: set beacon protection %d\n", __func__, __LINE__, interface->name, isEnabled);
+
+    v_secure_system("wl -i %s bcnprot enable %d", interface->name, isEnabled);
+    return RETURN_OK;
+}
+
 #if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
 static bool platform_radio_state(wifi_radio_index_t index)
 {

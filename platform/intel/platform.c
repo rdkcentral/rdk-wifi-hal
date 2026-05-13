@@ -1656,6 +1656,11 @@ int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
     return RETURN_OK;
 }
 
+int platform_set_beacon_prot(uint apIndex, bool isEnabled)
+{
+    return RETURN_OK;
+}
+
 #ifdef CONFIG_IEEE80211BE
 int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
     struct wpa_driver_ap_params *params)
