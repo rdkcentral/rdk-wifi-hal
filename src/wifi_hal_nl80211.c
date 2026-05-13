@@ -3369,6 +3369,11 @@ void recv_link_status()
                 return;
             }
 
+            if (interface && (int)interface->vap_info.vap_index < 0) {
+                wifi_hal_dbg_print("%s:%d: Interface %s is not VAP\n", __func__, __LINE__, interface->name);
+                return;
+            }
+
             if (ifi->ifi_flags & IFF_UP) {
                 status = true;
             } else {
