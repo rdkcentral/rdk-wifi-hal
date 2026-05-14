@@ -74,6 +74,29 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #endif
 #endif
 
+#ifdef ARM_SYSTEM_READY_PORT
+#if defined(PLATFORM_LINUX)
+    {0, 0,  "wlan0",   "",  "brlan0",    0,    0,      "private_ssid_2g"},
+#else
+    {0, 0,  "wlan0",   "",  "brlan0",    0,    0,      "private_ssid_2g"},
+    {1, 1,  "wlan1",   "",  "brlan0",    0,    1,      "private_ssid_5g"},
+    {0, 0,  "wlan2",   "",  "brlan1",    0,    2,      "iot_ssid_2g"},
+    {1, 1,  "wlan3",   "",  "brlan1",    0,    3,      "iot_ssid_5g"},
+    {0, 0,  "wlan4",   "",  "brlan2",    0,    4,      "hotspot_open_2g"},
+    {1, 1,  "wlan5",   "",  "brlan3",    0,    5,      "hotspot_open_5g"},
+    {0, 0,  "wlan6",   "",  "br1an4",    0,    6,      "lnf_psk_2g"},
+    {1, 1,  "wlan7",   "",  "brlan3",    0,    7,      "lnf_psk_5g"},
+    {0, 0,  "wlan8",   "",  "brlan4",    0,    8,      "hotspot_secure_2g"},
+    {1, 1,  "wlan9",   "",  "brlan5",    0,    9,      "hotspot_secure_5g"},
+    {0, 0,  "wlan10",  "",  "br1an6",    0,    10,     "lnf_radius_2g"},
+    {1, 1,  "wlan11",  "",  "br1an6",    0,    11,     "lnf_radius_5g"},
+    {0, 0,  "wlan12",  "",  "brlan2",    0,    12,     "mesh_backhaul_2g"},
+    {1, 1,  "wlan13",  "",  "brlan3",    0,    13,     "mesh_backhaul_5g"},
+    {0, 0,  "wlan14",  "",  "brlan2",    0,    14,     "mesh_sta_2g"},
+    {1, 1,  "wlan15",  "",  "brlan2",    0,    15,     "mesh_sta_5g"},
+#endif
+#endif
+
 #ifdef TCXB7_PORT // for Broadcom based platforms
     {0, 0,  "wl0.1",   "",  "brlan0",  100,    0,      "private_ssid_2g"},
     {1, 1,  "wl1.1",   "",  "brlan0",  100,    1,      "private_ssid_5g"},
@@ -449,6 +472,15 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
 #endif
 #endif
 
+#ifdef ARM_SYSTEM_RAEDY_PORT
+#if !defined(PLATFORM_LINUX)
+    { 0, 0, "radio1", "wlan0"},
+    { 1, 1, "radio2", "wlan1"},
+#else
+    { 0, 0, "radio1", "wlan0"},
+#endif
+#endif
+
 #if defined(RDKB_ONE_WIFI_PROD)
     { 2, 0, "radio1", "wl0"},
     { 1, 1, "radio2", "wl1"},
@@ -461,6 +493,40 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
 
 const wifi_driver_info_t  driver_info = {
 #ifdef RASPBERRY_PI_PORT
+    "pi4",
+    "cfg80211",
+    {"RaspBerry","RaspBerry","PI","PI","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    platform_pre_init,
+    platform_post_init,
+    platform_set_radio,
+    platform_set_radio_pre_init,
+    platform_pre_create_vap,
+    platform_create_vap,
+    platform_get_ssid_default,
+    platform_get_keypassphrase_default,
+    platform_get_radius_key_default,
+    platform_get_wps_pin_default,
+    platform_get_country_code_default,
+    platform_wps_event,
+    platform_flags_init,
+    platform_get_aid,
+    platform_free_aid,
+    platform_sync_done,
+    platform_update_radio_presence,
+    platform_set_txpower,
+    platform_set_offload_mode,
+    platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
+    platform_get_vendor_oui,
+    platform_set_neighbor_report,
+    platform_get_radio_phytemperature,
+    platform_set_dfs,
+    platform_get_radio_caps,
+    platform_get_reg_domain,
+#endif
+
+#ifdef ARM_SYSTEM_READY_PORT
     "pi4",
     "cfg80211",
     {"RaspBerry","RaspBerry","PI","PI","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
