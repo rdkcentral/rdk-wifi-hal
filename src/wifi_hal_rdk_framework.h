@@ -137,6 +137,8 @@ typedef struct {
     unsigned int                            num_vapstatus_cbs;
     unsigned int                            num_stamode_cbs;
     wifi_stamode_callback                   stamode_cb[MAX_REGISTERED_CB_NUM];
+    unsigned int                            num_handshake_cbs;
+    wifi_handshake_callback                 handshake_cb[MAX_REGISTERED_CB_NUM];
     queue_t                                 *queue;
     wifi_RMBeaconReport_callback            bcnrpt_callback[MAX_AP_INDEX];
     wifi_BTM_callbacks_t                    btm_callback[MAX_AP_INDEX];
