@@ -1964,6 +1964,84 @@ block:
     return true;
 }
 
+static int wifi_drv_send_mgmt_response_frame(
+    wifi_interface_info_t *interface,
+    struct ieee80211_mgmt *req,
+    const mac_address_t sta,
+    u16 subtype,
+    u16 status_code)
+{
+    struct ieee80211_mgmt resp;
+    int ret = -1;
+    mac_addr_str_t sta_mac_str;
+
+    if (interface == NULL || req == NULL) {
+        return -1;
+    }
+
+    memset(&resp, 0, sizeof(resp));
+
+    // Common header
+    resp.frame_control = IEEE80211_FC(WLAN_FC_TYPE_MGMT, subtype);
+    memcpy(resp.da, sta, ETH_ALEN);
+    memcpy(resp.sa, interface->mac, ETH_ALEN);
+    memcpy(resp.bssid, interface->mac, ETH_ALEN);
+
+    if (subtype == WLAN_FC_STYPE_AUTH) {
+        u16 auth_alg = le_to_host16(req->u.auth.auth_alg);
+        u16 auth_transaction = le_to_host16(req->u.auth.auth_transaction);
+
+        resp.u.auth.auth_alg = host_to_le16(auth_alg);
+        resp.u.auth.auth_transaction = host_to_le16(auth_transaction + 1);
+        resp.u.auth.status_code = host_to_le16(status_code);
+
+        wifi_hal_info_print("%s:%d: Sending AUTH rsp (status=%d) to STA:%s\n",
+            __func__, __LINE__, status_code,to_mac_str(sta, sta_mac_str));
+
+#ifdef HOSTAPD_2_11
+        ret = wifi_drv_send_mlme((void *)interface, (u8 *)&resp,
+            IEEE80211_HDRLEN + sizeof(resp.u.auth), 0, 0, NULL, 0, 0, 0, -1);
+#elif defined(HOSTAPD_2_10)
+        ret = wifi_drv_send_mlme((void *)interface, (u8 *)&resp,
+            IEEE80211_HDRLEN + sizeof(resp.u.auth), 0, 0, NULL, 0, 0, 0);
+#else
+        ret = wifi_drv_send_mlme((void *)interface, (u8 *)&resp,
+            IEEE80211_HDRLEN + sizeof(resp.u.auth), 0, 0, NULL, 0);
+#endif
+
+    } else if (subtype == WLAN_FC_STYPE_ASSOC_RESP ||
+           subtype == WLAN_FC_STYPE_REASSOC_RESP) {
+
+        resp.u.assoc_resp.capab_info = host_to_le16(WLAN_CAPABILITY_ESS);
+        resp.u.assoc_resp.status_code = host_to_le16(status_code);
+        resp.u.assoc_resp.aid = host_to_le16(0);
+
+        size_t len = IEEE80211_HDRLEN + sizeof(resp.u.assoc_resp);
+
+        wifi_hal_info_print("%s:%d: Sending ASSOC Response (subtype=%d, status=%d) to STA:%s\n",
+            __func__, __LINE__, subtype, status_code, to_mac_str(sta, sta_mac_str));
+
+#ifdef HOSTAPD_2_11
+        ret = wifi_drv_send_mlme((void *)interface, (u8 *)&resp, len, 0, 0, NULL, 0, 0, 0, -1);
+#elif defined(HOSTAPD_2_10)
+        ret = wifi_drv_send_mlme((void *)interface, (u8 *)&resp, len, 0, 0, NULL, 0, 0, 0);
+#else
+        ret = wifi_drv_send_mlme((void *)interface, (u8 *)&resp, len, 0, 0, NULL, 0);
+#endif
+    } else {
+        wifi_hal_error_print("%s:%d: Unsupported subtype=%d for STA:%s\n",
+            __func__, __LINE__, subtype, to_mac_str(sta, sta_mac_str));
+        return -1;
+    }
+
+    if (ret != 0) {
+        wifi_hal_error_print("%s:%d: Failed to send frame (subtype=%d, status=%d) to STA:%s (ret=%d)\n",
+            __func__, __LINE__, subtype, status_code, to_mac_str(sta, sta_mac_str), ret);
+    }
+
+    return ret;
+}
+
 #ifdef CMXB7_PORT
 int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *mgmt, u16 reason, int sig_dbm, int snr, int phy_rate, unsigned int len, unsigned int recv_freq) {
 #else
@@ -1984,6 +2062,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     wifi_frame_t mgmt_frame;
     bool forward_frame = true;
     bool is_greylist_reject = false;
+    int ret = -1;
 #ifdef WIFI_EMULATOR_CHANGE
     static int fd_c = -1;
     unsigned int msg_type = wlan_emu_msg_type_frm80211;
@@ -2082,8 +2161,12 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         }
 #ifdef NL80211_ACL
         if (is_core_acl_drop_mgmt_frame(interface, sta)) {
-            wifi_hal_dbg_print("%s:%d: Station present in acl list dropping auth req\n",
-                                   __func__, __LINE__);
+            wifi_hal_dbg_print("%s:%d: Station present in acl list sending auth frame with rejection\n", __func__, __LINE__);
+            ret = wifi_drv_send_mgmt_response_frame(interface, mgmt, sta, WLAN_FC_STYPE_AUTH, WLAN_STATUS_DENIED_INSUFFICIENT_BANDWIDTH);
+            if (ret < 0) {
+                 wifi_hal_error_print("%s:%d: interface:%s failed to send auth rejection frame: %d\n",
+                     __func__, __LINE__, interface->name, ret);
+            }
             return -1;
         }
 #endif
@@ -2111,6 +2194,18 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         if (callbacks->steering_event_callback != 0) {
             handle_assoc_req_event_for_bm(interface, mgmt, len, sta);
         }
+#ifdef NL80211_ACL
+        if (is_core_acl_drop_mgmt_frame(interface, sta)) {
+            wifi_hal_dbg_print("%s:%d: Station present in acl list sending assoc response with rejection\n", __func__, __LINE__);
+            ret = wifi_drv_send_mgmt_response_frame(interface, mgmt, sta, WLAN_FC_STYPE_ASSOC_RESP, WLAN_STATUS_DENIED_INSUFFICIENT_BANDWIDTH);
+            if (ret < 0) {
+                 wifi_hal_error_print("%s:%d: interface:%s failed to send assoc rejection frame: %d\n",
+                     __func__, __LINE__, interface->name, ret);
+            }
+            return -1;
+        }
+#endif
+
         remove_station_from_other_interfaces(interface, sta);
 #ifdef WIFI_EMULATOR_CHANGE
         send_mgmt_to_char_dev = true;
@@ -2131,7 +2226,17 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, sta_mac_str),
                 to_mac_str(mgmt->da, frame_da_str), len, sig_dbm);
         }
-
+#ifdef NL80211_ACL
+        if (is_core_acl_drop_mgmt_frame(interface, sta)) {
+            wifi_hal_dbg_print("%s:%d: Station present in acl list sending re-assoc response with rejection\n", __func__, __LINE__);
+            ret = wifi_drv_send_mgmt_response_frame(interface, mgmt, sta, WLAN_FC_STYPE_REASSOC_RESP, WLAN_STATUS_DENIED_INSUFFICIENT_BANDWIDTH);
+            if (ret < 0) {
+                 wifi_hal_error_print("%s:%d: interface:%s failed to send re-assoc rejection frame: %d\n",
+                     __func__, __LINE__, interface->name, ret);
+            }
+            return -1;
+        }
+#endif
         remove_station_from_other_interfaces(interface, sta);
 #ifdef WIFI_EMULATOR_CHANGE
         send_mgmt_to_char_dev = true;
