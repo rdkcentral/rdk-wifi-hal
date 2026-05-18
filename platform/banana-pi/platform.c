@@ -979,7 +979,7 @@ INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
     return 0;
 }
 
-#ifdef CONFIG_IEEE80211BE
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
 int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
     struct wpa_driver_ap_params *params)
 {
@@ -997,7 +997,9 @@ int nl80211_send_mlo_msg(struct nl_msg *msg)
 
     return 0;
 }
+#endif /* CONFIG_IEEE80211BE && CONFIG_MLO */
 
+#if defined(CONFIG_IEEE80211BE)
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb)
 {
     if (tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC] &&
@@ -1008,7 +1010,9 @@ void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nla
         eht_capab->mac_cap = WPA_GET_LE16(pos);
     }
 }
+#endif /* CONFIG_IEEE80211BE */
 
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
 static struct hostapd_mld *find_mld(struct wifi_interface_info_t *interface)
 {
     struct hostapd_mld *mld_it = NULL;
@@ -1150,5 +1154,5 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
 #endif
     return 0;
 }
-#endif /* CONFIG_IEEE80211BE */
+#endif /* CONFIG_IEEE80211BE && CONFIG_MLO */
 
