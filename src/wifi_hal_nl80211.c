@@ -18152,9 +18152,12 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
 Fail:
     radio_param = radio->oper_param;
     radio_param.channel = get_non_dfs_chan(interface, &seg0, &seg1, &sec_chan_offset);
-    radio_param.channelWidth = is_valid_evac_width(radio->dfs_evacuation_channel_width)
-                               ? radio->dfs_evacuation_channel_width
-                               : WIFI_CHANNELBANDWIDTH_80MHZ;
+    if (is_valid_evac_width(radio->dfs_evacuation_channel_width)) {
+        radio_param.channelWidth = radio->dfs_evacuation_channel_width;
+    }
+    if (radio_param.channelWidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
+        radio_param.channelWidth = WIFI_CHANNELBANDWIDTH_80MHZ;
+    }
 
     wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d \n", radio_param.channel, seg0, seg1, sec_chan_offset);
     if( wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, &radio_param) ) {
