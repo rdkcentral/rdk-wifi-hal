@@ -17807,10 +17807,23 @@ static bool is_unii3_channel157_usable(wifi_radio_info_t *radio)
     return false;
 }
 
-/* ch is non-zero and outside the 5GHz DFS range (52-144) */
-static bool is_valid_evac_channel(unsigned int ch)
+static bool is_valid_evac_channel(unsigned int ch, wifi_radio_info_t *radio)
 {
-    return ch != 0 && (ch < WIFI_DFS_CHAN_FIRST || ch > WIFI_DFS_CHAN_LAST);
+    unsigned int i;
+    unsigned int map_size;
+
+    if (ch == 0 || (ch >= WIFI_DFS_CHAN_FIRST && ch <= WIFI_DFS_CHAN_LAST))
+        return false;
+
+    /* Verify channel exists in this radio's available channel list */
+    map_size = sizeof(radio->oper_param.channel_map) /
+               sizeof(radio->oper_param.channel_map[0]);
+    for (i = 0; i < map_size; i++) {
+        if (radio->oper_param.channel_map[i].ch_number == ch &&
+            radio->oper_param.channel_map[i].ch_state == CHAN_STATE_AVAILABLE)
+            return true;
+    }
+    return false;
 }
 
 /* Only 20/40/80 MHz are valid evacuation widths */
@@ -17837,7 +17850,7 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
     if (radio == NULL) {
         wifi_hal_error_print("%s:%d: [DFS]: no radio for index %d\n", __func__, __LINE__,
             interface->vap_info.radio_index);
-        return 36;
+        return 44;
     }
 
     if (radio->oper_param.band == WIFI_FREQUENCY_5_BAND || radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) {
@@ -17856,7 +17869,7 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
         if (is_unii3_channel157_usable(radio)) {
             wifi_hal_info_print("%s:%d: [DFS]: evacuating to channel 157 (UNII-3)\n", __func__, __LINE__);
             return 157;
-        }		
+        }
     }
 
 #if HOSTAPD_VERSION >= 210 // 2.10
