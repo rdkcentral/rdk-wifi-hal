@@ -17856,12 +17856,7 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
         if (is_unii3_channel157_usable(radio)) {
             wifi_hal_info_print("%s:%d: POORNA: evacuating to channel 157 (UNII-3)\n", __func__, __LINE__);
             return 157;
-        }
-		else {
-		    wifi_hal_info_print("%s:%d: POORNA: evacuating to channel 132\n", __func__, __LINE__);
-			return 132;
-		}
-		
+        }		
     }
 
 #if HOSTAPD_VERSION >= 210 // 2.10
