@@ -17835,7 +17835,7 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     if (radio == NULL) {
-        wifi_hal_error_print("%s:%d: POORNA: no radio for index %d\n", __func__, __LINE__,
+        wifi_hal_error_print("%s:%d: [DFS]: no radio for index %d\n", __func__, __LINE__,
             interface->vap_info.radio_index);
         return 36;
     }
@@ -17843,18 +17843,18 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
     if (radio->oper_param.band == WIFI_FREQUENCY_5_BAND || radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) {
         if (is_valid_evac_channel(radio->dfs_evacuation_channel))
             return radio->dfs_evacuation_channel;
-        wifi_hal_info_print("%s:%d: POORNA: evacuating to channel 44\n", __func__, __LINE__);
+        wifi_hal_info_print("%s:%d: [DFS]: evacuating to channel 44\n", __func__, __LINE__);
         return 44;
     }
 
     if (radio->oper_param.band == WIFI_FREQUENCY_5H_BAND) {
         if (is_valid_evac_channel(radio->dfs_evacuation_channel)) {
-            wifi_hal_info_print("%s:%d: POORNA: evacuating to configured channel %u\n",
+            wifi_hal_info_print("%s:%d: [DFS]: evacuating to configured channel %u\n",
                 __func__, __LINE__, radio->dfs_evacuation_channel);
             return radio->dfs_evacuation_channel;
         }
         if (is_unii3_channel157_usable(radio)) {
-            wifi_hal_info_print("%s:%d: POORNA: evacuating to channel 157 (UNII-3)\n", __func__, __LINE__);
+            wifi_hal_info_print("%s:%d: [DFS]: evacuating to channel 157 (UNII-3)\n", __func__, __LINE__);
             return 157;
         }		
     }
@@ -17867,11 +17867,11 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
 #endif /* HOSTAPD_VERSION >= 210 */
 
     if (chan == NULL) {
-        wifi_hal_error_print("%s:%d: POORNA: no channel found, returning 36\n", __func__, __LINE__);
-        return 36;
+        wifi_hal_error_print("%s:%d: [DFS]: no channel found, returning 44\n", __func__, __LINE__);
+        return 44;
     }
 
-    wifi_hal_info_print("%s:%d: POORNA: hostapd selected channel %u\n", __func__, __LINE__, chan->chan);
+    wifi_hal_info_print("%s:%d: [DFS]: hostapd selected channel %u\n", __func__, __LINE__, chan->chan);
     return chan->chan;
 }
 #endif /* defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) */
