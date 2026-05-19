@@ -17854,14 +17854,14 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
     }
 
     if (radio->oper_param.band == WIFI_FREQUENCY_5_BAND || radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) {
-        if (is_valid_evac_channel(radio->dfs_evacuation_channel))
+        if (is_valid_evac_channel(radio->dfs_evacuation_channel, radio))
             return radio->dfs_evacuation_channel;
         wifi_hal_info_print("%s:%d: [DFS]: evacuating to channel 44\n", __func__, __LINE__);
         return 44;
     }
 
     if (radio->oper_param.band == WIFI_FREQUENCY_5H_BAND) {
-        if (is_valid_evac_channel(radio->dfs_evacuation_channel)) {
+        if (is_valid_evac_channel(radio->dfs_evacuation_channel, radio)) {
             wifi_hal_info_print("%s:%d: [DFS]: evacuating to configured channel %u\n",
                 __func__, __LINE__, radio->dfs_evacuation_channel);
             return radio->dfs_evacuation_channel;
