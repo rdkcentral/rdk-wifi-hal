@@ -17796,17 +17796,11 @@ int wifi_drv_commit(void *priv)
 #define WIFI_DFS_EVAC_CHAN_5L    44   /* Default evacuation channel for 5/5L band (UNII-1) */
 #define WIFI_DFS_EVAC_CHAN_5H    157  /* Default evacuation channel for 5H band (UNII-3) */
 
+static bool is_valid_evac_channel(unsigned int ch, wifi_radio_info_t *radio);
+
 static bool is_unii3_channel157_usable(wifi_radio_info_t *radio)
 {
-    unsigned int i;
-    unsigned int map_size = sizeof(radio->oper_param.channel_map) /
-                            sizeof(radio->oper_param.channel_map[0]);
-    for (i = 0; i < map_size; i++) {
-        if (radio->oper_param.channel_map[i].ch_number == WIFI_DFS_EVAC_CHAN_5H &&
-            radio->oper_param.channel_map[i].ch_state == CHAN_STATE_AVAILABLE)
-            return true;
-    }
-    return false;
+    return is_valid_evac_channel(WIFI_DFS_EVAC_CHAN_5H, radio);
 }
 
 static bool is_valid_evac_channel(unsigned int ch, wifi_radio_info_t *radio)
