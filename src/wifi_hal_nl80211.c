@@ -17793,6 +17793,8 @@ int wifi_drv_commit(void *priv)
 #if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 #define WIFI_DFS_CHAN_FIRST  52
 #define WIFI_DFS_CHAN_LAST  144
+#define WIFI_DFS_EVAC_CHAN_5L    44   /* Default evacuation channel for 5/5L band (UNII-1) */
+#define WIFI_DFS_EVAC_CHAN_5H    157  /* Default evacuation channel for 5H band (UNII-3) */
 
 static bool is_unii3_channel157_usable(wifi_radio_info_t *radio)
 {
@@ -17800,7 +17802,7 @@ static bool is_unii3_channel157_usable(wifi_radio_info_t *radio)
     unsigned int map_size = sizeof(radio->oper_param.channel_map) /
                             sizeof(radio->oper_param.channel_map[0]);
     for (i = 0; i < map_size; i++) {
-        if (radio->oper_param.channel_map[i].ch_number == 157 &&
+        if (radio->oper_param.channel_map[i].ch_number == WIFI_DFS_EVAC_CHAN_5H &&
             radio->oper_param.channel_map[i].ch_state == CHAN_STATE_AVAILABLE)
             return true;
     }
@@ -17850,14 +17852,14 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
     if (radio == NULL) {
         wifi_hal_error_print("%s:%d: [DFS]: no radio for index %d\n", __func__, __LINE__,
             interface->vap_info.radio_index);
-        return 44;
+        return WIFI_DFS_EVAC_CHAN_5L;
     }
 
     if (radio->oper_param.band == WIFI_FREQUENCY_5_BAND || radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) {
         if (is_valid_evac_channel(radio->dfs_evacuation_channel, radio))
             return radio->dfs_evacuation_channel;
         wifi_hal_info_print("%s:%d: [DFS]: evacuating to channel 44\n", __func__, __LINE__);
-        return 44;
+        return WIFI_DFS_EVAC_CHAN_5L;
     }
 
     if (radio->oper_param.band == WIFI_FREQUENCY_5H_BAND) {
@@ -17868,7 +17870,7 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
         }
         if (is_unii3_channel157_usable(radio)) {
             wifi_hal_info_print("%s:%d: [DFS]: evacuating to channel 157 (UNII-3)\n", __func__, __LINE__);
-            return 157;
+            return WIFI_DFS_EVAC_CHAN_5H;
         }
     }
 
@@ -17881,7 +17883,7 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
 
     if (chan == NULL) {
         wifi_hal_error_print("%s:%d: [DFS]: no channel found, returning 44\n", __func__, __LINE__);
-        return 44;
+        return WIFI_DFS_EVAC_CHAN_5L;
     }
 
     wifi_hal_info_print("%s:%d: [DFS]: hostapd selected channel %u\n", __func__, __LINE__, chan->chan);
