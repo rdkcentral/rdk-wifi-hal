@@ -17796,13 +17796,6 @@ int wifi_drv_commit(void *priv)
 #define WIFI_DFS_EVAC_CHAN_5L    44   /* Default evacuation channel for 5/5L band (UNII-1) */
 #define WIFI_DFS_EVAC_CHAN_5H    157  /* Default evacuation channel for 5H band (UNII-3) */
 
-static bool is_valid_evac_channel(unsigned int ch, wifi_radio_info_t *radio);
-
-static bool is_unii3_channel157_usable(wifi_radio_info_t *radio)
-{
-    return is_valid_evac_channel(WIFI_DFS_EVAC_CHAN_5H, radio);
-}
-
 static bool is_valid_evac_channel(unsigned int ch, wifi_radio_info_t *radio)
 {
     unsigned int i;
@@ -17862,7 +17855,7 @@ short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg
                 __func__, __LINE__, radio->dfs_evacuation_channel);
             return radio->dfs_evacuation_channel;
         }
-        if (is_unii3_channel157_usable(radio)) {
+        if (is_valid_evac_channel(WIFI_DFS_EVAC_CHAN_5H, radio)) {
             wifi_hal_info_print("%s:%d: [DFS]: evacuating to channel 157 (UNII-3)\n", __func__, __LINE__);
             return WIFI_DFS_EVAC_CHAN_5H;
         }
