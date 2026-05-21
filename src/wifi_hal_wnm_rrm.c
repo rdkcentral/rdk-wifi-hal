@@ -1117,7 +1117,11 @@ int wifi_rrm_send_beacon_resp(unsigned int ap_index, wifi_neighbor_ap2_t *bss,
         pos2 += REPORTED_FRAME_BODY_SUBELEM_LEN;
         size_t data_len = ((pos - pos1) + sizeof(struct rrm_measurement_beacon_report) +
             REPORTED_FRAME_BODY_SUBELEM_LEN);
-        wpabuf_resize(&wpa_buf, 5 + data_len);
+        if (wpabuf_resize(&wpa_buf, 5 + data_len) < 0) {
+            wifi_hal_error_print("%s:%d failed to resize wpabuf\n", __func__, __LINE__);
+            os_free(buf);
+            return RETURN_ERR;
+        }
         wpabuf_put_u8(wpa_buf, WLAN_EID_MEASURE_REPORT);
         wpabuf_put_u8(wpa_buf, 3 + data_len);
         wpabuf_put_u8(wpa_buf, 0x01);
@@ -1132,6 +1136,11 @@ int wifi_rrm_send_beacon_resp(unsigned int ap_index, wifi_neighbor_ap2_t *bss,
     }
     u8 *wpos = wpabuf_mhead_u8(wpa_buf);
     struct wpabuf *report = wpabuf_alloc(wpabuf_len(wpa_buf) + 3);
+    if (report == NULL) {
+        wifi_hal_error_print("%s:%d Failed to allocate memory for report\n", __func__, __LINE__);
+        os_free(wpa_buf);
+        return RETURN_ERR;
+    }
     wpabuf_put_u8(report, WLAN_ACTION_RADIO_MEASUREMENT);
     wpabuf_put_u8(report, WLAN_RRM_RADIO_MEASUREMENT_REPORT);
     wpabuf_put_u8(report, token);
