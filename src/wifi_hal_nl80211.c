@@ -4855,6 +4855,7 @@ skip:   found = 0;
 }
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if HOSTAPD_VERSION >= 210 //2.10
 static void phy_info_iftype_copy(struct hostapd_hw_modes *mode,
                  enum ieee80211_op_mode opmode,
                  struct nlattr **tb, struct nlattr **tb_flags)
@@ -4987,6 +4988,7 @@ static void phy_info_iftype_copy(struct hostapd_hw_modes *mode,
     }
 #endif /* CONFIG_IEEE80211BE */
 }
+#endif /* HOSTAPD_VERSION >= 210 */
 
 static int wiphy_info_iface_comb_process(wifi_radio_info_t *radio,
                      struct nlattr *nl_combi)
@@ -5146,6 +5148,7 @@ static unsigned int get_akm_suites_info(struct nlattr *tb)
     return key_mgmt;
 }
 
+#if HOSTAPD_VERSION >= 210
 static void get_iface_akm_suites_info(wifi_radio_info_t *radio,
                     struct nlattr *nl_akms)
 {
@@ -5210,6 +5213,7 @@ static void get_iface_akm_suites_info(wifi_radio_info_t *radio,
                 key_mgmt);
     }
 }
+#endif // HOSTAPD_VERSION >= 210
 
 static void wiphy_info_feature_flags(wifi_radio_info_t *radio,
                      struct nlattr *tb)
@@ -5348,11 +5352,12 @@ static void wiphy_info_ext_feature_flags(wifi_radio_info_t *radio,
         capa->flags |= WPA_DRIVER_FLAGS_BEACON_RATE_VHT;
     }
 
+#if HOSTAPD_VERSION >= 210
     if (ext_feature_isset(ext_features, len,
                   NL80211_EXT_FEATURE_BEACON_RATE_HE)) {
         capa->flags2 |= WPA_DRIVER_FLAGS2_BEACON_RATE_HE;
     }
-
+#endif // HOSTAPD_VERSION >= 210
     if (ext_feature_isset(ext_features, len,
                   NL80211_EXT_FEATURE_SET_SCAN_DWELL)) {
         capa->rrm_flags |= WPA_DRIVER_FLAGS_SUPPORT_SET_SCAN_DWELL;
@@ -5421,6 +5426,8 @@ static void wiphy_info_ext_feature_flags(wifi_radio_info_t *radio,
         capa->flags |= WPA_DRIVER_FLAGS_FTM_RESPONDER;
     }
 
+
+#if HOSTAPD_VERSION >= 210
     if (ext_feature_isset(ext_features, len,
                   NL80211_EXT_FEATURE_CONTROL_PORT_OVER_NL80211)) {
         capa->flags |= WPA_DRIVER_FLAGS_CONTROL_PORT;
@@ -5481,6 +5488,7 @@ static void wiphy_info_ext_feature_flags(wifi_radio_info_t *radio,
                   NL80211_EXT_FEATURE_OPERATING_CHANNEL_VALIDATION)) {
         capa->flags2 |= WPA_DRIVER_FLAGS2_OCV;
     }
+#endif // HOSTAPD_VERSION >= 210
 
 #ifdef WPA_DRIVER_FLAGS2_RADAR_BACKGROUND
     if (ext_feature_isset(ext_features, len,
@@ -5650,6 +5658,7 @@ static void wiphy_info_wowlan_triggers(struct wpa_driver_capa *capa,
     }
 }
 
+#if HOSTAPD_VERSION >= 210 //2.10
 static int phy_info_iftype(struct hostapd_hw_modes *mode,
                struct nlattr *nl_iftype)
 {
@@ -5675,6 +5684,7 @@ static int phy_info_iftype(struct hostapd_hw_modes *mode,
 
     return NL_OK;
 }
+#endif
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
 
 static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
@@ -5789,6 +5799,7 @@ static int regulatory_domain_set_info_handler(struct nl_msg *msg, void *arg)
 }
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if HOSTAPD_VERSION >= 210
 static void wiphy_info_mbssid(struct wpa_driver_capa *cap, struct nlattr *attr)
 {
     struct nlattr *config[NL80211_MBSSID_CONFIG_ATTR_MAX + 1];
@@ -5811,6 +5822,7 @@ static void wiphy_info_mbssid(struct wpa_driver_capa *cap, struct nlattr *attr)
     wifi_hal_dbg_print("%s:%d mbssid: max interfaces %u, max profile periodicity %u", __func__,
         __LINE__, cap->mbssid_max_interfaces, cap->ema_max_periodicity);
 }
+#endif // HOSTAPD_VERSION >= 210
 #endif /* defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || TARGET_GEMINI7_2 */
 
 static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
@@ -6085,6 +6097,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
                 capa->key_mgmt);
     }
 
+#if HOSTAPD_VERSION >= 210
     if (tb[NL80211_ATTR_IFTYPE_AKM_SUITES]) {
         struct nlattr *nl_if;
         int rem_if;
@@ -6092,6 +6105,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
         nla_for_each_nested(nl_if, tb[NL80211_ATTR_IFTYPE_AKM_SUITES], rem_if)
             get_iface_akm_suites_info(radio, nl_if);
     }
+#endif /* HOSTAPD_VERSION >= 210 */
 
     if (tb[NL80211_ATTR_OFFCHANNEL_TX_OK]) {
         wifi_hal_info_print("%s:%d: nl80211: Using driver-based off-channel TX\n", __func__, __LINE__);
@@ -6181,9 +6195,11 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
         capa->flags |= WPA_DRIVER_FLAGS_SELF_MANAGED_REGULATORY;
     }
 
+#if HOSTAPD_VERSION >= 210
     if (tb[NL80211_ATTR_MBSSID_CONFIG]) {
         wiphy_info_mbssid(capa, tb[NL80211_ATTR_MBSSID_CONFIG]);
     }
+#endif /* HOSTAPD_VERSION >= 210 */
 
 #if HOSTAPD_VERSION >= 211
 #ifdef CONFIG_IEEE80211BE
@@ -6545,6 +6561,7 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
 }
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if HOSTAPD_VERSION >= 210
 static int phy_info_rates_get_hw_features(struct hostapd_hw_modes *mode, struct nlattr *tb)
 {
     static struct nla_policy rate_policy[NL80211_BITRATE_ATTR_MAX + 1] = {
@@ -6588,6 +6605,7 @@ static int phy_info_rates_get_hw_features(struct hostapd_hw_modes *mode, struct 
 
     return NL_OK;
 }
+#endif // HOSTAPD_VERSION >= 210
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
 
 static int phy_info_handler(struct nl_msg *msg, void *arg)
@@ -7442,7 +7460,7 @@ int init_nl80211()
             radio->driver_data.capa.max_sched_scan_plan_interval = UINT32_MAX;
             radio->driver_data.capa.max_sched_scan_plan_iterations = 0;
         }
-
+#if HOSTAPD_VERSION >= 210
         if (radio->driver_data.update_ft_ies_supported) {
             radio->driver_data.capa.flags |= WPA_DRIVER_FLAGS_UPDATE_FT_IES;
         }
@@ -7450,6 +7468,7 @@ int init_nl80211()
         if (radio->driver_data.capa.mbssid_max_interfaces == 0) {
             radio->driver_data.capa.mbssid_max_interfaces = MAX_MBSSID_INTERFACES;
         }
+#endif // HOSTAPD_VERSION >= 210
 
 #endif // CONFIG_HW_CAPABILITIES
         // initialize the interface map
@@ -14416,6 +14435,7 @@ fail:
 }
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if HOSTAPD_VERSION >= 210
 static int cw2ecw(unsigned int cw)
 {
     int bit;
@@ -14663,6 +14683,7 @@ static int phy_info_edmg_capa(struct hostapd_hw_modes *mode,
 
     return NL_OK;
 }
+#endif // HOSTAPD_VERSION >= 210
 
 static void nl80211_dump_chan_list(struct hostapd_hw_modes *modes,
                    u16 num_modes)
@@ -20480,7 +20501,9 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
 #endif // CONFIG_USE_HOSTAP_BTM_PATCH
 #endif // CONFIG_VENDOR_COMMANDS
 #if !defined(PLATFORM_LINUX)
+    #if HOSTAPD_VERSION >= 210
     .radius_eap_failure = wifi_drv_send_radius_eap_failure,
+    #endif
     .radius_fallback_failover = wifi_drv_send_radius_fallback_and_failover,
 #endif // CONFIG_VENDOR_COMMANDS
 #ifdef CMXB7_PORT
@@ -20657,7 +20680,9 @@ const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops = {
     .get_sta_measurements = wifi_drv_get_sta_measurements,
 #endif // CONFIG_USE_HOSTAP_BTM_PATCH
 #endif // CONFIG_VENDOR_COMMANDS
+    #if HOSTAPD_VERSION >= 210
     .radius_eap_failure = wifi_drv_send_radius_eap_failure,
+    #endif
     .radius_fallback_failover = wifi_drv_send_radius_fallback_and_failover,
     .get_handshake_status = wifi_drv_get_handshake_status,
 #ifdef CMXB7_PORT
