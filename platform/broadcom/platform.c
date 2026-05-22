@@ -1256,18 +1256,28 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     platform_set_eht(index, (operationParam->variant & WIFI_80211_VARIANT_BE) ? true : false);
 #elif defined(XB10_PORT)
     int eht_enab = (operationParam->variant & WIFI_80211_VARIANT_BE) ? 1 : 0;
-    char interface_name[8];
+    bool is_eht_enab_changed = false;
 
-    snprintf(interface_name, sizeof(interface_name), "wl%d", index);
-    snprintf(param_name, sizeof(param_name), "%s_oper_stands", interface_name);
-    wifi_hal_dbg_print("### %s: radio=%d eht_enab=%d %s=%s ###\n", __FUNCTION__, index,
-        eht_enab, param_name, nvram_get(param_name));
-
-    if (_platform_init_done)
+    if (_platform_init_done) {
+        int old_eht_enab = (radio->oper_param.variant & WIFI_80211_VARIANT_BE) ? 1 : 0;
+        is_eht_enab_changed = eht_enab != old_eht_enab;
+    }
+    if (_platform_init_done && is_eht_enab_changed)
         platform_radio_up(index, FALSE);
-    sprintf(cmd, "wl -i %s eht enab %d", interface_name, eht_enab);
-    system(cmd);
-    if (_platform_init_done)
+    if (!_platform_init_done || is_eht_enab_changed) {
+        char interface_name[8];
+        char *op_standards_str = NULL;
+
+        snprintf(interface_name, sizeof(interface_name), "wl%d", index);
+        snprintf(param_name, sizeof(param_name), "%s_oper_stands", interface_name);
+        op_standards_str = nvram_get(param_name);
+        wifi_hal_dbg_print("### %s: radio=%d eht_enab=%d %s=%s ###\n", __FUNCTION__, index,
+            eht_enab, param_name, op_standards_str ? op_standards_str : "null");
+
+        sprintf(cmd, "wl -i %s eht enab %d", interface_name, eht_enab);
+        system(cmd);
+    }
+    if (_platform_init_done && is_eht_enab_changed)
         platform_radio_up(index, TRUE);
 #endif
 #endif
