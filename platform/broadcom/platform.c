@@ -129,6 +129,8 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
 	{"keep_ap_up", "1"}
 };
 
+static int _platform_init_done = FALSE;
+
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
 static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames);
@@ -467,7 +469,6 @@ void set_string_nvram_param(char *param_name, char *value)
 #if defined(MLO_ENAB)
 #define MAX_MLO_RADIOS (4)
 
-static int _platform_init_done = FALSE;
 static int mlo_MAP = -1; /* Main AP index */
 static int mlo_config[MAX_MLO_RADIOS] = { -1, -1, -1, -1 }; /* wl_mlo_config values */
 static int mlo_radio_cnt = 0; /* Number of MLO radios */
@@ -918,6 +919,7 @@ void platform_mlo_post_init(void)
 int platform_pre_init()
 {
     wifi_hal_dbg_print("%s:%d \r\n", __func__, __LINE__);
+    _platform_init_done = FALSE;
 
     system("sysevent set multinet-up 13");
     system("sysevent set multinet-up 14");
@@ -940,8 +942,6 @@ int platform_pre_init()
 
 #if defined(MLO_ENAB)
     /* Start the init process */
-    _platform_init_done = FALSE;
-
     platform_radio_up(-1, FALSE); /* Bring all radios down */
     platform_mlo_init();
 #endif /* MLO_ENAB */
@@ -1093,6 +1093,21 @@ int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
     return RETURN_OK;
 }
 
+/* apsta iovar is per-radio, not per-BSS */
+static int platform_set_apsta(wifi_radio_index_t index, bool enable)
+{
+    int apsta_enable = enable ? 1 : 0;
+    char osifname[IFNAMSIZ] = { 0 };
+
+    snprintf(osifname, sizeof(osifname), "wl%d", index);
+    if (wl_iovar_set(osifname, "apsta", &apsta_enable, sizeof(apsta_enable)) < 0) {
+        wifi_hal_error_print("%s: failed to set apsta %d for %s, err: %d (%s)\n", __func__,
+            apsta_enable, osifname, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+    return RETURN_OK;
+}
+
 int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
     if (operationParam == NULL) {
@@ -1110,6 +1125,13 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     if (radio == NULL) {
         wifi_hal_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
         return RETURN_ERR;
+    }
+
+    if (!_platform_init_done) {
+        /* OneWifi designates primary IF as sta, so the radio shall always work in apsta mode */
+        if (platform_set_apsta(index, TRUE) != RETURN_OK) {
+           wifi_hal_error_print("%s:%d: Failed to set apsta=1 for radio index:%d\n", __func__, __LINE__, index);
+        }
     }
 
 #if defined (ENABLED_EDPD)
@@ -1294,8 +1316,9 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
 #if defined(MLO_ENAB)
     platform_mlo_post_init();
     platform_vap_enable_update(vap_map, TRUE);		/* Bring all VAPs up, including MLDs */
-    _platform_init_done = TRUE;
 #endif /* MLO_ENAB */
+    _platform_init_done = TRUE;
+
 
     memset(param_name, 0 ,sizeof(param_name));
     memset(interface_name, 0, sizeof(interface_name));
