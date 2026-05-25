@@ -3587,9 +3587,9 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
          * Driver does not set RDK_VENDOR_ATTR_STA_INFO_MLD_ENAB for 1-link MLO clients.
          * Infer MLD Enable flag from the presence of a non-zero MLD address. */
         if (stats->cli_MLDEnable == 0 && !is_zero_ether_addr(stats->cli_MLDAddr)) {
-            wifi_hal_stats_error_print("%s:%d MLD address " MACSTR
-                                       " is present but cli_MLDEnable is %d."
-                                       " Force enabling cli_MLDEnable to %d.\n",
+            wifi_hal_stats_dbg_print("%s:%d MLD address " MACSTR
+                                     " is present but cli_MLDEnable is %d."
+                                     " Force enabling cli_MLDEnable to %d.\n",
                 __func__, __LINE__, MAC2STR(stats->cli_MLDAddr), stats->cli_MLDEnable, 1);
             stats->cli_MLDEnable = 1;
         }
