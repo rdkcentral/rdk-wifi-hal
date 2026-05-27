@@ -4541,6 +4541,23 @@ void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_
     callbacks->num_disassoc_cbs++;
 }
 
+
+
+
+void wifi_hal_eapol_timeouts_callback_register(wifi_eapol_timeouts_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+    
+    if (callbacks == NULL || callbacks->num_eapol_timeouts_cbs >= MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+    
+    callbacks->eapol_timeouts_cb[callbacks->num_eapol_timeouts_cbs] = func;
+    callbacks->num_eapol_timeouts_cbs++;
+}
+
 void wifi_hal_handshake_callback_register(wifi_handshake_callback func)
 {
     wifi_device_callbacks_t *callbacks;
