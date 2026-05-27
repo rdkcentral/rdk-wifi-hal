@@ -10173,9 +10173,20 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     interface->wpa_s.current_ssid->key_mgmt = interface->u.sta.wpa_sm->key_mgmt;
     if ((security->mode == wifi_security_mode_wpa3_personal) ||
         (security->mode == wifi_security_mode_wpa3_transition) ||
+        (security->mode == wifi_security_mode_wpa3_enterprise)) {
+        interface->wpa_s.current_ssid->ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
+    } else if (security->mode == wifi_security_mode_wpa3_compatibility) {
+        if (backhaul->oper_freq_band == WIFI_FREQUENCY_6_BAND) {
+            interface->wpa_s.current_ssid->ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
+        } else {
+            interface->wpa_s.current_ssid->ieee80211w = MGMT_FRAME_PROTECTION_OPTIONAL;
+        }
+    }
+
+    if ((security->mode == wifi_security_mode_wpa3_personal) ||
+        (security->mode == wifi_security_mode_wpa3_transition) ||
         (security->mode == wifi_security_mode_wpa3_enterprise) ||
         (security->mode == wifi_security_mode_wpa3_compatibility)) {
-        interface->wpa_s.current_ssid->ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
         if (interface->wpa_s.conf->sae_groups == NULL) {
             interface->wpa_s.conf->sae_groups =
                 os_malloc(sizeof(*interface->wpa_s.conf->sae_groups) * MAX_SAE_GROUP);
@@ -10450,10 +10461,16 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 #ifdef CONFIG_IEEE80211W
     if (security_mode == wifi_security_mode_wpa3_personal ||
         security_mode == wifi_security_mode_wpa3_enterprise ||
-        security_mode == wifi_security_mode_wpa3_transition || 
-        security_mode == wifi_security_mode_wpa3_compatibility) {
+        security_mode == wifi_security_mode_wpa3_transition) {
         // WPA3 REQUIRES MFP
         wpa_conf.ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
+        wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
+    } else if (security_mode == wifi_security_mode_wpa3_compatibility) {
+        if (backhaul->oper_freq_band == WIFI_FREQUENCY_6_BAND) {
+            wpa_conf.ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
+        } else {
+            wpa_conf.ieee80211w = MGMT_FRAME_PROTECTION_OPTIONAL;
+        }
         wpa_conf.group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
     }
 #endif

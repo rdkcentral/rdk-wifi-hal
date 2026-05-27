@@ -649,20 +649,23 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             break;
     }
     if(sec->mode == wifi_security_mode_wpa3_compatibility) {
-        conf->ieee80211w = (enum mfp_options) NO_MGMT_FRAME_PROTECTION;
+        if (is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
+            conf->ieee80211w = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
 #if HOSTAPD_VERSION >= 210
-        conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
+            conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
 #endif /* HOSTAPD_VERSION >= 210 */
+        } else {
+            conf->ieee80211w = (enum mfp_options) MGMT_FRAME_PROTECTION_OPTIONAL;
+#if HOSTAPD_VERSION >= 210
+            conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_OPTIONAL;
+#endif /* HOSTAPD_VERSION >= 210 */
+        }
         conf->sae_require_mfp = 1;
 #if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
         if(is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
-            conf->ieee80211w = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
-        if(!conf->disable_11be) {
-            conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED; 
-        }
             wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d ieee80211w:%d ieee80211w_rsno:%d \n",
                            __func__, __LINE__, conf->iface, conf->disable_11be, conf->ieee80211w, conf->ieee80211w_rsno);
-    }
+        }
 #endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
     }
 #endif

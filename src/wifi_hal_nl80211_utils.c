@@ -2696,6 +2696,11 @@ enum nl80211_mfp get_mfp_mode(wifi_security_modes_t mode, int configured_mfp)
         return NL80211_MFP_REQUIRED;
 
     case wifi_security_mode_wpa3_compatibility:
+        if (configured_mfp == MGMT_FRAME_PROTECTION_REQUIRED) {
+            return NL80211_MFP_REQUIRED;
+        }
+        return NL80211_MFP_OPTIONAL;
+
     case wifi_security_mode_wpa2_enterprise:
     case wifi_security_mode_wpa2_personal:
     case wifi_security_mode_wpa_wpa2_personal:
