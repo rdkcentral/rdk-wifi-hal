@@ -5035,3 +5035,127 @@ INT wifi_hal_get_RegDomain(wifi_radio_index_t radioIndex, UINT *reg_domain)
     }
     return RETURN_ERR;
 }
+
+#ifdef MXL_WIFI
+#define MXL_GET_RADIO_TRY(radio_, radio_idx_) \
+    radio_ = get_radio_by_rdk_index(radio_idx_); \
+    if (NULL == radio_) { \
+        wifi_hal_error_print("%s:%d: WiFi radio not found for index:%d\n", __func__, __LINE__, radio_idx_); \
+        return WIFI_HAL_ERROR; \
+    }
+
+#define MXL_GET_AP_TRY(ap_, ap_idx_) \
+    ap_ = get_interface_by_vap_index(ap_idx_); \
+    if (NULL == ap_) { \
+        wifi_hal_error_print("%s:%d: WiFi AP not found for index:%d\n", __func__, __LINE__, ap_idx_); \
+        return WIFI_HAL_ERROR; \
+    }
+
+#define MXL_GET_PRIMARY_INTERFACE_TRY(interface_, radio_) \
+    interface_ = get_primary_interface(radio_); \
+    if (NULL == interface_) { \
+        wifi_hal_error_print("%s:%d: WiFi interface not found\n", __func__, __LINE__); \
+        return WIFI_HAL_ERROR; \
+    }
+
+#define MXL_INTERFACE_IS_CONFIGURED(interface_) \
+    if (!interface_ || !interface_->vap_configured) { \
+        wifi_hal_error_print("%s:%d: WiFi interface is not configured\n", __func__, __LINE__); \
+        return WIFI_HAL_ERROR; \
+    }
+
+INT wifi_getNASta(INT apIndex, wifi_na_sta_req_params *params, wifi_na_sta_info *sta_info)
+{
+    struct intel_vendor_unconnected_sta_req_cfg req = { 0 };
+    struct intel_vendor_unconnected_sta nasta_info = { 0 };
+    wifi_radio_info_t *radio = NULL;
+    wifi_interface_info_t *ap_iface = NULL, *primary_iface = NULL;
+    struct hostapd_iface *bss = NULL, *master = NULL;
+    struct sta_info *sta = NULL;
+    int cca_in_progress, cac_started;
+    int ret = WIFI_HAL_ERROR;
+
+    if (!params || !sta_info) {
+        wifi_hal_error_print("%s:%d: Invalid parameters\n", __func__, __LINE__);
+        goto out;
+    }
+
+    memset(sta_info, 0, sizeof(*sta_info));
+
+    AP_INDEX_ASSERT(apIndex);
+    MXL_GET_AP_TRY(ap_iface, apIndex);
+    MXL_GET_RADIO_TRY(radio, ap_iface->rdk_radio_index);
+    MXL_GET_PRIMARY_INTERFACE_TRY(primary_iface, radio);
+    MXL_INTERFACE_IS_CONFIGURED(ap_iface);
+
+    master = &primary_iface->u.ap.iface;
+    bss = &ap_iface->u.ap.iface;
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    cac_started = master->cac_started;
+    cca_in_progress = bss->bss[0]->cca_in_progress;
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+    if (WAVE_FREQ_IS_5G(bss->freq)) {
+        if (cac_started) {
+            wifi_hal_error_print("%s:%d: CAC is in progress, can't schedule scan\n", __func__, __LINE__);
+            goto out;
+        }
+    }
+
+    if (cca_in_progress) {
+        wifi_hal_error_print("%s:%d: CCA is in progress, can't schedule scan\n", __func__, __LINE__);
+        goto out;
+    }
+
+    if (!hostapd_is_chandef_valid(bss, params->freq, 20)) {
+        wifi_hal_error_print("%s:%d: invalid freq %d\n", __func__, __LINE__, params->freq);
+        goto out;
+    }
+
+    req.bandwidth = bw_to_nl80211_chan_width(params->bw, params->cf2);
+    if (req.bandwidth == -1) {
+        wifi_hal_error_print("%s:%d: invalid bandwidth %d\n", __func__, __LINE__, params->bw);
+        goto out;
+    }
+
+    if (!hostapd_is_chandef_valid(bss, params->cf1, params->bw)) {
+        wifi_hal_error_print("%s:%d: invalid cf1 %d\n", __func__, __LINE__, params->cf1);
+        goto out;
+    }
+
+    if (params->cf2 && !hostapd_is_chandef_valid(bss, params->cf2, params->bw)) {
+        wifi_hal_error_print("%s:%d: invalid cf2 %d\n", __func__, __LINE__, params->cf2);
+        goto out;
+    }
+
+    sta = ap_get_sta(bss->bss[0], params->sta_addr);
+    if (sta) {
+        wifi_hal_error_print("%s:%d: STA " MACSTR " is connected to current AP index %d\n", __func__, __LINE__, MAC2STR(params->sta_addr), apIndex);
+        goto out;
+    }
+
+    req.freq = params->freq;
+    req.center_freq1 = params->cf1;
+    req.center_freq2 = params->cf2;
+    req.req_type = NASTA_STATS_REQ_SYNC;
+    memcpy(&req.addr, params->sta_addr, ETH_ALEN);
+
+    ret = platform_get_nasta(ap_iface, &req, &nasta_info);
+    if (ret) {
+        wifi_hal_error_print("%s:%d: platform_get_nasta failed\n", __func__, __LINE__);
+        goto out;
+    }
+
+    sta_info->rx_bytes = nasta_info.rx_bytes;
+    sta_info->rx_packets = nasta_info.rx_packets;
+    sta_info->rate = nasta_info.rate;
+    memcpy(sta_info->sta_addr, &nasta_info.addr, ETH_ALEN);
+    memcpy(sta_info->rssi, &nasta_info.rssi, sizeof(nasta_info.rssi));
+    memcpy(sta_info->noise, &nasta_info.noise, sizeof(nasta_info.noise));
+
+out:
+    return ret;
+}
+
+#endif /* MXL_WIFI */

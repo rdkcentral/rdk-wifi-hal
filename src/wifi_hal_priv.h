@@ -1470,4 +1470,10 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
 int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
     size_t ifname_out_len);
+int bw_to_nl80211_chan_width(int bw, int cf2);
+
+#ifdef MXL_WIFI
+int platform_get_nasta(void *priv, struct intel_vendor_unconnected_sta_req_cfg *req, struct intel_vendor_unconnected_sta *sta_info);
+#endif /* MXL_WIFI */
+
 #endif // WIFI_HAL_PRIV_H

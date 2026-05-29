@@ -77,6 +77,49 @@ int platform_pre_init()
     return 0;
 }
 
+int platform_get_nasta(void *priv, struct intel_vendor_unconnected_sta_req_cfg *req, struct intel_vendor_unconnected_sta *sta_info)
+{
+    int ret = WIFI_HAL_SUCCESS;
+    struct wpabuf *rsp;
+
+    if (!priv || !req || !sta_info) {
+        wifi_hal_error_print("%s:%d: invalid argument\n", __func__, __LINE__);
+        return WIFI_HAL_ERROR;
+    }
+
+    if (req->req_type != NASTA_STATS_REQ_SYNC) {
+        wifi_hal_error_print("%s:%d: unsupported request type\n", __func__, __LINE__);
+        return WIFI_HAL_ERROR;
+    }
+
+    rsp = wpabuf_alloc(sizeof(*sta_info));
+    if (!rsp) {
+        wifi_hal_error_print("%s:%d: alloc failed\n", __func__, __LINE__);
+        return WIFI_HAL_ERROR;
+    }
+
+    ret = wifi_drv_vendor_cmd(priv, OUI_LTQ, LTQ_NL80211_VENDOR_SUBCMD_GET_UNCONNECTED_STA,
+                                (u8*)req, sizeof(*req), NESTED_ATTR_NOT_USED, rsp);
+    if (ret) {
+        wifi_hal_error_print("%s: nl80211: sending/receiving GET_UNCONNECTED_STA "
+            "failed: %i (%s)", __func__, ret, strerror(-ret));
+        ret = WIFI_HAL_ERROR;
+        goto out;
+    }
+
+   if (rsp->used != sizeof(*sta_info)) {
+        ret = WIFI_HAL_ERROR;
+        wifi_hal_error_print("%s: nl80211: driver returned %zu bytes instead of %zu",
+            __func__, rsp->used, sizeof(*sta_info));
+        goto out;
+    }
+    memcpy(sta_info, rsp->buf, sizeof(*sta_info));
+
+out:
+    wpabuf_free(rsp);
+    return ret;
+}
+
 #if HAL_IPC
 int platform_post_init(wifi_hal_post_init_t *post_init_struct)
 {
