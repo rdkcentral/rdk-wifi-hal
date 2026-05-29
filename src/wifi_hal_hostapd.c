@@ -1611,9 +1611,12 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     if ((param->variant & WIFI_80211_VARIANT_G) && !(param->variant & WIFI_80211_VARIANT_B)) {
         memcpy(radio->basic_rates[band], basic_rates_g, sizeof(basic_rates_g));
         mode->mode = HOSTAPD_MODE_IEEE80211G;
-    } else if (param->variant & WIFI_80211_VARIANT_B) {
+    } else if ((param->variant & WIFI_80211_VARIANT_B) && !(param->variant & WIFI_80211_VARIANT_G)) {
         memcpy(radio->basic_rates[band], basic_rates_b, sizeof(basic_rates_b));
         mode->mode = HOSTAPD_MODE_IEEE80211B;
+    } else if ((param->variant & WIFI_80211_VARIANT_B) && (param->variant & WIFI_80211_VARIANT_G)) {
+        memcpy(radio->basic_rates[band], basic_rates_bg, sizeof(basic_rates_bg));
+        mode->mode = HOSTAPD_MODE_IEEE80211G;
     } else if (param->variant & WIFI_80211_VARIANT_A) {
         memcpy(radio->basic_rates[band], basic_rates_a, sizeof(basic_rates_a));
         mode->mode = HOSTAPD_MODE_IEEE80211A;
