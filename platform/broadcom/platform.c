@@ -16,7 +16,7 @@
   See the License for the specific language governing permissions and
   limitations under the License.
  **************************************************************************/
-
+/*test*/
 #include <stddef.h>
 #include "wifi_hal.h"
 #define MAX_EMU_NEIGHBOR_AP_COUNT 64
