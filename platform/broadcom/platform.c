@@ -5134,6 +5134,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     }
 #if defined(SCXF10_PORT) || defined(SCXER10_PORT)
     if (nvram_changed & KERNEL_NVRAM_CHANGED) {
+		wifi_hal_info_print("%s:%d kernel nvram was changed => nvram_kcommit()\n", __func__, __LINE__);
         nvram_kcommit();
     }
 #endif
