@@ -467,7 +467,7 @@ void set_string_nvram_param(char *param_name, char *value)
 #if defined(MLO_ENAB)
 #define MAX_MLO_RADIOS (4)
 #define USER_NVRAM_CHANGED		0x01
-#define KERNEL_NVRAM_CHANGED	0X02
+#define KERNEL_NVRAM_CHANGED	0x02
 
 static int _platform_init_done = FALSE;
 static int mlo_MAP = -1; /* Main AP index */
