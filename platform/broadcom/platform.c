@@ -4965,7 +4965,7 @@ static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id
     if ((u8)mld_link_id == (u8)NL80211_DRV_LINK_ID_NA) {
         mld_link_id = -1;
     }
-	/* Format of nvram wl_mlo_config="-1 -1 -1 -1" */
+    /* Format of nvram wl_mlo_config="-1 -1 -1 -1" */
 #if defined(SCXF10_PORT) || defined(SCXER10_PORT)
     wl_mlo_config = nvram_kget("wl_mlo_config");
 #else
