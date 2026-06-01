@@ -77,47 +77,276 @@ int platform_pre_init()
     return 0;
 }
 
-int platform_get_nasta(void *priv, struct intel_vendor_unconnected_sta_req_cfg *req, struct intel_vendor_unconnected_sta *sta_info)
+/**
+ * opclass_channel_to_center_freq - Compute center frequency from operating class,
+ *                                  primary channel and bandwidth.
+ * @op_class: Global operating class (IEEE 802.11 Table E-4).
+ * @channel:  Primary channel number within the operating class.
+ * @bw:       Bandwidth in MHz (from op_class_to_bandwidth).
+ *
+ * Returns the center frequency in MHz, or -1 on error.
+ */
+static int opclass_channel_to_center_freq(UINT op_class, UINT channel, int bw)
 {
-    int ret = WIFI_HAL_SUCCESS;
+    static const unsigned int centers_80_5g[]  = {42, 58, 106, 122, 138, 155};
+    static const unsigned int centers_80_6g[]  = {7, 23, 39, 55, 71, 87, 103, 119,
+                                                  135, 151, 167, 183, 199, 215};
+    static const unsigned int centers_160_5g[] = {50, 114, 163};
+    static const unsigned int centers_160_6g[] = {15, 47, 79, 111, 143, 175, 207};
+    const unsigned int *centers;
+    int freq, n, i;
+    bool is_6g = (op_class >= 131 && op_class <= 137);
+
+    freq = ieee80211_chan_to_freq(NULL, op_class, channel);
+    if (freq < 0)
+        return -1;
+
+    switch (bw) {
+    case 20:
+        return freq;
+
+    case 40:
+        /* 40 MHz: center = primary ± 10 MHz, direction determined by operating class */
+        switch (op_class) {
+        case 83:   /* 2.4 GHz HT40+ */
+        case 116:  /* 5 GHz 36,44 */
+        case 119:  /* 5 GHz 52,60 */
+        case 122:  /* 5 GHz 100-140 */
+        case 126:  /* 5 GHz 149-173 */
+            return freq + 10;
+        case 84:   /* 2.4 GHz HT40- */
+        case 117:  /* 5 GHz 40,48 */
+        case 120:  /* 5 GHz 56,64 */
+        case 123:  /* 5 GHz 104-144 */
+        case 127:  /* 5 GHz 153-177 */
+            return freq - 10;
+        case 132:  /* 6 GHz 40 MHz */
+            /* Pairs: (1,5), (9,13), (17,21), ...
+             * Lower primary ch % 8 == 1: secondary above
+             * Upper primary ch % 8 == 5: secondary below */
+            return (channel % 8 == 1) ? freq + 10 : freq - 10;
+        default:
+            return -1;
+        }
+
+    case 80:
+        /* 80 MHz: find center channel whose block contains primary (center ± 6) */
+        if (is_6g) {
+            centers = centers_80_6g;
+            n = ARRAY_SZ(centers_80_6g);
+        } else {
+            centers = centers_80_5g;
+            n = ARRAY_SZ(centers_80_5g);
+        }
+        for (i = 0; i < n; i++) {
+            if (channel <= centers[i] + 6)
+                return is_6g ? (int)(5950 + centers[i] * 5)
+                             : (int)(5000 + centers[i] * 5);
+        }
+        return -1;
+
+    case 160:
+        /* 160 MHz: find center channel whose block contains primary (center ± 14) */
+        if (is_6g) {
+            centers = centers_160_6g;
+            n = ARRAY_SZ(centers_160_6g);
+        } else {
+            centers = centers_160_5g;
+            n = ARRAY_SZ(centers_160_5g);
+        }
+        for (i = 0; i < n; i++) {
+            if (channel <= centers[i] + 14)
+                return is_6g ? (int)(5950 + centers[i] * 5)
+                             : (int)(5000 + centers[i] * 5);
+        }
+        return -1;
+
+    default:
+        return -1;
+    }
+}
+
+int platform_get_nasta(INT apIndex, wifi_na_sta_req_params *params, wifi_na_sta_info *sta_info)
+{
+    struct intel_vendor_unconnected_sta_req_cfg req = { 0 };
+    struct intel_vendor_unconnected_sta nasta_info = { 0 };
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *ap_iface, *primary_iface;
+    struct hostapd_iface *bss, *master;
+    struct sta_info *sta;
     struct wpabuf *rsp;
+    int cca_in_progress, cac_started;
+    int freq, c_freq, bw, rcpi, i, ret;
 
-    if (!priv || !req || !sta_info) {
-        wifi_hal_error_print("%s:%d: invalid argument\n", __func__, __LINE__);
+    if (!params || !sta_info) {
+        wifi_hal_error_print("%s:%d: Invalid parameters\n", __func__, __LINE__);
         return WIFI_HAL_ERROR;
     }
 
-    if (req->req_type != NASTA_STATS_REQ_SYNC) {
-        wifi_hal_error_print("%s:%d: unsupported request type\n", __func__, __LINE__);
+    memset(sta_info, 0, sizeof(*sta_info));
+
+    ap_iface = get_interface_by_vap_index(apIndex);
+    if (!ap_iface) {
+        wifi_hal_error_print("%s:%d: WiFi AP not found for index:%d\n",
+            __func__, __LINE__, apIndex);
         return WIFI_HAL_ERROR;
     }
 
-    rsp = wpabuf_alloc(sizeof(*sta_info));
+    radio = get_radio_by_rdk_index(ap_iface->rdk_radio_index);
+    if (!radio) {
+        wifi_hal_error_print("%s:%d: WiFi radio not found for index:%d\n",
+            __func__, __LINE__, ap_iface->rdk_radio_index);
+        return WIFI_HAL_ERROR;
+    }
+
+    primary_iface = get_primary_interface(radio);
+    if (!primary_iface) {
+        wifi_hal_error_print("%s:%d: WiFi primary interface not found\n",
+            __func__, __LINE__);
+        return WIFI_HAL_ERROR;
+    }
+
+    if (!ap_iface->vap_configured) {
+        wifi_hal_error_print("%s:%d: WiFi interface is not configured\n",
+            __func__, __LINE__);
+        return WIFI_HAL_ERROR;
+    }
+
+    master = &primary_iface->u.ap.iface;
+    bss = &ap_iface->u.ap.iface;
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    cac_started = master->cac_started;
+    cca_in_progress = bss->bss[0]->cca_in_progress;
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+    if (WAVE_FREQ_IS_5G(bss->freq) && cac_started) {
+        wifi_hal_error_print("%s:%d: CAC is in progress, can't schedule scan\n",
+            __func__, __LINE__);
+        return WIFI_HAL_ERROR;
+    }
+
+    if (cca_in_progress) {
+        wifi_hal_error_print("%s:%d: CCA is in progress, can't schedule scan\n",
+            __func__, __LINE__);
+        return WIFI_HAL_ERROR;
+    }
+
+    sta = ap_get_sta(bss->bss[0], params->sta_addr);
+    if (sta) {
+        wifi_hal_error_print("%s:%d: STA " MACSTR " is connected to current AP index %d\n",
+            __func__, __LINE__, MAC2STR(params->sta_addr), apIndex);
+        return WIFI_HAL_ERROR;
+    }
+
+
+    /* Get bandwidth from operating class */
+    bw = op_class_to_bandwidth(params->op_class);
+    if (bw > 320) {
+        bw = 20;
+        wifi_hal_error_print("%s:%d: op_class %u is not supported, forcing bandwidth to %d\n",
+            __func__, __LINE__, params->op_class, bw);
+    }
+
+    /* Convert operating class + channel to center frequency */
+    c_freq = opclass_channel_to_center_freq(params->op_class, params->channel, bw);
+    if (c_freq < 0) {
+        wifi_hal_error_print("%s:%d: Invalid opclass/channel: %u/%u\n",
+            __func__, __LINE__, params->op_class, params->channel);
+        return WIFI_HAL_ERROR;
+    }
+
+    /* Get the primary channel frequency */
+    freq = ieee80211_chan_to_freq(NULL, params->op_class, params->channel);
+    if (freq < 0) {
+        wifi_hal_error_print("%s:%d: invalid channel: freq for opclass %u channel %u not found\n",
+            __func__, __LINE__, params->op_class, params->channel);
+        return WIFI_HAL_ERROR;
+    }
+
+    /* Validate channel definition for primary frequency */
+    if (!hostapd_is_chandef_valid(bss, freq, 20)) {
+        wifi_hal_error_print("%s:%d: invalid channel definition: primary freq %d (opclass=%u, channel=%u)\n",
+            __func__, __LINE__, freq, params->op_class, params->channel);
+        return WIFI_HAL_ERROR;
+    }
+
+    /* Validate channel definition for central frequency */
+    if (!hostapd_is_chandef_valid(bss, c_freq, bw)) {
+        wifi_hal_error_print("%s:%d: invalid channel definition: central freq %d bandwidth %d (opclass=%u, channel=%u)\n",
+            __func__, __LINE__, c_freq, bw, params->op_class, params->channel);
+        return WIFI_HAL_ERROR;
+    }
+
+    /* compose request */
+    req.bandwidth = bw_to_nl80211_chan_width(bw, 0);
+    if (req.bandwidth == -1) {
+        wifi_hal_error_print("%s:%d: invalid bandwidth %d for opclass %u\n",
+            __func__, __LINE__, bw, params->op_class);
+        return WIFI_HAL_ERROR;
+    }
+
+    req.freq = freq;
+    req.center_freq1 = c_freq;
+    req.center_freq2 = 0;
+
+    req.req_type = NASTA_STATS_REQ_SYNC;
+    memcpy(&req.addr, params->sta_addr, ETH_ALEN);
+
+    wifi_hal_dbg_print("%s:%d: NaSta vendor req: freq=%d center_freq1=%d center_freq2=%d "
+        "bw=%d req_type=%d addr=" MACSTR "\n",
+        __func__, __LINE__, req.freq, req.center_freq1, req.center_freq2,
+        req.bandwidth, req.req_type, MAC2STR(req.addr));
+
+    rsp = wpabuf_alloc(sizeof(nasta_info));
     if (!rsp) {
         wifi_hal_error_print("%s:%d: alloc failed\n", __func__, __LINE__);
         return WIFI_HAL_ERROR;
     }
 
-    ret = wifi_drv_vendor_cmd(priv, OUI_LTQ, LTQ_NL80211_VENDOR_SUBCMD_GET_UNCONNECTED_STA,
-                                (u8*)req, sizeof(*req), NESTED_ATTR_NOT_USED, rsp);
+    ret = wifi_drv_vendor_cmd(ap_iface, OUI_LTQ, LTQ_NL80211_VENDOR_SUBCMD_GET_UNCONNECTED_STA,
+                                (u8 *)&req, sizeof(req), NESTED_ATTR_NOT_USED, rsp);
     if (ret) {
-        wifi_hal_error_print("%s: nl80211: sending/receiving GET_UNCONNECTED_STA "
-            "failed: %i (%s)", __func__, ret, strerror(-ret));
-        ret = WIFI_HAL_ERROR;
-        goto out;
+        wifi_hal_error_print("%s:%d: nl80211: sending/receiving GET_UNCONNECTED_STA "
+            "failed: %i (%s)", __func__, __LINE__, ret, strerror(-ret));
+        goto err;
     }
 
-   if (rsp->used != sizeof(*sta_info)) {
-        ret = WIFI_HAL_ERROR;
-        wifi_hal_error_print("%s: nl80211: driver returned %zu bytes instead of %zu",
-            __func__, rsp->used, sizeof(*sta_info));
-        goto out;
+    if (rsp->used != sizeof(nasta_info)) {
+        wifi_hal_error_print("%s:%d: nl80211: driver returned %zu bytes instead of %zu",
+            __func__, __LINE__, rsp->used, sizeof(nasta_info));
+        goto err;
     }
-    memcpy(sta_info, rsp->buf, sizeof(*sta_info));
+    memcpy(&nasta_info, rsp->buf, sizeof(nasta_info));
 
-out:
+    wifi_hal_dbg_print("%s:%d: NaSta RSSI per antenna: [0]=%d [1]=%d [2]=%d [3]=%d\n",
+        __func__, __LINE__,
+        (int)nasta_info.rssi[0], (int)nasta_info.rssi[1],
+        (int)nasta_info.rssi[2], (int)nasta_info.rssi[3]);
+
+    /* Convert max antenna RSSI to RCPI: (RSSI + 110) * 2, clamped to [0, 220] */
+    for (i = 1; i < WAVE_STAT_MAX_ANTENNAS; i++) {
+        if (nasta_info.rssi[i] && (nasta_info.rssi[i] > nasta_info.rssi[0])) {
+            nasta_info.rssi[0] = nasta_info.rssi[i];
+        }
+    }
+    rcpi = ((int)nasta_info.rssi[0] + 110) << 1;
+    rcpi = MXL_CLAMP(rcpi, 0, 220);
+
+    wifi_hal_dbg_print("%s:%d: NaSta RCPI=%d (best RSSI=%d)\n",
+        __func__, __LINE__, rcpi, (int)nasta_info.rssi[0]);
+
+    memcpy(sta_info->sta_mac, params->sta_addr, ETH_ALEN);
+    sta_info->channel = params->channel;
+    sta_info->op_class = params->op_class;
+    sta_info->rcpi = (UINT)rcpi;
+
     wpabuf_free(rsp);
-    return ret;
+    return WIFI_HAL_SUCCESS;
+
+err:
+    wpabuf_free(rsp);
+    return WIFI_HAL_ERROR;
 }
 
 #if HAL_IPC
