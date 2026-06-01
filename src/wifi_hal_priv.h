@@ -1473,7 +1473,9 @@ int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifn
 int bw_to_nl80211_chan_width(int bw, int cf2);
 
 #ifdef MXL_WIFI
-int platform_get_nasta(void *priv, struct intel_vendor_unconnected_sta_req_cfg *req, struct intel_vendor_unconnected_sta *sta_info);
+#define MXL_CLAMP(x_, min_, max_) ((x_) < (min_) ? (min_) : ((x_) > (max_) ? (max_) : (x_)))
+
+int platform_get_nasta(INT apIndex, wifi_na_sta_req_params *params, wifi_na_sta_info *sta_info);
 #endif /* MXL_WIFI */
 
 #endif // WIFI_HAL_PRIV_H
