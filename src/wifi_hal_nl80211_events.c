@@ -537,6 +537,10 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             }
             if ((attr = tb[NL80211_ATTR_REASON_CODE]) != NULL) {
                 reason = nla_get_u16(attr);
+            } else {
+                /* NL80211_ATTR_REASON_CODE is absent for TX status events (AP-originated
+                 * deauth). Read reason directly from the frame body instead. */
+                reason = le_to_host16(mgmt->u.deauth.reason_code);
             }
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             station = ap_get_sta(&interface->u.ap.hapd, sta);
