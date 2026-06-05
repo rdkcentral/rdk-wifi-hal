@@ -714,40 +714,7 @@ void wifi_hal_deauth(int vap_index, int status, uint8_t *mac)
     return;
 }
 
-#if defined(CONFIG_IEEE80211BE) && defined(SCXER10_PORT) && defined(KERNEL_NO_320MHZ_SUPPORT)
-INT _wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
-
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
-{
-    int status;
-    bool b_320mhz = false;
-    wifi_radio_info_t *radio;
-
-    radio = get_radio_by_rdk_index(index);
-    if ((operationParam->channelWidth == WIFI_CHANNELBANDWIDTH_320MHZ) && operationParam->enable) {
-        b_320mhz = true;
-        operationParam->channelWidth = WIFI_CHANNELBANDWIDTH_160MHZ;
-    }
-
-    status = _wifi_hal_setRadioOperatingParameters(index, operationParam);
-
-    if (b_320mhz) {
-        radio->oper_param.channelWidth = WIFI_CHANNELBANDWIDTH_320MHZ;
-        if (radio->oper_param.enable) {
-            platform_set_csa(index, &radio->oper_param);
-        } else {
-            platform_set_chanspec(index, &radio->oper_param, true);
-        }
-        operationParam->channelWidth = WIFI_CHANNELBANDWIDTH_320MHZ;
-    }
-
-    return status;
-}
-
-INT _wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
-#else
-INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
-#endif
 {
     wifi_radio_info_t *radio;
     int op_class;
@@ -1591,35 +1558,7 @@ static int reload_vap_configuration(wifi_interface_info_t *interface)
     return reload_single_vap_configuration(interface);
 }
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-INT _wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map);
-
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
-{
-    int status;
-    bool b_320mhz = false;
-    wifi_radio_info_t *radio;
-
-    radio = get_radio_by_rdk_index(index);
-    if (radio->oper_param.channelWidth == WIFI_CHANNELBANDWIDTH_320MHZ) {
-        b_320mhz = true;
-        radio->oper_param.channelWidth = WIFI_CHANNELBANDWIDTH_160MHZ;
-    }
-
-    status = _wifi_hal_createVAP(index, map);
-
-    if (b_320mhz) {
-        radio->oper_param.channelWidth = WIFI_CHANNELBANDWIDTH_320MHZ;
-        platform_set_csa(index, &radio->oper_param);
-    }
-
-    return status;
-}
-
-INT _wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
-#else
-INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
-#endif
 {
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface, *mbssid_tx_interface;
@@ -3170,11 +3109,26 @@ static int decode_bss_info_to_neighbor_ap_info(wifi_neighbor_ap2_t *ap, const wi
 
     // - ap_DTIMPeriod
     ap->ap_DTIMPeriod = bss->dtim_period;
-    // - ap_ChannelUtilization
+  
+    /*
+     * Channel Utilization (CU) may be derived from multiple sources (e.g., BSS Load IE
+     * or other scan attributes like NL80211_BSS_CU). Populate ap_ChannelUtilization
+     * unconditionally to preserve legacy behavior and avoid dropping valid CU when
+     * the BSS Load IE is absent.
+     *
+     * Only BSS Load specific fields (bss_load_element_present, ap_StaCount) are gated
+     * on the presence of the BSS Load IE.
+     */
     ap->ap_ChannelUtilization = bss->chan_utilization;
 
-    wifi_hal_stats_dbg_print("%s:%d: [SCAN] bssid: %s, ssid: %s, channel: %d, noise: %d\n",
-        __func__, __LINE__, ap->ap_BSSID, ap->ap_SSID, ap->ap_Channel, ap->ap_Noise);
+    // - bss_load_element 
+    if (bss->bss_load_element_present) {
+        ap->bss_load_element_present = bss->bss_load_element_present;
+        ap->ap_StaCount = bss->station_cnt;
+    }
+
+    wifi_hal_stats_dbg_print("%s:%d: [SCAN] bssid: %s, ssid: %s, channel: %d, noise: %d station_cnt %u\n",
+        __func__, __LINE__, ap->ap_BSSID, ap->ap_SSID, ap->ap_Channel, ap->ap_Noise, ap->ap_StaCount);
 
     return ret;
 }
@@ -4589,6 +4543,23 @@ void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_
 
     callbacks->disassoc_cb[callbacks->num_disassoc_cbs] = func;
     callbacks->num_disassoc_cbs++;
+}
+
+
+
+
+void wifi_hal_eapol_timeouts_callback_register(wifi_eapol_timeouts_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+    
+    if (callbacks == NULL || callbacks->num_eapol_timeouts_cbs >= MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+    
+    callbacks->eapol_timeouts_cb[callbacks->num_eapol_timeouts_cbs] = func;
+    callbacks->num_eapol_timeouts_cbs++;
 }
 
 void wifi_hal_handshake_callback_register(wifi_handshake_callback func)
