@@ -929,6 +929,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         radio->oper_param.operatingClass = operationParam->operatingClass;
         radio->oper_param.channelWidth = operationParam->channelWidth;
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
+        radio->oper_param.transmitPower = operationParam->transmitPower;
 		radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
 		strncpy(radio->oper_param.radarDetected, operationParam->radarDetected,
 				sizeof(radio->oper_param.radarDetected)-1);
