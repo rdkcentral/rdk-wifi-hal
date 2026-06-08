@@ -929,6 +929,11 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         radio->oper_param.operatingClass = operationParam->operatingClass;
         radio->oper_param.channelWidth = operationParam->channelWidth;
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
+        if (old_operationParam->transmitPower != operationParam->transmitPower) {
+            wifi_hal_info_print("%s:%d: OldTransmitPower:%d, NewTransmitPower:%d updating\n", __func__, __LINE__, old_operationParam->transmitPower, operationParam->transmitPower);
+            (void)wifi_hal_setRadioTransmitPower(index, operationParam->transmitPower);
+        }
+        radio->oper_param.transmitPower = operationParam->transmitPower;
 		radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
 		strncpy(radio->oper_param.radarDetected, operationParam->radarDetected,
 				sizeof(radio->oper_param.radarDetected)-1);
