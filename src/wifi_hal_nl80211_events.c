@@ -42,6 +42,10 @@
 #include "config_supplicant.h"
 #endif
 
+#if defined(CONFIG_GENERIC_MLO)
+#define MLD_INTERFACE_NAME "mld0"
+#endif
+
 int no_seq_check(struct nl_msg *msg, void *arg)
 {
     return NL_OK;
@@ -1798,6 +1802,45 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
     case NL80211_CMD_SCAN_ABORTED:
         /* Special case for SCAN events - don't drop these event even if the interface is not fully
          * configured */
+#if defined(CONFIG_GENERIC_MLO)
+        /* If driver did not provide LINK_ID, fallback safely */
+        if (link_id == NL80211_DRV_LINK_ID_NA) {
+            for (unsigned int i = 0; i < priv->num_radios; i++) {
+                radio = &priv->radio_info[i];
+
+                interface = hash_map_get_first(radio->interface_map);
+                while (interface != NULL) {
+                    /* Process only MLO interfaces */
+                    if (!interface->mld_name[0] || strcmp(interface->mld_name, MLD_INTERFACE_NAME) != 0) {
+                        interface = hash_map_get_next(radio->interface_map, interface);
+                        continue;
+                    }
+
+                    /* If ifindex is present, only process matching interface */
+                    if (ifidx && interface->index != ifidx) {
+                        interface = hash_map_get_next(radio->interface_map, interface);
+                        continue;
+                    }
+
+                    /* get neighbour scan state for the interface */
+                    enum scan_state_type_e nb_scan_state;
+                    pthread_mutex_lock(&interface->scan_state_mutex);
+                    nb_scan_state = interface->scan_state;
+                    pthread_mutex_unlock(&interface->scan_state_mutex);
+                    /* Only process interfaces actively involved in scan */
+                    if (nb_scan_state == WIFI_SCAN_STATE_STARTED) {
+                        wifi_hal_dbg_print("%s:%d: SCAN processing for %s for event %d\n", __func__, __LINE__, interface->name, gnlh->cmd);
+                        do_process_drv_event(interface, gnlh->cmd, tb);
+                    }
+
+                    interface = hash_map_get_next(radio->interface_map, interface);
+                }
+            }
+
+            return NL_SKIP;
+        }
+#endif /* CONFIG_GENERIC_MLO */
+
         if (interface != NULL) {
             wifi_hal_dbg_print("%s:%d: event registered - processing for %s event %d\n", __func__,
                 __LINE__, interface->name, gnlh->cmd);
