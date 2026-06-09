@@ -10347,12 +10347,22 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             interface->wpa_s.conf->sae_pwe = 1;
         }
 
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
         interface->wpa_s.current_ssid->pt = sae_derive_pt(interface->wpa_s.conf->sae_groups,
+            interface->wpa_s.current_ssid->ssid,
+            interface->wpa_s.current_ssid->ssid_len,
+            (const u8*) interface->wpa_s.current_ssid->sae_password,
+            os_strlen(interface->wpa_s.current_ssid->sae_password),
+            (const u8*) interface->wpa_s.current_ssid->sae_password_id,
+            interface->wpa_s.current_ssid->sae_password_id ? os_strlen(interface->wpa_s.current_ssid->sae_password_id) : 0);
+#else
+       interface->wpa_s.current_ssid->pt = sae_derive_pt(interface->wpa_s.conf->sae_groups,
             interface->wpa_s.current_ssid->ssid,
             interface->wpa_s.current_ssid->ssid_len,
             interface->wpa_s.current_ssid->sae_password,
             os_strlen(interface->wpa_s.current_ssid->sae_password),
             interface->wpa_s.current_ssid->sae_password_id);
+#endif // BANANA_PI_PORT && KERNEL_6_12
     }
 
 #ifdef CONFIG_WIFI_EMULATOR
@@ -12155,8 +12165,13 @@ int wifi_drv_get_ext_capab(void *priv, enum wpa_driver_if_type type,
 
 #if HOSTAPD_VERSION >= 211
 #ifdef CONFIG_IEEE80211BE
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
+                                 u16 *eml_capa, u16 *mld_capa_and_ops, u16 *ext_mld_capa_and_ops)
+#else
 static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
                                  u16 *eml_capa, u16 *mld_capa_and_ops)
+#endif // BANANA_PI_PORT && KERNEL_6_12
 {
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
@@ -13704,13 +13719,13 @@ fail:
 }
 
 #ifdef BANANA_PI_PORT
-#if defined(KERNEL_6_6)
+#if defined(KERNEL_6_6) && !defined(KERNEL_6_12)
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
     const char *ifname_wds, u32 radio_mask)
 #else
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
     const char *ifname_wds)
-#endif //KERNEL_6_6
+#endif //KERNEL_6_6 && !KERNEL_6_12
 #else
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
     char *ifname_wds)
@@ -15487,9 +15502,15 @@ int wifi_drv_if_remove(void *priv, enum wpa_driver_if_type type, const char *ifn
 }
 
 #ifdef BANANA_PI_PORT
+#if !defined(KERNEL_6_12)
+static int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type, const char *ifname,
+     const u8 *addr, void *bss_ctx, void **drv_priv, char *force_ifname, u8 *if_addr,
+     const char *bridge, int use_existing, int setup_ap, int freq, u32 radio_mask)
+#else
 static int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type, const char *ifname,
     const u8 *addr, void *bss_ctx, void **drv_priv, char *force_ifname, u8 *if_addr,
-    const char *bridge, int use_existing, int setup_ap, int freq, u32 radio_mask)
+    const char *bridge, int use_existing, int setup_ap, int freq)
+#endif // !KERNEL_6_12
 #else
 static int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type, const char *ifname,
     const u8 *addr, void *bss_ctx, void **drv_priv, char *force_ifname, u8 *if_addr,
