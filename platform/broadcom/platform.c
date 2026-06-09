@@ -75,6 +75,7 @@
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT ||
        // SCXF10_PORT || RDKB_ONE_WIFI_PROD
 
+/* For XER10 and XF10, MLO_ENAB is defined in CFLAGS in recipe appends */
 #if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT)
 #define MLO_ENAB 1
 #endif
@@ -114,6 +115,8 @@ static void platform_set_eht(wifi_radio_index_t index, bool enable);
 
 #ifdef CONFIG_IEEE80211BE
 #define MLD_UNIT_COUNT 8
+#define USER_NVRAM_CHANGED      0x01
+#define KERNEL_NVRAM_CHANGED    0x02
 #endif
 
 typedef struct wl_runtime_params {
@@ -129,9 +132,11 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
 	{"keep_ap_up", "1"}
 };
 
+static int _platform_init_done = FALSE;
+
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
-static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames);
+static bool needs_conf_mbssid_num_frames(int radio_index, int *mbssid_num_frames);
 #endif
 static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl);
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
@@ -467,7 +472,6 @@ void set_string_nvram_param(char *param_name, char *value)
 #if defined(MLO_ENAB)
 #define MAX_MLO_RADIOS (4)
 
-static int _platform_init_done = FALSE;
 static int mlo_MAP = -1; /* Main AP index */
 static int mlo_config[MAX_MLO_RADIOS] = { -1, -1, -1, -1 }; /* wl_mlo_config values */
 static int mlo_radio_cnt = 0; /* Number of MLO radios */
@@ -509,6 +513,12 @@ static bool platform_down_reqd(wifi_radio_index_t r_index, wifi_vap_info_map_t *
     bool reqd = false;
 
     /* Check all params that require down for the given radio */
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
+        reqd |= needs_conf_mbssid_num_frames(r_index, &ctrl);
+        if (reqd)
+            return reqd;
+#endif
+
     /* Check all params that require down for the given VAPs */
     if (map == NULL)
         return reqd;
@@ -517,10 +527,6 @@ static bool platform_down_reqd(wifi_radio_index_t r_index, wifi_vap_info_map_t *
 
         reqd |= needs_conf_split_assoc_req(
             vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
-#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
-        reqd |= needs_conf_mbssid_num_frames(
-            vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
-#endif
         if (reqd)
             break;
     }
@@ -631,7 +637,11 @@ int platform_bss_up(int vap_index, bool up)
 int platform_mlo_init(void)
 {
     int i;
+#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+    char *value = nvram_kget("wl_mlo_config");
+#else
     char *value = nvram_get("wl_mlo_config");
+#endif
 
     mlo_radio_cnt = mlo_radio_map = 0;
     mlo_MAP = mlo_init_map = -1;
@@ -918,6 +928,7 @@ void platform_mlo_post_init(void)
 int platform_pre_init()
 {
     wifi_hal_dbg_print("%s:%d \r\n", __func__, __LINE__);
+    _platform_init_done = FALSE;
 
     system("sysevent set multinet-up 13");
     system("sysevent set multinet-up 14");
@@ -940,8 +951,6 @@ int platform_pre_init()
 
 #if defined(MLO_ENAB)
     /* Start the init process */
-    _platform_init_done = FALSE;
-
     platform_radio_up(-1, FALSE); /* Bring all radios down */
     platform_mlo_init();
 #endif /* MLO_ENAB */
@@ -1093,6 +1102,21 @@ int platform_set_acs_exclusion_list(unsigned int radioIndex, char* str)
     return RETURN_OK;
 }
 
+/* apsta iovar is per-radio, not per-BSS */
+static int platform_set_apsta(wifi_radio_index_t index, bool enable)
+{
+    int apsta_enable = enable ? 1 : 0;
+    char osifname[IFNAMSIZ] = { 0 };
+
+    snprintf(osifname, sizeof(osifname), "wl%d", index);
+    if (wl_iovar_set(osifname, "apsta", &apsta_enable, sizeof(apsta_enable)) < 0) {
+        wifi_hal_error_print("%s: failed to set apsta %d for %s, err: %d (%s)\n", __func__,
+            apsta_enable, osifname, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+    return RETURN_OK;
+}
+
 int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
     if (operationParam == NULL) {
@@ -1110,6 +1134,13 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     if (radio == NULL) {
         wifi_hal_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
         return RETURN_ERR;
+    }
+
+    if (!_platform_init_done) {
+        /* OneWifi designates primary IF as sta, so the radio shall always work in apsta mode */
+        if (platform_set_apsta(index, TRUE) != RETURN_OK) {
+           wifi_hal_error_print("%s:%d: Failed to set apsta=1 for radio index:%d\n", __func__, __LINE__, index);
+        }
     }
 
 #if defined (ENABLED_EDPD)
@@ -1256,18 +1287,28 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     platform_set_eht(index, (operationParam->variant & WIFI_80211_VARIANT_BE) ? true : false);
 #elif defined(XB10_PORT)
     int eht_enab = (operationParam->variant & WIFI_80211_VARIANT_BE) ? 1 : 0;
-    char interface_name[8];
+    bool is_eht_enab_changed = false;
 
-    snprintf(interface_name, sizeof(interface_name), "wl%d", index);
-    snprintf(param_name, sizeof(param_name), "%s_oper_stands", interface_name);
-    wifi_hal_dbg_print("### %s: radio=%d eht_enab=%d %s=%s ###\n", __FUNCTION__, index,
-        eht_enab, param_name, nvram_get(param_name));
-
-    if (_platform_init_done)
+    if (_platform_init_done) {
+        int old_eht_enab = (radio->oper_param.variant & WIFI_80211_VARIANT_BE) ? 1 : 0;
+        is_eht_enab_changed = eht_enab != old_eht_enab;
+    }
+    if (_platform_init_done && is_eht_enab_changed)
         platform_radio_up(index, FALSE);
-    sprintf(cmd, "wl -i %s eht enab %d", interface_name, eht_enab);
-    system(cmd);
-    if (_platform_init_done)
+    if (!_platform_init_done || is_eht_enab_changed) {
+        char interface_name[8];
+        char *op_standards_str = NULL;
+
+        snprintf(interface_name, sizeof(interface_name), "wl%d", index);
+        snprintf(param_name, sizeof(param_name), "%s_oper_stands", interface_name);
+        op_standards_str = nvram_get(param_name);
+        wifi_hal_dbg_print("### %s: radio=%d eht_enab=%d %s=%s ###\n", __FUNCTION__, index,
+            eht_enab, param_name, op_standards_str ? op_standards_str : "null");
+
+        sprintf(cmd, "wl -i %s eht enab %d", interface_name, eht_enab);
+        system(cmd);
+    }
+    if (_platform_init_done && is_eht_enab_changed)
         platform_radio_up(index, TRUE);
 #endif
 #endif
@@ -1284,8 +1325,9 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
 #if defined(MLO_ENAB)
     platform_mlo_post_init();
     platform_vap_enable_update(vap_map, TRUE);		/* Bring all VAPs up, including MLDs */
-    _platform_init_done = TRUE;
 #endif /* MLO_ENAB */
+    _platform_init_done = TRUE;
+
 
     memset(param_name, 0 ,sizeof(param_name));
     memset(interface_name, 0, sizeof(interface_name));
@@ -1929,23 +1971,18 @@ static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl
 
 /*
  * Check if mbssid_num_frames need reconfiguration to new value
- * [in] vap_index
- * [in] hostap_mgt_frame_ctrl
+ * [in] radio_index
  * [out] mbssid_num_frames
 */
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
-static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames)
+static bool needs_conf_mbssid_num_frames(int radio_index, int *mbssid_num_frames)
 {
-    char interface_name[8] = { 0 };
+    char interface_name[IFNAMSIZ] = { 0 };
     int curr_mbssid_num_frames;
 
     *mbssid_num_frames = 1;
 
-    if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
-        wifi_hal_error_print("%s:%d failed to get interface name for vap index: %d, err: %d (%s)\n",
-            __func__, __LINE__, vap_index, errno, strerror(errno));
-        return false;
-    }
+    snprintf(interface_name, sizeof(interface_name), "wl%d", radio_index);
 
     if (wl_iovar_getint(interface_name, "mbssid_num_frames", &curr_mbssid_num_frames) < 0) {
         wifi_hal_error_print("%s:%d failed to get mbssid_num_frames for %s, err: %d (%s)\n",
@@ -2016,7 +2053,7 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
 
     split_assoc_req_change = needs_conf_split_assoc_req(vap_index, enable, &assoc_ctrl);
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
-    mbssid_num_frames_change = needs_conf_mbssid_num_frames(vap_index, enable, &mbssid_num_frames);
+    mbssid_num_frames_change = needs_conf_mbssid_num_frames(radio->rdk_radio_index, &mbssid_num_frames);
 #endif
     if (split_assoc_req_change == false && mbssid_num_frames_change == false) {
         return RETURN_OK;
@@ -2043,18 +2080,28 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
         (void)snprintf(name, sizeof(name), "%s_split_assoc_req", interface_name);
         wifi_hal_info_print("%s:%d Writing nvram %s=%d\n", __func__,__LINE__, name, assoc_ctrl);
         set_decimal_nvram_param(name, assoc_ctrl);
-        nvram_commit();
     }
 
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
-    // supported by driver version 23.2.1
-    if (wl_iovar_set(interface_name, "mbssid_num_frames", &mbssid_num_frames,
-            sizeof(mbssid_num_frames)) < 0) {
-        wifi_hal_error_print("%s:%d failed to set mbssid_num_frames %d for %s, err: %d (%s)\n",
-            __func__, __LINE__, mbssid_num_frames, interface_name, errno, strerror(errno));
-        return RETURN_ERR;
+    if (mbssid_num_frames_change) {
+        char nvram_name[IFNAMSIZ + sizeof("_mbssid_num_frames")];
+        char radio_dev[IFNAMSIZ];
+
+        snprintf(radio_dev, sizeof(radio_dev), "wl%d", radio->rdk_radio_index);
+        // supported by driver version 23.2.1
+        if (wl_iovar_set(radio_dev, "mbssid_num_frames", &mbssid_num_frames,
+                sizeof(mbssid_num_frames)) < 0) {
+            wifi_hal_error_print("%s:%d failed to set mbssid_num_frames %d for %s, err: %d (%s)\n",
+                __func__, __LINE__, mbssid_num_frames, radio_dev, errno, strerror(errno));
+            return RETURN_ERR;
+        }
+        snprintf(nvram_name, sizeof(nvram_name), "%s_mbssid_num_frames", radio_dev);
+        wifi_hal_info_print("%s:%d Writing nvram %s=%d\n", __func__,__LINE__, 
+            nvram_name, mbssid_num_frames);
+        set_decimal_nvram_param(nvram_name, mbssid_num_frames);
     }
 #endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
+    nvram_commit();
 
 #if !(defined(MLO_ENAB))
     if (wl_ioctl(interface_name, WLC_UP, NULL, 0) < 0) {
@@ -4845,7 +4892,11 @@ static unsigned char platform_get_link_id_for_radio_index(unsigned int radio_ind
     if (radio_index < (sizeof(mlo_config) / sizeof(*mlo_config))) {
         char *wl_mlo_config;
 
+#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+        wl_mlo_config = nvram_kget("wl_mlo_config");
+#else
         wl_mlo_config = nvram_get("wl_mlo_config");
+#endif
         if (wl_mlo_config != NULL) {
             int ret;
 
@@ -4896,7 +4947,7 @@ static void nvram_update_wl_mlo_apply(const char *iface, unsigned char mlo_apply
     }
 
     set_decimal_nvram_param(name, mlo_apply);
-    *nvram_changed |=1;
+    *nvram_changed |= USER_NVRAM_CHANGED;
     wifi_hal_info_print("%s:%d Updating wl_mlo_apply nvram %s=%u for the iface:%s\n", __func__,
         __LINE__, name, mlo_apply, iface);
 }
@@ -4915,7 +4966,7 @@ static void nvram_update_wl_bss_mlo_mode(const char *iface, unsigned char bss_ml
     }
 
     set_decimal_nvram_param(name, bss_mlo_mode);
-    *nvram_changed |=1;
+    *nvram_changed |= USER_NVRAM_CHANGED;
     wifi_hal_info_print("%s:%d Updating wl_bss_mlo_mode nvram %s=%u for the iface:%s\n", __func__,
         __LINE__, name, bss_mlo_mode, iface);
 }
@@ -4934,8 +4985,12 @@ static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id
     if ((u8)mld_link_id == (u8)NL80211_DRV_LINK_ID_NA) {
         mld_link_id = -1;
     }
-
-    wl_mlo_config = nvram_get("wl_mlo_config"); /* Format of nvram wl_mlo_config="-1 -1 -1 -1" */
+    /* Format of nvram wl_mlo_config="-1 -1 -1 -1" */
+#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+    wl_mlo_config = nvram_kget("wl_mlo_config");
+#else
+    wl_mlo_config = nvram_get("wl_mlo_config");
+#endif
     if (wl_mlo_config != NULL) {
         int ret;
 
@@ -4955,8 +5010,13 @@ static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id
     memset(new_nvram_val, 0, sizeof(new_nvram_val));
     snprintf(new_nvram_val, sizeof(new_nvram_val), "%d %d %d %d", mlo_config[0], mlo_config[1],
         mlo_config[2], mlo_config[3]);
+#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+    nvram_kset("wl_mlo_config", new_nvram_val);
+    *nvram_changed |= KERNEL_NVRAM_CHANGED;
+#else
     set_string_nvram_param("wl_mlo_config", new_nvram_val);
-    *nvram_changed |=1;
+    *nvram_changed |= USER_NVRAM_CHANGED;
+#endif
     wifi_hal_info_print("%s:%d Updating nvram wl_mlo_config with new value: %s\n", __func__,
         __LINE__, new_nvram_val);
 }
@@ -5089,10 +5149,16 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     mld_ap = vap->u.bss_info.enabled && (!conf->disable_11be && mld_conf->mld_enable &&
         (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
     nvram_update_wl_bss_mlo_mode(conf->iface, mld_ap, &nvram_changed);
-    if (nvram_changed) {
+    if (nvram_changed & USER_NVRAM_CHANGED) {
         wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
         nvram_commit();
     }
+#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+    if (nvram_changed & KERNEL_NVRAM_CHANGED) {
+        wifi_hal_info_print("%s:%d kernel nvram was changed => nvram_kcommit()\n", __func__, __LINE__);
+        nvram_kcommit();
+    }
+#endif
 
     if (mld_ap) {
         conf->mld_ap = mld_ap;

@@ -60,6 +60,7 @@
 #include <linux/sched.h>
 #endif
 
+void wifi_drv_eapol_timeouts(wifi_interface_info_t *interface, mac_address_t sta, int type);
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -110,6 +111,10 @@ static int scan_info_handler(struct nl_msg *msg, void *arg);
 static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface);
 void recv_data_frame(wifi_interface_info_t *interface);
 int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx);
+
+static bool is_eapol_m3(uint8_t *data, size_t data_len);
+static bool is_eapol_m4(uint8_t *data, size_t data_len);
+static int  get_eapol_reply_counter(uint8_t *data, size_t data_len);
 
 #ifndef WIFI_EMULATOR_CHANGE
 static bool is_interface_in_bridge(const char *iface, const char *bridge_name);
@@ -2074,7 +2079,6 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     if (is_wifi_hal_rate_limit_block(stype, sta, sig_dbm)) {
         return 0;
     }
-
     switch(stype) {
     case WLAN_FC_STYPE_AUTH:
         mgmt_type = WIFI_MGMT_FRAME_TYPE_AUTH;
@@ -2732,18 +2736,12 @@ static bool is_eapol_m4(uint8_t *data, size_t data_len)
 static int get_eapol_reply_counter(uint8_t *data, size_t data_len)
 {
     struct wpa_eapol_key *eapol_key;
-    size_t min_eapol_len;
 
-    min_eapol_len = sizeof(struct ieee802_1x_hdr) + sizeof(struct wpa_eapol_key);
-    if (data_len < min_eapol_len) {
-        wifi_hal_dbg_print("%s:%d: eapol data len %zu is less than %zu\n", __func__, __LINE__,
-            data_len, min_eapol_len);
+    if (data_len < sizeof(struct ieee802_1x_hdr) + sizeof(struct wpa_eapol_key))
         return -1;
-    }
 
     eapol_key = (struct wpa_eapol_key *)(data + sizeof(struct ieee802_1x_hdr));
-
-    return eapol_key->replay_counter[WPA_REPLAY_COUNTER_LEN - 1];
+    return (int)eapol_key->replay_counter[WPA_REPLAY_COUNTER_LEN - 1];
 }
 
 #if defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
@@ -3145,14 +3143,22 @@ void recv_data_frame(wifi_interface_info_t *interface)
         buflen -= sizeof(struct ieee8023_hdr);
         wifi_hal_info_print("%s:%d: from:%s to:%s interface:%s received eapol m%d "
                             "reply counter:%d\n",
-            __func__, __LINE__, to_mac_str(eth_hdr->src, src_mac_str), to_mac_str(eth_hdr->dest, dst_mac_str), interface->name,
-            is_eapol_m4((uint8_t *)hdr, buflen) ? 4 : 2, get_eapol_reply_counter((uint8_t *)hdr, buflen));
+            __func__, __LINE__, to_mac_str(eth_hdr->src, src_mac_str),
+            to_mac_str(eth_hdr->dest, dst_mac_str), interface->name,
+            is_eapol_m4((uint8_t *)hdr, buflen) ? 4 : 2,
+            get_eapol_reply_counter((uint8_t *)hdr, buflen));
 
         wifi_hal_mgt_frame_rate_limit_t *rl = &g_wifi_hal.mgt_frame_rate_limit;
         if (rl->enabled && rl->rate_limit > 0 && rl->window_size > 0 && rl->cooldown_time > 0) {
             rate_limit_entry_t *entry = wifi_hal_rate_limit_entry_get(sta);
             if (entry)
                 entry->activity_mask |= RL_EAP_START;
+        }
+        int eapol_type = is_eapol_m4((uint8_t *)hdr, buflen) ? 4 : 2;
+        int eapol_retry_counter = get_eapol_reply_counter((uint8_t *)hdr, buflen);
+        if (eapol_retry_counter >=4) {
+		    wifi_hal_dbg_print("%s:%d eapol_timeout callback is called \n", __func__, __LINE__);
+            wifi_drv_eapol_timeouts(interface, sta, eapol_type);
         }
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
@@ -13932,7 +13938,30 @@ int nl80211_tx_control_port(wifi_interface_info_t *interface, const u8 *dest,
     return nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
 }
 
-
+void wifi_drv_eapol_timeouts(wifi_interface_info_t *interface, mac_address_t sta, int type)
+{
+    wifi_vap_info_t *vap;
+    mac_addr_str_t  sta_mac_str;
+    wifi_device_callbacks_t *callbacks;
+    if(interface == NULL) {
+        wifi_hal_error_print("%s:%d interface is null\n", __func__, __LINE__);
+        return;
+    }
+    vap = &interface->vap_info;
+    callbacks = get_hal_device_callbacks();
+    if (callbacks == NULL) {
+        wifi_hal_info_print("%s:%d callbacks is null \n", __func__, __LINE__);
+        return;
+    }
+	if (type == EAPOL_MSG_M2 || type == EAPOL_MSG_M4) {
+	    type = EAPOL_MSG_M2;
+	}
+    for (int i = 0; i < callbacks->num_eapol_timeouts_cbs; i++) {
+        if (callbacks->eapol_timeouts_cb[i] != NULL) {
+            callbacks->eapol_timeouts_cb[i](vap->vap_index, to_mac_str(sta, sta_mac_str), type);
+        }
+    }
+}
 
 #if HOSTAPD_VERSION >= 211 //2.11
 int wifi_drv_hapd_send_eapol(
@@ -13949,6 +13978,7 @@ int wifi_drv_hapd_send_eapol(
     struct ieee8023_hdr *eth_hdr;
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
+	mac_address_t sta;
     mac_addr_str_t src_mac_str, dst_mac_str;
     int sock_fd;
     struct sockaddr_ll sockaddr;
@@ -13961,12 +13991,18 @@ int wifi_drv_hapd_send_eapol(
 #if HOSTAPD_VERSION < 211 // 2.11
     int link_id = -1;
 #endif // HOSTAPD_VERSION < 211
-
+    memcpy(sta, addr, sizeof(mac_address_t));
     wifi_hal_info_print(
         "%s:%d: from:%s to:%s interface:%s sending eapol m%d replay counter:%d link id:%d\n",
         __func__, __LINE__, to_mac_str(own_addr, src_mac_str), to_mac_str(addr, dst_mac_str),
         interface->name, is_eapol_m3(data, data_len) ? 3 : 1,
         get_eapol_reply_counter(data, data_len), link_id);
+    int eapol_type = is_eapol_m3(data, data_len) ? 3 : 1 ;
+    int eapol_retry_counter = get_eapol_reply_counter(data, data_len);
+    if ((eapol_retry_counter >=4)) {
+		wifi_hal_dbg_print("%s:%d eapol_timeout callback is called \n", __func__, __LINE__);
+        wifi_drv_eapol_timeouts(interface, sta, eapol_type);
+    }
 
     if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_CONTROL_PORT_FRAME) {
         if ((ret = nl80211_tx_control_port(interface, addr, ETH_P_EAPOL, data, data_len, !encrypt,
@@ -17813,30 +17849,89 @@ int wifi_drv_commit(void *priv)
 }
 
 #if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
-//Selects a Non-DFS Channel from the list of available channels
+#define WIFI_DFS_CHAN_FIRST  52
+#define WIFI_DFS_CHAN_LAST  144
+#define WIFI_DFS_EVAC_CHAN_5L    44   /* Default evacuation channel for 5/5L band (UNII-1) */
+#define WIFI_DFS_EVAC_CHAN_5H    157  /* Default evacuation channel for 5H band (UNII-3) */
+
+static bool is_valid_evac_channel(unsigned int ch, wifi_radio_info_t *radio)
+{
+    unsigned int i;
+    unsigned int map_size;
+
+    if (ch == 0 || (ch >= WIFI_DFS_CHAN_FIRST && ch <= WIFI_DFS_CHAN_LAST))
+        return false;
+
+    /* Verify channel exists in this radio's available channel list */
+    map_size = sizeof(radio->oper_param.channel_map) /
+               sizeof(radio->oper_param.channel_map[0]);
+    for (i = 0; i < map_size; i++) {
+        if (radio->oper_param.channel_map[i].ch_number == ch &&
+            radio->oper_param.channel_map[i].ch_state == CHAN_STATE_AVAILABLE)
+            return true;
+    }
+    return false;
+}
+
+/* Only 20/40/80 MHz are valid evacuation widths */
+static bool is_valid_evac_width(wifi_channelBandwidth_t w)
+{
+    return w == WIFI_CHANNELBANDWIDTH_20MHZ ||
+           w == WIFI_CHANNELBANDWIDTH_40MHZ ||
+           w == WIFI_CHANNELBANDWIDTH_80MHZ;
+}
+
+/* Select radar evacuation channel: 5/5L->ch.44, 5H->ch.157 or hostapd fallback.
+ * Override via radio->dfs_evacuation_channel (must pass is_valid_evac_channel). */
 short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg0_idx, u8 *oper_centr_freq_seg1_idx,
                                               int *secondary_channel)
 {
     struct hostapd_channel_data *chan = NULL;
+    wifi_radio_info_t *radio;
+
+    *oper_centr_freq_seg0_idx = 0;
+    *oper_centr_freq_seg1_idx = 0;
+    *secondary_channel        = 0;
+
+    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: [DFS]: no radio for index %d\n", __func__, __LINE__,
+            interface->vap_info.radio_index);
+        return WIFI_DFS_EVAC_CHAN_5L;
+    }
+
+    if (radio->oper_param.band == WIFI_FREQUENCY_5_BAND || radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) {
+        if (is_valid_evac_channel(radio->dfs_evacuation_channel, radio))
+            return radio->dfs_evacuation_channel;
+        wifi_hal_info_print("%s:%d: [DFS]: evacuating to channel 44\n", __func__, __LINE__);
+        return WIFI_DFS_EVAC_CHAN_5L;
+    }
+
+    if (radio->oper_param.band == WIFI_FREQUENCY_5H_BAND) {
+        if (is_valid_evac_channel(radio->dfs_evacuation_channel, radio)) {
+            wifi_hal_info_print("%s:%d: [DFS]: evacuating to configured channel %u\n",
+                __func__, __LINE__, radio->dfs_evacuation_channel);
+            return radio->dfs_evacuation_channel;
+        }
+        if (is_valid_evac_channel(WIFI_DFS_EVAC_CHAN_5H, radio)) {
+            wifi_hal_info_print("%s:%d: [DFS]: evacuating to channel 157 (UNII-3)\n", __func__, __LINE__);
+            return WIFI_DFS_EVAC_CHAN_5H;
+        }
+    }
+
 #if HOSTAPD_VERSION >= 210 // 2.10
-
-    wifi_hal_error_print("%s:%d DFS: Radar detected — selecting non-DFS-only fallback channel\n", __func__,
-            __LINE__);
-    enum dfs_channel_type channel_type = DFS_NON_DFS_ONLY; //select only non-dfs channel
-
     chan = dfs_get_valid_channel(&interface->u.ap.iface, secondary_channel,
                                     oper_centr_freq_seg0_idx,
                                     oper_centr_freq_seg1_idx,
-                                    channel_type);
+                                    DFS_NON_DFS_ONLY);
 #endif /* HOSTAPD_VERSION >= 210 */
+
     if (chan == NULL) {
-        wifi_hal_error_print("%s:%d failed to get new channel, return default\n", __func__,
-            __LINE__);
-        return 36;
+        wifi_hal_error_print("%s:%d: [DFS]: no channel found, returning 44\n", __func__, __LINE__);
+        return WIFI_DFS_EVAC_CHAN_5L;
     }
 
-    wifi_hal_info_print("%s:%d Selected non-dfs channel:%u \n", __FUNCTION__, __LINE__, chan->chan);
-
+    wifi_hal_info_print("%s:%d: [DFS]: hostapd selected channel %u\n", __func__, __LINE__, chan->chan);
     return chan->chan;
 }
 #endif /* defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) */
@@ -18117,6 +18212,9 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
 Fail:
     radio_param = radio->oper_param;
     radio_param.channel = get_non_dfs_chan(interface, &seg0, &seg1, &sec_chan_offset);
+    radio_param.channelWidth = is_valid_evac_width(radio->dfs_evacuation_channel_width)
+                               ? radio->dfs_evacuation_channel_width
+                               : WIFI_CHANNELBANDWIDTH_80MHZ;
 
     wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d \n", radio_param.channel, seg0, seg1, sec_chan_offset);
     if( wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, &radio_param) ) {
@@ -18225,14 +18323,10 @@ int nl80211_dfs_radar_cac_aborted(wifi_interface_info_t *interface, int freq, in
     }
 
     radio_param.channel = get_non_dfs_chan(interface, &oper_centr_freq_seg0_idx, &oper_centr_freq_seg1_idx, &sec_chan_offset);
-    radio_param.channelWidth = bandwidth;
+    radio_param.channelWidth = is_valid_evac_width(radio->dfs_evacuation_channel_width)
+                               ? radio->dfs_evacuation_channel_width
+                               : WIFI_CHANNELBANDWIDTH_80MHZ;
     interface->u.ap.iface.dfs_cac_ms = 0;
-
-    if(bandwidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
-        wifi_channelBandwidth_t Chan_width_80MHz = WIFI_CHANNELBANDWIDTH_80MHZ;
-        wifi_hal_info_print("nl80211-%s:%d Setting bandwidth as 80MHz \n", __func__, __LINE__);
-        radio_param.channelWidth = Chan_width_80MHz;
-    }
 
     wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d dfs_cac_ms:%u \n", radio_param.channel, oper_centr_freq_seg0_idx, oper_centr_freq_seg1_idx, sec_chan_offset,
                         interface->u.ap.iface.dfs_cac_ms);
@@ -18365,13 +18459,12 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
 
     radio_param->channel = get_non_dfs_chan(interface, &oper_centr_freq_seg0_idx,
         &oper_centr_freq_seg1_idx, &sec_chan_offset);
-    radio_param->channelWidth = bandwidth;
+    radio_param->channelWidth = is_valid_evac_width(radio->dfs_evacuation_channel_width)
+                                ? radio->dfs_evacuation_channel_width
+                                : WIFI_CHANNELBANDWIDTH_80MHZ;
 
     if (bandwidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
-        wifi_channelBandwidth_t Chan_width_80MHz = WIFI_CHANNELBANDWIDTH_80MHZ;
-        wifi_hal_info_print("%s:%d Setting bandwidth to 80MHz\n", __func__, __LINE__);
-        radio_param->channelWidth = Chan_width_80MHz;
-        // restore original bandwidth to avoid beacon change before channel switch
+        // restore original hostapd bandwidth config to avoid beacon change before channel switch
         hostapd_set_oper_chwidth(interface->u.ap.hapd.iconf, orig_chan_width);
         interface->u.ap.iface.conf->secondary_channel = orig_secondary_chan;
     }

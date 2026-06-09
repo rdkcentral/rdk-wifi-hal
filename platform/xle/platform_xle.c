@@ -45,6 +45,7 @@ If include secure_wrapper.h, will need to convert other system calls with v_secu
 int v_secure_system(const char *command, ...);
 FILE *v_secure_popen(const char *direction, const char *command, ...);
 int v_secure_pclose(FILE *);
+static int _platform_init_done = FALSE;
 
 typedef struct wl_runtime_params {
     char *param_name;
@@ -162,13 +163,14 @@ extern char *wlcsm_nvram_get(char *name);
 int platform_pre_init()
 {
     wifi_hal_dbg_print("%s \n", __func__);
+    _platform_init_done = FALSE;
     return 0;
 }
 
 int platform_post_init(wifi_vap_info_map_t *vap_map)
 {
     wifi_hal_dbg_print("%s \n", __func__);
-
+    _platform_init_done = TRUE;
     wifi_hal_info_print("%s:%d: start_wifi_apps\n", __func__, __LINE__);
     v_secure_system("wifi_setup.sh start_wifi_apps");
     //set runtime configs using wl command.
@@ -227,6 +229,24 @@ static int disable_dfs_auto_channel_change(int radio_index, int disable)
     return 0;
 }
 
+/* apsta iovar is per-radio, not per-BSS */
+static int platform_set_apsta(wifi_radio_index_t index, bool enable)
+{
+    int apsta_enable = enable ? 1 : 0;
+    char osifname[IFNAMSIZ] = { 0 };
+
+    snprintf(osifname, sizeof(osifname), "wl%d", index);
+    if (wl_iovar_set(osifname, "apsta", &apsta_enable, sizeof(apsta_enable)) < 0) {
+        wifi_hal_error_print("%s: failed to set apsta %d for %s, err: %d (%s)\n", __func__,
+            apsta_enable, osifname, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+    wifi_hal_info_print("%s:  set apsta %d for %s finished successfully\n", __func__,
+            apsta_enable, osifname);
+
+    return RETURN_OK;
+}
+
 int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
     wifi_hal_dbg_print("%s \n", __func__);
@@ -242,6 +262,14 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         wifi_hal_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
         return RETURN_ERR;
     }
+
+    if (!_platform_init_done) {
+        /* OneWifi designates primary IF as sta, so the radio shall always work in apsta mode */
+        if (platform_set_apsta(index, TRUE) != RETURN_OK) {
+           wifi_hal_error_print("%s:%d: Failed to set apsta=1 for radio index:%d\n", __func__, __LINE__, index);
+        }
+    }
+
     if (radio->radio_presence == false) {
         wifi_hal_dbg_print("%s:%d Skip this radio %d. This is in sleeping mode\n", __FUNCTION__, __LINE__, index);
         return 0;
