@@ -6886,16 +6886,25 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
                         wifi_hal_dbg_print("%s:%d: Link %u average RSSI: %d dBm\n", __func__,
                             __LINE__, link_id, link_rssi);
                     }
-                    if (link_idx >= MAX_NUM_RADIOS) {
-                         wifi_hal_error_print("%s:%d: link_idx Out of bounds %d\n", __func__,
-                        __LINE__, link_idx);
-                        break;
-                    }
                 }
+            }
+            if (link_idx >= MAX_NUM_RADIOS) {
+                wifi_hal_error_print("%s:%d: link_idx Out of bounds %d\n", __func__, __LINE__,
+                    link_idx);
+                break;
             }
             associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkID = link_id;
             associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_RSSI = link_rssi;
             associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_Valid = true;
+            /* Extract per-link STA MAC from NL80211_ATTR_MAC within the link nested attrs */
+            if (link_tb[NL80211_ATTR_MAC] != NULL &&
+                nla_len(link_tb[NL80211_ATTR_MAC]) >=
+                    (int)sizeof(
+                        associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkAddress)) {
+                memcpy(associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkAddress,
+                    nla_data(link_tb[NL80211_ATTR_MAC]),
+                    sizeof(associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkAddress));
+            }
             link_idx++;
             has_link_stats = true;
         }
