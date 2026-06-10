@@ -8959,29 +8959,44 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
     if (msg == NULL) {
         wifi_hal_error_print("%s:%d: nl80211 driver command msg failure for %s interface on dev:%d \n",
                     __func__, __LINE__, interface->name, radio->index);
-        return -1;
+        return RETURN_ERR;
     }
 
     if (vap->vap_mode == wifi_vap_mode_ap) {
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
     } else {
 #ifndef TARGET_GEMINI7_2
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_DRIVER_BRCM)
+        /* In case of BRCM MLO enabled platforms do not reconfigure STA interface to AP */
+        nlmsg_free(msg);
+        msg = NULL;
+        wifi_hal_info_print("%s:%d: Skipping interface type update STA->AP for %s interface on dev:%d\n",
+            __func__, __LINE__, interface->name, radio->index);
+#else
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
 
         if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
             wifi_hal_error_print("%s:%d: Error updating %s interface on dev:%d error: %d (%s)\n",
                         __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
-            return -1;
+            return RETURN_ERR;
         }
 
         wifi_hal_dbg_print("%s:%d: Updating %s interface on dev:%d to type: NL80211_IFTYPE_AP successful\n",
                     __func__, __LINE__, interface->name, radio->index);
-
+#endif
         if ((interface->vap_info.u.sta_info.enabled != true) && (interface->vap_info.u.sta_info.ignite_enabled != true)) {
-            return 0;
+            wifi_hal_info_print("%s:%d: %s interface on dev:%d is not enabled (enabled: %d, ignite_enabled: %d)  - skipping\n",
+                __func__, __LINE__, interface->name, radio->index,
+                interface->vap_info.u.sta_info.enabled, interface->vap_info.u.sta_info.ignite_enabled);
+            return RETURN_OK;
         }
 
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_INTERFACE);
+        if (msg == NULL) {
+            wifi_hal_error_print("%s:%d: nl80211 driver command msg failure for %s interface on dev:%d \n",
+                        __func__, __LINE__, interface->name, radio->index);
+            return RETURN_ERR;
+        }
 #endif
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_STATION);
 
@@ -8991,6 +9006,7 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
                 wifi_hal_error_print("%s:%d: Error enabling sta wds for %s interface"
                     " on dev:%d error: %d (%s)\n", __func__, __LINE__, interface->name,
                     radio->index, ret, strerror(-ret));
+                nlmsg_free(msg);
                 return RETURN_ERR;
             }
             wifi_hal_info_print("%s:%d: Sta %s interface on dev:%d 4ADDR:%d"
@@ -9002,14 +9018,14 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
     if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
         wifi_hal_error_print("%s:%d: Error updating %s interface on dev:%d error: %d (%s)\n",
             __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
-        return -1;
+        return RETURN_ERR;
     }
 
     wifi_hal_dbg_print("%s:%d: Updating %s interface on dev:%d to type:%s successful\n",
             __func__, __LINE__, interface->name, radio->index,
             (vap->vap_mode == wifi_vap_mode_ap) ? "NL80211_IFTYPE_AP":"NL80211_IFTYPE_STATION");
 
-    return 0;
+    return RETURN_OK;
 }
 
 int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wifi_interface_info_t **interface)
