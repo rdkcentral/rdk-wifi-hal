@@ -40,6 +40,9 @@
 #include "crypto/sha1.h"
 #include "eap_peer/eap_methods.h"
 
+//bananapi
+#include "wpa_supplicant/scan.h"
+
 #define MACF      "%02x:%02x:%02x:%02x:%02x:%02x"
 #define MAC_TO_MACF(addr)    addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]
 #define RADIUS_FALLBACK_TIMER_IN_SECS   12*60*60
@@ -721,10 +724,23 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->wpa_pairwise = WPA_CIPHER_CCMP;
             switch (sec->mode) {
             case wifi_security_mode_wpa3_personal:
-            case wifi_security_mode_wpa3_transition:
             case wifi_security_mode_wpa3_enterprise:
             case wifi_security_mode_enhanced_open:
-                conf->wpa_pairwise |= (conf->disable_11be ? 0 : WPA_CIPHER_GCMP_256);
+                if (!conf->disable_11be) {
+                    conf->wpa_pairwise |= WPA_CIPHER_GCMP_256;
+                    conf->group_cipher = WPA_CIPHER_GCMP_256;
+                    conf->group_mgmt_cipher = WPA_CIPHER_BIP_GMAC_256;
+                } else {
+                    conf->group_cipher = WPA_CIPHER_CCMP;
+                    conf->group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
+                }
+                break;
+            case wifi_security_mode_wpa3_transition:
+                if (!conf->disable_11be) {
+                    conf->wpa_pairwise |= WPA_CIPHER_GCMP_256;
+                }
+                conf->group_cipher = WPA_CIPHER_CCMP;
+                conf->group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
                 break;
             case wifi_security_mode_wpa3_compatibility:
                 /* GCMP-256 is advertised via rsn_pairwise_rsno_2 in RSNO2 IE only;
@@ -2259,7 +2275,7 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
 int update_hostap_interface_params(wifi_interface_info_t *interface)
 {
     int ret = RETURN_ERR;
-
+    wifi_hal_info_print("%s:%d: \n", __func__, __LINE__);
 #ifdef CONFIG_GENERIC_MLO
     if (wifi_hal_is_mld_enabled(interface)) {
         wifi_interface_info_t *first_interface = wifi_hal_get_first_mld_interface(interface);
@@ -2381,11 +2397,43 @@ static enum wpa_states wpa_sm_sta_get_state(void *ctx)
 
     return interface->u.sta.state;
 }
+/* workaround for BRCM-AP race condition;
+ * he AP retransmits M3 four times (retry limit), then disconnects with reason 15
+ * (4-way handshake timeout). The AP logs from the first attempt show the BRCM FullMAC
+ * in a bad state: WLC_SCB_DEAUTHORIZE error (-30)   ← first deauth cleanup failed
+ * wlc_ulmu_admit_ready_check: SCB:02:02:23:0b:30:1e admit fail: scb del in progress
+The SCB for link MAC 02:02:23:0b:30:1e is mid-deletion during the second attempt. M4 transmits successfully at the MAC layer from the STA side (send eapol key ... success), but the AP-side BRCM firmware likely cannot enqueue or deliver it to the upper stack because the SCB isn't in a clean state yet.
+*/
+static void wpa_sta_delayed_reconnect_cb(void *eloop_ctx, void *timeout_ctx)
+{
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)eloop_ctx;
+    wifi_hal_info_print("wpa_sta_delayed_reconnect_cb: triggering reconnect\n");
+
+    /* Reset MLO state so next attempt re-primes cleanly */
+    interface->mlo_assoc_event_delivered = 0;
+
+    wpa_supplicant_req_scan(&interface->wpa_s, 0, 0); 
+}
 
 static void wpa_sm_sta_deauthenticate(void *ctx, u16 reason_code)
 {
-    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__); 
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)ctx;
+
+    wifi_hal_info_print("wpa_sm_sta_deauthenticate: Enter, reason=%u\n", reason_code);
+
+    /* 1. Cancel the wpa_supplicant auth timeout so it doesn't race
+          against our delayed reconnect */
+    //eloop_cancel_timeout(wpa_supplicant_timeout, &interface->wpa_s, NULL);
+    wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
+    /* 2. Prevent the M3-retransmission loop: mark state as disconnected
+          so subsequent M3 arrivals are dropped rather than re-answered */
+    interface->u.sta.state = WPA_DISCONNECTED;
+
+    /* 3. Schedule reconnect with backoff — give AP SCB ~300ms to clean up */
+    eloop_cancel_timeout(wpa_sta_delayed_reconnect_cb, interface, NULL);
+    eloop_register_timeout(0, 300000, wpa_sta_delayed_reconnect_cb, interface, NULL);
 }
+
 
 #ifdef HOSTAPD_2_11 //2.11
 static int wpa_sm_sta_set_key(void *ctx, int link_id, enum wpa_alg alg,
@@ -2467,6 +2515,7 @@ static unsigned char* wpa_sm_sta_alloc_eapol(void *ctx, unsigned char type,
     hdr->version = EAPOL_VERSION;
     hdr->type = type;
     hdr->length = host_to_be16(data_len);
+    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
     if (data) {
         memcpy(hdr + 1, data, data_len);
@@ -2497,11 +2546,15 @@ static int wpa_sm_sta_ether_send(void *ctx, const u8 *dest, u16 proto, const u8 
         int encrypt;
         mac_addr_str_t mac_str;
 #ifdef CONFIG_GENERIC_MLO
-        int link_id = wifi_hal_get_mld_link_id(interface);
+    /* Use assoc_link_id directly — wifi_hal_get_mld_link_id returns -1
+     * because RDK interface map hasn't been updated with kernel link MACs yet. */
+    int link_id = (interface->mlo_params.valid_links > 0) ?
+                   (int)interface->mlo_params.assoc_link_id : -1;
 #else
         int link_id = -1;
 #endif // CONFIG_GENERIC_MLO
-
+        if (link_id == -1)
+            wifi_hal_info_print("%s:%d: MLO link_id=-1, kernel will use default\n",__func__, __LINE__);
         encrypt = interface->u.sta.wpa_sm && wpa_sm_has_ptk_installed(interface->u.sta.wpa_sm);
         wifi_hal_info_print("%s:%d: Sending eapol via control port to sta:%s on interface:%s encrypt:%d\n", __func__, __LINE__,
             to_mac_str(dest, mac_str), interface->name, encrypt);
@@ -2513,17 +2566,41 @@ static int wpa_sm_sta_ether_send(void *ctx, const u8 *dest, u16 proto, const u8 
         return 0;
 #endif // HOSTAPD_VERSION >= 210     
     }
-        
     memset(&ll, 0, sizeof(ll));
-    //ll.sll_family = AF_PACKET;
+    eth_hdr = (struct ieee8023_hdr *)buff;
+
+#ifdef CONFIG_GENERIC_MLO
+    int link_id = wifi_hal_get_mld_link_id(interface);
+    struct wpa_sm *sm = interface->u.sta.wpa_sm;
+    const u8 *link_src_mac = interface->mac;
+    int link_ifindex = if_nametoindex(interface->name);
+
+    if (sm && link_id >= 0 && link_id < MAX_NUM_MLD_LINKS &&
+        !is_zero_ether_addr(sm->mlo.links[link_id].addr)) {
+        link_src_mac = sm->mlo.links[link_id].addr;
+    } else if (sm && interface->mlo_params.valid_links > 0) {
+        int aid = (int)interface->mlo_params.assoc_link_id;
+        if (aid >= 0 && aid < MAX_NUM_MLD_LINKS &&
+            !is_zero_ether_addr(sm->mlo.links[aid].addr))
+            link_src_mac = sm->mlo.links[aid].addr;
+    }
+    
+    ll.sll_ifindex = link_ifindex;
+    memcpy(eth_hdr->src, link_src_mac, sizeof(mac_address_t));
+#else
     ll.sll_ifindex = if_nametoindex(interface->name);
+    memcpy(eth_hdr->src, interface->mac, sizeof(mac_address_t));
+#endif
+
+    wifi_hal_dbg_print("%s: interface name %s, idx=%d\n", __func__, interface->name, ll.sll_ifindex);
+    
+    //ll.sll_family = AF_PACKET;
     //ll.sll_protocol = htons(proto);
     ll.sll_halen = ETH_ALEN;
     memcpy(ll.sll_addr, dest, ETH_ALEN);
 
-    eth_hdr = (struct ieee8023_hdr *)buff;
     memcpy(eth_hdr->dest, dest, sizeof(mac_address_t));
-    memcpy(eth_hdr->src, interface->mac, sizeof(mac_address_t));
+    wifi_hal_dbg_print("%s: after setting hdr, src=" MACSTR " dst= " MACSTR "\n", __func__, MAC2STR(eth_hdr->src), MAC2STR(eth_hdr->dest));
     eth_hdr->ethertype = host_to_be16(ETH_P_EAPOL);
 
     memcpy(&buff[sizeof(struct ieee8023_hdr)], buf, len);
@@ -2617,13 +2694,13 @@ static int wpa_sm_sta_get_beacon_ie(void *ctx)
 static int wpa_sm_sta_mlme_setprotection(void *ctx, const u8 *addr,
                                             int protection_type, int key_type)
 {
-    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: Enter, empty stub\n", __func__, __LINE__);
     return 0;
 }
 
 static void wpa_sm_sta_cancel_auth_timeout(void *ctx)
 {
-    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: Enter, empty stub\n", __func__, __LINE__);
 }
 
 static int wpa_sm_sta_key_mgmt_set_pmk(void *ctx, const u8 *pmk,
@@ -2645,7 +2722,7 @@ static int wpa_sm_sta_add_pmkid(void *_wpa_s, void *network_ctx,
                                             const u8 *pmk, size_t pmk_len)
 #endif
 {
-    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: Enter, empty stub\n", __func__, __LINE__);
     return 0;
 }
 
@@ -2653,7 +2730,7 @@ static int wpa_sm_sta_remove_pmkid(void *_wpa_s, void *network_ctx,
                                             const u8 *bssid, const u8 *pmkid,
                                             const u8 *fils_cache_id)
 {
-    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: Enter, empty stub\n", __func__, __LINE__);
     return 0;
 }
 
@@ -2955,9 +3032,37 @@ static void wpa_sm_eapol_notify_done(void *ctx)
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 }
 
+/* vap->u.sta_info.bssid being set to the 6GHz AP link MAC (5c:22:da:4c:31:02) rather than the MLD address or the assoc link MAC suggests that sta_info.bssid is being populated from a different source than u.sta.backhaul.bssid or current_bss. This could cause problems if wpa_sm_eapol_send ever legitimately fires — it would send to the wrong peer. 
+ */
 static int wpa_sm_eapol_send(void *ctx, int type, const u8 *buf,
                                             size_t len)
 {
+#ifdef EAPOL_OVER_NL //&& BANANA_PI_PORT
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)ctx;
+    wifi_vap_info_t *vap = &interface->vap_info;
+    int link_id = (interface->mlo_params.valid_links > 0) ?
+                   (int)interface->mlo_params.assoc_link_id : -1;
+    int encrypt = interface->u.sta.wpa_sm &&
+                  wpa_sm_has_ptk_installed(interface->u.sta.wpa_sm);
+    int ret;
+
+    if (type != 3 /* EAPOL-Key */ &&
+        interface->u.sta.state < WPA_ASSOCIATED) {
+        wifi_hal_dbg_print("%s:%d: Suppressing EAPOL type=%d before association (state=%d)\n",
+                           __func__, __LINE__, type, interface->u.sta.state);
+        return 0;
+    }
+
+    wifi_hal_info_print("%s:%d: EAPOL type=%d len=%zu via NL control port"
+        " (link_id=%d encrypt=%d)\n", __func__, __LINE__, type, len, link_id, encrypt);
+    ret = nl80211_tx_control_port(interface, vap->u.sta_info.bssid,
+                                  ETH_P_EAPOL, buf, len, !encrypt, link_id);
+    if (ret < 0) {
+        wifi_hal_error_print("%s:%d: EAPOL TX failed: %d\n", __func__, __LINE__, ret);
+        return -1;
+    }
+    return 0;
+#else /* EAPOL_OVER_NL */
     struct sockaddr_ll ll;
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
@@ -2967,6 +3072,7 @@ static int wpa_sm_eapol_send(void *ctx, int type, const u8 *buf,
     int ret;
     int buff_size = 0;
     u16 data_len = htons(len);
+    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
     unsigned char eapol_version_buff[] = { 0x01, 0x00 };
 
@@ -3001,6 +3107,7 @@ static int wpa_sm_eapol_send(void *ctx, int type, const u8 *buf,
     }
 
     return ret;
+#endif //EAPOL_OVER_NL && BANANA_PI_PORT
 }
 
 static void wpa_sm_eapol_aborted_cached(void *ctx)
@@ -3084,6 +3191,7 @@ void update_eapol_sm_params(wifi_interface_info_t *interface)
     wifi_vap_security_t *sec;
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
+    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 
     if (interface->u.sta.wpa_sm->eapol == NULL) {
         ctx = os_zalloc(sizeof(struct eapol_ctx));
