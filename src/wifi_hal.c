@@ -1120,8 +1120,29 @@ INT wifi_hal_sm_deinit(INT vap_index)
 
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
 {
+    wifi_hal_info_print("%s:%d: !!!!!! Enter \n", __func__, __LINE__);
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
+
+  /*  if (is_wifi_hal_vap_mesh_sta(ap_index) && ap_index != 15) {
+        wifi_hal_info_print("%s:%d: FORCE_5G: redirecting mesh_sta connect "
+            "from vap_index=%d to vap_index=15 (mesh_sta_5g)\n",
+            __func__, __LINE__, ap_index);
+        ap_index = 15;
+    }*/
+
+
+    /* Workaround: clear stale firmware STA/WCID entries from previous
+     * session. After HAL crash/restart, firmware retains entries that
+     * cause CMD_AUTHENTICATE to fail silently. SOCKET_OWNER in upstream
+     * MTK patches may eventually handle this automatically.
+     * Expected errors: -ENOENT (not connected) or -ENOTCONN are normal. */
+    if ((interface = get_interface_by_vap_index(ap_index)) != NULL) {
+        wifi_hal_dbg_print("%s:%d: pre-connect cleanup for %s\n",
+                           __func__, __LINE__, interface->name);
+        nl80211_disconnect_sta(interface);
+    }
+
     bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     wifi_bss_info_t *backhaul, *tmp = NULL, *best = NULL;
     int best_rssi = -100;
@@ -1660,24 +1681,28 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         interface_name = wifi_hal_get_interface_name(interface);
 
 #ifdef CONFIG_GENERIC_MLO
-        // VAP down removes MLO links, so restrict down of interface to sta mode only
-        if (vap->vap_mode == wifi_vap_mode_sta) {
+        // VAP down removes MLO links, so restrict down of interface to non-mlo sta mode only
+    if (vap->vap_mode == wifi_vap_mode_sta && wifi_hal_is_mld_enabled(interface)) {
+        wifi_hal_info_print("%s:%d: interface:%s is MLO, ensuring link is UP\n", __func__, __LINE__, interface->name);
+        nl80211_interface_enable(interface->name, true); // Ensure the link has a carrier
+    } else {
 #endif
-            wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface->name);
-            nl80211_interface_enable(interface->name, false);
+        wifi_hal_info_print("%s:%d: interface:%s set down !!!\n", __func__, __LINE__, interface->name);
+        nl80211_interface_enable(interface->name, false);
 #ifdef CONFIG_GENERIC_MLO
-        }
+    }
 #endif
 
 #if  !defined(CONFIG_WIFI_EMULATOR) && !defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
         if (vap->vap_mode == wifi_vap_mode_sta) {
             bool sta_4addr = 0;
-            wifi_hal_info_print("%s:%d: interface:%s remove from bridge\n", __func__, __LINE__,
-                interface_name);
             nl80211_remove_from_bridge(interface_name);
             if (get_sta_4addr_status(&sta_4addr) == RETURN_OK) {
                 interface->u.sta.sta_4addr = (int)sta_4addr;
             }
+            wifi_hal_info_print("%s:%d: interface:%s sta_4addr=%d bridge=%s\n",
+                __func__, __LINE__, interface_name,
+                interface->u.sta.sta_4addr, vap->bridge_name);
         }
 #endif
         wifi_hal_info_print("%s:%d: interface:%s set mode:%d\n", __func__, __LINE__,
@@ -1690,7 +1715,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         wifi_hal_info_print("%s:%d: interface:%s radio configured:%d radio enabled:%d\n",
             __func__, __LINE__, interface_name, radio->configured, radio->oper_param.enable);
+#ifdef CONFIG_IEEE80211BE
+        if (radio->oper_param.enable) {
+#else
         if (radio->configured && radio->oper_param.enable) {
+#endif /* CONFIG_IEEE80211BE */
             wifi_hal_info_print("%s:%d: interface:%s set up\n", __func__, __LINE__,
                 interface_name);
             if (nl80211_interface_enable(interface_name, true) != 0) {
@@ -1842,7 +1871,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             nl80211_set_mac(interface);
             nl80211_interface_enable(interface->name, true);
 #endif
+#ifndef CONFIG_IEEE80211BE
+            if (radio->oper_param.enable) {
+#else
             if (radio->configured && radio->oper_param.enable) {
+#endif /* CONFIG_IEEE80211BE */
                 wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
                     __LINE__, interface_name);
                 wifi_drv_set_operstate(interface, 1);
@@ -1853,6 +1886,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             } else {
                 wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__,
                     interface_name);
+                wifi_hal_info_print("%s:%d: radio->configured %d, radio enable %d\n", __func__, __LINE__,
+                    radio->configured, radio->oper_param.enable);
                 nl80211_interface_enable(interface_name, false);
             }
 #endif //CONFIG_WIFI_EMULATOR
@@ -1918,6 +1953,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         set_vap_params_fn(index, map);
     }
 
+    wifi_hal_info_print("%s:%d: !!!!!! 0->\n", __func__, __LINE__);
     return ret;
 }
 
