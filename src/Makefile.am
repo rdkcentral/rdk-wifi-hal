@@ -139,6 +139,12 @@ librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/banana-pi -I${PKG_CONF
 librdk_wifihal_la_SOURCES += ../platform/banana-pi/platform.c
 endif
 
+if ARM_SYSTEM_READY_PORT
+librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/arm-system-ready
+librdk_wifihal_la_SOURCES += ../platform/arm-system-ready/platform_pi.c
+endif
+
+
 include_HEADERS = wifi_hal_rdk.h wifi_hal_rdk_framework.h ieee80211.h ../util_crypto/aes_siv.h 
 
 if ONE_WIFIBUILD
