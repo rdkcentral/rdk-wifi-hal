@@ -3369,8 +3369,8 @@ static int set_mld_shared_resources(struct hostapd_data *hapd)
 
             ret = hostapd_setup_bss_internal(link);
             if (ret) {
-                wifi_hal_error_print("%s:%d: set shared resources failed for link: %s\n",
-                    __func__, __LINE__, hapd->conf->iface);
+                wifi_hal_error_print("%s:%d: set shared resources failed for link: %s - first_bss %s\n",
+                    __func__, __LINE__, link->conf->iface, hapd->conf->iface);
                 return RETURN_ERR;
             }
         }

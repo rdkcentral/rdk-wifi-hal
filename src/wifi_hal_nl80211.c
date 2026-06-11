@@ -7151,16 +7151,25 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
                         wifi_hal_dbg_print("%s:%d: Link %u average RSSI: %d dBm\n", __func__,
                             __LINE__, link_id, link_rssi);
                     }
-                    if (link_idx >= MAX_NUM_RADIOS) {
-                         wifi_hal_error_print("%s:%d: link_idx Out of bounds %d\n", __func__,
-                        __LINE__, link_idx);
-                        break;
-                    }
                 }
+            }
+            if (link_idx >= MAX_NUM_RADIOS) {
+                wifi_hal_error_print("%s:%d: link_idx Out of bounds %d\n", __func__, __LINE__,
+                    link_idx);
+                break;
             }
             associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkID = link_id;
             associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_RSSI = link_rssi;
             associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_Valid = true;
+            /* Extract per-link STA MAC from NL80211_ATTR_MAC within the link nested attrs */
+            if (link_tb[NL80211_ATTR_MAC] != NULL &&
+                nla_len(link_tb[NL80211_ATTR_MAC]) >=
+                    (int)sizeof(
+                        associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkAddress)) {
+                memcpy(associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkAddress,
+                    nla_data(link_tb[NL80211_ATTR_MAC]),
+                    sizeof(associated_dev.cli_MLDInfo.cli_LinkInfo[link_idx].cli_LinkAddress));
+            }
             link_idx++;
             has_link_stats = true;
         }
@@ -9226,7 +9235,7 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
     if (msg == NULL) {
         wifi_hal_error_print("%s:%d: nl80211 driver command msg failure for %s interface on dev:%d \n",
                     __func__, __LINE__, interface->name, radio->index);
-        return -1;
+        return RETURN_ERR;
     }
 
     wifi_hal_info_print("%s:%d: Working on vap %d,name=%s \n", __func__, __LINE__, vap->vap_index, vap->vap_name);
@@ -9234,26 +9243,38 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
         wifi_hal_info_print("%s:%d: it is AP mode-type vap\n", __func__, __LINE__);
     } else {
-        wifi_hal_info_print("%s:%d: it is STA/monitor mode-type vap, making double if-type\n", __func__, __LINE__);
-#ifndef TARGET_GEMINI7_2
-        wifi_hal_info_print("%s:%d: will call ismldenabled\n", __func__, __LINE__);
-        if (!wifi_hal_is_mld_enabled(interface)) {
-            nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
+        wifi_hal_info_print("%s:%d: it is STA/monitor mode-type vap\n", __func__, __LINE__);
+#if !defined(TARGET_GEMINI7_2) && !defined(_PLATFORM_BANANAPI_R4_)
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_DRIVER_BRCM)
+        /* In case of BRCM MLO enabled platforms do not reconfigure STA interface to AP */
+        nlmsg_free(msg);
+        msg = NULL;
+        wifi_hal_info_print("%s:%d: Skipping interface type update STA->AP for %s interface on dev:%d\n",
+            __func__, __LINE__, interface->name, radio->index);
+#else
+        nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
 
-            if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
-                wifi_hal_error_print("%s:%d: Error updating %s interface on dev:%d error: %d (%s)\n",
-                            __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
-                return -1;
-            }
+        if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
+            wifi_hal_error_print("%s:%d: Error updating %s interface on dev:%d error: %d (%s)\n",
+                        __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
+            return RETURN_ERR;
+        }
 
-            wifi_hal_dbg_print("%s:%d: Updating %s interface on dev:%d to type: NL80211_IFTYPE_AP successful\n",
+        wifi_hal_dbg_print("%s:%d: Updating %s interface on dev:%d to type: NL80211_IFTYPE_AP successful\n",
+                    __func__, __LINE__, interface->name, radio->index);
+#endif
+        if ((interface->vap_info.u.sta_info.enabled != true) && (interface->vap_info.u.sta_info.ignite_enabled != true)) {
+            wifi_hal_info_print("%s:%d: %s interface on dev:%d is not enabled (enabled: %d, ignite_enabled: %d)  - skipping\n",
+                __func__, __LINE__, interface->name, radio->index,
+                interface->vap_info.u.sta_info.enabled, interface->vap_info.u.sta_info.ignite_enabled);
+            return RETURN_OK;
+        }
+
+        msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_INTERFACE);
+        if (msg == NULL) {
+            wifi_hal_error_print("%s:%d: nl80211 driver command msg failure for %s interface on dev:%d \n",
                         __func__, __LINE__, interface->name, radio->index);
-
-            if ((interface->vap_info.u.sta_info.enabled != true) &&
-                (interface->vap_info.u.sta_info.ignite_enabled != true)) {
-                return 0;
-            }
-            msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_SET_INTERFACE);
+            return RETURN_ERR;
         }
 #endif
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_STATION);
@@ -9264,6 +9285,7 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
                 wifi_hal_error_print("%s:%d: Error enabling sta wds for %s interface"
                     " on dev:%d error: %d (%s)\n", __func__, __LINE__, interface->name,
                     radio->index, ret, strerror(-ret));
+                nlmsg_free(msg);
                 return RETURN_ERR;
             }
             wifi_hal_info_print("%s:%d: Sta %s interface on dev:%d 4ADDR:%d"
@@ -9275,14 +9297,14 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
     if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
         wifi_hal_error_print("%s:%d: Error updating %s interface on dev:%d error: %d (%s)\n",
             __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
-        return -1;
+        return RETURN_ERR;
     }
 
     wifi_hal_dbg_print("%s:%d: Updating %s interface on dev:%d to type:%s successful\n",
             __func__, __LINE__, interface->name, radio->index,
             (vap->vap_mode == wifi_vap_mode_ap) ? "NL80211_IFTYPE_AP":"NL80211_IFTYPE_STATION");
 
-    return 0;
+    return RETURN_OK;
 }
 
 int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wifi_interface_info_t **interface)
