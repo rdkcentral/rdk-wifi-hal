@@ -3279,7 +3279,7 @@ static int set_mld_shared_resources(struct hostapd_data *hapd)
                     __func__, __LINE__, link->conf->iface, hapd->conf->iface);
                 overall_ret = RETURN_ERR;
                 /*
-                 * Continue next link to make sure the all links have their
+                 * Continue next link to make sure all the links have their
                  * hapd->wpa_auth initialized.
                  */
             }
