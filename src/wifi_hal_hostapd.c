@@ -3265,6 +3265,7 @@ static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
 static int set_mld_shared_resources(struct hostapd_data *hapd)
 {
     int ret;
+    int overall_ret = RETURN_OK;
 
     if (hapd->mld != NULL && hostapd_mld_is_first_bss(hapd)) {
         struct hostapd_data *link;
@@ -3276,11 +3277,15 @@ static int set_mld_shared_resources(struct hostapd_data *hapd)
             if (ret) {
                 wifi_hal_error_print("%s:%d: set shared resources failed for link: %s - first_bss %s\n",
                     __func__, __LINE__, link->conf->iface, hapd->conf->iface);
-                return RETURN_ERR;
+                overall_ret = RETURN_ERR;
+                /*
+                 * Continue next link to make sure the all links have their
+                 * hapd->wpa_auth initialized.
+                 */
             }
         }
     }
-    return RETURN_OK;
+    return overall_ret;
 }
 
 static void clear_mld_shared_resources(struct hostapd_data *hapd)
