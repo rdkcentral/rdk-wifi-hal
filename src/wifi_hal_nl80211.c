@@ -2113,7 +2113,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     callbacks = get_hal_device_callbacks();
     hooks = get_device_frame_hooks();
     vap = &interface->vap_info;
-    //ToDo(Phase5-6): rework MLD MAC assignment to check if already assigned
+    // TODO: rework MLD MAC assignment to check if already assigned
 #ifdef CONFIG_GENERIC_MLO
     mld_mac = wifi_hal_get_mld_mac_address(interface);
     if (memcmp(mgmt->da, interface->mac, sizeof(mac_address_t)) == 0 ||
@@ -3022,7 +3022,6 @@ void recv_data_frame_process(wifi_interface_info_t *interface,
             /* No hapd_lock here — wpa_sm is single-threaded and
              * nl80211_send_and_recv re-enters the event loop synchronously,
              * causing deadlock if the lock is held across wpa_sm_rx_eapol. */
-          //  pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             if (!eapol_sm->eapol ||
                 !eapol_sm_rx_eapol(eapol_sm->eapol,
                                    (unsigned char *)src_mac,
@@ -3074,7 +3073,6 @@ void recv_data_frame_process(wifi_interface_info_t *interface,
                 }
 #endif
             }
-            //pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #else  /* HOSTAPD_VERSION < 211 */
             if (!eapol_sm->eapol ||
                 !eapol_sm_rx_eapol(eapol_sm->eapol,
@@ -3102,9 +3100,6 @@ void recv_data_frame(wifi_interface_info_t *interface)
     //wifi_direction_t dir;
     wifi_vap_info_t *vap;
     mac_address_t sta;
-    //union wpa_event_data event;
-    //struct ieee802_1x_hdr *hdr;
-    //mac_addr_str_t src_mac_str, dst_mac_str;
 #ifdef CONFIG_GENERIC_MLO
     uint8_t *interface_mac = NULL;
 #endif // CONFIG_GENERIC_MLO
@@ -3945,7 +3940,6 @@ static int execute_send_and_recv(struct nl_cb *cb_ctx,
              int (*valid_finish_handler)(struct nl_msg *, void *),
              void *valid_finish_data)
 {
-    wifi_hal_info_print("%s:%d: !!!!!! 0<-\n", __func__, __LINE__);
     struct nl_cb *cb;
     wifi_finish_data_t  *finish_arg;
     int err = -1, opt;
@@ -4058,11 +4052,7 @@ int nl80211_send_and_recv(struct nl_msg *msg,
              int (*valid_finish_handler)(struct nl_msg *, void *),
              void *valid_finish_data)
 {
-    wifi_hal_info_print("%s:%d: !!!!!! 0<-\n", __func__, __LINE__);
-
-
-
-// 1. Get the standard Netlink header
+    // 1. Get the standard Netlink header
     struct nlmsghdr *nlh = nlmsg_hdr(msg);
     
     if (nlh) {
@@ -4096,7 +4086,6 @@ int nl80211_send_and_recv(struct nl_msg *msg,
     return (nl_info ? execute_send_and_recv(nl_info->nl_cb, nl_info->nl, msg,
                     valid_handler, valid_data, valid_finish_handler,
                     valid_finish_data) : -1);
-    wifi_hal_info_print("%s:%d: !!!!!! 0->\n", __func__, __LINE__);
 }
 
 static int family_handler(struct nl_msg *msg, void *arg)
@@ -6747,18 +6736,11 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
             }
 
 #ifdef CONFIG_GENERIC_MLO
-            wifi_hal_info_print("%s:%d: !!!!!! Checking for MLD info\n", __func__, __LINE__);
             mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
             if (mld_name != NULL) {
-                wifi_hal_info_print("%s:%d: !!!!!! MLD name present:%s\n", __func__, __LINE__, mld_name);
                 mac_address_t mld_mac = {};
 
                 strncpy(interface->mld_name, mld_name, sizeof(interface->mld_name) - 1);
-                //if ((interface->index = if_nametoindex(mld_name)) == 0) {
-                //    wifi_hal_error_print("%s:%d: Failed to get ifindex for MLD interface %s: %s\n",
-                //        __func__, __LINE__, mld_name, strerror(errno));
-                //    return NL_SKIP;
-               // }
                 if (wifi_hal_get_mac_address(mld_name, mld_mac) < 0) {
                     wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n",
                         __func__, __LINE__, mld_name);
@@ -6769,14 +6751,11 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                 wifi_hal_set_mld_enabled(interface, true);
                 wifi_hal_set_mld_mac_address(interface, mld_mac);
                 wifi_hal_set_mld_link_id(interface, interface->rdk_radio_index);
-                wifi_hal_info_print("%s:%d: set mld-linkdId %d\n", __func__, __LINE__, interface->rdk_radio_index);
                 wifi_hal_set_mld_link_id(interface, link_id);
                 link_id++;
                 wifi_hal_set_mld_link_id(interface, radio->rdk_radio_index);
-                wifi_hal_info_print("%s:%d: set mld-linkdId %d\n", __func__, __LINE__, radio->rdk_radio_index);
-				// pavlo's change in jan
-            } else {
-                wifi_hal_info_print("%s:%d: !!!!!! No MLD name\n", __func__, __LINE__);
+                wifi_hal_dbg_print("%s:%d: MLD name=%s link_id=%d\n",
+                    __func__, __LINE__, mld_name, radio->rdk_radio_index);
             }
 #endif // CONFIG_GENERIC_MLO
 
@@ -11214,11 +11193,9 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 
 #if defined(EASY_MESH_NODE)
     if (is_wifi_hal_vap_mesh_sta(vap->vap_index)) {
-                    wifi_hal_info_print("%s:%d\n", __func__, __LINE__);
-        // interface->wpa_s.current_ssid->multi_ap_backhaul_sta = 1;
-     /*   wifi_hal_info_print("%s:%d: Enabled multi_ap_backhaul_sta:%d for interface:%s\n",
-            __func__, __LINE__, interface->wpa_s.current_ssid->multi_ap_backhaul_sta,
-            interface->name);*/
+        interface->wpa_s.current_ssid->multi_ap_backhaul_sta = 1;
+        wifi_hal_dbg_print("%s:%d: Enabled multi_ap_backhaul_sta for %s\n",
+            __func__, __LINE__, interface->name);
     }
 #endif // EASY_MESH_NODE
     update_wpa_sm_params(interface);
@@ -11238,7 +11215,6 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
 #endif
 #endif
     interface->wpa_s.current_ssid->ieee80211w = security->mfp;
-    //ToDo: remove?
     interface->wpa_s.current_ssid->key_mgmt = interface->u.sta.wpa_sm->key_mgmt;
 
     if ((security->mode == wifi_security_mode_wpa3_personal) ||
@@ -11361,19 +11337,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     interface->wpa_s.current_bss = curr_bss;
     memcpy(interface->wpa_s.current_ssid->bssid, backhaul->bssid, ETH_ALEN);
 
-// reset assoc-event gate flag
     interface->mlo_assoc_event_delivered = false;
 
-// cipher and setup logic...
-    //update_wpa_sm_params(interface);
-   // init_wpa_sm_param(interface);
-    //todo
-//    interface->wpa_s.current_ssid->proto = WPA_PROTO_RSN;
-  //  if (security->mode != wifi_security_mode_wpa3_compatibility) {
-    //    interface->wpa_s.current_ssid->group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
-   // }
-
-//ToDo: ->mode >= wpa3_... 
     if (((security->mode == wifi_security_mode_wpa3_personal) ||
         (security->mode == wifi_security_mode_wpa3_transition) ||
         (security->mode == wifi_security_mode_wpa3_enterprise) ||
@@ -11407,12 +11372,6 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     dl_list_add(&interface->wpa_s.bss, &curr_bss->list);
 
 
-   wifi_hal_info_print("%s:%d\n", __func__, __LINE__);
-
-
-// 1. Explicitly enable WiFi 7 / EHT //ToDo :spr czy cos takiego jest w ogole
-  //  interface->wpa_s.conf->disable_11be = 0;
-    
     // MLO mandates protected management frames
     interface->wpa_s.current_ssid->ieee80211w = MGMT_FRAME_PROTECTION_REQUIRED;
     interface->wpa_s.current_ssid->group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
@@ -11684,23 +11643,9 @@ wifi_hal_dbg_print("%s: sma_sm=[%p], sta_wpa_sm=[%p], wpa_s-wpa=[%p], eapolsm [%
 
 #endif /* CONFIG_IEEE80211BE */
 
-
-/* Force H2E-only — AP advertises SAE-H2E in RSNXE (bit 5 = 0x20).
- * This eliminates the status-126 round trip and the second 
- * NL80211_CMD_AUTHENTICATE that resets the MTK driver state. */
-if (rsnxe_capa & BIT(WLAN_RSNX_CAPAB_SAE_H2E)) {
-    interface->wpa_s.conf->sae_pwe = 1;
-    wifi_hal_info_print("%s: AP supports H2E, forcing sae_pwe=1\n", __func__);
-} else {
-    interface->wpa_s.conf->sae_pwe = 0;
-    wifi_hal_info_print("%s: AP  does not support H2E, forcing sae_pwe=0\n", __func__);
-}
-
     wpa_hexdump(MSG_MSGDUMP, "CONN_BSS_IE", bss_ie->buff, bss_ie->buff_len);
 
-
-//sep thread
-sme_auth_args_t *auth_args = malloc(sizeof(sme_auth_args_t));
+    sme_auth_args_t *auth_args = malloc(sizeof(sme_auth_args_t));
 if (!auth_args) return -1;
 auth_args->wpa_s = &interface->wpa_s;
 auth_args->bss   = curr_bss;

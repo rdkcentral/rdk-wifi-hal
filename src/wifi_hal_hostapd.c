@@ -2694,13 +2694,13 @@ static int wpa_sm_sta_get_beacon_ie(void *ctx)
 static int wpa_sm_sta_mlme_setprotection(void *ctx, const u8 *addr,
                                             int protection_type, int key_type)
 {
-    wifi_hal_dbg_print("%s:%d: Enter, empty stub\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return 0;
 }
 
 static void wpa_sm_sta_cancel_auth_timeout(void *ctx)
 {
-    wifi_hal_dbg_print("%s:%d: Enter, empty stub\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
 }
 
 static int wpa_sm_sta_key_mgmt_set_pmk(void *ctx, const u8 *pmk,
@@ -2722,7 +2722,7 @@ static int wpa_sm_sta_add_pmkid(void *_wpa_s, void *network_ctx,
                                             const u8 *pmk, size_t pmk_len)
 #endif
 {
-    wifi_hal_dbg_print("%s:%d: Enter, empty stub\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return 0;
 }
 
@@ -2730,7 +2730,7 @@ static int wpa_sm_sta_remove_pmkid(void *_wpa_s, void *network_ctx,
                                             const u8 *bssid, const u8 *pmkid,
                                             const u8 *fils_cache_id)
 {
-    wifi_hal_dbg_print("%s:%d: Enter, empty stub\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
     return 0;
 }
 

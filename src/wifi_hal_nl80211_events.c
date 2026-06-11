@@ -797,7 +797,6 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     wifi_radio_operationParam_t *radio_param;
 
     sec = &interface->vap_info.u.sta_info.security;
-    wifi_hal_dbg_print("%s:%d: ehter\n", __func__, __LINE__);
     backhaul = &interface->u.sta.backhaul;
 
 #ifdef CONFIG_IEEE80211BE
@@ -959,9 +958,7 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     interface->u.sta.state = WPA_DISCONNECTED;
     callbacks = get_hal_device_callbacks();
 
-    wifi_hal_dbg_print("%s:%d: ehter\n", __func__, __LINE__);
-
-wifi_hal_info_print("%s: MLO disconnect during handshake state=%d reason=%d by_ap=%d\n",
+    wifi_hal_info_print("%s: MLO disconnect during handshake state=%d reason=%d by_ap=%d\n",
     __func__, interface->wpa_s.wpa_state,
     tb[NL80211_ATTR_REASON_CODE] ? nla_get_u16(tb[NL80211_ATTR_REASON_CODE]) : -1,
     tb[NL80211_ATTR_DISCONNECTED_BY_AP] != NULL);
