@@ -237,11 +237,12 @@ unsigned short channel_to_frequency(unsigned int channel)
  * @freq: Frequency (MHz) to convert
  * Returns: channel on success, NULL on failure
 */
-unsigned short freq_to_channel(unsigned int freq)
+unsigned short freq_to_channel(unsigned int freq1)
 {
     unsigned int temp = 0;
     int sec_channel = -1;
     unsigned int op_class = 0;
+    int freq = 2412;
     if(freq)
     {
         if (freq >= 2412 && freq <= 2472)
@@ -961,7 +962,8 @@ hkdf (const EVP_MD *h, int skip,
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
     HMAC_CTX_cleanup(&ctx);
 #else
-    HMAC_CTX_free(ctx);
+//check if this can be executed outside while when while is not executed
+    // HMAC_CTX_free(ctx);
 #endif
 
     return okmlen;
@@ -1675,7 +1677,7 @@ int wifi_dppCreateReconfigContext(unsigned int ap_index, char *net_access_key, w
     int asn1len;
     const unsigned char *key;
 	EC_GROUP *group;
-	unsigned char *pub_key;
+	unsigned char *pub_key = NULL;
 
     printf("%s:%d Here\n", __func__, __LINE__);
 
@@ -1719,7 +1721,7 @@ int wifi_dppCreateReconfigContext(unsigned int ap_index, char *net_access_key, w
 	}
 
     printf("%s:%d Here\n", __func__, __LINE__);
-    instance->pt = (EC_POINT*)EC_KEY_get0_public_key(instance->key);
+    instance->pt = EC_KEY_get0_public_key(instance->key);
     if (instance->pt == NULL) {
 		delete_dpp_reconfig_context(ap_index, instance);
         printf("%s:%d Could not get access public key\n", __func__, __LINE__);
