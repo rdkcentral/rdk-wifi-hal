@@ -5030,3 +5030,49 @@ INT wifi_hal_get_RegDomain(wifi_radio_index_t radioIndex, UINT *reg_domain)
     }
     return RETURN_ERR;
 }
+
+#ifdef MXL_WIFI
+#define MXL_GET_RADIO_TRY(radio_, radio_idx_) \
+    radio_ = get_radio_by_rdk_index(radio_idx_); \
+    if (NULL == radio_) { \
+        wifi_hal_error_print("%s:%d: WiFi radio not found for index:%d\n", __func__, __LINE__, radio_idx_); \
+        return WIFI_HAL_ERROR; \
+    }
+
+#define MXL_GET_AP_TRY(ap_, ap_idx_) \
+    ap_ = get_interface_by_vap_index(ap_idx_); \
+    if (NULL == ap_) { \
+        wifi_hal_error_print("%s:%d: WiFi AP not found for index:%d\n", __func__, __LINE__, ap_idx_); \
+        return WIFI_HAL_ERROR; \
+    }
+
+#define MXL_GET_PRIMARY_INTERFACE_TRY(interface_, radio_) \
+    interface_ = get_primary_interface(radio_); \
+    if (NULL == interface_) { \
+        wifi_hal_error_print("%s:%d: WiFi interface not found\n", __func__, __LINE__); \
+        return WIFI_HAL_ERROR; \
+    }
+
+#define MXL_INTERFACE_IS_CONFIGURED(interface_) \
+    if (!interface_ || !interface_->vap_configured) { \
+        wifi_hal_error_print("%s:%d: WiFi interface is not configured\n", __func__, __LINE__); \
+        return WIFI_HAL_ERROR; \
+    }
+
+INT wifi_getNASta(INT apIndex, wifi_na_sta_req_params *params, wifi_na_sta_info *sta_info)
+{
+#ifdef MXL_WIFI
+    AP_INDEX_ASSERT(apIndex);
+
+    if (!params || !sta_info) {
+        wifi_hal_error_print("%s:%d: Invalid parameters\n", __func__, __LINE__);
+        return WIFI_HAL_ERROR;
+    }
+
+    return platform_get_nasta(apIndex, params, sta_info);
+#else
+    return WIFI_HAL_ERROR;
+#endif /* MXL_WIFI */
+}
+
+#endif /* MXL_WIFI */

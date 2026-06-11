@@ -8666,6 +8666,28 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
     return RETURN_OK;
 }
 
+int bw_to_nl80211_chan_width(int bw, int cf2)
+{
+    switch (bw) {
+    case 20:
+        return NL80211_CHAN_WIDTH_20;
+    case 40:
+        return NL80211_CHAN_WIDTH_40;
+    case 80:
+        if (cf2)
+            return NL80211_CHAN_WIDTH_80P80;
+        else
+            return NL80211_CHAN_WIDTH_80;
+    case 160:
+        return NL80211_CHAN_WIDTH_160;
+    case 320:
+        return NL80211_CHAN_WIDTH_320;
+    default:
+        return -1;
+    }
+    return -1;
+}
+
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
 {
