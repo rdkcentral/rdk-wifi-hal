@@ -2272,6 +2272,9 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
 int update_hostap_interface_params(wifi_interface_info_t *interface)
 {
     int ret = RETURN_ERR;
+    if (unlikely(interface == NULL)) {
+        return ret;
+    }
 
 #ifdef CONFIG_GENERIC_MLO
     if (wifi_hal_is_mld_enabled(interface)) {
@@ -3315,8 +3318,9 @@ void deinit_bss(struct hostapd_data *hapd)
 int start_bss(wifi_interface_info_t *interface)
 {
     int ret;
-    struct hostapd_data     *hapd;
-    struct hostapd_bss_config *conf;
+    struct hostapd_data *hapd = NULL;
+    struct hostapd_data *link_bss = NULL;
+    struct hostapd_bss_config *conf = NULL;
     //struct hostapd_iface *iface;
     //struct hostapd_config *iconf;
     wifi_vap_info_t *vap = &interface->vap_info;
@@ -3351,6 +3355,18 @@ int start_bss(wifi_interface_info_t *interface)
 #endif
 #endif
 #endif /* CONFIG_GENERIC_MLO */
+#ifdef CONFIG_GENERIC_MLO
+    // For making the beacon broadcast in BPi-R4
+    if (wifi_hal_is_mld_enabled(interface)) {
+        for_each_mld_link(link_bss, hapd) {
+            if (ieee802_11_set_beacon(link_bss) != 0) {
+                wifi_hal_error_print("%s:%d: Failed to set beacon for interface: %s link id: %d\n",
+                    __func__, __LINE__, wifi_hal_get_interface_name(interface),
+                    link_bss->mld_link_id);
+            }
+        }
+    }
+#endif
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     return ret;
