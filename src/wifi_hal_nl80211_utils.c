@@ -2148,6 +2148,12 @@ int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *inte
             strcpy(vap->vap_name, map->vap_name);
             vap->vap_mode = is_wifi_hal_vap_mesh_sta(vap->vap_index) ? wifi_vap_mode_sta :
                                                                        wifi_vap_mode_ap;
+            if (vap->vap_mode == wifi_vap_mode_sta) {
+                wifi_hal_info_print("%s:%d: DIAG mesh_sta matched: ifname=%s vap_index=%d"
+                    " vap_name=%s phy_index=%u\n",
+                    __func__, __LINE__, interface->name, vap->vap_index, vap->vap_name,
+                    phy_index);
+            }
             return 0;
         }
     }
@@ -5327,7 +5333,7 @@ static inline int json_parse_interface_map(cJSON *json)
     unsigned int interface_idx_map_size;
     unsigned int r_idx;
     unsigned int i_idx;
-    cJSON_bool valid;
+    cJSON_bool valid = false;
 
     phy_list = cJSON_GetObjectItem(json, "PhyList");
     if (!cJSON_IsArray(phy_list)) {
@@ -5769,7 +5775,13 @@ bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface)
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         return interface->vap_info.u.bss_info.mld_info.common_info.mld_enable;
+    } else { //wifi_vap_mode_sta or _monitor mode
+        //wifi_hal_error_print("%s:%d: vap_mode : %s \n", __func__, __LINE__, (interface->vap_info.vap_mode == wifi_vap_mode_sta) ? "sta" : "monitor");
+        // return interface->vap_info.u.sta_info.mld_info.common_info.mld_enable
+        //wifi_hal_error_print("%s: For now returning true, vap_index %d,name:%s \n", __func__, interface->vap_info.vap_index, interface->vap_info.vap_name);
+        return true;
     }
+        wifi_hal_error_print("%s:%d: 0->\n", __func__, __LINE__);
 
     return false;
 }
@@ -5830,6 +5842,7 @@ wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *i
 {
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface_iter;
+      //  wifi_hal_info_print("%s:%d: enter \n", __func__, __LINE__);
 
     if (!wifi_hal_is_mld_enabled(interface)) {
         return interface;
@@ -5886,6 +5899,11 @@ int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t
         memcpy(interface->vap_info.u.bss_info.mld_info.common_info.mld_addr, mac,
             sizeof(mac_address_t));
         return 0;
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        memcpy(interface->wpa_s.own_addr, mac, ETH_ALEN);
+        return 0;
+#endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
     }
 
     return -1;
@@ -5902,6 +5920,7 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info
     }
 
     if (!wifi_hal_is_mld_enabled(interface)) {
+        wifi_hal_dbg_print("%s:%d: mld NOT enabled for  %s\n", __func__, __LINE__, interface->name);
         return interface;
     }
 
@@ -5924,6 +5943,7 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info
             }
 
             if (wifi_hal_get_mld_link_id(interface_iter) == link_id) {
+                wifi_hal_dbg_print("%s:%d:  %s = linkid %d, returning\n", __func__, __LINE__, interface_iter->name, link_id);
                 return interface_iter;
             }
         }
