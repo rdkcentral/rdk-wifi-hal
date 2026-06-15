@@ -16939,11 +16939,13 @@ static int register_data_frame_socket(wifi_interface_info_t *interface)
     }
 #endif // CONFIG_GENERIC_MLO
 
+#ifndef WIFI_CONFIG_EMULATOR
     if (interface->data_frames_registered == 1) {
         wifi_hal_dbg_print("%s:%d: data frame socket already registered for %s\n", __func__,
             __LINE__, wifi_hal_get_interface_name(interface));
         return 0;
     }
+#endif
 
     vap = &interface->vap_info;
 
