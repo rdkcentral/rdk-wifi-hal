@@ -2802,6 +2802,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                     sel = (WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w) & data.key_mgmt;
                 } else if (sec->mode == wifi_security_mode_wpa3_enterprise) {
                     sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_enhanced_open) {
+                    sel = (WPA_KEY_MGMT_OWE | wpa_key_mgmt_11w) & data.key_mgmt;
                 } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
                     sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE) & data.key_mgmt;
                 } else {
@@ -2856,9 +2858,9 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                 sel = (WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w);
             } else if (get_vap_security_mode(vap,sec) == wifi_security_mode_wpa3_enterprise) {
                 sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w);
-            } else if (get_vap_security_mode(vap,sec) == wifi_security_mode_enhanced_open) {
+            } else if (sec->mode == wifi_security_mode_enhanced_open) {
                 sel = (WPA_KEY_MGMT_OWE | wpa_key_mgmt_11w);
-            } else if (get_vap_security_mode(vap,sec) == wifi_security_mode_wpa3_compatibility) {
+            } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
                 sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE);
             } else {
                 wifi_hal_error_print("Unsupported security mode : 0x%x\n", get_vap_security_mode(vap, sec));
