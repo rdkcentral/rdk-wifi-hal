@@ -2167,7 +2167,9 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
     case WLAN_FC_STYPE_PROBE_REQ:
         mgmt_type = WIFI_MGMT_FRAME_TYPE_PROBE_REQ;
-        wifi_hal_dbg_print("%s:%d: Received probe req frame on interface:%s from the sta : %s and the phy_rate:%d\n", __func__, __LINE__,interface->name,to_mac_str(sta, sta_mac_str),phy_rate);
+        wifi_hal_dbg_print("%s:%d: Received probe req frame on interface:%s from the sta : %s and "
+                           "the phy_rate:%d\n",
+            __func__, __LINE__, interface->name, to_mac_str(sta, sta_mac_str), phy_rate);
 
         if (callbacks->steering_event_callback != 0) {
             handle_probe_req_event_for_bm(interface, mgmt, len, sta, sig_dbm);
@@ -2518,7 +2520,9 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                     c_buff += len;
 
                     if (write(fd_c, frame_buff, total_len) > 0) {
-                        wifi_hal_dbg_print("%s:%d: write succesful bytes written : %d for msg_ops_type : %d\n", __func__, __LINE__, total_len, msg_ops_type);
+                        wifi_hal_dbg_print(
+                            "%s:%d: write succesful bytes written : %d for msg_ops_type : %d\n",
+                            __func__, __LINE__, total_len, msg_ops_type);
                     }
                     free(frame_buff);
                 }
