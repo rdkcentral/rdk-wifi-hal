@@ -8706,8 +8706,10 @@ int bw_to_nl80211_chan_width(int bw, int cf2)
             return NL80211_CHAN_WIDTH_80;
     case 160:
         return NL80211_CHAN_WIDTH_160;
+#ifdef CONFIG_IEEE80211BE
     case 320:
         return NL80211_CHAN_WIDTH_320;
+#endif /* CONFIG_IEEE80211BE */
     default:
         return -1;
     }
