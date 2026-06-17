@@ -309,12 +309,12 @@ int platform_get_nasta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi
                                 (u8 *)&req, sizeof(req), NESTED_ATTR_NOT_USED, rsp);
     if (ret) {
         wifi_hal_error_print("%s:%d: nl80211: sending/receiving GET_UNCONNECTED_STA "
-            "failed: %i (%s)", __func__, __LINE__, ret, strerror(-ret));
+            "failed: %i (%s)\n", __func__, __LINE__, ret, strerror(-ret));
         goto err;
     }
 
     if (rsp->used != sizeof(nasta_info)) {
-        wifi_hal_error_print("%s:%d: nl80211: driver returned %zu bytes instead of %zu",
+        wifi_hal_error_print("%s:%d: nl80211: driver returned %zu bytes instead of %zu\n",
             __func__, __LINE__, rsp->used, sizeof(nasta_info));
         goto err;
     }
@@ -1438,7 +1438,7 @@ int platform_get_vap_measurements(void *priv, struct intel_vendor_vap_info *vap_
 
     if (ret) {
         wifi_hal_error_print("%s: nl80211: sending/receiving GET_VAP_MEASUREMENTS "
-            "failed: %i (%s)", __func__, ret, strerror(-ret));
+            "failed: %i (%s)\n", __func__, ret, strerror(-ret));
         goto out;
     }
 
@@ -1476,7 +1476,7 @@ int platform_get_radio_info(void *priv, struct intel_vendor_radio_info *radio_in
 
     if (ret) {
         wifi_hal_error_print("%s: nl80211: sending/receiving GET_RADIO_INFO "
-            "failed: %i (%s)", __func__, ret, strerror(-ret));
+            "failed: %i (%s)\n", __func__, ret, strerror(-ret));
         goto out;
     }
 
@@ -1514,7 +1514,7 @@ int platform_get_sta_measurements(void *priv, const u8 *sta_addr, struct intel_v
 
     if (ret) {
         wifi_hal_error_print("%s: nl80211: sending/receiving GET_STA_MEASUREMENTS "
-            "failed: %i (%s)", __func__, ret, strerror(-ret));
+            "failed: %i (%s)\n", __func__, ret, strerror(-ret));
         goto out;
     }
 
