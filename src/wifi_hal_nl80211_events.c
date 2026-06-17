@@ -133,6 +133,7 @@ cleanup:
 
 static void nl80211_new_station_event(wifi_interface_info_t *interface, struct nlattr **tb)
 {
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
     union wpa_event_data event;
     unsigned char *ies = NULL;
     size_t ies_len = 0;
@@ -186,6 +187,7 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
     //Remove the station from the bridge, if present
     wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
+#endif
 }
 #endif
 
@@ -745,7 +747,12 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     if (callbacks->sta_conn_status_callback) {
         memcpy(bss.bssid, interface->u.sta.backhaul.bssid, sizeof(bssid_t));
 
+#ifdef CONFIG_WIFI_EMULATOR_EXT_AGENT
+        sta.vap_index = interface->index;
+#else
         sta.vap_index = vap->vap_index;
+#endif
+
         sta.connect_status = wifi_connection_status_disconnected;
 
         callbacks->sta_conn_status_callback(vap->vap_index, &bss, &sta);
