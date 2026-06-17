@@ -285,12 +285,13 @@ int platform_get_nasta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi
     }
 
     /* compose request */
-    req.bandwidth = bw_to_nl80211_chan_width(bw, 0);
-    if (req.bandwidth == -1) {
+    ret = bw_to_nl80211_chan_width(bw, 0);
+    if (ret == -1) {
         wifi_hal_error_print("%s:%d: invalid bandwidth %d for opclass %u\n",
             __func__, __LINE__, bw, params->op_class);
         return WIFI_HAL_ERROR;
     }
+    req.bandwidth =  ret;
 
     req.freq = freq;
     req.center_freq1 = c_freq;
