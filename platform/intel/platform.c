@@ -77,6 +77,7 @@ int platform_pre_init()
     return 0;
 }
 
+#ifdef MXL_WIFI
 /**
  * opclass_channel_to_center_freq - Compute center frequency from operating class,
  *                                  primary channel and bandwidth.
@@ -166,7 +167,7 @@ static int opclass_channel_to_center_freq(UINT op_class, UINT channel, int bw)
     }
 }
 
-int platform_get_nasta(INT apIndex, wifi_na_sta_req_params *params, wifi_na_sta_info *sta_info)
+int platform_get_nasta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi_na_sta_info_t *sta_info)
 {
     struct intel_vendor_unconnected_sta_req_cfg req = { 0 };
     struct intel_vendor_unconnected_sta nasta_info = { 0 };
@@ -232,10 +233,10 @@ int platform_get_nasta(INT apIndex, wifi_na_sta_req_params *params, wifi_na_sta_
         return WIFI_HAL_ERROR;
     }
 
-    sta = ap_get_sta(bss->bss[0], params->sta_addr);
+    sta = ap_get_sta(bss->bss[0], params->sta_mac);
     if (sta) {
         wifi_hal_error_print("%s:%d: STA " MACSTR " is connected to current AP index %d\n",
-            __func__, __LINE__, MAC2STR(params->sta_addr), apIndex);
+            __func__, __LINE__, MAC2STR(params->sta_mac), apIndex);
         return WIFI_HAL_ERROR;
     }
 
@@ -291,7 +292,7 @@ int platform_get_nasta(INT apIndex, wifi_na_sta_req_params *params, wifi_na_sta_
     req.center_freq2 = 0;
 
     req.req_type = NASTA_STATS_REQ_SYNC;
-    memcpy(&req.addr, params->sta_addr, ETH_ALEN);
+    memcpy(&req.addr, params->sta_mac, ETH_ALEN);
 
     wifi_hal_dbg_print("%s:%d: NaSta vendor req: freq=%d center_freq1=%d center_freq2=%d "
         "bw=%d req_type=%d addr=" MACSTR "\n",
@@ -336,7 +337,7 @@ int platform_get_nasta(INT apIndex, wifi_na_sta_req_params *params, wifi_na_sta_
     wifi_hal_dbg_print("%s:%d: NaSta RCPI=%d (best RSSI=%d)\n",
         __func__, __LINE__, rcpi, (int)nasta_info.rssi[0]);
 
-    memcpy(sta_info->sta_mac, params->sta_addr, ETH_ALEN);
+    memcpy(sta_info->sta_mac, params->sta_mac, ETH_ALEN);
     sta_info->channel = params->channel;
     sta_info->op_class = params->op_class;
     sta_info->rcpi = (UINT)rcpi;
@@ -348,6 +349,7 @@ err:
     wpabuf_free(rsp);
     return WIFI_HAL_ERROR;
 }
+#endif /* MXL_WIFI */
 
 #if HAL_IPC
 int platform_post_init(wifi_hal_post_init_t *post_init_struct)

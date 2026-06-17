@@ -5063,8 +5063,9 @@ INT wifi_hal_get_RegDomain(wifi_radio_index_t radioIndex, UINT *reg_domain)
         wifi_hal_error_print("%s:%d: WiFi interface is not configured\n", __func__, __LINE__); \
         return WIFI_HAL_ERROR; \
     }
+#endif /* MXL_WIFI */
 
-INT wifi_getNASta(INT apIndex, wifi_na_sta_req_params *params, wifi_na_sta_info *sta_info)
+INT wifi_getNASta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi_na_sta_info_t *sta_info)
 {
 #ifdef MXL_WIFI
     AP_INDEX_ASSERT(apIndex);
@@ -5076,8 +5077,9 @@ INT wifi_getNASta(INT apIndex, wifi_na_sta_req_params *params, wifi_na_sta_info 
 
     return platform_get_nasta(apIndex, params, sta_info);
 #else
+    (void)apIndex;
+    (void)params;
+    (void)sta_info;
     return WIFI_HAL_ERROR;
 #endif /* MXL_WIFI */
 }
-
-#endif /* MXL_WIFI */

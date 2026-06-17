@@ -2521,7 +2521,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
                     if (write(fd_c, frame_buff, total_len) > 0) {
                         wifi_hal_dbg_print(
-                            "%s:%d: write succesful bytes written : %d for msg_ops_type : %d\n",
+                            "%s:%d: write successful bytes written : %d for msg_ops_type : %d\n",
                             __func__, __LINE__, total_len, msg_ops_type);
                     }
                     free(frame_buff);
@@ -8711,7 +8711,6 @@ int bw_to_nl80211_chan_width(int bw, int cf2)
     default:
         return -1;
     }
-    return -1;
 }
 
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
@@ -14111,7 +14110,7 @@ int wifi_drv_hapd_send_eapol(
             memcpy(t_buff, data, len);
 
             if (write(fd_c, c_buff, 2048) > 0) {
-            //    wifi_hal_dbg_print("%s:%d: write succesful bytes written : %d for EAPOL data\n", __func__, __LINE__, len);
+            //    wifi_hal_dbg_print("%s:%d: write successful bytes written : %d for EAPOL data\n", __func__, __LINE__, len);
             }
             close(fd_c);
             fd_c = -1;

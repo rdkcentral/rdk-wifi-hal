@@ -1473,9 +1473,13 @@ int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifn
 int bw_to_nl80211_chan_width(int bw, int cf2);
 
 #ifdef MXL_WIFI
-#define MXL_CLAMP(x_, min_, max_) ((x_) < (min_) ? (min_) : ((x_) > (max_) ? (max_) : (x_)))
+static inline int mxl_clamp(int val, int min_val, int max_val)
+{
+    return (val < min_val) ? min_val : ((val > max_val) ? max_val : val);
+}
+#define MXL_CLAMP(x_, min_, max_) mxl_clamp((x_), (min_), (max_))
 
-int platform_get_nasta(INT apIndex, wifi_na_sta_req_params *params, wifi_na_sta_info *sta_info);
+int platform_get_nasta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi_na_sta_info_t *sta_info);
 #endif /* MXL_WIFI */
 
 #endif // WIFI_HAL_PRIV_H
