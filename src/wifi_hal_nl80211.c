@@ -163,6 +163,20 @@ struct sock_fprog bpf = { 6, bpf_filter };
 
 #if defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
 typedef enum {
+    wlan_emu_frm80211_ops_type_prb_resp,
+    wlan_emu_frm80211_ops_type_prb_req,
+    wlan_emu_frm80211_ops_type_assoc_resp,
+    wlan_emu_frm80211_ops_type_assoc_req,
+    wlan_emu_frm80211_ops_type_auth,
+    wlan_emu_frm80211_ops_type_deauth,
+    wlan_emu_frm80211_ops_type_disassoc,
+    wlan_emu_frm80211_ops_type_eapol,
+    wlan_emu_frm80211_ops_type_reassoc_req,
+    wlan_emu_frm80211_ops_type_reassoc_resp, //Not implemented in hal
+    wlan_emu_frm80211_ops_type_action
+} wlan_emu_frm80211_ops_type_t;
+
+typedef enum {
     wlan_emu_msg_type_none,
     wlan_emu_msg_type_emu80211,
     wlan_emu_msg_type_cfg80211,
@@ -1224,6 +1238,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #endif
         remove_station_from_other_interfaces(interface, sta);
 #ifdef WIFI_EMULATOR_CHANGE
+        msg_ops_type = wlan_emu_frm80211_ops_type_auth;
         send_mgmt_to_char_dev = true;
 #endif
         break;
@@ -1259,6 +1274,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
         remove_station_from_other_interfaces(interface, sta);
 #ifdef WIFI_EMULATOR_CHANGE
+        msg_ops_type = wlan_emu_frm80211_ops_type_assoc_req;
         send_mgmt_to_char_dev = true;
 #endif
         break;
@@ -1280,6 +1296,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
         remove_station_from_other_interfaces(interface, sta);
 #ifdef WIFI_EMULATOR_CHANGE
+        msg_ops_type = wlan_emu_frm80211_ops_type_reassoc_req;
         send_mgmt_to_char_dev = true;
 #endif
         break;
@@ -1291,7 +1308,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
     case WLAN_FC_STYPE_PROBE_REQ:
         mgmt_type = WIFI_MGMT_FRAME_TYPE_PROBE_REQ;
-        //wifi_hal_dbg_print("%s:%d: Received probe req frame on interface:%s from the sta : %s and the phy_rate:%d\n", __func__, __LINE__,interface->name,to_mac_str(sta, sta_mac_str),phy_rate);
+        wifi_hal_dbg_print("%s:%d: Received probe req frame on interface:%s from the sta : %s and the phy_rate:%d\n", __func__, __LINE__,interface->name,to_mac_str(sta, sta_mac_str),phy_rate);
         //wifi_hal_dbg_print("%s:%d: Value of mgmt->da is %s, vap_index %d\n", __func__, __LINE__, to_mac_str(mgmt->da, sta_mac_str), vap->vap_index);
         if (callbacks->steering_event_callback != 0 && (vap->vap_index==0 || vap->vap_index==1 || vap->vap_index==2 || vap->vap_index==3)) {
             fill_steering_event_general(&steering_evt, WIFI_STEERING_EVENT_PROBE_REQ, vap);
@@ -1313,11 +1330,13 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #ifdef NL80211_ACL
         // If mac filter acl is enabled then we need to drop mgmt frame based on acl config
         if (is_core_acl_drop_mgmt_frame(interface, sta)) {
+            wifi_hal_dbg_print("%s:%d: Dropping probe request based on acl config\n", __func__, __LINE__);
             return -1;
         }
 #endif
 
 #ifdef WIFI_EMULATOR_CHANGE
+        msg_ops_type = wlan_emu_frm80211_ops_type_prb_req;
         send_mgmt_to_char_dev = true;
 #endif
         break;
@@ -1350,6 +1369,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             break;
         }
 #ifdef WIFI_EMULATOR_CHANGE
+        //msg_ops_type = wlan_emu_frm80211_ops_type_action;
         send_mgmt_to_char_dev = true;
 #endif
         break;
@@ -1416,6 +1436,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             callbacks->steering_event_callback(0, &steering_evt);
         }
 #ifdef WIFI_EMULATOR_CHANGE
+        msg_ops_type = wlan_emu_frm80211_ops_type_disassoc;
         send_mgmt_to_char_dev = true;
 #endif
         break;
@@ -1499,6 +1520,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             callbacks->steering_event_callback(0, &steering_evt);
         }
 #ifdef WIFI_EMULATOR_CHANGE
+        msg_ops_type = wlan_emu_frm80211_ops_type_deauth;
         send_mgmt_to_char_dev = true;
 #endif
         break;
@@ -1669,7 +1691,9 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                     c_buff += len;
 
                     if (write(fd_c, frame_buff, total_len) > 0) {
-                        //wifi_hal_dbg_print("%s:%d: write succesful bytes written : %d for msg_ops_type : %d\n", __func__, __LINE__, total_len, msg_ops_type);
+                        wifi_hal_dbg_print(
+                            "%s:%d: write succesful bytes written : %d for msg_ops_type : %d\n",
+                            __func__, __LINE__, total_len, msg_ops_type);
                     }
                     free(frame_buff);
                 }
