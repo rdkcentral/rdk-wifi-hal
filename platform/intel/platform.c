@@ -125,7 +125,12 @@ static int opclass_channel_to_center_freq(UINT op_class, UINT channel, int bw)
             /* Pairs: (1,5), (9,13), (17,21), ...
              * Lower primary ch % 8 == 1: secondary above
              * Upper primary ch % 8 == 5: secondary below */
-            return (channel % 8 == 1) ? freq + 10 : freq - 10;
+            if (channel % 8 == 1)
+                return freq + 10;
+            else if (channel % 8 == 5)
+                return freq - 10;
+            else
+                return -1;
         default:
             return -1;
         }
@@ -140,7 +145,7 @@ static int opclass_channel_to_center_freq(UINT op_class, UINT channel, int bw)
             n = ARRAY_SZ(centers_80_5g);
         }
         for (i = 0; i < n; i++) {
-            if (channel <= centers[i] + 6)
+            if (channel >= centers[i] - 6 && channel <= centers[i] + 6)
                 return is_6g ? (int)(5950 + centers[i] * 5)
                              : (int)(5000 + centers[i] * 5);
         }
@@ -156,7 +161,7 @@ static int opclass_channel_to_center_freq(UINT op_class, UINT channel, int bw)
             n = ARRAY_SZ(centers_160_5g);
         }
         for (i = 0; i < n; i++) {
-            if (channel <= centers[i] + 14)
+            if (channel >= centers[i] - 14 && channel <= centers[i] + 14)
                 return is_6g ? (int)(5950 + centers[i] * 5)
                              : (int)(5000 + centers[i] * 5);
         }
