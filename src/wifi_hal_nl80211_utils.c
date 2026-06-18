@@ -3040,52 +3040,6 @@ static int find_country_code_match(const char *const cc[], const char *const cou
     return RETURN_ERR;
 }
 #ifdef RDKB_ONE_WIFI_PROD
-
-static bool parse_wiphy_band_mapping(FILE *fp, int *pcie_index) {
-    char line[LINE_MAX];
-    int curr_phy_idx;
-    bool in_wiphy = false;
-
-    while (fgets(line, sizeof(line), fp)) {
-        // Detect start of Wiphy
-        char *wiphy_ptr = strstr(line, "Wiphy ");
-        if (wiphy_ptr == line) {
-            // Example: "Wiphy phy2"
-            if (sscanf(line, "Wiphy phy%d", &curr_phy_idx) == 1) {
-                in_wiphy = true;
-            }
-            continue;
-        }
-        // If in a Wiphy stanza, look for "Band N:"
-        if (in_wiphy) {
-            // Skip leading spaces
-            char *trimmed = line;
-            while (*trimmed == ' ' || *trimmed == '\t') ++trimmed;
-
-            // Look for "Band N:"
-            if (strncmp(trimmed, "Band ", 5) == 0) {
-                int band_num;
-                if (sscanf(trimmed, "Band %d:", &band_num) == 1) {
-                    --band_num; /* The iw tool prints nl_band->nla_type + 1 */
-                    if (curr_phy_idx < MAX_NUM_RADIOS &&
-                        ((band_num < NUM_NL80211_BANDS) && (band_num >= 0)))
-                        pcie_index[curr_phy_idx] = ((band_num == NL80211_BAND_6GHZ) ? 2 : band_num);
-                    else {
-                        wifi_hal_error_print("%s:%d: Recieved phy_index:%d Num Radios:%d \
-                            band_num:%d NUM_NL80211_BANDS:%d\n", __func__, __LINE__, \
-                            curr_phy_idx, MAX_NUM_RADIOS, band_num, NUM_NL80211_BANDS);
-                        return false;
-                    }
-                } else {
-                    wifi_hal_error_print("%s:%d: Unable to read the band num %s\n", __func__, __LINE__, trimmed);
-                    return false;
-                }
-                in_wiphy = false;
-            }
-        }
-    }
-    return true;
-}
 static void remap_phy_index(wifi_interface_name_idex_map_t *map, int map_size, const int *pcie_index, int pcie_size)
 {
     for (int i = 0; i < map_size; ++i) {
@@ -3113,14 +3067,79 @@ static void remap_phy_index(wifi_interface_name_idex_map_t *map, int map_size, c
 }
 
 void remap_wifi_interface_name_index_map() {
-    FILE *fp;
-    int pcie_index[MAX_NUM_RADIOS] = {-1, -1, -1};
+    /*
+     * Determine which kernel phy number is assigned to each wlN base interface
+     * by reading /sys/class/net/wlN/phy80211/name.  This sysfs entry is created
+     * the moment the interface is registered with cfg80211 — well before full
+     * band-capability information is published — and is far more reliable than
+     * spawning a subprocess to run "iw list".
+     *
+     * pcie_index[N] will hold the kernel phy number for wlN (e.g. pcie_index[0]=2
+     * means wl0 is registered as phy2).  remap_phy_index() then sets every
+     * interface_index_map entry whose name starts with "wlN" to use that phy
+     * number, correcting the static map's phy_index values.
+     */
+    int pcie_index[MAX_NUM_RADIOS];
+    int retries = 30;
 
-    fp = popen("iw list", "r");
-    if (parse_wiphy_band_mapping(fp, pcie_index)) {
-        remap_phy_index(interface_index_map, interface_index_map_size, pcie_index, MAX_NUM_RADIOS);
-    }
-    pclose(fp);
+    memset(pcie_index, -1, sizeof(pcie_index));
+
+    do {
+        int i;
+        bool all_found = true;
+
+        for (i = 0; i < MAX_NUM_RADIOS; i++) {
+            char sysfs_path[64];
+            char phy_name[32];
+            int kern_phy;
+            FILE *f;
+
+            if (pcie_index[i] != -1)
+                continue; /* already resolved */
+
+            snprintf(sysfs_path, sizeof(sysfs_path),
+                     "/sys/class/net/wl%d/phy80211/name", i);
+            f = fopen(sysfs_path, "r");
+            if (!f) {
+                all_found = false;
+                continue;
+            }
+
+            phy_name[0] = '\0';
+            if (fgets(phy_name, sizeof(phy_name), f) &&
+                sscanf(phy_name, "phy%d", &kern_phy) == 1) {
+                pcie_index[i] = kern_phy;
+                wifi_hal_dbg_print("%s:%d: wl%d -> phy%d (from sysfs)\n",
+                                   __func__, __LINE__, i, kern_phy);
+            } else {
+                wifi_hal_error_print("%s:%d: could not parse phy name from %s\n",
+                                     __func__, __LINE__, sysfs_path);
+                all_found = false;
+            }
+            fclose(f);
+        }
+
+        if (all_found) {
+            remap_phy_index(interface_index_map, interface_index_map_size,
+                            pcie_index, MAX_NUM_RADIOS);
+            wifi_hal_dbg_print("%s:%d: phy remap complete\n", __func__, __LINE__);
+            return;
+        }
+
+        /* Log which base interfaces are still missing */
+        for (i = 0; i < MAX_NUM_RADIOS; i++) {
+            if (pcie_index[i] == -1) {
+                wifi_hal_error_print(
+                    "%s:%d: wl%d not yet visible in sysfs, retrying (%d left)\n",
+                    __func__, __LINE__, i, retries - 1);
+            }
+        }
+        sleep(1);
+    } while (--retries > 0);
+
+    wifi_hal_error_print(
+        "%s:%d: wl base interfaces did not appear in sysfs after retries; skipping phy_index remap\n",
+        __func__, __LINE__);
 }
 
 #endif /* RDKB_ONE_WIFI_PROD */
