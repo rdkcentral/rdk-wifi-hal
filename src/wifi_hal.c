@@ -4862,3 +4862,13 @@ INT wifi_getNASta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi_na_s
     return WIFI_HAL_ERROR;
 #endif /* MXL_WIFI */
 }
+
+INT wifi_setApIgnoreBTMDisassocTimer(INT ap_index, BOOL ignoreBTMDisassocTimer)
+{
+    (void)ap_index;
+    (void)ignoreBTMDisassocTimer;
+
+    wifi_hal_dbg_print("%s:%d: not supported (stub)\n", __func__, __LINE__);
+
+    return RETURN_ERR;
+}
