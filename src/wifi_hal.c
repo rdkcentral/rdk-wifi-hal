@@ -5030,3 +5030,13 @@ INT wifi_hal_get_RegDomain(wifi_radio_index_t radioIndex, UINT *reg_domain)
     }
     return RETURN_ERR;
 }
+
+int wifi_hal_setIgnoreDisassocTimer(INT ap_index, BOOL enable)
+{
+    (void)ap_index;
+    (void)enable;
+
+    wifi_hal_error_print("%s:%d: not supported\n", __func__, __LINE__);
+
+    return RETURN_ERR;
+}
