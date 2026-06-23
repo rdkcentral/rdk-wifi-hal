@@ -5622,6 +5622,14 @@ static void wiphy_info_extended_capab(wifi_driver_data_t *drv,
 
         wifi_hal_dbg_print("%s:%d: nl80211: EML Capability: 0x%x MLD Capability: 0x%x\n", __func__,
             __LINE__, capa->eml_capa, capa->mld_capa_and_ops);
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+	if (tb1[NL80211_ATTR_EML_CAPABILITY] &&
+                    tb1[NL80211_ATTR_EXT_MLD_CAPA_AND_OPS])
+                        capa->ext_mld_capa_and_ops =
+                                nla_get_u16(tb1[NL80211_ATTR_EXT_MLD_CAPA_AND_OPS]);
+        wifi_hal_dbg_print("%s:%d: nl80211: Extended MLD Capabilities and Operations: 0x%x", __func__,
+            __LINE__, capa->ext_mld_capa_and_ops);
+#endif // BANANA_PI_PORT && KERNEL_6_12
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
 
@@ -12179,6 +12187,11 @@ static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
     wifi_driver_data_t *drv;
     enum nl80211_iftype nlmode;
     unsigned int i;
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+    if (!ext_mld_capa_and_ops) {
+        return -1;
+    }
+#endif // BANANA_PI_PORT && KERNEL_6_12
 
     if (!eml_capa || !mld_capa_and_ops) {
         return -1;

@@ -1470,7 +1470,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 {
     struct hostapd_iface   *iface;
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
-    struct hostapd_data *hdata = calloc(1, sizeof(*hdata));
+    struct hostapd_data *hdata = interface ? &interface->u.ap.hapd : NULL;
 #endif // BANANA_PI_PORT && KERNEL_6_12
     wifi_vap_info_t *vap;
     wifi_radio_info_t *radio;
@@ -1501,6 +1501,12 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     struct eht_capabilities *drv_eht_cap;
 #endif // HOSTAPD_VERSION >= 211
 #endif // CONFIG_IEEE80211BE
+
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+    if (hdata == NULL) {
+        return RETURN_ERR;
+    }
+#endif // BANANA_PI_PORT && KERNEL_6_12
 
     if (interface == NULL) {
         return RETURN_ERR;
@@ -1597,13 +1603,6 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         }
         hdata->current_cac_rates = os_calloc(mode->num_rates, sizeof(struct hostapd_rate_data));
         if (!hdata->current_cac_rates) {
-#else
-        if(iface->current_cac_rates) {
-            os_free(iface->current_cac_rates);
-        }
-        iface->current_cac_rates = os_calloc(mode->num_rates, sizeof(struct hostapd_rate_data));
-        if (!iface->current_cac_rates) {
-#endif // BANANA_PI_PORT && KERNEL_6_12
             wifi_hal_info_print("%s:%d Failed to allocate memory\n",__func__,__LINE__);
             if(preassoc_supp_rates) {
                 os_free(preassoc_supp_rates);
@@ -1615,6 +1614,24 @@ int update_hostap_iface(wifi_interface_info_t *interface)
             }
             return RETURN_ERR;
         }
+#else
+        if(iface->current_cac_rates) {
+            os_free(iface->current_cac_rates);
+        }
+        iface->current_cac_rates = os_calloc(mode->num_rates, sizeof(struct hostapd_rate_data));
+        if (!iface->current_cac_rates) {
+            wifi_hal_info_print("%s:%d Failed to allocate memory\n",__func__,__LINE__);
+            if(preassoc_supp_rates) {
+                os_free(preassoc_supp_rates);
+                preassoc_supp_rates = NULL;
+            }
+            if(preassoc_basic_rates) {
+                os_free(preassoc_basic_rates);
+                preassoc_basic_rates = NULL;
+            }
+            return RETURN_ERR;
+        }
+#endif // BANANA_PI_PORT && KERNEL_6_12
     }
     else {
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
