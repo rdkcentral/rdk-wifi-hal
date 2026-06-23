@@ -385,6 +385,15 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {0, 2,  "wl2.7",  "", "brlan114", 114,   22,     "mesh_backhaul_6g"},
     {0, 2,  "wl2",    "", "",         0,     23,     "mesh_sta_6g"},
 #endif /* SCXF10_PORT */
+
+#ifdef XER2_PORT // For XER2 Platform
+    {0, 0,  "wl0.1",  "", "brlan0",  100,    0,     "private_ssid_2g"},
+    {1, 1,  "wl1.1",  "", "brlan0",  100,    1,     "private_ssid_5g"},
+    {0, 0,  "wl0.7",  "", "brlan112", 112,   12,     "mesh_backhaul_2g"},
+    {1, 1,  "wl1.7",  "", "brlan113", 113,   13,     "mesh_backhaul_5g"},
+    {0, 0,  "wl0",    "", "",          0,   14,     "mesh_sta_2g"},
+    {1, 1,  "wl1",    "", "",          0,   15,     "mesh_sta_5g"},
+#endif
     // for Intel based platforms
 };
 #endif
@@ -434,7 +443,12 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 1, 1, "radio2", "wl1"},
     { 0, 2, "radio3", "wl2"},
 #endif
- 
+
+#if defined(XER2_PORT) 
+    { 0, 0, "radio1", "wl0"},
+    { 1, 1, "radio2", "wl1"},
+#endif
+
 #ifdef CMXB7_PORT // for Intel based platforms
     { 1, 0, "radio1", "wlan0"},
     { 0, 1, "radio2", "wlan2"},
@@ -805,7 +819,41 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
 #endif
- 
+
+#ifdef XER2_PORT // For XER2 Broadcom Platform
+    "xer2",
+    "dhd",
+    {"Xfinity Ethernet Router","Arcadyan","XER2","AYER21BEL","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    platform_pre_init,
+    platform_post_init,
+    platform_set_radio,
+    platform_set_radio_pre_init,
+    platform_pre_create_vap,
+    platform_create_vap,
+    platform_get_ssid_default,
+    platform_get_keypassphrase_default,
+    platform_get_radius_key_default,
+    platform_get_wps_pin_default,
+    platform_get_country_code_default,
+    platform_wps_event,
+    platform_flags_init,
+    platform_get_aid,
+    platform_free_aid,
+    platform_sync_done,
+    platform_update_radio_presence,
+    platform_set_txpower,
+    platform_set_offload_mode,
+    platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
+    platform_get_vendor_oui,
+    platform_set_neighbor_report,
+    platform_get_radio_phytemperature,
+    platform_set_dfs,
+    platform_get_radio_caps,
+    platform_get_reg_domain,
+#endif
+
 #ifdef CMXB7_PORT
     "cmxb7",
     "mtlk",
