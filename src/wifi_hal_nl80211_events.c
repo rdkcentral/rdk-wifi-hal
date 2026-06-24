@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include <unistd.h>
 #include <signal.h>
@@ -541,6 +542,15 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             }
             if ((attr = tb[NL80211_ATTR_REASON_CODE]) != NULL) {
                 reason = nla_get_u16(attr);
+            } else if (event.tx_status.stype == WLAN_FC_STYPE_DEAUTH &&
+                       event.tx_status.data_len >= offsetof(struct ieee80211_mgmt, u.deauth.reason_code) +
+                                                   sizeof(((struct ieee80211_mgmt *)0)->u.deauth.reason_code)) {
+                /* NL80211_ATTR_REASON_CODE is absent for TX status events (AP-originated
+                 * deauth). Read reason directly from the deauth frame body instead.
+                 * The stype guard is redundant (we are inside case WLAN_FC_STYPE_DEAUTH)
+                 * but makes the union-member selection explicit for static analysis.
+                 * WPA_GET_LE16 reads via u8* and is safe regardless of buffer alignment. */
+                reason = WPA_GET_LE16((const u8 *)&mgmt->u.deauth.reason_code);
             }
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             station = ap_get_sta(&interface->u.ap.hapd, sta);
