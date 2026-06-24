@@ -225,8 +225,8 @@ int platform_get_ssid_default(char *ssid, int vap_index)
             wifi_hal_dbg_print("%s:%d, read SSID:%s from jSON file\n", __func__, __LINE__, ssid);
             return 0;
         }
-	else
-	    return -1;
+	    else
+	        return -1;
     }
     char serial[BPI_LEN_8] = {0};
     FILE *fp = NULL;
