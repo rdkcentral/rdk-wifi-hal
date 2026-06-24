@@ -39,6 +39,9 @@
 #include "wifi_hal_priv.h"
 #include "crypto/sha1.h"
 #include "eap_peer/eap_methods.h"
+#ifdef UWM_EXT_WPS_SUPPORT
+#include "wps_supplicant.h"
+#endif
 
 #define MACF      "%02x:%02x:%02x:%02x:%02x:%02x"
 #define MAC_TO_MACF(addr)    addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]
@@ -1189,6 +1192,46 @@ int update_hostap_bss(wifi_interface_info_t *interface)
 
 #if defined(CONFIG_WPS)
     wifi_hal_wps_init(radio, vap, conf);
+
+    // Set multi_ap flag to FRONTHAUL_BSS and populate backhaul credentials if WPS is enabled
+    if (vap->u.bss_info.wps.enable &&
+        strlen((char *)vap->u.bss_info.multi_ap_backhaul_ssid) > 0) {
+        conf->multi_ap = FRONTHAUL_BSS;
+        wifi_hal_info_print("%s:%d: Set multi_ap to FRONTHAUL_BSS for interface:%s with backhaul SSID:%s\n",
+            __func__, __LINE__, interface->name, vap->u.bss_info.multi_ap_backhaul_ssid);
+
+        // Populate multi_ap_backhaul_ssid structure
+        memset(&conf->multi_ap_backhaul_ssid, 0, sizeof(conf->multi_ap_backhaul_ssid));
+        strncpy((char *)conf->multi_ap_backhaul_ssid.ssid,
+                (char *)vap->u.bss_info.multi_ap_backhaul_ssid,
+                sizeof(conf->multi_ap_backhaul_ssid.ssid) - 1);
+        conf->multi_ap_backhaul_ssid.ssid_len = strlen((char *)conf->multi_ap_backhaul_ssid.ssid);
+        conf->multi_ap_backhaul_ssid.ssid_set = (conf->multi_ap_backhaul_ssid.ssid_len > 0) ? 1 : 0;
+
+        // Set wpa_passphrase (hostapd will handle PSK conversion if needed)
+        if (strlen((char *)vap->u.bss_info.multi_ap_backhaul_network_key) > 0) {
+            size_t key_len = strlen((char *)vap->u.bss_info.multi_ap_backhaul_network_key);
+            // Free existing passphrase if any
+            if (conf->multi_ap_backhaul_ssid.wpa_passphrase) {
+                os_free(conf->multi_ap_backhaul_ssid.wpa_passphrase);
+                conf->multi_ap_backhaul_ssid.wpa_passphrase = NULL;
+            }
+            // Allocate and copy passphrase
+            conf->multi_ap_backhaul_ssid.wpa_passphrase = os_malloc(key_len + 1);
+            if (conf->multi_ap_backhaul_ssid.wpa_passphrase) {
+                strncpy(conf->multi_ap_backhaul_ssid.wpa_passphrase,
+                       (char *)vap->u.bss_info.multi_ap_backhaul_network_key,
+                       key_len);
+                conf->multi_ap_backhaul_ssid.wpa_passphrase[key_len] = '\0';
+                conf->multi_ap_backhaul_ssid.wpa_passphrase_set = 1;
+                wifi_hal_info_print("%s:%d: Populated multi_ap_backhaul_ssid with SSID:%s and passphrase (len:%zu)\n",
+                    __func__, __LINE__, conf->multi_ap_backhaul_ssid.ssid, key_len);
+            } else {
+                wifi_hal_error_print("%s:%d: Failed to allocate memory for multi_ap_backhaul_ssid passphrase\n",
+                    __func__, __LINE__);
+            }
+        }
+    }
 #endif
 
     //wme_enabled, uapsd_enabled
@@ -2624,6 +2667,9 @@ static int wpa_sm_sta_mlme_setprotection(void *ctx, const u8 *addr,
 static void wpa_sm_sta_cancel_auth_timeout(void *ctx)
 {
     wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
+    wifi_interface_info_t *interface;
+    interface = (wifi_interface_info_t *)ctx;
+    wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
 }
 
 static int wpa_sm_sta_key_mgmt_set_pmk(void *ctx, const u8 *pmk,
