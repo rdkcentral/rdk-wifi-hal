@@ -1056,6 +1056,11 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         radio->oper_param.operatingClass = operationParam->operatingClass;
         radio->oper_param.channelWidth = operationParam->channelWidth;
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
+        if (old_operationParam->transmitPower != operationParam->transmitPower) {
+            wifi_hal_info_print("%s:%d: OldTransmitPower:%d, NewTransmitPower:%d updating\n", __func__, __LINE__, old_operationParam->transmitPower, operationParam->transmitPower);
+            (void)wifi_hal_setRadioTransmitPower(index, operationParam->transmitPower);
+        }
+        radio->oper_param.transmitPower = operationParam->transmitPower;
 		radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
 		strncpy(radio->oper_param.radarDetected, operationParam->radarDetected,
 				sizeof(radio->oper_param.radarDetected)-1);
@@ -5022,6 +5027,23 @@ void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_
 
     callbacks->disassoc_cb[callbacks->num_disassoc_cbs] = func;
     callbacks->num_disassoc_cbs++;
+}
+
+
+
+
+void wifi_hal_eapol_timeouts_callback_register(wifi_eapol_timeouts_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+    
+    if (callbacks == NULL || callbacks->num_eapol_timeouts_cbs >= MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+    
+    callbacks->eapol_timeouts_cb[callbacks->num_eapol_timeouts_cbs] = func;
+    callbacks->num_eapol_timeouts_cbs++;
 }
 
 void wifi_hal_handshake_callback_register(wifi_handshake_callback func)

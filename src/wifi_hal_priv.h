@@ -566,6 +566,8 @@ typedef struct {
     bool radio_presence; //True for ECO mode Active radio, false for ECO mode power down sleeping radio
     bool radar_detected;
     bool configuration_in_progress;
+    unsigned int dfs_evacuation_channel;              /* 0 = default (ch.44/157 by band) */
+    wifi_channelBandwidth_t dfs_evacuation_channel_width; /* 0 = default 80 MHz */
 #ifndef FEATURE_SINGLE_PHY
     rnr_scan_t rnr;
     bool rnr_enabled;
@@ -897,6 +899,7 @@ void wifi_hal_newApAssociatedDevice_callback_register(wifi_newApAssociatedDevice
 void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_callback func);
 void wifi_hal_stamode_callback_register(wifi_stamode_callback func);
 void wifi_hal_handshake_callback_register(wifi_handshake_callback func);
+void wifi_hal_eapol_timeouts_callback_register(wifi_eapol_timeouts_callback func);
 void wifi_hal_apStatusCode_callback_register(wifi_apStatusCode_callback func);
 void wifi_hal_radiusEapFailure_callback_register(wifi_radiusEapFailure_callback func);
 void wifi_hal_radiusFallback_failover_callback_register(wifi_radiusFallback_failover_callback func);
