@@ -238,7 +238,9 @@ int platform_get_nasta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi
         return WIFI_HAL_ERROR;
     }
 
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     sta = ap_get_sta(bss->bss[0], params->sta_mac);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     if (sta) {
         wifi_hal_error_print("%s:%d: STA " MACSTR " is connected to current AP index %d\n",
             __func__, __LINE__, MAC2STR(params->sta_mac), apIndex);
