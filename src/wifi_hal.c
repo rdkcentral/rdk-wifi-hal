@@ -5035,3 +5035,15 @@ INT wifi_hal_get_RegDomain(wifi_radio_index_t radioIndex, UINT *reg_domain)
     }
     return RETURN_ERR;
 }
+
+INT wifi_hal_set_acs_exclusion_list(wifi_radio_index_t radioIndex, wifi_hal_acs_exclude_t *list, INT count, INT *operating_channel_excluded)
+{
+    (void)radioIndex;
+    (void)list;
+    (void)count;
+    (void)operating_channel_excluded;
+
+    wifi_hal_error_print("%s:%d: not supported\n", __func__, __LINE__);
+
+    return WIFI_HAL_ERROR;
+}
