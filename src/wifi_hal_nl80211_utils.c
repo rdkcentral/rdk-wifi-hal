@@ -4571,7 +4571,7 @@ void update_ecomode_radio_capabilities(wifi_radio_info_t *radio)
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
     unsigned int channels_2_4g[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
-    unsigned int channels_5g[] = {36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 132, 136, 140, 144, 149, 153, 157, 161, 165};
+    unsigned int channels_5g[] = {36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 132, 136, 140, 144, 149, 153, 157, 161, 165, 169, 173, 177};
     unsigned int channels_6g[] = {5, 21, 37, 53, 69, 85, 101, 117, 133, 149, 165, 181, 197, 213, 229};
 
     if (radio == NULL) {

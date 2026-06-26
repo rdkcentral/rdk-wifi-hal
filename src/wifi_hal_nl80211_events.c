@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include <unistd.h>
 #include <signal.h>
@@ -40,6 +41,10 @@
 #include "ap/dfs.h"
 #ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
+#endif
+
+#if defined(CONFIG_GENERIC_MLO)
+#define MLD_INTERFACE_NAME "mld0"
 #endif
 
 int no_seq_check(struct nl_msg *msg, void *arg)
@@ -452,7 +457,6 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         switch(event.tx_status.stype) {
          case WLAN_FC_STYPE_AUTH:
             mgmt_type = WIFI_MGMT_FRAME_TYPE_AUTH_RSP;
-
             for (int i = 0; i < callbacks->num_statuscode_cbs; i++) {
                 if (callbacks->statuscode_cb[i] != NULL) {
                     status = le_to_host16(mgmt->u.auth.status_code);
@@ -465,7 +469,6 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             mgmt_type = WIFI_MGMT_FRAME_TYPE_ASSOC_RSP;
             wifi_hal_dbg_print("%s:%d: Received assoc response frame from: %s\n", __func__, __LINE__,
                            to_mac_str(sta, sta_mac_str));
-
             for (int i = 0; i < callbacks->num_statuscode_cbs; i++) {
                 if (callbacks->statuscode_cb[i] != NULL) {
                     status = le_to_host16(mgmt->u.assoc_resp.status_code);
@@ -480,7 +483,6 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             mgmt_type = WIFI_MGMT_FRAME_TYPE_REASSOC_RSP;
             wifi_hal_dbg_print("%s:%d: Received Reassoc response frame from: %s\n", __func__, __LINE__,
                            to_mac_str(sta, sta_mac_str));
-
             for (int i = 0; i < callbacks->num_statuscode_cbs; i++) {
                 if (callbacks->statuscode_cb[i] != NULL) {
                     status = le_to_host16(mgmt->u.reassoc_resp.status_code);
@@ -540,6 +542,15 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             }
             if ((attr = tb[NL80211_ATTR_REASON_CODE]) != NULL) {
                 reason = nla_get_u16(attr);
+            } else if (event.tx_status.stype == WLAN_FC_STYPE_DEAUTH &&
+                       event.tx_status.data_len >= offsetof(struct ieee80211_mgmt, u.deauth.reason_code) +
+                                                   sizeof(((struct ieee80211_mgmt *)0)->u.deauth.reason_code)) {
+                /* NL80211_ATTR_REASON_CODE is absent for TX status events (AP-originated
+                 * deauth). Read reason directly from the deauth frame body instead.
+                 * The stype guard is redundant (we are inside case WLAN_FC_STYPE_DEAUTH)
+                 * but makes the union-member selection explicit for static analysis.
+                 * WPA_GET_LE16 reads via u8* and is safe regardless of buffer alignment. */
+                reason = WPA_GET_LE16((const u8 *)&mgmt->u.deauth.reason_code);
             }
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             station = ap_get_sta(&interface->u.ap.hapd, sta);
@@ -1801,6 +1812,45 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
     case NL80211_CMD_SCAN_ABORTED:
         /* Special case for SCAN events - don't drop these event even if the interface is not fully
          * configured */
+#if defined(CONFIG_GENERIC_MLO)
+        /* If driver did not provide LINK_ID, fallback safely */
+        if (link_id == NL80211_DRV_LINK_ID_NA) {
+            for (unsigned int i = 0; i < priv->num_radios; i++) {
+                radio = &priv->radio_info[i];
+
+                interface = hash_map_get_first(radio->interface_map);
+                while (interface != NULL) {
+                    /* Process only MLO interfaces */
+                    if (!interface->mld_name[0] || strcmp(interface->mld_name, MLD_INTERFACE_NAME) != 0) {
+                        interface = hash_map_get_next(radio->interface_map, interface);
+                        continue;
+                    }
+
+                    /* If ifindex is present, only process matching interface */
+                    if (ifidx && interface->index != ifidx) {
+                        interface = hash_map_get_next(radio->interface_map, interface);
+                        continue;
+                    }
+
+                    /* get neighbour scan state for the interface */
+                    enum scan_state_type_e nb_scan_state;
+                    pthread_mutex_lock(&interface->scan_state_mutex);
+                    nb_scan_state = interface->scan_state;
+                    pthread_mutex_unlock(&interface->scan_state_mutex);
+                    /* Only process interfaces actively involved in scan */
+                    if (nb_scan_state == WIFI_SCAN_STATE_STARTED) {
+                        wifi_hal_dbg_print("%s:%d: SCAN processing for %s for event %d\n", __func__, __LINE__, interface->name, gnlh->cmd);
+                        do_process_drv_event(interface, gnlh->cmd, tb);
+                    }
+
+                    interface = hash_map_get_next(radio->interface_map, interface);
+                }
+            }
+
+            return NL_SKIP;
+        }
+#endif /* CONFIG_GENERIC_MLO */
+
         if (interface != NULL) {
             wifi_hal_dbg_print("%s:%d: event registered - processing for %s event %d\n", __func__,
                 __LINE__, interface->name, gnlh->cmd);

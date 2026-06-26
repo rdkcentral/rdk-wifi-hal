@@ -929,6 +929,11 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         radio->oper_param.operatingClass = operationParam->operatingClass;
         radio->oper_param.channelWidth = operationParam->channelWidth;
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
+        if (old_operationParam->transmitPower != operationParam->transmitPower) {
+            wifi_hal_info_print("%s:%d: OldTransmitPower:%d, NewTransmitPower:%d updating\n", __func__, __LINE__, old_operationParam->transmitPower, operationParam->transmitPower);
+            (void)wifi_hal_setRadioTransmitPower(index, operationParam->transmitPower);
+        }
+        radio->oper_param.transmitPower = operationParam->transmitPower;
 		radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
 		strncpy(radio->oper_param.radarDetected, operationParam->radarDetected,
 				sizeof(radio->oper_param.radarDetected)-1);
@@ -4537,6 +4542,23 @@ void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_
     callbacks->num_disassoc_cbs++;
 }
 
+
+
+
+void wifi_hal_eapol_timeouts_callback_register(wifi_eapol_timeouts_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+    
+    if (callbacks == NULL || callbacks->num_eapol_timeouts_cbs >= MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+    
+    callbacks->eapol_timeouts_cb[callbacks->num_eapol_timeouts_cbs] = func;
+    callbacks->num_eapol_timeouts_cbs++;
+}
+
 void wifi_hal_handshake_callback_register(wifi_handshake_callback func)
 {
     wifi_device_callbacks_t *callbacks;
@@ -5029,4 +5051,23 @@ INT wifi_hal_get_RegDomain(wifi_radio_index_t radioIndex, UINT *reg_domain)
         return (platform_get_RegDomain_fn(radioIndex, reg_domain));
     }
     return RETURN_ERR;
+}
+
+INT wifi_getNASta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi_na_sta_info_t *sta_info)
+{
+#ifdef MXL_WIFI
+    AP_INDEX_ASSERT(apIndex);
+
+    if (!params || !sta_info) {
+        wifi_hal_error_print("%s:%d: Invalid parameters\n", __func__, __LINE__);
+        return WIFI_HAL_ERROR;
+    }
+
+    return platform_get_nasta(apIndex, params, sta_info);
+#else
+    (void)apIndex;
+    (void)params;
+    (void)sta_info;
+    return WIFI_HAL_ERROR;
+#endif /* MXL_WIFI */
 }

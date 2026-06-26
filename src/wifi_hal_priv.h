@@ -899,6 +899,7 @@ void wifi_hal_newApAssociatedDevice_callback_register(wifi_newApAssociatedDevice
 void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_callback func);
 void wifi_hal_stamode_callback_register(wifi_stamode_callback func);
 void wifi_hal_handshake_callback_register(wifi_handshake_callback func);
+void wifi_hal_eapol_timeouts_callback_register(wifi_eapol_timeouts_callback func);
 void wifi_hal_apStatusCode_callback_register(wifi_apStatusCode_callback func);
 void wifi_hal_radiusEapFailure_callback_register(wifi_radiusEapFailure_callback func);
 void wifi_hal_radiusFallback_failover_callback_register(wifi_radiusFallback_failover_callback func);
@@ -1469,4 +1470,16 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
 int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
     size_t ifname_out_len);
+int bw_to_nl80211_chan_width(int bw, int cf2);
+
+#ifdef MXL_WIFI
+static inline int mxl_clamp(int val, int min_val, int max_val)
+{
+    return (val < min_val) ? min_val : ((val > max_val) ? max_val : val);
+}
+#define MXL_CLAMP(x_, min_, max_) mxl_clamp((x_), (min_), (max_))
+
+int platform_get_nasta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi_na_sta_info_t *sta_info);
+#endif /* MXL_WIFI */
+
 #endif // WIFI_HAL_PRIV_H

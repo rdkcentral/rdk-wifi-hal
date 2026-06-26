@@ -131,7 +131,7 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
 
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
-static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames);
+static bool needs_conf_mbssid_num_frames(int radio_index, int *mbssid_num_frames);
 #endif
 static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl);
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
@@ -509,6 +509,12 @@ static bool platform_down_reqd(wifi_radio_index_t r_index, wifi_vap_info_map_t *
     bool reqd = false;
 
     /* Check all params that require down for the given radio */
+#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
+        reqd |= needs_conf_mbssid_num_frames(r_index, &ctrl);
+        if (reqd)
+            return reqd;
+#endif
+
     /* Check all params that require down for the given VAPs */
     if (map == NULL)
         return reqd;
@@ -517,10 +523,6 @@ static bool platform_down_reqd(wifi_radio_index_t r_index, wifi_vap_info_map_t *
 
         reqd |= needs_conf_split_assoc_req(
             vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
-#if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
-        reqd |= needs_conf_mbssid_num_frames(
-            vap_index,map->vap_array[index].u.bss_info.hostap_mgt_frame_ctrl, &ctrl);
-#endif
         if (reqd)
             break;
     }
@@ -913,6 +915,22 @@ void platform_mlo_post_init(void)
     }
     platform_mlo_up();
 }
+
+/* apsta iovar is per-radio, not per-BSS */
+static int platform_set_apsta(wifi_radio_index_t index, bool enable)
+{
+    int apsta_enable = enable ? 1 : 0;
+    char osifname[IFNAMSIZ] = { 0 };
+
+    snprintf(osifname, sizeof(osifname), "wl%d", index);
+    if (wl_iovar_set(osifname, "apsta", &apsta_enable, sizeof(apsta_enable)) < 0) {
+        wifi_hal_error_print("%s: failed to set apsta %d for %s, err: %d (%s)\n", __func__,
+            apsta_enable, osifname, errno, strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
 #endif /* MLO_ENAB */
 
 int platform_pre_init()
@@ -943,6 +961,11 @@ int platform_pre_init()
     _platform_init_done = FALSE;
 
     platform_radio_up(-1, FALSE); /* Bring all radios down */
+
+    for(int radio_idx = 0; radio_idx < MAX_NUM_RADIOS; radio_idx++) {
+	    platform_set_apsta(radio_idx, true);
+    }
+
     platform_mlo_init();
 #endif /* MLO_ENAB */
     return 0;
@@ -1939,23 +1962,18 @@ static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl
 
 /*
  * Check if mbssid_num_frames need reconfiguration to new value
- * [in] vap_index
- * [in] hostap_mgt_frame_ctrl
+ * [in] radio_index
  * [out] mbssid_num_frames
 */
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
-static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames)
+static bool needs_conf_mbssid_num_frames(int radio_index, int *mbssid_num_frames)
 {
-    char interface_name[8] = { 0 };
+    char interface_name[IFNAMSIZ] = { 0 };
     int curr_mbssid_num_frames;
 
     *mbssid_num_frames = 1;
 
-    if (get_interface_name_from_vap_index(vap_index, interface_name) != RETURN_OK) {
-        wifi_hal_error_print("%s:%d failed to get interface name for vap index: %d, err: %d (%s)\n",
-            __func__, __LINE__, vap_index, errno, strerror(errno));
-        return false;
-    }
+    snprintf(interface_name, sizeof(interface_name), "wl%d", radio_index);
 
     if (wl_iovar_getint(interface_name, "mbssid_num_frames", &curr_mbssid_num_frames) < 0) {
         wifi_hal_error_print("%s:%d failed to get mbssid_num_frames for %s, err: %d (%s)\n",
@@ -2026,7 +2044,7 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
 
     split_assoc_req_change = needs_conf_split_assoc_req(vap_index, enable, &assoc_ctrl);
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
-    mbssid_num_frames_change = needs_conf_mbssid_num_frames(vap_index, enable, &mbssid_num_frames);
+    mbssid_num_frames_change = needs_conf_mbssid_num_frames(radio->rdk_radio_index, &mbssid_num_frames);
 #endif
     if (split_assoc_req_change == false && mbssid_num_frames_change == false) {
         return RETURN_OK;
@@ -2053,18 +2071,28 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
         (void)snprintf(name, sizeof(name), "%s_split_assoc_req", interface_name);
         wifi_hal_info_print("%s:%d Writing nvram %s=%d\n", __func__,__LINE__, name, assoc_ctrl);
         set_decimal_nvram_param(name, assoc_ctrl);
-        nvram_commit();
     }
 
 #if defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
-    // supported by driver version 23.2.1
-    if (wl_iovar_set(interface_name, "mbssid_num_frames", &mbssid_num_frames,
-            sizeof(mbssid_num_frames)) < 0) {
-        wifi_hal_error_print("%s:%d failed to set mbssid_num_frames %d for %s, err: %d (%s)\n",
-            __func__, __LINE__, mbssid_num_frames, interface_name, errno, strerror(errno));
-        return RETURN_ERR;
+    if (mbssid_num_frames_change) {
+        char nvram_name[IFNAMSIZ + sizeof("_mbssid_num_frames")];
+        char radio_dev[IFNAMSIZ];
+
+        snprintf(radio_dev, sizeof(radio_dev), "wl%d", radio->rdk_radio_index);
+        // supported by driver version 23.2.1
+        if (wl_iovar_set(radio_dev, "mbssid_num_frames", &mbssid_num_frames,
+                sizeof(mbssid_num_frames)) < 0) {
+            wifi_hal_error_print("%s:%d failed to set mbssid_num_frames %d for %s, err: %d (%s)\n",
+                __func__, __LINE__, mbssid_num_frames, radio_dev, errno, strerror(errno));
+            return RETURN_ERR;
+        }
+        snprintf(nvram_name, sizeof(nvram_name), "%s_mbssid_num_frames", radio_dev);
+        wifi_hal_info_print("%s:%d Writing nvram %s=%d\n", __func__,__LINE__, 
+            nvram_name, mbssid_num_frames);
+        set_decimal_nvram_param(nvram_name, mbssid_num_frames);
     }
 #endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
+    nvram_commit();
 
 #if !(defined(MLO_ENAB))
     if (wl_ioctl(interface_name, WLC_UP, NULL, 0) < 0) {
