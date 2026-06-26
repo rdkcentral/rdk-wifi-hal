@@ -75,7 +75,6 @@
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT ||
        // SCXF10_PORT || RDKB_ONE_WIFI_PROD
 
-/* For XER10 and XF10, MLO_ENAB is defined in CFLAGS in recipe appends */
 #if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT)
 #define MLO_ENAB 1
 #endif
@@ -115,8 +114,6 @@ static void platform_set_eht(wifi_radio_index_t index, bool enable);
 
 #ifdef CONFIG_IEEE80211BE
 #define MLD_UNIT_COUNT 8
-#define USER_NVRAM_CHANGED      0x01
-#define KERNEL_NVRAM_CHANGED    0x02
 #endif
 
 typedef struct wl_runtime_params {
@@ -636,11 +633,7 @@ int platform_bss_up(int vap_index, bool up)
 int platform_mlo_init(void)
 {
     int i;
-#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
-    char *value = nvram_kget("wl_mlo_config");
-#else
     char *value = nvram_get("wl_mlo_config");
-#endif
 
     mlo_radio_cnt = mlo_radio_map = 0;
     mlo_MAP = mlo_init_map = -1;
@@ -4890,11 +4883,7 @@ static unsigned char platform_get_link_id_for_radio_index(unsigned int radio_ind
     if (radio_index < (sizeof(mlo_config) / sizeof(*mlo_config))) {
         char *wl_mlo_config;
 
-#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
-        wl_mlo_config = nvram_kget("wl_mlo_config");
-#else
         wl_mlo_config = nvram_get("wl_mlo_config");
-#endif
         if (wl_mlo_config != NULL) {
             int ret;
 
@@ -4945,7 +4934,7 @@ static void nvram_update_wl_mlo_apply(const char *iface, unsigned char mlo_apply
     }
 
     set_decimal_nvram_param(name, mlo_apply);
-    *nvram_changed |= USER_NVRAM_CHANGED;
+    *nvram_changed |=1;
     wifi_hal_info_print("%s:%d Updating wl_mlo_apply nvram %s=%u for the iface:%s\n", __func__,
         __LINE__, name, mlo_apply, iface);
 }
@@ -4964,7 +4953,7 @@ static void nvram_update_wl_bss_mlo_mode(const char *iface, unsigned char bss_ml
     }
 
     set_decimal_nvram_param(name, bss_mlo_mode);
-    *nvram_changed |= USER_NVRAM_CHANGED;
+    *nvram_changed |=1;
     wifi_hal_info_print("%s:%d Updating wl_bss_mlo_mode nvram %s=%u for the iface:%s\n", __func__,
         __LINE__, name, bss_mlo_mode, iface);
 }
@@ -4983,12 +4972,8 @@ static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id
     if ((u8)mld_link_id == (u8)NL80211_DRV_LINK_ID_NA) {
         mld_link_id = -1;
     }
-    /* Format of nvram wl_mlo_config="-1 -1 -1 -1" */
-#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
-    wl_mlo_config = nvram_kget("wl_mlo_config");
-#else
-    wl_mlo_config = nvram_get("wl_mlo_config");
-#endif
+
+    wl_mlo_config = nvram_get("wl_mlo_config"); /* Format of nvram wl_mlo_config="-1 -1 -1 -1" */
     if (wl_mlo_config != NULL) {
         int ret;
 
@@ -5008,13 +4993,8 @@ static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id
     memset(new_nvram_val, 0, sizeof(new_nvram_val));
     snprintf(new_nvram_val, sizeof(new_nvram_val), "%d %d %d %d", mlo_config[0], mlo_config[1],
         mlo_config[2], mlo_config[3]);
-#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
-    nvram_kset("wl_mlo_config", new_nvram_val);
-    *nvram_changed |= KERNEL_NVRAM_CHANGED;
-#else
     set_string_nvram_param("wl_mlo_config", new_nvram_val);
-    *nvram_changed |= USER_NVRAM_CHANGED;
-#endif
+    *nvram_changed |=1;
     wifi_hal_info_print("%s:%d Updating nvram wl_mlo_config with new value: %s\n", __func__,
         __LINE__, new_nvram_val);
 }
@@ -5147,16 +5127,10 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     mld_ap = vap->u.bss_info.enabled && (!conf->disable_11be && mld_conf->mld_enable &&
         (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
     nvram_update_wl_bss_mlo_mode(conf->iface, mld_ap, &nvram_changed);
-    if (nvram_changed & USER_NVRAM_CHANGED) {
+    if (nvram_changed) {
         wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
         nvram_commit();
     }
-#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
-    if (nvram_changed & KERNEL_NVRAM_CHANGED) {
-        wifi_hal_info_print("%s:%d kernel nvram was changed => nvram_kcommit()\n", __func__, __LINE__);
-        nvram_kcommit();
-    }
-#endif
 
     if (mld_ap) {
         conf->mld_ap = mld_ap;
