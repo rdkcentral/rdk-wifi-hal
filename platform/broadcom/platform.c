@@ -933,7 +933,7 @@ static int platform_set_apsta(wifi_radio_index_t index, bool enable)
     if (wl_iovar_set(osifname, "apsta", &apsta_enable, sizeof(apsta_enable)) < 0) {
         wifi_hal_error_print("%s: failed to set apsta %d for %s, err: %d (%s)\n", __func__,
             apsta_enable, osifname, errno, strerror(errno));
-	return -1;
+        return -1;
     }
     return 0;
 }
