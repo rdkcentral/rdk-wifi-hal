@@ -915,6 +915,22 @@ void platform_mlo_post_init(void)
     }
     platform_mlo_up();
 }
+
+/* apsta iovar is per-radio, not per-BSS */
+static int platform_set_apsta(wifi_radio_index_t index, bool enable)
+{
+    int apsta_enable = enable ? 1 : 0;
+    char osifname[IFNAMSIZ] = { 0 };
+
+    snprintf(osifname, sizeof(osifname), "wl%d", index);
+    if (wl_iovar_set(osifname, "apsta", &apsta_enable, sizeof(apsta_enable)) < 0) {
+        wifi_hal_error_print("%s: failed to set apsta %d for %s, err: %d (%s)\n", __func__,
+            apsta_enable, osifname, errno, strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
 #endif /* MLO_ENAB */
 
 int platform_pre_init()
@@ -945,6 +961,11 @@ int platform_pre_init()
     _platform_init_done = FALSE;
 
     platform_radio_up(-1, FALSE); /* Bring all radios down */
+
+    for(int radio_idx = 0; radio_idx < MAX_NUM_RADIOS; radio_idx++) {
+	    platform_set_apsta(radio_idx, true);
+    }
+
     platform_mlo_init();
 #endif /* MLO_ENAB */
     return 0;
