@@ -2521,7 +2521,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 
                     if (write(fd_c, frame_buff, total_len) > 0) {
                         wifi_hal_dbg_print(
-                            "%s:%d: write succesful bytes written : %d for msg_ops_type : %d\n",
+                            "%s:%d: write successful bytes written : %d for msg_ops_type : %d\n",
                             __func__, __LINE__, total_len, msg_ops_type);
                     }
                     free(frame_buff);
@@ -8692,6 +8692,29 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
     return RETURN_OK;
 }
 
+int bw_to_nl80211_chan_width(int bw, int cf2)
+{
+    switch (bw) {
+    case 20:
+        return NL80211_CHAN_WIDTH_20;
+    case 40:
+        return NL80211_CHAN_WIDTH_40;
+    case 80:
+        if (cf2)
+            return NL80211_CHAN_WIDTH_80P80;
+        else
+            return NL80211_CHAN_WIDTH_80;
+    case 160:
+        return NL80211_CHAN_WIDTH_160;
+#ifdef CONFIG_IEEE80211BE
+    case 320:
+        return NL80211_CHAN_WIDTH_320;
+#endif /* CONFIG_IEEE80211BE */
+    default:
+        return -1;
+    }
+}
+
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
 {
@@ -14089,7 +14112,7 @@ int wifi_drv_hapd_send_eapol(
             memcpy(t_buff, data, len);
 
             if (write(fd_c, c_buff, 2048) > 0) {
-            //    wifi_hal_dbg_print("%s:%d: write succesful bytes written : %d for EAPOL data\n", __func__, __LINE__, len);
+            //    wifi_hal_dbg_print("%s:%d: write successful bytes written : %d for EAPOL data\n", __func__, __LINE__, len);
             }
             close(fd_c);
             fd_c = -1;
