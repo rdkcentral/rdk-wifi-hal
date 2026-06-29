@@ -2755,7 +2755,7 @@ int nvram_get_mgmt_frame_power_control(int vap_index, int* output_dbm)
     return RETURN_OK;
 }
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT)
 
 static int get_radio_phy_temp_handler(struct nl_msg *msg, void *arg)
 {
