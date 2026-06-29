@@ -5035,3 +5035,22 @@ INT wifi_hal_get_RegDomain(wifi_radio_index_t radioIndex, UINT *reg_domain)
     }
     return RETURN_ERR;
 }
+
+INT wifi_getNASta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi_na_sta_info_t *sta_info)
+{
+#ifdef MXL_WIFI
+    AP_INDEX_ASSERT(apIndex);
+
+    if (!params || !sta_info) {
+        wifi_hal_error_print("%s:%d: Invalid parameters\n", __func__, __LINE__);
+        return WIFI_HAL_ERROR;
+    }
+
+    return platform_get_nasta(apIndex, params, sta_info);
+#else
+    (void)apIndex;
+    (void)params;
+    (void)sta_info;
+    return WIFI_HAL_ERROR;
+#endif /* MXL_WIFI */
+}
