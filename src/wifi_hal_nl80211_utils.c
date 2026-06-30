@@ -320,14 +320,14 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #endif
 
 #ifdef SKYSR213_PORT // for Broadcom based platforms
-    {1, 0,  "wl0.1",   "",  "brlan0",  100,    0,      "private_ssid_2g"},
-    {0, 1,  "wl1.1",   "",  "brlan0",  100,    1,      "private_ssid_5g"},
-    {1, 0,  "wl0.2",   "",  "brlan9",  101,    2,      "iot_ssid_2g"},
-    {0, 1,  "wl1.2",   "",  "brlan10", 101,    3,      "iot_ssid_5g"},
-    {1, 0,  "wl0.7",   "",  "brlan6",    0,    12,     "mesh_backhaul_2g"},
-    {0, 1,  "wl1.7",   "",  "brlan7",    0,    13,     "mesh_backhaul_5g"},
-    {1, 0,  "wl0",     "",  "",          0,    14,     "mesh_sta_2g"},
-    {0, 1,  "wl1",     "",  "",          0,    15,     "mesh_sta_5g"},
+    {0, 1,  "wl1.1",   "",  "brlan0",  100,    1,      "private_ssid_2g"},
+    {1, 0,  "wl0.1",   "",  "brlan0",  100,    0,      "private_ssid_5g"},
+    {0, 1,  "wl1.2",   "",  "brlan9",  101,    3,      "iot_ssid_2g"},
+    {1, 0,  "wl0.2",   "",  "brlan10", 101,    2,      "iot_ssid_5g"},
+    {0, 1,  "wl1.7",   "",  "brlan7",    0,    13,     "mesh_backhaul_2g"},
+    {1, 0,  "wl0.7",   "",  "brlan6",    0,    12,     "mesh_backhaul_5g"},
+    {0, 1,  "wl1",     "",  "",          0,    15,     "mesh_sta_2g"},
+    {1, 0,  "wl0",     "",  "",          0,    14,     "mesh_sta_5g"},
 #endif
 
 #ifdef RDKB_ONE_WIFI_PROD
@@ -395,9 +395,14 @@ static radio_interface_mapping_t *l_radio_interface_map = NULL;
 static const radio_interface_mapping_t *l_radio_interface_map;
 static unsigned int l_radio_interface_map_size;
 static const radio_interface_mapping_t static_radio_interface_map[] = {
-#if defined(TCXB7_PORT) || defined(SKYSR213_PORT) || defined(TCHCBRV2_PORT)
+#if defined(TCXB7_PORT) || defined(TCHCBRV2_PORT)
     { 0, 0, "radio1", "wl0"},
     { 1, 1, "radio2", "wl1"},
+#endif
+
+#if defined(SKYSR213_PORT)
+    { 1, 0, "radio1", "wl0"},
+    { 0, 1, "radio2", "wl1"},
 #endif
 
 #if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) 
