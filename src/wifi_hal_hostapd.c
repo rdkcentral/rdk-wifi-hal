@@ -1131,6 +1131,10 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     init_hostap_bss(interface);
 
     vap = &interface->vap_info;
+    /* Initialize interface->bridge from vap configuration early, so it's available for all flows */
+    if (vap->bridge_name[0] != '\0') {
+        strncpy(interface->bridge, vap->bridge_name, sizeof(interface->bridge));
+    }
     radio = get_radio_by_rdk_index(vap->radio_index);
     op_param = &radio->oper_param;
 
@@ -1178,8 +1182,15 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     if (is_backhaul_interface(interface)) {
         // For backhaul VAPs, set multi-ap flag to 1
         conf->multi_ap = BACKHAUL_BSS;
-        wifi_hal_info_print("%s:%d: Enabled multi_ap:%d for interface:%s\n", __func__,
-            __LINE__, conf->multi_ap, interface->name);
+
+        /* Enable WDS mode for backhaul STAs to create per-STA virtual interfaces
+         * This allows 4-address frames and proper bridge forwarding
+         */
+        conf->wds_sta = 1;
+        strncpy(conf->wds_bridge, interface->bridge, sizeof(conf->wds_bridge));
+
+        wifi_hal_info_print("%s:%d: Enabled multi_ap:%d for interface:%s, wds_bridge:%s\n",
+            __func__, __LINE__, conf->multi_ap, interface->name, conf->wds_bridge);
     }
 #endif // EASY_MESH_NODE
 
@@ -2791,6 +2802,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                     sel = (WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w) & data.key_mgmt;
                 } else if (sec->mode == wifi_security_mode_wpa3_enterprise) {
                     sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w) & data.key_mgmt;
+                } else if (sec->mode == wifi_security_mode_enhanced_open) {
+                    sel = (WPA_KEY_MGMT_OWE | wpa_key_mgmt_11w) & data.key_mgmt;
                 } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
                     sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE) & data.key_mgmt;
                 } else {
@@ -2845,9 +2858,9 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                 sel = (WPA_KEY_MGMT_SAE | wpa_key_mgmt_11w);
             } else if (get_vap_security_mode(vap,sec) == wifi_security_mode_wpa3_enterprise) {
                 sel = (WPA_KEY_MGMT_IEEE8021X_SHA256 | wpa_key_mgmt_11w);
-            } else if (get_vap_security_mode(vap,sec) == wifi_security_mode_enhanced_open) {
+            } else if (sec->mode == wifi_security_mode_enhanced_open) {
                 sel = (WPA_KEY_MGMT_OWE | wpa_key_mgmt_11w);
-            } else if (get_vap_security_mode(vap,sec) == wifi_security_mode_wpa3_compatibility) {
+            } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
                 sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE);
             } else {
                 wifi_hal_error_print("Unsupported security mode : 0x%x\n", get_vap_security_mode(vap, sec));
@@ -3216,8 +3229,8 @@ static int set_mld_shared_resources(struct hostapd_data *hapd)
 
             ret = hostapd_setup_bss_internal(link);
             if (ret) {
-                wifi_hal_error_print("%s:%d: set shared resources failed for link: %s\n",
-                    __func__, __LINE__, hapd->conf->iface);
+                wifi_hal_error_print("%s:%d: set shared resources failed for link: %s - first_bss %s\n",
+                    __func__, __LINE__, link->conf->iface, hapd->conf->iface);
                 return RETURN_ERR;
             }
         }

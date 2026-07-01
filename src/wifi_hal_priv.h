@@ -531,6 +531,8 @@ typedef struct {
     bool radio_presence; //True for ECO mode Active radio, false for ECO mode power down sleeping radio
     bool radar_detected;
     bool configuration_in_progress;
+    unsigned int dfs_evacuation_channel;              /* 0 = default (ch.44/157 by band) */
+    wifi_channelBandwidth_t dfs_evacuation_channel_width; /* 0 = default 80 MHz */
 #ifndef FEATURE_SINGLE_PHY
     rnr_scan_t rnr;
     bool rnr_enabled;
@@ -771,6 +773,7 @@ void wifi_hal_deauth(int vap_index, int status, uint8_t *mac);
 INT wifi_hal_getInterfaceMap(wifi_interface_name_idex_map_t *if_map, unsigned int max_entries,
     unsigned int *if_map_size);
 INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal);
+INT wifi_hal_sm_deinit(INT vap_index);
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss);
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map);
@@ -806,6 +809,7 @@ void wifi_hal_newApAssociatedDevice_callback_register(wifi_newApAssociatedDevice
 void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_callback func);
 void wifi_hal_stamode_callback_register(wifi_stamode_callback func);
 void wifi_hal_handshake_callback_register(wifi_handshake_callback func);
+void wifi_hal_eapol_timeouts_callback_register(wifi_eapol_timeouts_callback func);
 void wifi_hal_apStatusCode_callback_register(wifi_apStatusCode_callback func);
 void wifi_hal_radiusEapFailure_callback_register(wifi_radiusEapFailure_callback func);
 void wifi_hal_radiusFallback_failover_callback_register(wifi_radiusFallback_failover_callback func);

@@ -1106,6 +1106,30 @@ reload_config:
 
 }
 
+INT wifi_hal_sm_deinit(INT vap_index)
+{
+    wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: interface for vap index:%d not found\n", __func__, __LINE__,
+            vap_index);
+        return RETURN_ERR;
+    }
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_sta) {
+        wifi_hal_error_print("%s:%d:interface for vap index:%d not found\n", __func__, __LINE__,
+            vap_index);
+        return RETURN_ERR;
+    }
+
+    if (interface->u.sta.wpa_sm != NULL) {
+        eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
+        interface->u.sta.wpa_sm->eapol = NULL;
+        wpa_sm_deinit(interface->u.sta.wpa_sm);
+        interface->u.sta.wpa_sm = NULL;
+    }
+    return RETURN_OK;
+}
+
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
 {
     wifi_interface_info_t *interface;
@@ -2679,7 +2703,11 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     }
 #endif //FEATURE_SINGLE_PHY
 
-    return (nl80211_start_scan(interface, NL80211_SCAN_FLAG_COLOCATED_6GHZ, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+#if HOSTAPD_VERSION >= 210
+    return (nl80211_start_scan(interface, NL80211_SCAN_FLAG_COLOCATED_6GHZ | NL80211_SCAN_FLAG_FLUSH, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+#else
+    return (nl80211_start_scan(interface, 0, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+#endif
 }
 
 /*****************************/
@@ -4412,6 +4440,23 @@ void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_
 
     callbacks->disassoc_cb[callbacks->num_disassoc_cbs] = func;
     callbacks->num_disassoc_cbs++;
+}
+
+
+
+
+void wifi_hal_eapol_timeouts_callback_register(wifi_eapol_timeouts_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+    
+    if (callbacks == NULL || callbacks->num_eapol_timeouts_cbs >= MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+    
+    callbacks->eapol_timeouts_cb[callbacks->num_eapol_timeouts_cbs] = func;
+    callbacks->num_eapol_timeouts_cbs++;
 }
 
 void wifi_hal_handshake_callback_register(wifi_handshake_callback func)
