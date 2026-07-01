@@ -9024,7 +9024,7 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
     } else {
 #ifndef TARGET_GEMINI7_2
-#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_DRIVER_BRCM)
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_DRIVER_BRCM) && !defined (CONFIG_WIFI_EMULATOR)
         /* In case of BRCM MLO enabled platforms do not reconfigure STA interface to AP */
         nlmsg_free(msg);
         msg = NULL;
