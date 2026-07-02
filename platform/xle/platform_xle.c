@@ -1002,6 +1002,10 @@ int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
     return RETURN_OK;
 }
 
+int platform_set_beacon_prot(uint apIndex, bool isEnabled)
+{
+    return RETURN_OK;
+}
 
 INT wifi_sendActionFrameExt(INT apIndex, mac_address_t MacAddr, UINT frequency, UINT wait, UCHAR *frame, UINT len)
 {
