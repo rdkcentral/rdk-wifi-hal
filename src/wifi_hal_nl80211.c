@@ -7017,15 +7017,112 @@ int nl80211_kick_device(wifi_interface_info_t *interface, mac_address_t addr)
 {
     struct nl_msg *msg;
 
+    /*
+     * mac80211's ieee80211_del_station() calls
+     * sta_info_destroy_addr_bss() which silently removes the STA without
+     * sending any OTA management frame - it ignores NL80211_ATTR_MGMT_SUBTYPE
+     * and NL80211_ATTR_REASON_CODE entirely.
+     *
+     * To send an 802.11 Deauthentication frame OTA we use the hostapd driver
+     * callback (sta_deauth). In the nl80211 softmac path this routes through
+     * wifi_drv_sta_deauth() -> wifi_drv_send_mlme() -> NL80211_CMD_FRAME
+     * (AP-SME offload drivers may instead handle deauth via DEL_STATION).
+     * We then fall through to NL80211_CMD_DEL_STATION to clean up kernel state.
+     */
+    /* Send OTA deauth if STA exists (covers associated and in-progress states)
+     * NL80211_CMD_DEL_STATION below always runs to clean up kernel state. */
+    if (interface == NULL || interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d: nl80211_kick_device only supported for AP VAPs\n",
+                             __func__, __LINE__);
+        return -1;
+    }
+
+    struct hostapd_data *hapd = &interface->u.ap.hapd;
+    void *drv_priv = NULL;
+    const struct wpa_driver_ops *driver = NULL;
+    u8 own_addr[ETH_ALEN];
+    bool sta_present = false;
+    struct sta_info *sta = NULL;
+#if HOSTAPD_VERSION >= 211
+    int link_id = NL80211_DRV_LINK_ID_NA;
+#endif
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    if (interface->u.ap.hapd_initialized && interface->bss_started) {
+        sta = ap_get_sta(hapd, addr);
+        if (sta) {
+            sta_present = true;
+            drv_priv = hapd->drv_priv;
+            driver = hapd->driver;
+            memcpy(own_addr, hapd->own_addr, ETH_ALEN);
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+            link_id = wifi_hal_get_mld_link_id(interface);
+#endif
+        }
+    }
+
+    if (!sta_present) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        wifi_hal_dbg_print("%s:%d: skip OTA deauth; STA " MACSTR " not found in hostapd or hostapd/BSS not ready\n",
+                            __func__, __LINE__, MAC2STR(addr));
+    } else if (drv_priv && driver && driver->sta_deauth) {
+        int deauth_ret;
+        wifi_hal_info_print("%s:%d: sending OTA deauth via hapd driver cb for STA " MACSTR "\n",
+                            __func__, __LINE__, MAC2STR(addr));
+        /*
+         * Keep hapd_lock held across sta_deauth() to protect drv_priv lifetime.
+         * drv_priv is tied to interface/hapd and may be freed during AP teardown.
+         * Releasing the lock earlier can result in use-after-free.
+         *
+         * sta_deauth() path does not re-enter hapd_lock, so holding the lock
+         * here is safe.
+         */
+#if HOSTAPD_VERSION >= 211
+        deauth_ret = driver->sta_deauth(drv_priv, own_addr, addr, WLAN_REASON_NOT_ENOUGH_BANDWIDTH, link_id);
+#else
+        deauth_ret = driver->sta_deauth(drv_priv, own_addr, addr, WLAN_REASON_NOT_ENOUGH_BANDWIDTH);
+#endif
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        if (deauth_ret) {
+            wifi_hal_error_print("%s:%d: sta_deauth failed (%d) for STA " MACSTR " on %s\n",
+                                __func__, __LINE__, deauth_ret, MAC2STR(addr), interface->name);
+        } else if (driver->sta_deauth == wifi_drv_sta_deauth) {
+            wifi_radio_info_t *radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+            if (radio && radio->driver_data.device_ap_sme) {
+                /* Offload path already issued NL80211_CMD_DEL_STATION in sta_deauth(). */
+                return 0;
+            }
+        }
+    } else {
+        const char *sta_deauth_state = (driver && driver->sta_deauth) ? "set" : "NULL";
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        wifi_hal_dbg_print("%s:%d: skip OTA deauth (sta_deauth=%s) on %s; proceeding with NL80211_CMD_DEL_STATION only\n",
+                           __func__, __LINE__, sta_deauth_state, interface->name);
+    }
+
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_DEL_STATION);
     if (msg == NULL) {
         return -1;
     }
 
-    nla_put(msg, NL80211_ATTR_MAC, sizeof(mac_address_t), addr);
+    if (nla_put(msg, NL80211_ATTR_MAC, sizeof(mac_address_t), addr) < 0) {
+        wifi_hal_error_print("%s:%d: nla_put failed for NL80211_ATTR_MAC\n",
+                         __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
 
-    if (nl80211_send_and_recv(msg, kick_device_handler, interface, NULL, NULL)) {
-        wifi_hal_error_print("%s:%d: Error getting sta info\n", __func__, __LINE__);
+    int ret = nl80211_send_and_recv(msg, kick_device_handler, interface, NULL, NULL);
+
+    if (ret == -ENOENT) {
+        wifi_hal_dbg_print("%s:%d: STA already removed (ENOENT)\n", __func__, __LINE__);
+        ret = 0;
+    }
+
+    if (ret != 0) {
+        const char *errstr = (ret < 0) ? strerror(-ret) : "unknown";
+        wifi_hal_error_print("%s:%d: failed to kick STA on %s, err %d (%s)\n",
+                             __func__, __LINE__, interface->name, ret, errstr);
         return -1;
     }
 
