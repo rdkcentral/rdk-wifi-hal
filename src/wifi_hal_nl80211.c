@@ -17956,7 +17956,12 @@ int wifi_drv_wps_event_notify_cb(void *ctx, unsigned int event, void *data)
 
 #if !defined(TARGET_GEMINI7_2)
     if (event == WPS_EV_SUCCESS) {
-        wifi_hal_wps_cancel_on_other_radios(interface);
+        if (!wifi_hal_is_mld_enabled(interface)) {
+            wifi_hal_wps_cancel_on_other_radios(interface);
+        } else {
+            wifi_hal_dbg_print("%s:%d: MLD enabled - skip wps_cancel_on_other_radios "
+                "to avoid deauthing the just-enrolled STA\n", __func__, __LINE__);
+        }
     }
 #endif
 
