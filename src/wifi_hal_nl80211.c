@@ -4683,6 +4683,24 @@ static void phy_info_vht_capa(struct hostapd_hw_modes *mode,
     }
 }
 
+static int get_band_index(enum nl80211_band band)
+{
+    switch (band) {
+        case NL80211_BAND_2GHZ:
+            return 0;
+        case NL80211_BAND_5GHZ:
+            return 1;
+        case NL80211_BAND_6GHZ:
+ #ifdef LINUX_VM_PORT
+            return -1;
+ #else
+            return 2;
+ #endif
+        default:
+            return -1;
+    }
+}
+
 static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct nlattr *tb, enum nl80211_band *nlband)
 {
     struct nlattr *tb_freq[NL80211_FREQUENCY_ATTR_MAX + 1];
@@ -4697,6 +4715,7 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
     enum nl80211_band band;
     int found = 0;
     char channel_str[8], channels_str[512] = {};
+    int index = -1;
 #ifdef CONFIG_WMM
     static struct nla_policy wmm_policy[NL80211_WMMR_MAX + 1] = {
         [NL80211_WMMR_CW_MIN] = { .type = NLA_U16 },
@@ -4877,9 +4896,16 @@ skip:   found = 0;
 
     if (!mode)
         return NULL;
+
+    index = get_band_index(band);
+    if(index == -1) {
+        wifi_hal_dbg_print("%s:%d: Invalid band\n", __func__, __LINE__);
+        return NULL;
+    }
+
     cap = &radio->capab;
-    cap->band[cap->numSupportedFreqBand] = freq_band;
-    channels = &cap->channel_list[cap->numSupportedFreqBand];
+    cap->band[index] = freq_band;
+    channels = &cap->channel_list[index];
     channels->num_channels = mode->num_channels;
     chan = mode->channels;
 
@@ -5721,17 +5747,100 @@ static int phy_info_iftype(struct hostapd_hw_modes *mode,
 }
 #endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
 
+
+static bool is_supported_nl_iftype(struct nlattr* tbIfType) {
+    struct nlattr* ift = NULL;
+    int rem = 0;
+    if(tbIfType == NULL) {
+        return false;
+    }
+    nla_for_each_nested(ift, tbIfType, rem) {
+        if((nla_type(ift) == NL80211_IFTYPE_STATION) ||
+           (nla_type(ift) == NL80211_IFTYPE_AP)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
 {
     struct nlattr *tb[NL80211_BAND_ATTR_MAX + 1];
     struct nlattr *tb_band[NL80211_BAND_ATTR_MAX + 1];
     struct hostapd_hw_modes *mode = NULL;
     enum nl80211_band band = 0;
-
-    nla_parse(tb, NL80211_BAND_ATTR_MAX, nla_data(nl_band), nla_len(nl_band), NULL);
+    wifi_ieee80211Variant_t supported = 0;
+    enum nl80211_band band_type = nl_band->nla_type;
+    int index = get_band_index(band_type);
+    if (index == -1) {
+        wifi_hal_dbg_print("%s:%d: Invalid band\n", __func__, __LINE__);
+        return -1;
+    }
 
     wifi_hal_dbg_print("%s:%d:band_type:%d rdk_radio_index:%d\n", __func__, __LINE__,
         nl_band->nla_type, radio->rdk_radio_index);
+    nla_parse(tb_band, NL80211_BAND_ATTR_MAX, nla_data(nl_band), nla_len(nl_band), NULL);
+    /* Determine supported standards from band and capabilities */
+    switch (band_type) {
+        case NL80211_BAND_2GHZ:
+            supported |= WIFI_80211_VARIANT_B;
+            supported |= WIFI_80211_VARIANT_G;
+            break;
+        case NL80211_BAND_5GHZ:
+            supported |= WIFI_80211_VARIANT_A;
+            break;
+        case NL80211_BAND_6GHZ:
+            supported |= WIFI_80211_VARIANT_AX;
+            break;
+        default:
+            break;
+    }
+
+    /* HT (802.11n) */
+    if (tb_band[NL80211_BAND_ATTR_HT_CAPA]) {
+        supported |= WIFI_80211_VARIANT_N;
+    }
+
+    /* VHT (802.11ac) - skip for 2.4GHz */
+    if (band_type != NL80211_BAND_2GHZ && tb_band[NL80211_BAND_ATTR_VHT_CAPA]) {
+        supported |= WIFI_80211_VARIANT_AC;
+    }
+
+    /* HE/VHT (802.11ax/802.11be) */
+    if (tb_band[NL80211_BAND_ATTR_IFTYPE_DATA]) {
+        struct nlattr *nl_iftype = NULL;
+        int rem = 0;
+        struct nlattr* tbIfTypeAx[NL80211_BAND_IFTYPE_ATTR_HE_6GHZ_CAPA + 1] = {};
+        nla_for_each_nested(nl_iftype, tb_band[NL80211_BAND_ATTR_IFTYPE_DATA], rem) {
+            memset(tbIfTypeAx, 0, sizeof(tbIfTypeAx));
+            nla_parse(tbIfTypeAx, NL80211_BAND_IFTYPE_ATTR_HE_6GHZ_CAPA, nla_data(nl_iftype), nla_len(nl_iftype), NULL);
+            if(!is_supported_nl_iftype(tbIfTypeAx[NL80211_BAND_IFTYPE_ATTR_IFTYPES])) {
+                continue;
+            }
+            struct nlattr* heCapMacAttr = tbIfTypeAx[NL80211_BAND_IFTYPE_ATTR_HE_CAP_MAC];
+            struct nlattr* heCapPhyAttr = tbIfTypeAx[NL80211_BAND_IFTYPE_ATTR_HE_CAP_PHY];
+            struct nlattr* heCapMcsSetAttr = tbIfTypeAx[NL80211_BAND_IFTYPE_ATTR_HE_CAP_MCS_SET];
+            if(!heCapMacAttr || !heCapPhyAttr || !heCapMcsSetAttr) {
+                continue;
+            }
+            supported |= WIFI_80211_VARIANT_AX;
+        }
+        nl_iftype = NULL;
+        rem = 0;
+        struct nlattr* tbIfTypeBe[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MCS_SET + 1] = {};
+        nla_for_each_nested(nl_iftype, tb_band[NL80211_BAND_ATTR_IFTYPE_DATA], rem) {
+            memset(tbIfTypeBe, 0, sizeof(tbIfTypeBe));
+            nla_parse(tbIfTypeBe, NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MCS_SET, nla_data(nl_iftype), nla_len(nl_iftype), NULL);
+            if(!is_supported_nl_iftype(tbIfTypeBe[NL80211_BAND_IFTYPE_ATTR_IFTYPES])) {
+                continue;
+            }
+            if(tbIfTypeBe[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_PHY] != NULL) {
+                supported |= WIFI_80211_VARIANT_BE;
+            }
+        }
+    }
+
+    nla_parse(tb, NL80211_BAND_ATTR_MAX, nla_data(nl_band), nla_len(nl_band), NULL);
     if (tb[NL80211_BAND_ATTR_FREQS] == NULL) {
         wifi_hal_dbg_print("%s:%d: Frequency attributes not present\n", __func__, __LINE__);
         return NL_OK;
@@ -5744,6 +5853,9 @@ static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
         return NL_OK;
     }
 
+    radio->capab.mode[index] |= supported;
+    wifi_hal_dbg_print("%s:%d: band=%d supported=0x%x\n", __func__, __LINE__, band_type, radio->capab.mode[index]);
+
     mode->mode = NUM_HOSTAPD_MODES;
     mode->flags = HOSTAPD_MODE_FLAG_HT_INFO_KNOWN | HOSTAPD_MODE_FLAG_VHT_INFO_KNOWN;
     mode->vht_mcs_set[0] = 0xff;
@@ -5751,7 +5863,6 @@ static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
     mode->vht_mcs_set[4] = 0xff;
     mode->vht_mcs_set[5] = 0xff;
 
-    nla_parse(tb_band, NL80211_BAND_ATTR_MAX, nla_data(nl_band), nla_len(nl_band), NULL);
     phy_info_ht_capa(mode, tb_band[NL80211_BAND_ATTR_HT_CAPA],
              tb_band[NL80211_BAND_ATTR_HT_AMPDU_FACTOR],
              tb_band[NL80211_BAND_ATTR_HT_AMPDU_DENSITY],
@@ -6276,9 +6387,9 @@ static int wiphy_get_info_handler(struct nl_msg *msg, void *arg)
     struct nlattr *tb_comb[NUM_NL80211_IFACE_COMB];
     int rem_combi;
     int rem_band;
+    int numSupportedFreqBand = 0;
 #ifdef FEATURE_SINGLE_PHY
     enum nl80211_band band_type, radio_nl80211_band_type;
-    int num_bands=0;
 #endif //FEATURE_SINGLE_PHY
 
     gnlh = nlmsg_data(nlmsg_hdr(msg));
@@ -6303,17 +6414,13 @@ static int wiphy_get_info_handler(struct nl_msg *msg, void *arg)
     radio->capab.rdk_radio_index = radio->rdk_radio_index;
     wifi_hal_dbg_print("%s:%d:radio->capab.rdk_radio_index:%d\n",
         __func__, __LINE__, radio->capab.rdk_radio_index);
-    radio->capab.cipherSupported = 0;
     if (tb[NL80211_ATTR_CIPHER_SUITES]) {
         phy_info_cipher(radio, tb[NL80211_ATTR_CIPHER_SUITES]);
     }
-    radio->capab.numSupportedFreqBand = 0;
-    memset((unsigned char *)radio->hw_modes, 0, NUM_NL80211_BANDS*sizeof(struct hostapd_hw_modes));
     if (tb[NL80211_ATTR_WIPHY_BANDS] != NULL) {
         nla_for_each_nested(nl_band, tb[NL80211_ATTR_WIPHY_BANDS], rem_band) {
 #ifndef FEATURE_SINGLE_PHY
             phy_info_band(radio, nl_band);
-            radio->capab.numSupportedFreqBand++;
 #else //FEATURE_SINGLE_PHY
             //Check whether nl_band is applicable to the radio and process only
             //if it is applicable
@@ -6324,20 +6431,21 @@ static int wiphy_get_info_handler(struct nl_msg *msg, void *arg)
                 ((band_type == radio_nl80211_band_type)? "yes":"no"));
             if (band_type == radio_nl80211_band_type) {
                 phy_info_band(radio, nl_band);
-                radio->capab.numSupportedFreqBand++;
             }
-            num_bands++;
 #endif //FEATURE_SINGLE_PHY
         }
     } else {
         wifi_hal_info_print("%s:%d: Bands attribute not present in radio index:%d\n", __func__, __LINE__, radio->index);
     }
-#ifdef FEATURE_SINGLE_PHY
-    wifi_hal_dbg_print("%s:%d:Num bands supported:%d by phy index:%d\n", __func__, __LINE__,
-        num_bands, radio->index);
-    wifi_hal_dbg_print("%s:%d:Configured bands supported:%d in radio based on rdk_radio_index:%d\n",
+
+    for (int i = 0; i < MAX_NUM_FREQ_BAND; i++) {
+        if (radio->capab.mode[i] != 0) {
+            numSupportedFreqBand++;
+        }
+    }
+    radio->capab.numSupportedFreqBand = numSupportedFreqBand;
+    wifi_hal_dbg_print("%s:%d: Configured bands supported:%d in radio based on rdk_radio_index:%d\n",
         __func__, __LINE__, radio->capab.numSupportedFreqBand, radio->rdk_radio_index);
-#endif //FEATURE_SINGLE_PHY
     if (tb[NL80211_ATTR_INTERFACE_COMBINATIONS]) {
         nla_for_each_nested(nl_combi, tb[NL80211_ATTR_INTERFACE_COMBINATIONS], rem_combi) {
             static struct nla_policy iface_combination_policy[NUM_NL80211_IFACE_COMB] = {
@@ -7748,13 +7856,20 @@ int nl80211_init_radio_info()
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = &g_wifi_hal.radio_info[i];
 
+        radio->capab.numSupportedFreqBand = 0;
+        radio->capab.cipherSupported = 0;
+        memset(radio->capab.mode, 0, sizeof(radio->capab.mode));
+        memset(radio->capab.band, 0, sizeof(radio->capab.band));
+        memset(radio->capab.channel_list, 0, sizeof(radio->capab.channel_list));
+        memset((unsigned char *)radio->hw_modes, 0, NUM_NL80211_BANDS*sizeof(struct hostapd_hw_modes));
+
         if (radio->radio_presence == false) {
            wifi_hal_error_print("%s:%d: Skip the Radio %d .This is sleeping in ECO mode \n", __func__, __LINE__, radio->index);
            continue;
         }
 
         // get information about phy
-        msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_GET_WIPHY);
+        msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
         if (msg == NULL) {
             wifi_hal_dbg_print("%s:%d: Error creating nl80211 message\n", __func__, __LINE__);
             nlmsg_free(msg);
@@ -7763,6 +7878,12 @@ int nl80211_init_radio_info()
 
         if (nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index) < 0) {
             wifi_hal_dbg_print("%s:%d: Error adding nl80211 message data\n", __func__, __LINE__);
+            nlmsg_free(msg);
+            return -1;
+        }
+
+        if (nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP) < 0) {
+            wifi_hal_dbg_print("%s:%d: Error adding SPLIT_WIPHY_DUMP flag\n", __func__, __LINE__);
             nlmsg_free(msg);
             return -1;
         }
