@@ -3881,9 +3881,15 @@ int nl80211_send_and_recv(struct nl_msg *msg,
     }
     pthread_mutex_unlock(&g_wifi_hal.nl_create_socket_lock);
 
-    return (nl_info ? execute_send_and_recv(nl_info->nl_cb, nl_info->nl, msg,
+    if (!nl_info) {
+        wifi_hal_error_print("%s:%d: Failed to create netlink socket for thread %s\n",
+            __func__, __LINE__, thread_id);
+        nlmsg_free(msg);
+        return -1;
+    }
+    return execute_send_and_recv(nl_info->nl_cb, nl_info->nl, msg,
                     valid_handler, valid_data, valid_finish_handler,
-                    valid_finish_data) : -1);
+                    valid_finish_data);
 }
 
 static int family_handler(struct nl_msg *msg, void *arg)
@@ -7100,7 +7106,6 @@ static u32 fetch_nl80211_protocol_features(int nl_id, u32 *feat)
 
     msg = nl80211_drv_cmd_msg(nl_id, NULL, 0, NL80211_CMD_GET_PROTOCOL_FEATURES);
     if (!msg) {
-        nlmsg_free(msg);
         *feat = 0;
         return -1;
     }
@@ -7757,7 +7762,6 @@ int nl80211_init_radio_info()
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_GET_WIPHY);
         if (msg == NULL) {
             wifi_hal_dbg_print("%s:%d: Error creating nl80211 message\n", __func__, __LINE__);
-            nlmsg_free(msg);
             return -1;
         }
 
@@ -9681,8 +9685,8 @@ int wifi_hal_emu_set_radio_diag_stats(unsigned int radio_index, bool emu_state,
             nla_put_u64(msg, RDK_VENDOR_ATTR_RADIO_INFO_STATS_START_TIME, statisticsstarttime) <
                 0) {
 
-            nlmsg_free(msg);
             nla_nest_cancel(msg, nlattr_radio_info);
+            nlmsg_free(msg);
             free(interface);
             return -1;
         }
@@ -17681,6 +17685,8 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
         if (!types) {
             nl80211_nlmsg_clear(msg);
             nlmsg_free(msg);
+            wifi_hal_error_print("%s:%d: Failed to start nested attribute for key default types\n", __func__, __LINE__);
+            return -1;
         }
         nla_put_flag(msg, NL80211_KEY_DEFAULT_TYPE_MULTICAST);
         nla_nest_end(msg, types);
