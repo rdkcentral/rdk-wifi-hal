@@ -501,9 +501,34 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
     return 0;
 }
 
+int wifi_setRadioDfsBootupEnable(wifi_radio_index_t index, bool enable)
+{
+    wifi_radio_info_t *radio;
+
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_dbg_print("%s:%d failed to get radio for index\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    radio->oper_param.DfsEnabledBootup = enable;
+
+    return RETURN_OK;
+}
+
 int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
-    return 0;
+    wifi_radio_info_t *radio;
+
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_dbg_print("%s:%d failed to get radio for index\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    radio->oper_param.DfsEnabled = true;
+
+    return RETURN_OK;
 }
 
 int wifi_startNeighborScan(INT apIndex, wifi_neighborScanMode_t scan_mode, INT dwell_time, UINT chan_num, UINT *chan_list)

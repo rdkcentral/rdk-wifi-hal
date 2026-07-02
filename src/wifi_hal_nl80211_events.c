@@ -1179,6 +1179,22 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     }
 #endif
 
+#ifdef BANANA_PI_PORT
+    if ((wifi_chan_event_type == WIFI_EVENT_DFS_RADAR_DETECTED) && ((radio_channel_param.sub_event == WIFI_EVENT_RADAR_CAC_FINISHED) || (radio_channel_param.sub_event == WIFI_EVENT_RADAR_CAC_ABORTED))) {
+        if (interface->vap_info.vap_mode == wifi_vap_mode_ap && interface->u.ap.hapd.csa_in_progress) {
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            wifi_interface_info_t *dfs_interface;
+            hash_map_foreach(radio->interface_map, dfs_interface) {
+                if (dfs_interface->u.ap.hapd.csa_in_progress) {
+                    wifi_hal_info_print("%s:%d: ******** csa_in_progress = %d\n", __func__, __LINE__, interface->u.ap.hapd.csa_in_progress);
+                    hostapd_cleanup_cs_params(&dfs_interface->u.ap.hapd);
+                }
+           }
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        }
+    }
+#endif
+
     if ((callbacks != NULL) && (callbacks->channel_change_event_callback) && !(radio_channel_param.sub_event == WIFI_EVENT_RADAR_NOP_FINISHED)) {
         radio_channel_param.radioIndex = interface->vap_info.radio_index;
         radio_channel_param.event = wifi_chan_event_type;
@@ -1803,10 +1819,33 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
     case NL80211_CMD_RADAR_DETECT:
         // To handle CAC Finish and CAC Abort for DFS. These event involve only the primary
         // interface of the radio.
-        if (!(event_type == NL80211_RADAR_CAC_FINISHED || event_type == NL80211_RADAR_CAC_ABORTED))
-            break;
+        if (event_type == NL80211_RADAR_CAC_FINISHED || event_type == NL80211_RADAR_CAC_ABORTED || event_type == NL80211_RADAR_CAC_STARTED) {
 
-        /* fall through */
+            // Map VAP interface to primary interface for DFS events
+            if (interface != NULL) {
+                wifi_radio_info_t *radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+                if (radio != NULL) {
+                    wifi_interface_info_t *mgt_interface;
+                    if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_UPDATE_WIPHY_ON_PRIMARY) {
+                        mgt_interface = get_primary_interface(radio);
+                    } else {
+                        mgt_interface = get_private_vap_interface(radio);
+                    }
+                    if (mgt_interface != NULL) {
+                        wifi_hal_dbg_print("%s:%d: Mapping %s to %s for DFS event\n",
+                                            __func__, __LINE__, interface->name, mgt_interface->name);
+                        interface = mgt_interface;
+                    }
+                }
+                wifi_hal_dbg_print("%s:%d: event registered - processing for %s event %d\n", __func__,
+                                    __LINE__, interface->name, gnlh->cmd);
+                do_process_drv_event(interface, gnlh->cmd, tb);
+            } else {
+                wifi_hal_dbg_print("%s:%d: RADAR or SCAN event skipped, no interface found\n", __func__, __LINE__);
+            }
+            return NL_SKIP;
+        }
+        break;
     case NL80211_CMD_NEW_SCAN_RESULTS:
     case NL80211_CMD_TRIGGER_SCAN:
     case NL80211_CMD_SCAN_ABORTED:
