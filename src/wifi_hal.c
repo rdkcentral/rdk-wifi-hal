@@ -4620,10 +4620,27 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
 
     
 #ifdef HOSTAPD_2_11 // 2.11
+    mac_addr_str_t src_mac_str, dst_mac_str, bssid_str;
+    struct ieee80211_mgmt *mgmt;
+
     // Action frames will get rejected by kernel if we pass a valid link_id for non-MLO case.
     if(!wifi_hal_is_mld_enabled(interface)) {
         link_id = -1;
     }
+
+    mgmt = (struct ieee80211_mgmt *) buf;
+    if(data_len >= 2 && (mgmt->u.action.u.bss_tm_req.action == WNM_BSS_TRANS_MGMT_REQ)) {
+        memcpy(mgmt->bssid, interface->mac, ETH_ALEN);
+#ifdef CONFIG_GENERIC_MLO
+        if (link_id == -1 && wifi_hal_is_mld_enabled(interface)) {
+            link_id = wifi_hal_get_mld_link_id(interface);
+        }
+#endif
+        wifi_hal_dbg_print("%s:%d: interface:%s send action frame from:%s to:%s bssid:%s cat:%d link_id:%d \n",
+            __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, src_mac_str), to_mac_str(mgmt->da, dst_mac_str),
+            to_mac_str(mgmt->bssid, bssid_str), mgmt->u.action.category, link_id);
+    }
+
     res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait, link_id);
 #elif HOSTAPD_2_10 // 2.10
     res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait);
