@@ -8223,6 +8223,7 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
     while (interface != NULL) {
         if (interface->bss_started) {
                 reconfigure = true;
+#if !defined(CONFIG_GENERIC_MLO)
                 nl80211_enable_ap(interface, false);
                 pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                 deinit_bss(&interface->u.ap.hapd);
@@ -8231,6 +8232,7 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
 
                 pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                 nl80211_interface_enable(wifi_hal_get_interface_name(interface), false);
+#endif
         }
         interface = hash_map_get_next(radio->interface_map, interface);
     }
