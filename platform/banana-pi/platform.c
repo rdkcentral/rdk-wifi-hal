@@ -313,19 +313,30 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     }
     for (i = 0; i < map->num_vaps; i++)
     {
-      if (map->vap_array[i].vap_mode == wifi_vap_mode_ap)
-      {
-	    if ((get_security_mode_support_radius(map->vap_array[i].u.bss_info.security.mode)) || is_wifi_hal_vap_lnf_radius(map->vap_array[i].vap_index) || is_wifi_hal_vap_hotspot_secure(map->vap_array[i].vap_index)) {
-	//   Assigning default radius values
-	    wifi_nvram_defaultRead("radius_s_port",output_val);
-	    map->vap_array[i].u.bss_info.security.u.radius.s_port = atoi(output_val);
-	    map->vap_array[i].u.bss_info.security.u.radius.port = atoi(output_val);
-	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.s_ip);
-	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.ip);
-	    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.s_key);
-	    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.key);
-	    }
-      }
+        if (map->vap_array[i].vap_mode == wifi_vap_mode_ap)
+        {
+            if ((get_security_mode_support_radius(map->vap_array[i].u.bss_info.security.mode)) ||
+                is_wifi_hal_vap_lnf_radius(map->vap_array[i].vap_index) ||
+                is_wifi_hal_vap_hotspot_secure(map->vap_array[i].vap_index)) {
+                /* Set Default Primary RADIUS Configurations if not already configured */
+                if (strcmp(map->vap_array[i].u.bss_info.security.u.radius.ip, "0.0.0.0") == 0) {
+                    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.ip);
+                    wifi_nvram_defaultRead("radius_s_port",output_val);
+                    map->vap_array[i].u.bss_info.security.u.radius.port = atoi(output_val);
+                    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.key);
+                }
+                /* Set Default Secondary RADIUS Configurations if not already configured */
+                if (strcmp(map->vap_array[i].u.bss_info.security.u.radius.s_ip, "0.0.0.0") == 0) {
+                    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.s_ip);
+                    wifi_nvram_defaultRead("radius_s_port",output_val);
+                    map->vap_array[i].u.bss_info.security.u.radius.s_port = atoi(output_val);
+                    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.s_key);
+                }
+                wifi_hal_dbg_print("%s:%d: Primary RADIUS server IP address:%s Port:%d \n Secondary RADIUS server IP address:%s Port:%d \n",
+                    __func__, __LINE__, map->vap_array[i].u.bss_info.security.u.radius.ip, map->vap_array[i].u.bss_info.security.u.radius.port,
+                    map->vap_array[i].u.bss_info.security.u.radius.s_ip, map->vap_array[i].u.bss_info.security.u.radius.s_port);
+            }
+        }
     }
 
     for (unsigned int i = 0; i < map->num_vaps; i++) {
