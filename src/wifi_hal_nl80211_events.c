@@ -1582,6 +1582,83 @@ void nl80211_vendor_event_ltq(wifi_interface_info_t *interface, unsigned int sub
 
 #endif // CMXB7_PORT
 
+/* Broadcom vendor OUI and the subcmd / NLA attributes used by the driver
+ * for the WLC_E_FRAME_DROP_UNENC vendor event.  Kept in sync with
+ * wlan/wl_25.1P1/.../wl_cfgvendor_common.h.
+ */
+#define OUI_BRCM 0x001018
+#define BRCM_VENDOR_EVENT_FRAME_DROP_UNENC 3
+
+enum frame_drop_unenc_attr {
+    FRAME_DROP_UNENC_ATTR_UNSPEC,
+    FRAME_DROP_UNENC_ATTR_STA_MAC,
+    FRAME_DROP_UNENC_ATTR_ETHER_TYPE,
+    FRAME_DROP_UNENC_ATTR_MAX
+};
+
+static void nl80211_handle_frame_drop_unenc(wifi_interface_info_t *interface,
+                                            unsigned char *data, size_t len)
+{
+    wifi_device_callbacks_t *callbacks = get_hal_device_callbacks();
+    wifi_vap_info_t *vap = &interface->vap_info;
+    struct nlattr *tb[FRAME_DROP_UNENC_ATTR_MAX];
+    mac_address_t sta_mac;
+    mac_addr_str_t sta_mac_str;
+    unsigned short ether_type = 0;
+
+    if (callbacks == NULL || callbacks->num_frame_drop_unenc_cbs == 0) {
+        return;
+    }
+
+    if (data == NULL || len == 0) {
+        wifi_hal_error_print("%s:%d: nl80211: FRAME_DROP_UNENC vendor event with no payload\n",
+            __func__, __LINE__);
+        return;
+    }
+
+    if (nla_parse(tb, FRAME_DROP_UNENC_ATTR_MAX - 1, (struct nlattr *)data, (int)len, NULL) < 0) {
+        wifi_hal_error_print("%s:%d: nl80211: FRAME_DROP_UNENC nla_parse failed\n",
+            __func__, __LINE__);
+        return;
+    }
+
+    if (tb[FRAME_DROP_UNENC_ATTR_STA_MAC] == NULL ||
+        nla_len(tb[FRAME_DROP_UNENC_ATTR_STA_MAC]) < (int)sizeof(mac_address_t)) {
+        wifi_hal_error_print("%s:%d: nl80211: FRAME_DROP_UNENC missing STA MAC\n",
+            __func__, __LINE__);
+        return;
+    }
+    memcpy(sta_mac, nla_data(tb[FRAME_DROP_UNENC_ATTR_STA_MAC]), sizeof(mac_address_t));
+
+    if (tb[FRAME_DROP_UNENC_ATTR_ETHER_TYPE] != NULL) {
+        ether_type = nla_get_u16(tb[FRAME_DROP_UNENC_ATTR_ETHER_TYPE]);
+    }
+
+    wifi_hal_dbg_print("%s:%d: nl80211: FRAME_DROP_UNENC ap_index=%d sta=%s ethertype=0x%04x\n",
+        __func__, __LINE__, vap->vap_index, to_mac_str(sta_mac, sta_mac_str), ether_type);
+
+    for (unsigned int i = 0; i < callbacks->num_frame_drop_unenc_cbs; i++) {
+        if (callbacks->frame_drop_unenc_cb[i] != NULL) {
+            callbacks->frame_drop_unenc_cb[i](vap->vap_index,
+                to_mac_str(sta_mac, sta_mac_str), ether_type);
+        }
+    }
+}
+
+static void nl80211_vendor_event_brcm(wifi_interface_info_t *interface, unsigned int subcmd,
+                                      unsigned char *data, size_t len)
+{
+    switch (subcmd) {
+        case BRCM_VENDOR_EVENT_FRAME_DROP_UNENC:
+            nl80211_handle_frame_drop_unenc(interface, data, len);
+            break;
+        default:
+            wifi_hal_dbg_print("%s:%d: nl80211: Ignore unsupported BRCM vendor event %u\n",
+                __func__, __LINE__, subcmd);
+            break;
+    }
+}
+
 static void nl80211_vendor_event(wifi_interface_info_t *interface,
                     struct nlattr **tb)
 {
@@ -1615,6 +1692,9 @@ static void nl80211_vendor_event(wifi_interface_info_t *interface,
         nl80211_vendor_event_ltq(interface, subcmd, data, len);
         break;
 #endif // CMXB7_PORT
+    case OUI_BRCM:
+        nl80211_vendor_event_brcm(interface, subcmd, data, len);
+        break;
     default:
         wifi_hal_dbg_print("%s:%d: nl80211: Ignore unsupported vendor event\n", __func__, __LINE__);
         break;

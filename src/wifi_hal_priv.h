@@ -781,6 +781,7 @@ void wifi_hal_apStatusCode_callback_register(wifi_apStatusCode_callback func);
 void wifi_hal_radiusEapFailure_callback_register(wifi_radiusEapFailure_callback func);
 void wifi_hal_radiusFallback_failover_callback_register(wifi_radiusFallback_failover_callback func);
 void wifi_hal_apDeAuthEvent_callback_register(wifi_device_deauthenticated_callback func);
+void wifi_hal_apFrameDropUnencrypted_callback_register(wifi_apFrameDropUnencrypted_callback func);
 void wifi_hal_ap_max_client_rejection_callback_register(wifi_apMaxClientRejection_callback func);
 INT wifi_hal_BTMQueryRequest_callback_register(UINT apIndex,
                                             wifi_BTMQueryRequest_callback btmQueryCallback,

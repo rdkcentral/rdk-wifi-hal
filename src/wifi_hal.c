@@ -4113,6 +4113,20 @@ void wifi_hal_apDeAuthEvent_callback_register(wifi_device_deauthenticated_callba
     callbacks->num_apDeAuthEvent_cbs++;
 }
 
+void wifi_hal_apFrameDropUnencrypted_callback_register(wifi_apFrameDropUnencrypted_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+
+    if (callbacks == NULL || callbacks->num_frame_drop_unenc_cbs >= MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+
+    callbacks->frame_drop_unenc_cb[callbacks->num_frame_drop_unenc_cbs] = func;
+    callbacks->num_frame_drop_unenc_cbs++;
+}
+
 INT wifi_vapstatus_callback_register(wifi_vapstatus_callback func) {
     wifi_device_callbacks_t *callbacks;
 
