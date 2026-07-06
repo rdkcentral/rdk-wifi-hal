@@ -108,7 +108,6 @@ static unsigned char llc_info[] = {0xaa, 0xaa, 0x03, 0x00,0x00,0x00,0x88,0x8e};
 #endif // defined(WIFI_EMULATOR_CHANGE) ||  defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
 
 static int scan_info_handler(struct nl_msg *msg, void *arg);
-static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface);
 void recv_data_frame(wifi_interface_info_t *interface);
 int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx);
 
@@ -1995,7 +1994,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     unsigned char cat;
     unsigned short fc, stype;
     mac_address_t   sta, bmac = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-    mac_addr_str_t  sta_mac_str, interface_mac_str, frame_da_str;
+    mac_addr_str_t sta_mac_str, interface_mac_str, frame_da_str;
     wifi_vap_info_t *vap;
     bool drop = false;
     wifi_device_callbacks_t *callbacks;
@@ -2015,6 +2014,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #endif
 #ifdef CONFIG_GENERIC_MLO
     uint8_t *mld_mac = NULL;
+    mac_addr_str_t mld_mac_str = { 0 };
 #endif // CONFIG_GENERIC_MLO
 
 #if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
@@ -2062,9 +2062,21 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         to_mac_str(interface->mac, interface_mac_str);
         to_mac_str(mgmt->sa, sta_mac_str);
         to_mac_str(mgmt->da, frame_da_str);
+#ifdef CONFIG_GENERIC_MLO
+        if (wifi_hal_is_mld_enabled(interface)) {
+            if (mld_mac != NULL) {
+                to_mac_str(mld_mac, mld_mac_str);
+            }
+        }
+        wifi_hal_error_print("%s:%d: interface:%s dropping mgmt frame, interface mac:%s sta mac:%s"
+                             " frame da:%s, mld_mac_str:%s\n",
+            __func__, __LINE__, interface->name, interface_mac_str, sta_mac_str, frame_da_str,
+            mld_mac_str);
+#else
         wifi_hal_error_print("%s:%d: interface:%s dropping mgmt frame, interface mac:%s sta mac:%s"
                              " frame da:%s\n",
             __func__, __LINE__, interface->name, interface_mac_str, sta_mac_str, frame_da_str);
+#endif
         if ((callbacks != NULL) && (callbacks->analytics_callback != NULL)) {
             callbacks->analytics_callback("Dropping mgmt frame from interface:%s sta mac:%s frame da:%s",
                 interface_mac_str, sta_mac_str, frame_da_str);
@@ -3869,9 +3881,15 @@ int nl80211_send_and_recv(struct nl_msg *msg,
     }
     pthread_mutex_unlock(&g_wifi_hal.nl_create_socket_lock);
 
-    return (nl_info ? execute_send_and_recv(nl_info->nl_cb, nl_info->nl, msg,
+    if (!nl_info) {
+        wifi_hal_error_print("%s:%d: Failed to create netlink socket for thread %s\n",
+            __func__, __LINE__, thread_id);
+        nlmsg_free(msg);
+        return -1;
+    }
+    return execute_send_and_recv(nl_info->nl_cb, nl_info->nl, msg,
                     valid_handler, valid_data, valid_finish_handler,
-                    valid_finish_data) : -1);
+                    valid_finish_data);
 }
 
 static int family_handler(struct nl_msg *msg, void *arg)
@@ -5622,6 +5640,14 @@ static void wiphy_info_extended_capab(wifi_driver_data_t *drv,
 
         wifi_hal_dbg_print("%s:%d: nl80211: EML Capability: 0x%x MLD Capability: 0x%x\n", __func__,
             __LINE__, capa->eml_capa, capa->mld_capa_and_ops);
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+	if (tb1[NL80211_ATTR_EML_CAPABILITY] &&
+                    tb1[NL80211_ATTR_EXT_MLD_CAPA_AND_OPS])
+                        capa->ext_mld_capa_and_ops =
+                                nla_get_u16(tb1[NL80211_ATTR_EXT_MLD_CAPA_AND_OPS]);
+        wifi_hal_dbg_print("%s:%d: nl80211: Extended MLD Capabilities and Operations: 0x%x", __func__,
+            __LINE__, capa->ext_mld_capa_and_ops);
+#endif // BANANA_PI_PORT && KERNEL_6_12
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
 
@@ -6437,10 +6463,7 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
     wifi_vap_info_t *vap;
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh;
-#ifdef CONFIG_GENERIC_MLO
-    char *mld_name;
-    static unsigned int link_id = 0;
-#endif // CONFIG_GENERIC_MLO
+
 #ifdef FEATURE_SINGLE_PHY
     int rdk_radio_index_of_intf = -1;
 
@@ -6517,32 +6540,6 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                 interface_free(interface);
                 return NL_SKIP;
             }
-
-#ifdef CONFIG_GENERIC_MLO
-            mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
-            if (mld_name != NULL) {
-                mac_address_t mld_mac = {};
-
-                strncpy(interface->mld_name, mld_name, sizeof(interface->mld_name) - 1);
-                if ((interface->index = if_nametoindex(mld_name)) == 0) {
-                    wifi_hal_error_print("%s:%d: Failed to get ifindex for MLD interface %s: %s\n",
-                        __func__, __LINE__, mld_name, strerror(errno));
-                    return NL_SKIP;
-                }
-                if (wifi_hal_get_mac_address(mld_name, mld_mac) < 0) {
-                    wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n",
-                        __func__, __LINE__, mld_name);
-                    return NL_SKIP;
-                }
-
-                // TODO: get MLD configuration from DB
-                wifi_hal_set_mld_enabled(interface, true);
-                wifi_hal_set_mld_mac_address(interface, mld_mac);
-                wifi_hal_set_mld_link_id(interface, interface->rdk_radio_index);
-                wifi_hal_set_mld_link_id(interface, link_id);
-                link_id++;
-            }
-#endif // CONFIG_GENERIC_MLO
 
             wifi_hal_dbg_print("%s:%d: phy index: %d radio index: %d interface index: %d name: %s "
                                "type: %d mac:" MACSTR " vap index: %d vap name: %s mld name: %s\n",
@@ -7117,7 +7114,6 @@ static u32 fetch_nl80211_protocol_features(int nl_id, u32 *feat)
 
     msg = nl80211_drv_cmd_msg(nl_id, NULL, 0, NL80211_CMD_GET_PROTOCOL_FEATURES);
     if (!msg) {
-        nlmsg_free(msg);
         *feat = 0;
         return -1;
     }
@@ -7774,7 +7770,6 @@ int nl80211_init_radio_info()
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_GET_WIPHY);
         if (msg == NULL) {
             wifi_hal_dbg_print("%s:%d: Error creating nl80211 message\n", __func__, __LINE__);
-            nlmsg_free(msg);
             return -1;
         }
 
@@ -8803,9 +8798,7 @@ int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
     struct nl_msg *msg;
     unsigned int i;
     int ret;
-#if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
-    int err;
-#endif
+    const unsigned int wait_usec = 500000;
 
     /**
      * While stations are able to register for Action, Probe Request, and Authentication frames,
@@ -8864,7 +8857,7 @@ int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
 
     if (interface->mgmt_frames_registered == 1) {
         wifi_hal_dbg_print("%s:%d: Mgmt frames already registered for %s\n", __func__, __LINE__,
-            wifi_hal_get_interface_name(interface));
+            interface->name);
         return 0;
     }
 
@@ -8886,11 +8879,11 @@ int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
     }
 
 #if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
-    err = nl_socket_set_buffer_size((struct nl_sock *)interface->nl_event, NL_SOCKET_RX_BUFFER_SIZE,
+    ret = nl_socket_set_buffer_size((struct nl_sock *)interface->nl_event, NL_SOCKET_RX_BUFFER_SIZE,
         0);
-    if (err < 0) {
+    if (ret < 0) {
         wifi_hal_info_print("%s:%d:nl80211: Could not set nl_socket RX buffer size: %s", __func__,
-            __LINE__, nl_geterror(err));
+            __LINE__, nl_geterror(ret));
         /* continue anyway with the default (smaller) buffer */
     }
 #endif
@@ -8900,56 +8893,84 @@ int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
         wifi_hal_get_interface_name(interface), interface->index, interface->nl_event_fd);
 
     for (i = 0; i < num_stypes; i++) {
-        msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_REGISTER_FRAME);
-        if (msg == NULL) {
-            return -1;
-        }
+        // For Banana Pi in case of reconfiguration it was noticed that
+        // this operation can fail with -EALREADY as it takes time after deregistration
+        // of the handlers to clean them up. Do best effort to succeed.
+        for (int retry = 3; retry > 0; retry--) {
+            msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_REGISTER_FRAME);
+            if (msg == NULL) {
+                goto error;
+            }
 
-        if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index) < 0) {
-            nlmsg_free(msg);
-            return -1;
-        }
+            if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index) < 0) {
+                goto error;
+            }
 
-        frame_type = (WLAN_FC_TYPE_MGMT << 2) | (stypes[i] << 4);
+            frame_type = (WLAN_FC_TYPE_MGMT << 2) | (stypes[i] << 4);
 
-        if (nla_put_u16(msg, NL80211_ATTR_FRAME_TYPE, frame_type) < 0) {
-            nlmsg_free(msg);
-            return -1;
-        }
+            if (nla_put_u16(msg, NL80211_ATTR_FRAME_TYPE, frame_type) < 0) {
+                goto error;
+            }
 
-        if (nla_put(msg, NL80211_ATTR_FRAME_MATCH, 0, NULL) < 0) {
-            nlmsg_free(msg);
-            return -1;
-        }
+            if (nla_put(msg, NL80211_ATTR_FRAME_MATCH, 0, NULL) < 0) {
+                goto error;
+            }
 
-        if ((ret = execute_send_and_recv(interface->nl_cb, interface->nl_event, msg, mgmt_frame_register_handler, interface, NULL, NULL))) {
-            if ((-ret) == EALREADY) {
-                wifi_hal_dbg_print("%s:%d: Mgmt frames already registered\n", __func__, __LINE__);
+            ret = execute_send_and_recv(interface->nl_cb, interface->nl_event, msg,
+                mgmt_frame_register_handler, interface, NULL, NULL);
+            msg = NULL;
+
+            if (ret == 0) {
+                wifi_hal_info_print(
+                    "%s:%d: Mgmt frames have been registered for %s frame type %d\n", __func__,
+                    __LINE__, wifi_hal_get_interface_name(interface), frame_type);
+                break;
+            } else if ((-ret) == EALREADY) {
+                wifi_hal_info_print(
+                    "%s:%d: Mgmt frames already registered for %s and frame_type %d \n", __func__,
+                    __LINE__, wifi_hal_get_interface_name(interface), frame_type);
+                usleep(wait_usec);
             } else {
                 wifi_hal_error_print("%s:%d: Error registering for management frames on interface "
                                      "%s error: %d (%s)\n",
                     __func__, __LINE__, wifi_hal_get_interface_name(interface), ret,
                     strerror(-ret));
-                return -1;
+                goto error;
             }
         }
+
+        if (ret != 0) {
+            wifi_hal_error_print(
+              "%s:%d: Failed to register mgmt frame type %d for %s after retries\n",
+                __func__, __LINE__, frame_type, wifi_hal_get_interface_name(interface));
+             goto error;
+         }
     }
 
     interface->mgmt_frames_registered = 1;
-
     return 0;
+
+error:
+    if (interface->nl_event != NULL) {
+        nl_destroy_handles(&interface->nl_event);
+        interface->nl_event = NULL;
+        interface->nl_event_fd = -1;
+    }
+
+    if (interface->nl_cb != NULL) {
+        nl_cb_put(interface->nl_cb);
+        interface->nl_cb = NULL;
+    }
+
+    if (msg != NULL) {
+        nlmsg_free(msg);
+    }
+
+    return -1;
 }
 
-static void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface)
+void nl80211_unregister_mgmt_frames(wifi_interface_info_t *interface)
 {
-#if defined(CONFIG_GENERIC_MLO)
-    interface = wifi_hal_get_first_mld_interface(interface);
-    if (interface == NULL) {
-        wifi_hal_error_print("%s:%d: Failed to get first MLD interface\n", __func__, __LINE__);
-        return;
-    }
-#endif // CONFIG_GENERIC_MLO
-
     if (interface->mgmt_frames_registered == 0) {
         wifi_hal_dbg_print("%s:%d: interface:%s mgmt frames not registered\n", __func__, __LINE__,
             wifi_hal_get_interface_name(interface));
@@ -9140,9 +9161,8 @@ int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wif
     }
 
     if ((intf = get_interface_by_vap_index(vap->vap_index)) != NULL) {
-        wifi_hal_dbg_print("%s:%d:interface for vap index:%d already exists\n", __func__, __LINE__, 
+        wifi_hal_dbg_print("%s:%d:interface for vap index:%d already exists\n", __func__, __LINE__,
             vap->vap_index);
-
         memcpy(&intf->vap_info, vap, sizeof(wifi_vap_info_t));
         nl80211_interface_enable(intf->name, true);
     }
@@ -9673,8 +9693,8 @@ int wifi_hal_emu_set_radio_diag_stats(unsigned int radio_index, bool emu_state,
             nla_put_u64(msg, RDK_VENDOR_ATTR_RADIO_INFO_STATS_START_TIME, statisticsstarttime) <
                 0) {
 
-            nlmsg_free(msg);
             nla_nest_cancel(msg, nlattr_radio_info);
+            nlmsg_free(msg);
             free(interface);
             return -1;
         }
@@ -10370,12 +10390,22 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
             interface->wpa_s.conf->sae_pwe = 1;
         }
 
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
         interface->wpa_s.current_ssid->pt = sae_derive_pt(interface->wpa_s.conf->sae_groups,
+            interface->wpa_s.current_ssid->ssid,
+            interface->wpa_s.current_ssid->ssid_len,
+            (const u8*) interface->wpa_s.current_ssid->sae_password,
+            os_strlen(interface->wpa_s.current_ssid->sae_password),
+            (const u8*) interface->wpa_s.current_ssid->sae_password_id,
+            interface->wpa_s.current_ssid->sae_password_id ? os_strlen(interface->wpa_s.current_ssid->sae_password_id) : 0);
+#else
+       interface->wpa_s.current_ssid->pt = sae_derive_pt(interface->wpa_s.conf->sae_groups,
             interface->wpa_s.current_ssid->ssid,
             interface->wpa_s.current_ssid->ssid_len,
             interface->wpa_s.current_ssid->sae_password,
             os_strlen(interface->wpa_s.current_ssid->sae_password),
             interface->wpa_s.current_ssid->sae_password_id);
+#endif // BANANA_PI_PORT && KERNEL_6_12
     }
 
 #ifdef CONFIG_WIFI_EMULATOR
@@ -12178,8 +12208,13 @@ int wifi_drv_get_ext_capab(void *priv, enum wpa_driver_if_type type,
 
 #if HOSTAPD_VERSION >= 211
 #ifdef CONFIG_IEEE80211BE
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
+                                 u16 *eml_capa, u16 *mld_capa_and_ops, u16 *ext_mld_capa_and_ops)
+#else
 static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
                                  u16 *eml_capa, u16 *mld_capa_and_ops)
+#endif // BANANA_PI_PORT && KERNEL_6_12
 {
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
@@ -12187,6 +12222,11 @@ static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
     wifi_driver_data_t *drv;
     enum nl80211_iftype nlmode;
     unsigned int i;
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+    if (!ext_mld_capa_and_ops) {
+        return -1;
+    }
+#endif // BANANA_PI_PORT && KERNEL_6_12
 
     if (!eml_capa || !mld_capa_and_ops) {
         return -1;
@@ -13727,13 +13767,13 @@ fail:
 }
 
 #ifdef BANANA_PI_PORT
-#if defined(KERNEL_6_6)
+#if defined(KERNEL_6_6) && !defined(KERNEL_6_12)
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
     const char *ifname_wds, u32 radio_mask)
 #else
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
     const char *ifname_wds)
-#endif //KERNEL_6_6
+#endif //KERNEL_6_6 && !KERNEL_6_12
 #else
 int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const char *bridge_ifname,
     char *ifname_wds)
@@ -15510,9 +15550,15 @@ int wifi_drv_if_remove(void *priv, enum wpa_driver_if_type type, const char *ifn
 }
 
 #ifdef BANANA_PI_PORT
+#if !defined(KERNEL_6_12)
+static int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type, const char *ifname,
+     const u8 *addr, void *bss_ctx, void **drv_priv, char *force_ifname, u8 *if_addr,
+     const char *bridge, int use_existing, int setup_ap, int freq, u32 radio_mask)
+#else
 static int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type, const char *ifname,
     const u8 *addr, void *bss_ctx, void **drv_priv, char *force_ifname, u8 *if_addr,
-    const char *bridge, int use_existing, int setup_ap, int freq, u32 radio_mask)
+    const char *bridge, int use_existing, int setup_ap, int freq)
+#endif // !KERNEL_6_12
 #else
 static int wifi_drv_if_add(void *priv, enum wpa_driver_if_type type, const char *ifname,
     const u8 *addr, void *bss_ctx, void **drv_priv, char *force_ifname, u8 *if_addr,
@@ -16796,6 +16842,14 @@ int nl80211_register_bss_frames(wifi_interface_info_t *interface)
 {
     int err = 1;
 
+#if defined(CONFIG_GENERIC_MLO)
+    interface = wifi_hal_get_first_mld_interface(interface);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to get first MLD interface\n", __func__, __LINE__);
+        return -1;
+    }
+#endif // CONFIG_GENERIC_MLO
+
     if (interface->bss_frames_registered == 1) {
         wifi_hal_info_print("%s:%d: bss frames handler already registered for %s\n", __func__,
                 __LINE__, wifi_hal_get_interface_name(interface));
@@ -16860,10 +16914,31 @@ error:
 }
 #endif
 
+void nl80211_unregister_spurious_frames(wifi_interface_info_t *interface)
+{
+    if (interface->spurious_frames_registered == 0) {
+        wifi_hal_dbg_print("%s:%d: interface:%s spurious frames not registered\n", __func__,
+            __LINE__, wifi_hal_get_interface_name(interface));
+        return;
+    }
+
+    wifi_hal_info_print("%s:%d: interface:%s ifindex:%d nl sock:%d\n", __func__, __LINE__,
+        wifi_hal_get_interface_name(interface), interface->index, interface->spurious_nl_event_fd);
+
+    nl_cb_put(interface->spurious_nl_cb);
+    interface->spurious_nl_cb = NULL;
+    nl_destroy_handles(&interface->spurious_nl_event);
+    interface->spurious_nl_event = NULL;
+    interface->spurious_nl_event_fd = -1;
+
+    interface->spurious_frames_registered = 0;
+}
+
 int nl80211_register_spurious_frames(wifi_interface_info_t *interface)
 {
     struct nl_msg *msg = NULL;
     int ret = 0;
+    const unsigned int wait_usec = 300000;
 
 #if defined(CONFIG_GENERIC_MLO)
     interface = wifi_hal_get_first_mld_interface(interface);
@@ -16899,25 +16974,45 @@ int nl80211_register_spurious_frames(wifi_interface_info_t *interface)
         goto error;
     }
 
-    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_UNEXPECTED_FRAME);
-    if (msg == NULL) {
-        wifi_hal_error_print("%s:%d: failed to create message for %s interface\n", __func__,
-            __LINE__, wifi_hal_get_interface_name(interface));
-        goto error;
+    for (int retry = 3; retry > 0; retry--) {
+        // For Banana Pi in case of reconfiguration it was noticed that
+        // this operation can fail with -EALREADY as it takes time after deregistration
+        // of the handlers to clean them up. Do best effort to succeed.
+        msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_UNEXPECTED_FRAME);
+        if (msg == NULL) {
+            wifi_hal_error_print("%s:%d: failed to create message for %s interface\n", __func__,
+                __LINE__, wifi_hal_get_interface_name(interface));
+            goto error;
+        }
+
+        if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index) < 0) {
+            wifi_hal_error_print("%s:%d: failed set interface index in message for %s interface\n",
+                __func__, __LINE__, wifi_hal_get_interface_name(interface));
+            nlmsg_free(msg);
+            goto error;
+        }
+
+        ret = execute_send_and_recv(interface->spurious_nl_cb, interface->spurious_nl_event, msg,
+            spurious_frame_register_handler, interface, NULL, NULL);
+        if (ret == 0) {
+            wifi_hal_info_print("%s:%d: Spurious frames have been registered for %s\n", __func__,
+                __LINE__, wifi_hal_get_interface_name(interface));
+            break;
+        } else if ((-ret) == EALREADY) {
+            wifi_hal_info_print("%s:%d: Spurious frame handler already registered for %s\n",
+                __func__, __LINE__, wifi_hal_get_interface_name(interface));
+            usleep(wait_usec);
+        } else {
+            wifi_hal_error_print("%s:%d: failed to register for spurious frames on interface %s, "
+                                 "error: %d (%s)\n",
+                __func__, __LINE__, wifi_hal_get_interface_name(interface), ret, strerror(-ret));
+            goto error;
+        }
     }
 
-    if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index) < 0) {
-        wifi_hal_error_print("%s:%d: failed set interface index in message for %s interface\n",
+    if (ret != 0) {
+        wifi_hal_error_print("%s:%d: Failed to register spurious frame handler for %s after retries\n",
             __func__, __LINE__, wifi_hal_get_interface_name(interface));
-        goto error;
-    }
-
-    ret = execute_send_and_recv(interface->spurious_nl_cb, interface->spurious_nl_event, msg,
-        spurious_frame_register_handler, interface, NULL, NULL);
-    if (ret) {
-        wifi_hal_error_print("%s:%d: failed to register for spurious frames on interface %s, "
-                             "error: %d (%s)\n",
-            __func__, __LINE__, wifi_hal_get_interface_name(interface), ret, strerror(-ret));
         goto error;
     }
 
@@ -16973,7 +17068,32 @@ static bool is_interface_in_bridge(const char *iface, const char *bridge_name)
 }
 #endif
 
-static int register_data_frame_socket(wifi_interface_info_t *interface)
+void unregister_data_frame_socket(wifi_interface_info_t *interface)
+{
+    if (interface->data_frames_registered == 0) {
+        wifi_hal_dbg_print("%s:%d: interface:%s data frames not registered\n", __func__, __LINE__,
+            wifi_hal_get_interface_name(interface));
+        return;
+    }
+
+    wifi_hal_info_print("%s:%d: interface:%s ifindex:%d nl sock sta:%d, nl sock br_sock:%d\n",
+        __func__, __LINE__, interface->name, interface->index, interface->u.sta.sta_sock_fd,
+        interface->u.ap.br_sock_fd);
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta && interface->u.sta.sta_sock_fd >= 0) {
+        close(interface->u.sta.sta_sock_fd);
+        interface->u.sta.sta_sock_fd = -1;
+    }
+
+    if (interface->vap_info.vap_mode == wifi_vap_mode_ap && interface->u.ap.br_sock_fd >= 0) {
+        close(interface->u.ap.br_sock_fd);
+        interface->u.ap.br_sock_fd = -1;
+    }
+
+    interface->data_frames_registered = 0;
+}
+
+int register_data_frame_socket(wifi_interface_info_t *interface)
 {
     wifi_vap_info_t *vap;
     struct sockaddr_ll sockaddr;
@@ -17599,6 +17719,8 @@ int     wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
         if (!types) {
             nl80211_nlmsg_clear(msg);
             nlmsg_free(msg);
+            wifi_hal_error_print("%s:%d: Failed to start nested attribute for key default types\n", __func__, __LINE__);
+            return -1;
         }
         nla_put_flag(msg, NL80211_KEY_DEFAULT_TYPE_MULTICAST);
         nla_nest_end(msg, types);
