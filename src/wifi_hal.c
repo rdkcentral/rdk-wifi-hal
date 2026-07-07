@@ -4865,7 +4865,7 @@ INT wifi_getNASta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi_na_s
 
 INT wifi_setApIgnoreBTMDisassocTimer(INT apIndex, BOOL ignoreBTMDisassocTimer)
 {
-    (void)apIndex;
+    AP_INDEX_ASSERT(apIndex);
     (void)ignoreBTMDisassocTimer;
 
     wifi_hal_dbg_print("%s:%d: not supported (stub)\n", __func__, __LINE__);
