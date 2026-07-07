@@ -70,7 +70,7 @@ wifi_device_callbacks_t *get_device_callbacks()
     return &g_device_callbacks;
 }
 #if !defined(PLATFORM_LINUX)
-char *to_mac_str (mac_address_t mac, mac_addr_str_t key) {
+char *to_mac_str (const mac_address_t mac, mac_addr_str_t key) {
     snprintf(key, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
