@@ -4870,5 +4870,5 @@ INT wifi_setApIgnoreBTMDisassocTimer(INT apIndex, BOOL ignoreBTMDisassocTimer)
 
     wifi_hal_dbg_print("%s:%d: not supported (stub)\n", __func__, __LINE__);
 
-    return RETURN_ERR;
+    return WIFI_HAL_UNSUPPORTED;
 }
