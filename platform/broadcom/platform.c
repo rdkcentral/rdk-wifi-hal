@@ -492,6 +492,31 @@ static int is_mlo_radio(int radioIndex)
     return FALSE;
 }
 
+static bool platform_is_vap_enabled(const wifi_vap_info_t *vap_info)
+{
+    if (vap_info == NULL) {
+        wifi_hal_error_print("### %s: NULL vap ###\n", __func__);
+        return false;
+    }
+
+    if (vap_info->vap_mode == wifi_vap_mode_ap) {
+        return vap_info->u.bss_info.enabled;
+    } else if (vap_info->vap_mode == wifi_vap_mode_sta) {
+        return (vap_info->u.sta_info.enabled || vap_info->u.sta_info.ignite_enabled);
+    }
+    wifi_hal_error_print("### %s: vap_index=%d mode=%d not AP/STA  ###\n",
+            __func__, vap_info->vap_index, vap_info->vap_mode);
+    return false;
+}
+
+static bool platform_is_radio_enabled(int radio_index)
+{
+    wifi_radio_info_t *radio;
+
+    radio = get_radio_by_rdk_index(radio_index);
+    return (radio != NULL) ? radio->oper_param.enable : false;
+}
+
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 /*
  *  Any IOCTL that requires IF down shall be checked in this function.
@@ -691,7 +716,7 @@ void platform_mld_up(int mld_unit, bool up)
 
     for (i = 0; i < MAX_MLO_RADIOS; i++) {
         vapidx = mld_vapidx[mld_unit][i];
-        if (vapidx >= 0)
+        if (vapidx >= 0 && _vap_enable[vapidx])
             nlinks++;
     }
     if (nlinks < 2) {
@@ -700,11 +725,11 @@ void platform_mld_up(int mld_unit, bool up)
     }
     for (i = 0; i < MAX_MLO_RADIOS; i++) {
         vapidx = mld_vapidx[mld_unit][i];
-        if (vapidx < 0)
+        if (vapidx < 0 || !_vap_enable[vapidx])
             continue;
 
         get_ifname(vapidx, interface_name);
-        wifi_hal_info_print("### %s: %s calling platform_bss_up(%d, %d) ###\n", __func__,
+        wifi_hal_info_print("### %s: %s calling mld platform_bss_up(vap_index:%d, up:%d) ###\n", __func__,
             interface_name, vapidx, up);
         platform_bss_up(vapidx, up);
     }
@@ -716,14 +741,27 @@ void platform_mld_up(int mld_unit, bool up)
 void platform_mld_update(wifi_vap_info_t *vap)
 {
     int i, mld_unit = -1, vapidx = -1;
-    wifi_mld_common_info_t *mld_cmn = &vap->u.bss_info.mld_info.common_info;
+    wifi_mld_common_info_t *mld = NULL;
 
-    wifi_hal_info_print("### %s: %s radio=%d vap_index=%d enable %d mld: enable=%d unit=%d linkid=%d ###\n",
-        __func__, vap->vap_name, vap->radio_index, vap->vap_index, vap->u.bss_info.enabled,
-        mld_cmn->mld_enable, mld_cmn->mld_id, mld_cmn->mld_link_id);
+    if (vap == NULL) {
+        wifi_hal_error_print("### %s: NULL vap ###\n", __func__);
+        return;
+    }
+    if (vap->vap_mode == wifi_vap_mode_ap) {
+        mld = &vap->u.bss_info.mld_info.common_info;
+    } else if (vap->vap_mode == wifi_vap_mode_sta) {
+        mld = &vap->u.sta_info.mld_info.common_info;
+    } else {
+        wifi_hal_error_print("### %s: vap_index=%d mode=%d not AP/STA, skip ###\n",
+            __func__, vap->vap_index, vap->vap_mode);
+        return;
+    }
 
-    if (vap->u.bss_info.enabled && mld_cmn->mld_enable && mld_cmn->mld_id < MLD_UNIT_COUNT) {
-        mld_unit = mld_cmn->mld_id;
+    wifi_hal_info_print("### %s: %s radio=%d vap_index=%d mld: enable=%d unit=%d linkid=%d ###\n",
+        __func__, vap->vap_name, vap->radio_index, vap->vap_index, mld->mld_enable, mld->mld_id, mld->mld_link_id);
+
+    if (mld->mld_enable && mld->mld_id < MLD_UNIT_COUNT) {
+        mld_unit = mld->mld_id;
         vapidx = mld_vapidx[mld_unit][vap->radio_index];
         if (vapidx != vap->vap_index) {
             wifi_hal_info_print("### %s: mld%d[%d] vap_index changes from %d to %d ###\n", __func__,
@@ -823,6 +861,35 @@ int nl80211_send_mld_vap_disable(wifi_interface_info_t *interface)
     return ret;
 }
 
+static void update_mld_enable(int radio_index, int vap_index, bool vap_enabled)
+{
+    int is_mlo = FALSE;
+    int mld_unit = -1;
+    int k;
+
+    for (k = 0; k < MLD_UNIT_COUNT; k++) {
+        if (mld_vapidx[k][radio_index] == vap_index) {
+            is_mlo = TRUE;
+            mld_unit = k;
+            break;
+        }
+    }
+    if (is_mlo) {
+        if (vap_enabled == FALSE) {
+            /* Check all other MLD BSSes, override if any _vap_enable is true */
+            for (k = 0; k < MAX_MLO_RADIOS; k++) {
+                if (k == radio_index)
+                    continue;
+                vap_index = mld_vapidx[mld_unit][k];
+                if (vap_index >= 0 && _vap_enable[vap_index]) {
+                    vap_enabled = TRUE;
+                    break;
+                }
+            }
+        }
+        _mld_enable[mld_unit] = vap_enabled;
+    }
+}
 /*
  * Update the _vap_enable[] and restore bss up/dn states per vap_map.
  *
@@ -831,16 +898,17 @@ int nl80211_send_mld_vap_disable(wifi_interface_info_t *interface)
  * So the kernel modules cannot read & restore the current radio/BSS states.
  * This function will bring the BSSes up/down according to the _vap_enable[].
  */
-int platform_vap_enable_update(wifi_vap_info_map_t *vap_map, bool handle_mld)
+static int platform_vap_enable_update(wifi_vap_info_map_t *vap_map, int vap_maps_count,
+    int target_radio_index, const wifi_radio_operationParam_t *target_oper_param)
 {
-    int i, j, k, radio_index, vap_index, vap_enabled, is_mlo, mld_unit;
+    int i, j, k, radio_index, vap_index, vap_enabled, radio_enabled;
+    wifi_interface_info_t *interface;
 
     if (vap_map != NULL) {
-        for (i = 0; i < g_wifi_hal.num_radios; i++) {
+        for (i = 0; i < vap_maps_count; i++) {
             if (vap_map[i].num_vaps == 0)
                 break;
             for (j = 0; j < vap_map[i].num_vaps; j++) {
-                is_mlo = FALSE;
                 vap_index = vap_map[i].vap_array[j].vap_index;
                 radio_index = vap_map[i].vap_array[j].radio_index;
                 if (radio_index >= MAX_NUM_RADIOS || vap_index >= MAX_VAP) {
@@ -848,54 +916,48 @@ int platform_vap_enable_update(wifi_vap_info_map_t *vap_map, bool handle_mld)
                         radio_index, vap_index);
                     return -2;
                 }
-                for (k = 0; k < MLD_UNIT_COUNT; k++) {
-                    if (mld_vapidx[k][radio_index] == vap_index) {
-                        is_mlo = TRUE;
-                        mld_unit = k;
-                        break;
-                    }
-                }
-
-                if (vap_map[i].vap_array[j].vap_mode == wifi_vap_mode_ap) {
-                    vap_enabled = vap_map[i].vap_array[j].u.bss_info.enabled;
-		} else {
-                    vap_enabled = (vap_map[i].vap_array[j].u.sta_info.enabled || vap_map[i].vap_array[j].u.sta_info.ignite_enabled);
-		}
-		_vap_enable[vap_index] = vap_enabled;
-
-                if (is_mlo) {
-                    if (vap_enabled == FALSE) {
-                        /* Check all other MLD BSSes, override if any _vap_enable is true */
-                        for (k = 0; k < MAX_MLO_RADIOS; k++) {
-                            if (k == radio_index)
-                                continue;
-                            vap_index = mld_vapidx[mld_unit][k];
-                            if (vap_index >= 0 && _vap_enable[vap_index]) {
-                                vap_enabled = TRUE;
-                                break;
-                            }
-                        }
-                    }
-                    _mld_enable[mld_unit] = vap_enabled;
-                }
+                radio_enabled = platform_is_radio_enabled(radio_index);
+                vap_enabled = platform_is_vap_enabled(&vap_map[i].vap_array[j]);
+                vap_enabled = vap_enabled && radio_enabled;
+                _vap_enable[vap_index] = vap_enabled;
+                update_mld_enable(radio_index, vap_index, vap_enabled);
             } /*for vap_map[radio_index].vap_array[vap_index]*/
         } /* for each vap_map[radio_index] */
     } /* vap_map != NULL */
+    else {
+        if (target_oper_param != NULL) {
+            for (i = 0; i < MAX_VAP; i++) {
+                interface = get_interface_by_vap_index(i);
+                if (interface == NULL) {
+                    wifi_hal_error_print("### %s: vap_idx=%d interface is NULL, skip ###\n", __func__, i);
+                    continue;
+                }
+                if (interface->vap_info.radio_index == target_radio_index) {
+                    vap_enabled = platform_is_vap_enabled(&interface->vap_info);
+                    radio_enabled = target_oper_param->enable;
+                    vap_enabled = vap_enabled && radio_enabled;
+                    _vap_enable[i] = vap_enabled;
+                    update_mld_enable(target_radio_index, i, vap_enabled);
+                }
+            }
+        } else {
+            wifi_hal_error_print("### %s: target_oper_param=NULL ###\n", __func__);
+        }
+    }
     /* Bring up all non-MLO BSSes */
     for (i = 0; i < MAX_VAP; i++) {
         if (_vap_enable[i] && _vap_mld_unit[i] < 0) {
+            wifi_hal_info_print("### %s: calling non MLO platform_bss_up(vap_idx:%d, en:%d) ###\n",
+                __func__, i, _vap_enable[i]);
             platform_bss_up(i, _vap_enable[i]);
         }
     }
-
-    if (handle_mld == FALSE)
-        return 0;
 
     /* Bring up all MLDs */
     for (k = 0; k < MLD_UNIT_COUNT; k++) {
         if (_mld_enable[k] == FALSE)
             continue;
-        wifi_hal_info_print("### %s: calling platform_mld_up(%d, %d) ###\n",
+        wifi_hal_info_print("### %s: calling platform_mld_up(mld_unit:%d, en:%d) ###\n",
             __func__, k, _mld_enable[k]);
         platform_mld_up(k, _mld_enable[k]);
     }
@@ -1262,7 +1324,7 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
 
 #if defined(MLO_ENAB)
     platform_mlo_post_init();
-    platform_vap_enable_update(vap_map, TRUE);		/* Bring all VAPs up, including MLDs */
+    platform_vap_enable_update(vap_map, g_wifi_hal.num_radios, -1, NULL); /* Bring all VAPs up, including MLDs */
     _platform_init_done = TRUE;
 #endif /* MLO_ENAB */
 
@@ -1853,7 +1915,7 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     if (_platform_init_done != FALSE) {
         /* Check radio status and bring it up if _platform_init_done is true */
         platform_radio_up(index, TRUE);
-        platform_vap_enable_update(NULL, TRUE);
+        platform_vap_enable_update(NULL, -1, index, operationParam);
     }
 #endif /* MLO_ENAB */
     return 0;
@@ -2492,7 +2554,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 #endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
 
     if (_platform_init_done)
-        platform_vap_enable_update(map, TRUE);		/* Bring all VAPs up, including MLDs */
+        platform_vap_enable_update(map, 1, -1, NULL); /* Bring all VAPs up, including MLDs */
 #endif /* MLO_ENAB */
 
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
@@ -5240,6 +5302,8 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     struct hostapd_bss_config *conf;
     struct hostapd_data *hapd;
     wifi_vap_info_t *vap;
+    wifi_radio_info_t *radio = NULL;
+    bool radio_enabled = false;
     struct hostapd_mld *new_mld = NULL;
     wifi_mld_common_info_t *mld_conf;
     u8 mld_ap;
@@ -5262,7 +5326,8 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         wifi_hal_info_print("%s:%d: iface:%s MLO is not allowed for this AP\n", __func__, __LINE__, conf->iface);
         return RETURN_OK;
     }
-
+    radio = get_radio_by_rdk_index(vap->radio_index);
+    radio_enabled = (radio != NULL) ? radio->oper_param.enable : false;
     mld_conf = &vap->u.bss_info.mld_info.common_info;
     nvram_update_wl_mlo_apply(conf->iface, 1, &nvram_changed);
 
@@ -5271,7 +5336,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
 
     old_mld_link_id = hapd->mld_link_id;
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
-    mld_ap = vap->u.bss_info.enabled && (!conf->disable_11be && mld_conf->mld_enable &&
+    mld_ap = vap->u.bss_info.enabled && radio_enabled && (!conf->disable_11be && mld_conf->mld_enable &&
         (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
     nvram_update_wl_bss_mlo_mode(conf->iface, mld_ap, &nvram_changed);
     if (nvram_changed) {
@@ -5303,7 +5368,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
             mlo_remove_link(hapd);
             hapd->mld = NULL;
 #if defined(MLO_ENAB)
-            if (!vap->u.bss_info.enabled) {
+            if (!vap->u.bss_info.enabled || !radio_enabled) {
                 /* In case VAP was part of MLO we need to update driver about disabled MLO VAP here,
                  * because nl80211_drv_mlo_msg(called from start_bss) is not called when VAP is disabled
                  */
@@ -5314,8 +5379,8 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         conf->mld_ap = mld_ap;
     }
 
-    wifi_hal_info_print("%s:%d: iface:%s enabled %d mld_enable: %d mld_ap:%d mld_unit:%u mld_link_id:%u\n",
-        __func__, __LINE__, conf->iface, vap->u.bss_info.enabled, mld_conf->mld_enable,
+    wifi_hal_info_print("%s:%d: iface:%s vap_enabled %d radio_enabled: %d mld_enable: %d mld_ap:%d mld_unit:%u mld_link_id:%u\n",
+        __func__, __LINE__, conf->iface, vap->u.bss_info.enabled, radio_enabled, mld_conf->mld_enable,
         conf->mld_ap, get_mld_unit(conf), hapd->mld_link_id);
 
     return RETURN_OK;
