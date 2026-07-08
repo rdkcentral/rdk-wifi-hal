@@ -3395,7 +3395,7 @@ void deinit_bss(struct hostapd_data *hapd)
 
 int start_bss(wifi_interface_info_t *interface)
 {
-    int ret;
+    int ret, ret_mld = RETURN_OK;
     struct hostapd_data *hapd = NULL;
     struct hostapd_bss_config *conf = NULL;
     //struct hostapd_iface *iface;
@@ -3424,19 +3424,17 @@ int start_bss(wifi_interface_info_t *interface)
 #ifndef CONFIG_GENERIC_MLO
 #ifdef CONFIG_IEEE80211BE
 #if HOSTAPD_VERSION >= 211
-    /* TODO We MUST not ignore hostapd_setup_bss return value, but we need to figure out how to handle
-     * hostapd_setup_bss errors in a way that doesn't break the existing behavior.*/
-    ret = set_mld_shared_resources(hapd);
-    if (ret != RETURN_OK) {
+    ret_mld = set_mld_shared_resources(hapd);
+    if (ret_mld != RETURN_OK) {
         wifi_hal_error_print("%s:%d: vap:%s:%d mld set shared resources failed:%d csa status:%d\n", __func__,
-            __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
+            __LINE__, vap->vap_name, vap->vap_index, ret_mld, interface->u.ap.hapd.csa_in_progress);
     }
 #endif
 #endif
 #endif /* CONFIG_GENERIC_MLO */
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-    return ret;
+    return ret != RETURN_OK ? ret : ret_mld;
 }
 
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio)
