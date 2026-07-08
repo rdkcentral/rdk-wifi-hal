@@ -10396,12 +10396,12 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     wifi_vap_security_t *security;
     mac_addr_str_t bssid_str;
     //unsigned int rsn_ie_len;
-    struct nl_msg *msg;
 #if !defined(CONFIG_WIFI_EMULATOR) && !defined(BANANA_PI_PORT)
     u8 *pos, rsn_ie[128];
     ieee80211_tlv_t *bh_rsn = NULL;
     struct wpa_auth_config wpa_conf = {0};
     struct wpa_ie_data data;
+    struct nl_msg *msg;
     int sel, key_mgmt = 0;
 #endif
 
@@ -10456,8 +10456,8 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         wifi_hal_dbg_print("%s:%d: MLD detected. Performing synchronous targeted probe...\n",
                            __func__, __LINE__);
 
-        msg = build_directed_scan_msg(interface, backhaul->ssid, backhaul->bssid, backhaul->freq,
-                                      true);
+        struct nl_msg *msg = build_directed_scan_msg(interface, backhaul->ssid, backhaul->bssid,
+                                                     backhaul->freq, true);
         if (msg == NULL) {
             wifi_hal_error_print("%s:%d msg is NULL\n", __func__, __LINE__);
             return -1;
@@ -10588,9 +10588,10 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                 (interface->mlo_params.mld_links[link_id].freq == backhaul->freq))
                 continue;
 
-            msg = build_directed_scan_msg(interface, backhaul->ssid,
-                                          interface->mlo_params.mld_links[link_id].bssid,
-                                          interface->mlo_params.mld_links[link_id].freq, false);
+            struct nl_msg *msg = build_directed_scan_msg(interface, backhaul->ssid,
+                                                         interface->mlo_params.mld_links[link_id].bssid,
+                                                         interface->mlo_params.mld_links[link_id].freq,
+                                                         false);
             if (msg == NULL) {
                 pthread_mutex_unlock(&interface->scan_cmd_mutex);
                 wifi_hal_error_print("%s:%d msg is NULL\n", __func__, __LINE__);
