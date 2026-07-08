@@ -1579,7 +1579,7 @@ BOOL is_wifi_hal_vap_hotspot(UINT ap_index)
     return false;
 }
 
-BOOL is_wifi_hal_vap_hotspot_from_interfacename(char *interface_name)
+BOOL is_wifi_hal_vap_hotspot_from_interfacename(const char *interface_name)
 {
     unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
@@ -1591,7 +1591,7 @@ BOOL is_wifi_hal_vap_hotspot_from_interfacename(char *interface_name)
     return false;
 }
 
-wifi_vap_info_t* get_wifi_vap_info_from_interfacename(char *interface_name)
+wifi_vap_info_t* get_wifi_vap_info_from_interfacename(const char *interface_name)
 {
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
@@ -5327,7 +5327,7 @@ static inline int json_parse_interface_map(cJSON *json)
     unsigned int interface_idx_map_size;
     unsigned int r_idx;
     unsigned int i_idx;
-    cJSON_bool valid;
+    cJSON_bool valid = false;
 
     phy_list = cJSON_GetObjectItem(json, "PhyList");
     if (!cJSON_IsArray(phy_list)) {
@@ -5776,6 +5776,10 @@ bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface)
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         return interface->vap_info.u.bss_info.mld_info.common_info.mld_enable;
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        return (interface->mlo_params.valid_links > 0);
+#endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
     }
 
     return false;
@@ -5909,9 +5913,33 @@ uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         return interface->vap_info.u.bss_info.mld_info.common_info.mld_addr;
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        return interface->wpa_s.own_addr;
+#endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
     }
 
     return NULL;
+}
+
+int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, unsigned char link_id)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return -1;
+    }
+
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        interface->wpa_s.mlo_assoc_link_id = link_id;
+        interface->wpa_s.wpa->mlo.assoc_link_id = link_id;
+        return 0;
+    }
+#else
+    return 0;
+#endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
+
+    return -1;
 }
 
 int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t mac)
@@ -5925,6 +5953,11 @@ int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t
         memcpy(interface->vap_info.u.bss_info.mld_info.common_info.mld_addr, mac,
             sizeof(mac_address_t));
         return 0;
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        memcpy(interface->wpa_s.own_addr, mac, ETH_ALEN);
+        return 0;
+#endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
     }
 
     return -1;

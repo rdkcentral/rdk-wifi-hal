@@ -1813,8 +1813,10 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
         /* Special case for SCAN events - don't drop these event even if the interface is not fully
          * configured */
 #if defined(CONFIG_GENERIC_MLO)
-        /* If driver did not provide LINK_ID, fallback safely */
-        if (link_id == NL80211_DRV_LINK_ID_NA) {
+        /* Only for MLD interface when driver does not send LINK_ID, fallback safely */
+        if (link_id == NL80211_DRV_LINK_ID_NA && interface != NULL &&
+             interface->mld_name[0] != '\0' && strcmp(interface->mld_name, MLD_INTERFACE_NAME) == 0) {
+            wifi_hal_dbg_print("%s:%d: Using MLO fallback path\n",__func__, __LINE__);
             for (unsigned int i = 0; i < priv->num_radios; i++) {
                 radio = &priv->radio_info[i];
 

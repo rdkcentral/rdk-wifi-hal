@@ -1137,8 +1137,10 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     conf->disable_11be = !radio->iconf.ieee80211be;
 #endif /* CONFIG_IEEE80211BE */
 
-    snprintf(conf->iface, sizeof(conf->iface), "%s", interface->name);
-    snprintf(conf->bridge, sizeof(conf->bridge), "%s", interface->bridge);
+    memset(conf->iface, 0, sizeof(conf->iface));
+    memset(conf->bridge, 0, sizeof(conf->bridge));
+    strncpy(conf->iface, interface->name, sizeof(conf->iface) - 1);
+    strncpy(conf->bridge, interface->bridge, sizeof(conf->bridge) - 1);
     sprintf(conf->vlan_bridge, "vlan%d", vap->vap_index);
 
     conf->ctrl_interface = interface->ctrl_interface;
@@ -1469,6 +1471,9 @@ int update_hostap_iface_flags(wifi_interface_info_t *interface)
 int update_hostap_iface(wifi_interface_info_t *interface)
 {
     struct hostapd_iface   *iface;
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+    struct hostapd_data *hdata = interface ? &interface->u.ap.hapd : NULL;
+#endif // BANANA_PI_PORT && KERNEL_6_12
     wifi_vap_info_t *vap;
     wifi_radio_info_t *radio;
     //mac_addr_str_t  mac_str;
@@ -1498,6 +1503,12 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     struct eht_capabilities *drv_eht_cap;
 #endif // HOSTAPD_VERSION >= 211
 #endif // CONFIG_IEEE80211BE
+
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+    if (hdata == NULL) {
+        return RETURN_ERR;
+    }
+#endif // BANANA_PI_PORT && KERNEL_6_12
 
     if (interface == NULL) {
         return RETURN_ERR;
@@ -1558,8 +1569,11 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         }
         return RETURN_ERR;
     }
-
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+    hdata->basic_rates = radio->basic_rates[band];
+#else
     iface->basic_rates = radio->basic_rates[band];
+#endif // BANANA_PI_PORT && KERNEL_6_12
 
     get_coutry_str_from_code(param->countryCode, country);
     iface->freq = ieee80211_chan_to_freq(country, param->operatingClass, param->channel);
@@ -1585,6 +1599,24 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     mode = iface->current_mode;
 
     if ((strlen (vap->u.bss_info.preassoc.supported_data_transmit_rates) > 0) && strcmp(vap->u.bss_info.preassoc.supported_data_transmit_rates, "disabled")) {
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+        if(hdata->current_cac_rates) {
+            os_free(hdata->current_cac_rates);
+        }
+        hdata->current_cac_rates = os_calloc(mode->num_rates, sizeof(struct hostapd_rate_data));
+        if (!hdata->current_cac_rates) {
+            wifi_hal_info_print("%s:%d Failed to allocate memory\n",__func__,__LINE__);
+            if(preassoc_supp_rates) {
+                os_free(preassoc_supp_rates);
+                preassoc_supp_rates = NULL;
+            }
+            if(preassoc_basic_rates) {
+                os_free(preassoc_basic_rates);
+                preassoc_basic_rates = NULL;
+            }
+            return RETURN_ERR;
+        }
+#else
         if(iface->current_cac_rates) {
             os_free(iface->current_cac_rates);
         }
@@ -1601,9 +1633,14 @@ int update_hostap_iface(wifi_interface_info_t *interface)
             }
             return RETURN_ERR;
         }
+#endif // BANANA_PI_PORT && KERNEL_6_12
     }
     else {
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+        hdata->current_rates = radio->rate_data[band];
+#else
         iface->current_rates = radio->rate_data[band];
+#endif // BANANA_PI_PORT && KERNEL_6_12
     }
     wifi_hal_info_print("%s:%d: Interface: %s band: %d mode:%p (%d) has %d rates\n", __func__,
         __LINE__, interface->name, band, mode, mode->mode, mode->num_rates);
@@ -1611,9 +1648,12 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     if ((param->variant & WIFI_80211_VARIANT_G) && !(param->variant & WIFI_80211_VARIANT_B)) {
         memcpy(radio->basic_rates[band], basic_rates_g, sizeof(basic_rates_g));
         mode->mode = HOSTAPD_MODE_IEEE80211G;
-    } else if (param->variant & WIFI_80211_VARIANT_B) {
+    } else if ((param->variant & WIFI_80211_VARIANT_B) && !(param->variant & WIFI_80211_VARIANT_G)) {
         memcpy(radio->basic_rates[band], basic_rates_b, sizeof(basic_rates_b));
         mode->mode = HOSTAPD_MODE_IEEE80211B;
+    } else if ((param->variant & WIFI_80211_VARIANT_B) && (param->variant & WIFI_80211_VARIANT_G)) {
+        memcpy(radio->basic_rates[band], basic_rates_bg, sizeof(basic_rates_bg));
+        mode->mode = HOSTAPD_MODE_IEEE80211G;
     } else if (param->variant & WIFI_80211_VARIANT_A) {
         memcpy(radio->basic_rates[band], basic_rates_a, sizeof(basic_rates_a));
         mode->mode = HOSTAPD_MODE_IEEE80211A;
@@ -1632,7 +1672,11 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 
     wifi_hal_info_print("%s:%d: Interface: %s band: %d mode:%p (%d) has %d rates\n", __func__,
         __LINE__, interface->name, band, mode, mode->mode, mode->num_rates);
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+    hdata->num_rates = 0;
+#else
     iface->num_rates = 0;
+#endif // BANANA_PI_PORT && KERNEL_6_12
     for (i = 0; i < mode->num_rates; i++) {
 /*
         if (iface->conf->supported_rates &&
@@ -1642,35 +1686,62 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 */
 
         if (preassoc_supp_rates) {
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+              if (!int_array_includes(preassoc_supp_rates,
+                      mode->rates[i])) {
+#else
               if (!hostapd_rate_found(preassoc_supp_rates,
                       mode->rates[i])) {
+#endif // BANANA_PI_PORT && KERNEL_6_12
                   continue;
               } else {
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+                  rate = &hdata->current_cac_rates[hdata->num_rates];
+#else
                   rate = &iface->current_cac_rates[iface->num_rates];
+#endif // BANANA_PI_PORT && KERNEL_6_12
                   rate->rate = mode->rates[i];
               }
         } else {
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+            rate = &hdata->current_rates[hdata->num_rates];
+#else
             rate = &iface->current_rates[iface->num_rates];
+#endif // BANANA_PI_PORT && KERNEL_6_12
             rate->rate = mode->rates[i];
         }
         if (preassoc_basic_rates) { 
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+            if (int_array_includes(preassoc_basic_rates, rate->rate)) {
+#else
             if (hostapd_rate_found(preassoc_basic_rates, rate->rate)) {
+#endif // BANANA_PI_PORT && KERNEL_6_12
             rate->flags |= HOSTAPD_RATE_BASIC;
             }
             else {
               rate->flags &= ~(HOSTAPD_RATE_BASIC);
             }
         } else {
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+          if (int_array_includes(hdata->basic_rates, rate->rate)) {
+#else
           if (hostapd_rate_found(iface->basic_rates, rate->rate)) {
+#endif // BANANA_PI_PORT && KERNEL_6_12
               rate->flags |= HOSTAPD_RATE_BASIC;
           }
           else {
             rate->flags &= ~(HOSTAPD_RATE_BASIC);
           }
         }
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+        wifi_hal_dbg_print("%s:%d: RATE[%d] rate=%d flags=0x%x\n", __func__, __LINE__,
+            hdata->num_rates, rate->rate, rate->flags);
+        hdata->num_rates++;
+#else
         wifi_hal_dbg_print("%s:%d: RATE[%d] rate=%d flags=0x%x\n", __func__, __LINE__,
             iface->num_rates, rate->rate, rate->flags);
         iface->num_rates++;
+#endif // BANANA_PI_PORT && KERNEL_6_12
     }
     cf1 = iface->freq;
     freq1 = cf1;
