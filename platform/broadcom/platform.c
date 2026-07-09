@@ -285,7 +285,7 @@ static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map)
     }
 }
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 #if defined WIFI_EMULATOR_CHANGE
 #define SEM_NAME "/semlock"
 
