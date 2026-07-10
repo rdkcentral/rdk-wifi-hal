@@ -2178,7 +2178,7 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
 static void platform_snapshot_mld_units(wifi_vap_info_map_t *map, u8 old_mld_unit[MAX_NUM_VAP_PER_RADIO])
 {
     for (unsigned int index = 0; index < map->num_vaps; index++) {
-        int vap_index = map->vap_array[index].vap_index;
+        int vap_index;
         int unit;
 
         /* Should not happen, but check just in case */
@@ -2189,6 +2189,7 @@ static void platform_snapshot_mld_units(wifi_vap_info_map_t *map, u8 old_mld_uni
             break;
         }
 
+        vap_index = map->vap_array[index].vap_index;
         unit = (vap_index >= 0 && vap_index < MAX_VAP) ? _vap_mld_unit[vap_index] : -1;
         old_mld_unit[index] = (unit >= 0 && unit < MLD_UNIT_COUNT) ? (u8)unit : UNDEFINED_MLD_ID;
     }
