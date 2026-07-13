@@ -1370,6 +1370,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     wifi_vap_info_t *vap;
     platform_pre_create_vap_t pre_set_vap_params_fn;
     platform_create_vap_t set_vap_params_fn;
+    platform_set_beacon_prot_t set_vap_beacon_prot_fn;
     unsigned int i;
     char msg[2048];
     int ret = RETURN_OK;
@@ -1503,7 +1504,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         wifi_hal_info_print("%s:%d: interface:%s radio configured:%d radio enabled:%d\n",
             __func__, __LINE__, interface_name, radio->configured, radio->oper_param.enable);
+#ifdef CONFIG_GENERIC_MLO
+        if (radio->oper_param.enable &&
+            ((vap->vap_mode == wifi_vap_mode_sta) || radio->configured)) {
+#else
         if (radio->configured && radio->oper_param.enable) {
+#endif /* CONFIG_GENERIC_MLO */
             wifi_hal_info_print("%s:%d: interface:%s set up\n", __func__, __LINE__,
                 interface_name);
             if (nl80211_interface_enable(interface_name, true) != 0) {
@@ -1655,7 +1661,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             nl80211_set_mac(interface);
             nl80211_interface_enable(interface->name, true);
 #endif
+#ifdef CONFIG_GENERIC_MLO
+        if (radio->oper_param.enable &&
+            ((vap->vap_mode == wifi_vap_mode_sta) || radio->configured)) {
+#else
             if (radio->configured && radio->oper_param.enable) {
+#endif /* CONFIG_GENERIC_MLO */
                 wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
                     __LINE__, interface_name);
                 wifi_drv_set_operstate(interface, 1);
@@ -1704,14 +1715,22 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
 #endif // NL80211_ACL
             re_configure_steering_mac_list(interface);
-        }
-        if (vap->vap_mode == wifi_vap_mode_ap) {
+
             wifi_hal_info_print("%s:%d: vap index:%d set power:%d\n",  __func__, __LINE__,
                 vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             if (wifi_setApManagementFramePowerControl(vap->vap_index,
                 vap->u.bss_info.mgmtPowerControl) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d: vap index:%d failed to set power %d\n", __func__,
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
+            }
+
+            if ((set_vap_beacon_prot_fn = get_platform_set_beacon_prot_fn()) != NULL &&
+                    interface->u.ap.iface.drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION) {
+#ifdef BEACON_PROT
+                wifi_hal_info_print("%s:%d: vap index:%d set beacon prot: %d\n", __func__, __LINE__,
+                        vap->vap_index, interface->u.ap.conf.beacon_prot);
+                set_vap_beacon_prot_fn(vap->vap_index, interface->u.ap.conf.beacon_prot);
+#endif
             }
         }
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)

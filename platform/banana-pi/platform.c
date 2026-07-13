@@ -313,19 +313,30 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     }
     for (i = 0; i < map->num_vaps; i++)
     {
-      if (map->vap_array[i].vap_mode == wifi_vap_mode_ap)
-      {
-	    if ((get_security_mode_support_radius(map->vap_array[i].u.bss_info.security.mode)) || is_wifi_hal_vap_lnf_radius(map->vap_array[i].vap_index) || is_wifi_hal_vap_hotspot_secure(map->vap_array[i].vap_index)) {
-	//   Assigning default radius values
-	    wifi_nvram_defaultRead("radius_s_port",output_val);
-	    map->vap_array[i].u.bss_info.security.u.radius.s_port = atoi(output_val);
-	    map->vap_array[i].u.bss_info.security.u.radius.port = atoi(output_val);
-	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.s_ip);
-	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.ip);
-	    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.s_key);
-	    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.key);
-	    }
-      }
+        if (map->vap_array[i].vap_mode == wifi_vap_mode_ap)
+        {
+            if ((get_security_mode_support_radius(map->vap_array[i].u.bss_info.security.mode)) ||
+                is_wifi_hal_vap_lnf_radius(map->vap_array[i].vap_index) ||
+                is_wifi_hal_vap_hotspot_secure(map->vap_array[i].vap_index)) {
+                /* Set Default Primary RADIUS Configurations if not already configured */
+                if (strcmp(map->vap_array[i].u.bss_info.security.u.radius.ip, "0.0.0.0") == 0) {
+                    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.ip);
+                    wifi_nvram_defaultRead("radius_s_port",output_val);
+                    map->vap_array[i].u.bss_info.security.u.radius.port = atoi(output_val);
+                    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.key);
+                }
+                /* Set Default Secondary RADIUS Configurations if not already configured */
+                if (strcmp(map->vap_array[i].u.bss_info.security.u.radius.s_ip, "0.0.0.0") == 0) {
+                    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.s_ip);
+                    wifi_nvram_defaultRead("radius_s_port",output_val);
+                    map->vap_array[i].u.bss_info.security.u.radius.s_port = atoi(output_val);
+                    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.s_key);
+                }
+                wifi_hal_dbg_print("%s:%d: Primary RADIUS server IP address:%s Port:%d \n Secondary RADIUS server IP address:%s Port:%d \n",
+                    __func__, __LINE__, map->vap_array[i].u.bss_info.security.u.radius.ip, map->vap_array[i].u.bss_info.security.u.radius.port,
+                    map->vap_array[i].u.bss_info.security.u.radius.s_ip, map->vap_array[i].u.bss_info.security.u.radius.s_port);
+            }
+        }
     }
 
     for (unsigned int i = 0; i < map->num_vaps; i++) {
@@ -532,11 +543,46 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 #if HOSTAPD_VERSION >= 211
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
+    wifi_multi_link_modes_t mld_oper_cap = 0;
+    BOOL tid_negotiation = false;
+    u16 eml_capa = 0, mld_capa_and_ops = 0;
+    unsigned int i;
+    BOOL ap_ext_capa_present = false;
+
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
         wifi_hal_dbg_print("%s:%d failed to get radio for index\n", __func__, __LINE__);
         return RETURN_ERR;
     }
+
+    for (i = 0; i < radio->driver_data.num_iface_ext_capa; i++) {
+        if (radio->driver_data.iface_ext_capa[i].iftype == NL80211_IFTYPE_AP) {
+            ap_ext_capa_present = true;
+            eml_capa = radio->driver_data.iface_ext_capa[i].eml_capa;
+            mld_capa_and_ops = radio->driver_data.iface_ext_capa[i].mld_capa_and_ops;
+            break;
+        }
+    }
+
+    /* Fallback to UNSPECIFIED if AP-specific data is not present */
+    if (!ap_ext_capa_present) {
+        for (i = 0; i < radio->driver_data.num_iface_ext_capa; i++) {
+            if (radio->driver_data.iface_ext_capa[i].iftype == NL80211_IFTYPE_UNSPECIFIED) {
+                eml_capa = radio->driver_data.iface_ext_capa[i].eml_capa;
+                mld_capa_and_ops = radio->driver_data.iface_ext_capa[i].mld_capa_and_ops;
+                break;
+            }
+        }
+    }
+
+    wifi_get_mld_eml_cap(mld_capa_and_ops, eml_capa, &mld_oper_cap, &tid_negotiation);
+
+    if (mld_capa_and_ops || eml_capa) {
+        radio->driver_data.capa.flags2 |= WPA_DRIVER_FLAGS2_MLO;
+    }
+
+    radio->capab.TIDLinkMapNegotiation = tid_negotiation;
+    radio->capab.mldOperationalCap = mld_oper_cap;
 
     for (interface = hash_map_get_first(radio->interface_map); interface != NULL;
         interface = hash_map_get_next(radio->interface_map, interface)) {
@@ -562,6 +608,11 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 }
 
 int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
+{
+    return RETURN_OK;
+}
+
+int platform_set_beacon_prot(uint apIndex, bool isEnabled)
 {
     return RETURN_OK;
 }

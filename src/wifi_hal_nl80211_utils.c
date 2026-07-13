@@ -492,6 +492,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef BANANA_PI_PORT // for reference device platforms
@@ -526,6 +527,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef TCXB7_PORT // for Broadcom based platforms
@@ -560,6 +562,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef VNTXER5_PORT // for Qualcomm based platforms
@@ -594,6 +597,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef TARGET_GEMINI7_2
@@ -628,6 +632,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif 
 
 #ifdef TCXB8_PORT // for Broadcom based platforms
@@ -662,6 +667,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 
@@ -697,6 +703,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef XB10_PORT // for Broadcom based platforms
@@ -736,6 +743,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef SCXER10_PORT // for Broadcom based platforms
@@ -770,6 +778,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef SCXF10_PORT // for Broadcom based platforms
@@ -804,6 +813,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
  
 #ifdef CMXB7_PORT
@@ -838,6 +848,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef XLE_PORT // for Broadcom XLE
@@ -872,6 +883,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef SKYSR213_PORT // for Broadcom HUB6
@@ -906,6 +918,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 #ifdef RDKB_ONE_WIFI_PROD // for Broadcom based platforms
     "rdkb",
@@ -939,6 +952,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
     
 };
@@ -1579,7 +1593,7 @@ BOOL is_wifi_hal_vap_hotspot(UINT ap_index)
     return false;
 }
 
-BOOL is_wifi_hal_vap_hotspot_from_interfacename(char *interface_name)
+BOOL is_wifi_hal_vap_hotspot_from_interfacename(const char *interface_name)
 {
     unsigned int index = 0;
     for (index = 0; index < get_sizeof_interfaces_index_map(); index++) {
@@ -1591,7 +1605,7 @@ BOOL is_wifi_hal_vap_hotspot_from_interfacename(char *interface_name)
     return false;
 }
 
-wifi_vap_info_t* get_wifi_vap_info_from_interfacename(char *interface_name)
+wifi_vap_info_t* get_wifi_vap_info_from_interfacename(const char *interface_name)
 {
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
@@ -4545,6 +4559,11 @@ platform_get_RegDomain_t get_platform_get_RegDomain_fn()
     return driver_info.platform_get_RegDomain_fn;
 }
 
+platform_set_beacon_prot_t get_platform_set_beacon_prot_fn()
+{
+    return driver_info.platform_set_beacon_prot_fn;
+}
+
 bool lsmod_by_name(const char *name)
 {
     FILE *fp = NULL;
@@ -5327,7 +5346,7 @@ static inline int json_parse_interface_map(cJSON *json)
     unsigned int interface_idx_map_size;
     unsigned int r_idx;
     unsigned int i_idx;
-    cJSON_bool valid;
+    cJSON_bool valid = false;
 
     phy_list = cJSON_GetObjectItem(json, "PhyList");
     if (!cJSON_IsArray(phy_list)) {
@@ -5776,6 +5795,10 @@ bool wifi_hal_is_mld_enabled(wifi_interface_info_t *interface)
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         return interface->vap_info.u.bss_info.mld_info.common_info.mld_enable;
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        return (interface->mlo_params.valid_links > 0);
+#endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
     }
 
     return false;
@@ -5909,9 +5932,33 @@ uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         return interface->vap_info.u.bss_info.mld_info.common_info.mld_addr;
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        return interface->wpa_s.own_addr;
+#endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
     }
 
     return NULL;
+}
+
+int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, unsigned char link_id)
+{
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: NULL interface pointer\n", __func__, __LINE__);
+        return -1;
+    }
+
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        interface->wpa_s.mlo_assoc_link_id = link_id;
+        interface->wpa_s.wpa->mlo.assoc_link_id = link_id;
+        return 0;
+    }
+#else
+    return 0;
+#endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
+
+    return -1;
 }
 
 int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t mac)
@@ -5925,6 +5972,11 @@ int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t
         memcpy(interface->vap_info.u.bss_info.mld_info.common_info.mld_addr, mac,
             sizeof(mac_address_t));
         return 0;
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+        memcpy(interface->wpa_s.own_addr, mac, ETH_ALEN);
+        return 0;
+#endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
     }
 
     return -1;
