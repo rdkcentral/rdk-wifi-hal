@@ -6547,42 +6547,49 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                 return NL_SKIP;
             }
 
+            // update vap mode , Default values are not yet applied 
+            update_vap_mode(interface);
 #if defined(CONFIG_GENERIC_MLO) && defined(CONFIG_IEEE80211BE)
-            char *mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
-            unsigned char link_id = 0U;
-            if (wifi_hal_is_mld_enabled(interface) || (mld_name != NULL)) {
-                mac_address_t mld_mac = {};
+            //TODO: this is legacy way of setting interface to be in MLD
+            //group. It is redundant for AP type of VAP, STA still needs
+            //alignment so that this is not needed.
+            if (vap->vap_mode == wifi_vap_mode_sta) {
+                char *mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
+                unsigned char link_id = 0U;
+                if (wifi_hal_is_mld_enabled(interface) || (mld_name != NULL)) {
+                    mac_address_t mld_mac = {};
 
 
-                if (mld_name) {
-                    strncpy(interface->mld_name, mld_name, sizeof(interface->mld_name) - 1);
-                    if ((interface->mld_index = if_nametoindex(mld_name)) == 0) {
-                        wifi_hal_error_print("%s:%d: Failed to get ifindex for MLD interface "
-                            "%s: %s\n", __func__, __LINE__, mld_name, strerror(errno));
-                        return NL_SKIP;
+                    if (mld_name) {
+                        strncpy(interface->mld_name, mld_name, sizeof(interface->mld_name) - 1);
+                        if ((interface->mld_index = if_nametoindex(mld_name)) == 0) {
+                            wifi_hal_error_print("%s:%d: Failed to get ifindex for MLD interface "
+                                "%s: %s\n", __func__, __LINE__, mld_name, strerror(errno));
+                            return NL_SKIP;
+                        }
+                        if (wifi_hal_get_mac_address(mld_name, mld_mac) < 0) {
+                            wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n",
+                                __func__, __LINE__, mld_name);
+                            return NL_SKIP;
+                        }
+                    } else if (wifi_hal_is_mld_enabled(interface)) {
+                        if (wifi_hal_get_mac_address(interface->name, mld_mac) < 0) {
+                            wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n",
+                                __func__, __LINE__, interface->name);
+                            return NL_SKIP;
+                        }
                     }
-                    if (wifi_hal_get_mac_address(mld_name, mld_mac) < 0) {
-                        wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n",
-                            __func__, __LINE__, mld_name);
-                        return NL_SKIP;
-                    }
-                } else if (wifi_hal_is_mld_enabled(interface)) {
-                    if (wifi_hal_get_mac_address(interface->name, mld_mac) < 0) {
-                        wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n",
-                            __func__, __LINE__, interface->name);
-                        return NL_SKIP;
-                    }
+
+                    wifi_hal_dbg_print("%s:%d: MLD MAC: " MACSTR ", radio index: %u link ID: %u\n",
+                                       __func__, __LINE__, MAC2STR(mld_mac),
+                                       interface->rdk_radio_index, link_id);
+
+                    // TODO: get MLD configuration from DB
+                    wifi_hal_set_mld_enabled(interface, true);
+                    wifi_hal_set_mld_mac_address(interface, mld_mac);
+                    wifi_hal_set_mld_link_id(interface, link_id);
+                    link_id++;
                 }
-
-                wifi_hal_dbg_print("%s:%d: MLD MAC: " MACSTR ", radio index: %u link ID: %u\n",
-                                   __func__, __LINE__, MAC2STR(mld_mac),
-                                   interface->rdk_radio_index, link_id);
-
-                // TODO: get MLD configuration from DB
-                wifi_hal_set_mld_enabled(interface, true);
-                wifi_hal_set_mld_mac_address(interface, mld_mac);
-                wifi_hal_set_mld_link_id(interface, link_id);
-                link_id++;
             }
 #endif /* CONFIG_GENERIC_MLO & CONFIG_IEEE80211BE */
 
@@ -6610,8 +6617,7 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
             if (is_backhaul_interface(interface)) {
                 interface_set_mtu(interface, 1600);
             }
-            // update vap mode , Default values are not yet applied 
-            update_vap_mode(interface);
+
             if (!interface->mutexes_initialized) {
                 interface->mutexes_initialized = true;
                 pthread_mutex_init(&interface->scan_cmd_mutex, NULL);
