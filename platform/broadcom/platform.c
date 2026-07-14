@@ -4431,7 +4431,7 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
 #if defined(SKYSR213_PORT) || defined(XER2_PORT)
     static const u8 ext_cap[] = { 0x84, 0x00, 0x08, 0x82, 0x01, 0x00, 0x40, 0x40, 0x00, 0x40,
         0x20 };
-#endif // SKYSR213_PORT
+#endif // SKYSR213_PORT || XER2_PORT
     static const u8 ht_mcs[16] = { 0xff, 0xff, 0xff, 0xff };
     static const u8 vht_mcs[8] = { 0xaa, 0xff, 0x00, 0x00, 0xaa, 0xff, 0x00, 0x20 };
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || \
