@@ -389,8 +389,8 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #ifdef XER2_PORT // For XER2 Platform
     {0, 0,  "wl0.1",  "", "brlan0",  100,    0,     "private_ssid_2g"},
     {1, 1,  "wl1.1",  "", "brlan0",  100,    1,     "private_ssid_5g"},
-    {0, 0,  "wl0.7",  "", "brlan112", 112,   12,     "mesh_backhaul_2g"},
-    {1, 1,  "wl1.7",  "", "brlan113", 113,   13,     "mesh_backhaul_5g"},
+    {0, 0,  "wl0.7",  "", "brlan112", 112,   12,    "mesh_backhaul_2g"},
+    {1, 1,  "wl1.7",  "", "brlan113", 113,   13,    "mesh_backhaul_5g"},
     {0, 0,  "wl0",    "", "",          0,   14,     "mesh_sta_2g"},
     {1, 1,  "wl1",    "", "",          0,   15,     "mesh_sta_5g"},
 #endif
