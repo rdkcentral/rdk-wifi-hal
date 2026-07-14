@@ -1714,13 +1714,14 @@ static void nl80211_handle_frame_drop_unenc(wifi_interface_info_t *interface,
         ether_type = nla_get_u16(tb[FRAME_DROP_UNENC_ATTR_ETHER_TYPE]);
     }
 
+    const char *sta = to_mac_str(sta_mac, sta_mac_str);
+
     wifi_hal_dbg_print("%s:%d: nl80211: FRAME_DROP_UNENC ap_index=%d sta=%s ethertype=0x%04x\n",
-        __func__, __LINE__, vap->vap_index, to_mac_str(sta_mac, sta_mac_str), ether_type);
+        __func__, __LINE__, vap->vap_index, sta, ether_type);
 
     for (unsigned int i = 0; i < callbacks->num_frame_drop_unenc_cbs; i++) {
         if (callbacks->frame_drop_unenc_cb[i] != NULL) {
-            callbacks->frame_drop_unenc_cb[i](vap->vap_index,
-                to_mac_str(sta_mac, sta_mac_str), ether_type);
+            callbacks->frame_drop_unenc_cb[i](vap->vap_index, sta, ether_type);
         }
     }
 }
