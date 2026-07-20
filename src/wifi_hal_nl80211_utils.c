@@ -4156,6 +4156,61 @@ void update_ecomode_radio_capabilities(wifi_radio_info_t *radio)
             break;
     }
 }
+/* TCXB8-4143: helpers to distinguish "wiphy not registered yet" (transient,
+ * worth waiting for) from "radio in ECO deep power down" (permanent for this
+ * boot, backfilled by create_ecomode_interfaces()). */
++static bool rdk_radio_discovered(int rdk_radio_index)
+{
+    unsigned int i;
+
+    for (i = 0; i < g_wifi_hal.num_radios; i++) {
+        if (g_wifi_hal.radio_info[i].rdk_radio_index == rdk_radio_index) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool radio_in_eco_sleep(int rdk_radio_index)
+{
+#if defined(TCXB8_PORT)
+    /* same source of truth as platform_update_radio_presence() */
+    char cmd[32] = { 0 };
+    char buf[2] = { 0 };
+    bool sleeping = false;
+    FILE *fp;
+
+    snprintf(cmd, sizeof(cmd), "nvram kget wl%d_dpd", rdk_radio_index);
+    if ((fp = popen(cmd, "r")) != NULL) {
+        if (fgets(buf, sizeof(buf), fp) != NULL) {
+            sleeping = (atoi(buf) == 1);
+        }
+        pclose(fp);
+    }
+    return sleeping;
+#else
+    /* platforms without ECO deep power down: a mapped radio is always
+     * expected to register a wiphy */
+    (void)rdk_radio_index;
+    return false;
+#endif
+}
+
+bool nl80211_expected_radio_missing(void)
+{
+    unsigned int i;
+
+    for (i = 0; i < get_sizeof_radio_interfaces_map(); i++) {
+        if (!rdk_radio_discovered(l_radio_interface_map[i].radio_index) &&
+            !radio_in_eco_sleep(l_radio_interface_map[i].radio_index)) {
+            wifi_hal_info_print("%s:%d: radio %s (rdk index %d) not registered yet\n",
+                __func__, __LINE__, l_radio_interface_map[i].radio_name,
+                l_radio_interface_map[i].radio_index);
+            return true;
+        }
+    }
+    return false;
+}
 
 int create_ecomode_interfaces(void)
 {

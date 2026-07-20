@@ -5798,6 +5798,11 @@ static u32 get_nl80211_protocol_features(int nl_id)
 int init_nl80211()
 {
     int ret;
+    /* TCXB8-4143: keep WIPHY_DUMP_WAIT_BUDGET_MS + PRIMARY_IF_WAIT_BUDGET_MS
+     * comfortably below the 12s wifi-hal watchdog. */
+#define WIPHY_DUMP_WAIT_BUDGET_MS   5000
+#define WIPHY_DUMP_WAIT_STEP_MS     200
+    int wiphy_wait_ms = 0;
 #if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
     defined(SCXER10_PORT) || defined(SCXF10_PORT)
     u32 feat;
@@ -5908,6 +5913,7 @@ int init_nl80211()
     remap_wifi_interface_name_index_map();
     #endif /* RDKB_ONE_WIFI_PROD */
 
+retry_wiphy_dump:
 #if !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && !defined(TCXB7_PORT) && !defined(TCXB8_PORT) && \
     !defined(XB10_PORT) && !defined(SCXER10_PORT) && !defined(SCXF10_PORT)
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
@@ -5928,6 +5934,23 @@ int init_nl80211()
 
     if (nl80211_send_and_recv(msg, wiphy_dump_handler, &g_wifi_hal, NULL, NULL)) {
         return -1;
+    }
+
+    /* TCXB8-4143: a wiphy whose registration is still in progress is invisible in
+     * this snapshot and would be misclassified as an ECO-sleeping radio by
+     * create_ecomode_interfaces(). Retry (wiphy_dump_handler filters duplicates)
+     * while an expected, non-ECO radio is missing and the wait budget
+     * lasts; after the budget the old behaviour applies. */
+    if (nl80211_expected_radio_missing() &&
+        wiphy_wait_ms < WIPHY_DUMP_WAIT_BUDGET_MS) {
+        usleep(WIPHY_DUMP_WAIT_STEP_MS * 1000);
+        wiphy_wait_ms += WIPHY_DUMP_WAIT_STEP_MS;
+        goto retry_wiphy_dump;
+    }
+
+    if (wiphy_wait_ms != 0) {
+        wifi_hal_info_print("%s:%d: wiphy dump settled after %d ms, %d radios\n",
+            __func__, __LINE__, wiphy_wait_ms, g_wifi_hal.num_radios);
     }
 
     wifi_hal_dbg_print("%s:%d: Number of supported radios: %d\n", __func__, __LINE__, g_wifi_hal.num_radios);
