@@ -5265,6 +5265,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     u8 mld_ap;
     u8 old_mld_link_id;
     int nvram_changed = 0;
+    bool is_vap_private = false;
 
     conf = &interface->u.ap.conf;
     hapd = &interface->u.ap.hapd;
@@ -5277,7 +5278,9 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     set_mld_unit(conf, -1);
     conf->okc = 0;
 
-    if (!is_wifi_hal_vap_private(vap->vap_index) && !is_wifi_hal_vap_mesh_backhaul(vap->vap_index)) {
+    is_vap_private = is_wifi_hal_vap_private(vap->vap_index);
+
+    if (!is_vap_private && !is_wifi_hal_vap_mesh_backhaul(vap->vap_index)) {
         hapd->mld_link_id = -1;
         wifi_hal_info_print("%s:%d: iface:%s MLO is not allowed for this AP\n", __func__, __LINE__, conf->iface);
         return RETURN_OK;
@@ -5287,8 +5290,10 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     mld_conf = &vap->u.bss_info.mld_info.common_info;
     nvram_update_wl_mlo_apply(conf->iface, 1, &nvram_changed);
 
-    nvram_update_wl_mlo_config(vap->radio_index,
-        mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
+    if (is_vap_private) {
+        nvram_update_wl_mlo_config(vap->radio_index,
+            mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
+    }
 
     old_mld_link_id = hapd->mld_link_id;
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
