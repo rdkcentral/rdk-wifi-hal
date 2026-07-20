@@ -1004,6 +1004,18 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         }
     }
 
+#if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT)
+    if (radio->configured && radio->oper_param.mldLinkId != operationParam->mldLinkId) {
+        radio->oper_param.mldLinkId = operationParam->mldLinkId;
+
+        if (memcmp((unsigned char *)&radio->oper_param, (unsigned char *)operationParam, sizeof(wifi_radio_operationParam_t)) == 0) {
+            wifi_hal_dbg_print("%s:%d: radio %d: MLD link id changed to %d; light  refresh, no radio/VAP reconfiguration\n",
+                __func__, __LINE__, index, radio->oper_param.mldLinkId);
+            goto Exit;
+        }
+    }
+#endif /* CONFIG_IEEE80211BE */
+
 try_hostap_config_update:
     if (radio->configured && is_channel_changed) {
         radio->configuration_in_progress = true;
@@ -1045,31 +1057,6 @@ Exit:
     if (!radio->configured) {
         radio->configured = true;
     }
-
-#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && (HOSTAPD_VERSION >= 210)
-    for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
-        wifi_interface_info_t *interface_iter = NULL;
-
-        if (index == radio_index) {
-            continue;
-        }
-        wifi_radio_info_t *radio_iter = get_radio_by_rdk_index(radio_index);
-        if (radio_iter == NULL) {
-            continue;
-        }
-
-        hash_map_foreach(radio_iter->interface_map, interface_iter) {
-            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap ||
-                !interface_iter->vap_info.u.bss_info.enabled ||
-                !interface_iter->vap_info.u.bss_info.hostap_mgt_frame_ctrl) {
-                continue;
-            }
-
-            ieee802_11_set_beacon(&interface_iter->u.ap.hapd);
-        }
-    }
-
-#endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) &&  (HOSTAPD_VERSION >= 210)
 
     free(old_operationParam);
     old_operationParam = NULL;

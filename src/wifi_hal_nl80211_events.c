@@ -964,6 +964,38 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && (HOSTAPD_VERSION >= 210)
+/*
+ * A channel switch on switched_interface's radio makes the RNR / AP Channel
+ * Report that other radios' beacons advertise for this radio stale. Refresh
+ * every enabled AP VAP on the other radios so their beacons are regenerated.
+ * Caller must hold g_wifi_hal.hapd_lock.
+ */
+static void nl80211_refresh_colocated_beacons(wifi_interface_info_t *switched_interface)
+{
+    for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+        wifi_interface_info_t *interface_iter = NULL;
+        wifi_radio_info_t *radio_iter;
+
+        if (radio_index == switched_interface->vap_info.radio_index) {
+            continue;
+        }
+        radio_iter = get_radio_by_rdk_index(radio_index);
+        if (radio_iter == NULL) {
+            continue;
+        }
+        hash_map_foreach(radio_iter->interface_map, interface_iter) {
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap ||
+                !interface_iter->vap_info.u.bss_info.enabled ||
+                !interface_iter->vap_info.u.bss_info.hostap_mgt_frame_ctrl) {
+                continue;
+            }
+            ieee802_11_update_beacons(interface_iter->u.ap.hapd.iface);
+        }
+    }
+}
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL && HOSTAPD_VERSION >= 210
+
 static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, struct nlattr **tb, wifi_chan_eventType_t wifi_chan_event_type)
 {
     int ifidx = 0, freq = 0, bw = NL80211_CHAN_WIDTH_20_NOHT, cf1 = 0, cf2 = 0;
@@ -1151,6 +1183,9 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
             if (interface->beacon_set) {
                 ieee802_11_set_beacon(&interface->u.ap.hapd);
             }
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && (HOSTAPD_VERSION >= 210)
+            nl80211_refresh_colocated_beacons(interface);
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL && HOSTAPD_VERSION >= 210
             pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         }
     }

@@ -140,6 +140,9 @@ static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl
 
 static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map);
 static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char *chspec, wifi_radio_index_t index);
+#if defined(CONFIG_IEEE80211BE)
+static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id, int *nvram_changed);
+#endif /* CONFIG_IEEE80211BE */
 int sta_disassociated(int ap_index, char *mac, int reason);
 int sta_deauthenticated(int ap_index, char *mac, int reason);
 int sta_associated(int ap_index, wifi_associated_dev_t *associated_dev);
@@ -1913,6 +1916,9 @@ static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char
 
 int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
+#if defined(CONFIG_IEEE80211BE)
+    int nvram_changed = 0;
+#endif /* CONFIG_IEEE80211BE */
     char temp_buff[BUF_SIZE];
     char param_name[NVRAM_NAME_SIZE];
     char chspecbuf[NVRAM_NAME_SIZE];
@@ -1966,6 +1972,16 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     memset(param_name, 0 ,sizeof(param_name));
     sprintf(param_name, "wl%d_bcn", index);
     set_decimal_nvram_param(param_name, operationParam->beaconInterval);
+
+#if defined(CONFIG_IEEE80211BE)
+    nvram_update_wl_mlo_config(index,
+        operationParam->mldLinkId < MAX_NUM_MLD_LINKS ? (int)operationParam->mldLinkId : -1,
+        &nvram_changed);
+    if (nvram_changed) {
+        nvram_commit();
+    }
+#endif /* CONFIG_IEEE80211BE */
+
 
 #if defined(MLO_ENAB)
     if (_platform_init_done != FALSE) {
@@ -5283,9 +5299,6 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     radio_enabled = (radio != NULL) ? radio->oper_param.enable : false;
     mld_conf = &vap->u.bss_info.mld_info.common_info;
     nvram_update_wl_mlo_apply(conf->iface, 1, &nvram_changed);
-
-    nvram_update_wl_mlo_config(vap->radio_index,
-        mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
 
     old_mld_link_id = hapd->mld_link_id;
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
