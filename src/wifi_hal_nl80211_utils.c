@@ -4159,7 +4159,7 @@ void update_ecomode_radio_capabilities(wifi_radio_info_t *radio)
 /* TCXB8-4143: helpers to distinguish "wiphy not registered yet" (transient,
  * worth waiting for) from "radio in ECO deep power down" (permanent for this
  * boot, backfilled by create_ecomode_interfaces()). */
-+static bool rdk_radio_discovered(int rdk_radio_index)
+static bool rdk_radio_discovered(int rdk_radio_index)
 {
     unsigned int i;
 
