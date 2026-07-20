@@ -6191,9 +6191,52 @@ int nl80211_delete_interfaces(wifi_radio_info_t *radio)
     return 0;
 }
 
+/* TCXB8-4143: the wl driver registers the primary wlX netdevs asynchronously
+ * after its module reports "Live" in /proc/modules, so the wait at the lsmod
+ * gate in wifi_hal_init() is not sufficient. Poll the per-wiphy interface
+ * dump until the primary netdev shows up or the budget expires.
+ * Repeated calls are safe, as interface_info_handler() filters out duplicate names.
+ *
+ * Keep PRIMARY_IF_WAIT_BUDGET_MS
+ * comfortably below the 12 s wifi-hal watchdog. */
+#define PRIMARY_IF_WAIT_BUDGET_MS   5000
+#define PRIMARY_IF_WAIT_STEP_MS     100
+
+static wifi_interface_info_t *nl80211_wait_for_primary_interface(wifi_radio_info_t *radio)
+{
+    wifi_interface_info_t *primary_interface;
+    struct nl_msg *msg;
+    int waited_ms = 0;
+
+    while ((primary_interface = get_primary_interface(radio)) == NULL &&
+        waited_ms < PRIMARY_IF_WAIT_BUDGET_MS) {
+        usleep(PRIMARY_IF_WAIT_STEP_MS * 1000);
+        waited_ms += PRIMARY_IF_WAIT_STEP_MS;
+
+        /* re-enumerate this wiphy's netdevs */
+        msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP,
+            NL80211_CMD_GET_INTERFACE);
+        if (msg == NULL) {
+            return NULL;
+        }
+        nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index);
+        if (nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL)) {
+            /* temporary dump failure: keep polling until the budget expires */
+            continue;
+        }
+    }
+
+    if (primary_interface != NULL && waited_ms != 0) {
+        wifi_hal_info_print("%s:%d: primary interface of dev:%d appeared after %d ms\n",
+            __func__, __LINE__, radio->index, waited_ms);
+    }
+    return primary_interface;
+}
+
 int nl80211_init_primary_interfaces()
 {
-    unsigned int i, ret;
+    unsigned int i;
+    int ret;
     struct nl_msg *msg;
     wifi_radio_info_t *radio;
     wifi_interface_info_t *primary_interface;
@@ -6205,7 +6248,7 @@ int nl80211_init_primary_interfaces()
             wifi_hal_error_print("%s:%d: Skip the Radio %d .This is sleeping in ECO mode \n", __func__, __LINE__, radio->index);
             continue;
         }
-        primary_interface = get_primary_interface(radio);
+        primary_interface = nl80211_wait_for_primary_interface(radio);
         if (primary_interface == NULL) {
             wifi_hal_error_print("%s:%d: Error updating dev:%d no primary interfaces exist\n", __func__, __LINE__, radio->index);
             return -1;
@@ -6228,7 +6271,7 @@ int nl80211_init_primary_interfaces()
         if ((ret = nl80211_send_and_recv(msg, interface_info_handler, radio, NULL, NULL))) {
             wifi_hal_error_print("%s:%d: Error updating %s interface on dev:%d error: %d (%s) \n",
                 __func__, __LINE__, interface->name, radio->index, ret, strerror(-ret));
-            if (ret != ENODEV) {
+            if (ret != -ENODEV) {
                 // Try updating the mode again after bringing the interface down
                 nl80211_interface_enable(interface->name, false);
                 wifi_hal_dbg_print(
