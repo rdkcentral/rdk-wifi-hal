@@ -46,6 +46,10 @@
 
 extern const struct wpa_driver_ops g_wpa_driver_nl80211_ops;
 
+#ifdef CONFIG_IEEE80211BE
+extern void hostapd_bss_link_deinit(struct hostapd_data *hapd);
+#endif /* CONFIG_IEEE80211BE */
+
 int _syscmd(char *cmd, char *retBuf, int retBufSize)
 {
     FILE *f;
@@ -3319,6 +3323,13 @@ static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
     int ret;
 
 #if HOSTAPD_VERSION >= 211 //2.11
+#if defined(CONFIG_IEEE80211BE) && !defined(CONFIG_GENERIC_MLO)
+    if (hapd->conf->mld_ap && !wifi_hal_is_mld_link_exists(hapd)) {
+        hostapd_mld_add_link(hapd);
+    }
+    wifi_hal_dbg_print("%s:%d: entry iface:%s started:%d is_first_bss:%d\n",
+        __func__, __LINE__, hapd->conf->iface, hapd->started, hostapd_mld_is_first_bss(hapd));
+#endif /* defined(CONFIG_IEEE80211BE) && !defined(CONFIG_GENERIC_MLO) */
     ret = hostapd_setup_bss(hapd, 1, true);
 #elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
     ret = hostapd_setup_bss(hapd, 1, true);
@@ -3328,73 +3339,24 @@ static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
     return ret;
 }
 
-#ifndef CONFIG_GENERIC_MLO
-#ifdef CONFIG_IEEE80211BE
-#if HOSTAPD_VERSION >= 211
-static int set_mld_shared_resources(struct hostapd_data *hapd)
-{
-    int ret = RETURN_OK;
-
-    if (hapd->mld != NULL && hostapd_mld_is_first_bss(hapd)) {
-        struct hostapd_data *link;
-        int link_ret;
-        for_each_mld_link(link, hapd) {
-            if (hapd == link)
-                continue;
-
-            wifi_hal_dbg_print("%s:%d: init link iface:%s started:%d\n",
-                __func__, __LINE__, link->conf->iface, link->started);
-            link_ret = hostapd_setup_bss_internal(link);
-            if (link_ret != RETURN_OK) {
-                wifi_hal_error_print("%s:%d: set shared resources failed %d for link: %s - first_bss %s\n",
-                    __func__, __LINE__, link_ret, link->conf->iface, hapd->conf->iface);
-                ret = link_ret;
-            }
-        }
-    }
-    return ret;
-}
-
-static void clear_mld_shared_resources(struct hostapd_data *hapd)
-{
-    if (hapd->mld != NULL && hostapd_mld_is_first_bss(hapd)) {
-        struct hostapd_data *link;
-        for_each_mld_link(link, hapd) {
-            if (hapd == link)
-                continue;
-
-            wifi_hal_dbg_print("%s:%d: deinit link iface:%s started:%d\n",
-                __func__, __LINE__, link->conf->iface, link->started);
-
-            hostapd_bss_deinit_no_free(link);
-            hostapd_free_hapd_data(link);
-        }
-    }
-}
-#endif /* HOSTAPD_VERSION >= 211 */
-#endif /* CONFIG_IEEE80211BE */
-#endif /* CONFIG_GENERIC_MLO */
-
 void deinit_bss(struct hostapd_data *hapd)
 {
+    hostapd_bss_deinit_no_free(hapd);
 #ifndef CONFIG_GENERIC_MLO
 #ifdef CONFIG_IEEE80211BE
-#if HOSTAPD_VERSION >= 211
-    if (hapd && hapd->conf) {
-        wifi_hal_dbg_print("%s:%d: entry iface:%s started:%d is_first_bss:%d\n",
-            __func__, __LINE__, hapd->conf->iface, hapd->started, hostapd_mld_is_first_bss(hapd));
+    wifi_hal_dbg_print("%s:%d: entry iface:%s started:%d is_first_bss:%d\n",
+        __func__, __LINE__, hapd->conf->iface, hapd->started, hostapd_mld_is_first_bss(hapd));
+    if (hapd->conf->mld_ap && hapd->mld != NULL && wifi_hal_is_mld_link_exists(hapd)) {
+        hostapd_bss_link_deinit(hapd);
     }
-    clear_mld_shared_resources(hapd);
-#endif
-#endif
+#endif /* CONFIG_IEEE80211BE */
 #endif /* CONFIG_GENERIC_MLO */
-    hostapd_bss_deinit_no_free(hapd);
     hostapd_free_hapd_data(hapd);
 }
 
 int start_bss(wifi_interface_info_t *interface)
 {
-    int ret, ret_mld = RETURN_OK;
+    int ret;
     struct hostapd_data *hapd = NULL;
     struct hostapd_bss_config *conf = NULL;
     //struct hostapd_iface *iface;
@@ -3420,20 +3382,10 @@ int start_bss(wifi_interface_info_t *interface)
         wifi_hal_error_print("%s:%d: vap:%s:%d create is failed:%d csa status:%d\n", __func__,
             __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
     }
-#ifndef CONFIG_GENERIC_MLO
-#ifdef CONFIG_IEEE80211BE
-#if HOSTAPD_VERSION >= 211
-    ret_mld = set_mld_shared_resources(hapd);
-    if (ret_mld != RETURN_OK) {
-        wifi_hal_error_print("%s:%d: vap:%s:%d mld set shared resources failed:%d csa status:%d\n", __func__,
-            __LINE__, vap->vap_name, vap->vap_index, ret_mld, interface->u.ap.hapd.csa_in_progress);
-    }
-#endif
-#endif
-#endif /* CONFIG_GENERIC_MLO */
+
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-    return ret != RETURN_OK ? ret : ret_mld;
+    return ret;
 }
 
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio)
