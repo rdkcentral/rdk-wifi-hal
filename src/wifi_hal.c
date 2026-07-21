@@ -3897,7 +3897,12 @@ INT wifi_hal_setRMBeaconRequest(UINT apIndex,
                in_req->channelReport.channels[ap_ch_rep_len] != 0) {
             ap_ch_rep_len++;
         }
-        ap_ch_rep_p = in_req->channelReport.channels;
+        if (ap_ch_rep_len > 0) {
+            ap_ch_rep_p = in_req->channelReport.channels;
+        } else if (in_req->channel == 255) {
+            wifi_hal_error_print("%s:%d: [BTM] REQ_BEACON - channel report is empty for channel 255\n", __func__, __LINE__);
+            return WIFI_HAL_ERROR;
+        }
     }
 
     // (14)
