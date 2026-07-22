@@ -1667,7 +1667,7 @@ static void nl80211_handle_frame_drop_unenc(wifi_interface_info_t *interface,
         return;
     }
 
-    if (nla_parse(tb, FRAME_DROP_UNENC_ATTR_MAX - 1, (struct nlattr *)data, (int)len, NULL) < 0) {
+    if (nla_parse(tb, FRAME_DROP_UNENC_ATTR_ETHER_TYPE, (struct nlattr *)data, (int)len, NULL) < 0) {
         wifi_hal_error_print("%s:%d: nl80211: FRAME_DROP_UNENC nla_parse failed\n",
             __func__, __LINE__);
         return;
