@@ -339,7 +339,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     int sig_dbm = -100;
 #if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
     defined (TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || \
-    defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
+    defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT)
     int phy_rate = 60;
 #endif
 #ifdef CONFIG_GENERIC_MLO
@@ -374,7 +374,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     }
 #if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
     defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
-    defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
+    defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT)
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]) *10;
     }
@@ -615,7 +615,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
 #else
 #if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || \
     defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
-    defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD))
+    defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT))
             callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)event.tx_status.data,
                 event.tx_status.data_len, mgmt_type, dir, sig_dbm, phy_rate, 0);
 #else
@@ -1662,6 +1662,84 @@ void nl80211_vendor_event_ltq(wifi_interface_info_t *interface, unsigned int sub
 
 #endif // CMXB7_PORT
 
+/* Broadcom vendor OUI and the subcmd / NLA attributes used by the driver
+ * for the WLC_E_FRAME_DROP_UNENC vendor event.  Kept in sync with
+ * wlan/wl_25.1P1/.../wl_cfgvendor_common.h.
+ */
+#define OUI_BRCM 0x001018
+#define BRCM_VENDOR_EVENT_FRAME_DROP_UNENC 3
+
+enum frame_drop_unenc_attr {
+    FRAME_DROP_UNENC_ATTR_UNSPEC,
+    FRAME_DROP_UNENC_ATTR_STA_MAC,
+    FRAME_DROP_UNENC_ATTR_ETHER_TYPE,
+    FRAME_DROP_UNENC_ATTR_MAX
+};
+
+static void nl80211_handle_frame_drop_unenc(wifi_interface_info_t *interface,
+                                            unsigned char *data, size_t len)
+{
+    wifi_device_callbacks_t *callbacks = get_hal_device_callbacks();
+    wifi_vap_info_t *vap = &interface->vap_info;
+    struct nlattr *tb[FRAME_DROP_UNENC_ATTR_MAX];
+    mac_address_t sta_mac;
+    mac_addr_str_t sta_mac_str;
+    unsigned short ether_type = 0;
+
+    if (callbacks == NULL || callbacks->num_frame_drop_unenc_cbs == 0) {
+        return;
+    }
+
+    if (data == NULL || len == 0) {
+        wifi_hal_error_print("%s:%d: nl80211: FRAME_DROP_UNENC vendor event with no payload\n",
+            __func__, __LINE__);
+        return;
+    }
+
+    if (nla_parse(tb, FRAME_DROP_UNENC_ATTR_MAX - 1, (struct nlattr *)data, (int)len, NULL) < 0) {
+        wifi_hal_error_print("%s:%d: nl80211: FRAME_DROP_UNENC nla_parse failed\n",
+            __func__, __LINE__);
+        return;
+    }
+
+    if (tb[FRAME_DROP_UNENC_ATTR_STA_MAC] == NULL ||
+        nla_len(tb[FRAME_DROP_UNENC_ATTR_STA_MAC]) < (int)sizeof(mac_address_t)) {
+        wifi_hal_error_print("%s:%d: nl80211: FRAME_DROP_UNENC missing STA MAC\n",
+            __func__, __LINE__);
+        return;
+    }
+    memcpy(sta_mac, nla_data(tb[FRAME_DROP_UNENC_ATTR_STA_MAC]), sizeof(mac_address_t));
+
+    if (tb[FRAME_DROP_UNENC_ATTR_ETHER_TYPE] != NULL) {
+        ether_type = nla_get_u16(tb[FRAME_DROP_UNENC_ATTR_ETHER_TYPE]);
+    }
+
+    (void)to_mac_str(sta_mac, sta_mac_str);
+
+    wifi_hal_dbg_print("%s:%d: nl80211: FRAME_DROP_UNENC ap_index=%d sta=%s ethertype=0x%04x\n",
+        __func__, __LINE__, vap->vap_index, sta_mac_str, ether_type);
+
+    for (unsigned int i = 0; i < callbacks->num_frame_drop_unenc_cbs; i++) {
+        if (callbacks->frame_drop_unenc_cb[i] != NULL) {
+            callbacks->frame_drop_unenc_cb[i](vap->vap_index, sta_mac_str, ether_type);
+        }
+    }
+}
+
+static void nl80211_vendor_event_brcm(wifi_interface_info_t *interface, unsigned int subcmd,
+                                      unsigned char *data, size_t len)
+{
+    switch (subcmd) {
+        case BRCM_VENDOR_EVENT_FRAME_DROP_UNENC:
+            nl80211_handle_frame_drop_unenc(interface, data, len);
+            break;
+        default:
+            wifi_hal_dbg_print("%s:%d: nl80211: Ignore unsupported BRCM vendor event %u\n",
+                __func__, __LINE__, subcmd);
+            break;
+    }
+}
+
 static void nl80211_vendor_event(wifi_interface_info_t *interface,
                     struct nlattr **tb)
 {
@@ -1695,6 +1773,9 @@ static void nl80211_vendor_event(wifi_interface_info_t *interface,
         nl80211_vendor_event_ltq(interface, subcmd, data, len);
         break;
 #endif // CMXB7_PORT
+    case OUI_BRCM:
+        nl80211_vendor_event_brcm(interface, subcmd, data, len);
+        break;
     default:
         wifi_hal_dbg_print("%s:%d: nl80211: Ignore unsupported vendor event\n", __func__, __LINE__);
         break;
@@ -1813,8 +1894,10 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
         /* Special case for SCAN events - don't drop these event even if the interface is not fully
          * configured */
 #if defined(CONFIG_GENERIC_MLO)
-        /* If driver did not provide LINK_ID, fallback safely */
-        if (link_id == NL80211_DRV_LINK_ID_NA) {
+        /* Only for MLD interface when driver does not send LINK_ID, fallback safely */
+        if (link_id == NL80211_DRV_LINK_ID_NA && interface != NULL &&
+             interface->mld_name[0] != '\0' && strcmp(interface->mld_name, MLD_INTERFACE_NAME) == 0) {
+            wifi_hal_dbg_print("%s:%d: Using MLO fallback path\n",__func__, __LINE__);
             for (unsigned int i = 0; i < priv->num_radios; i++) {
                 radio = &priv->radio_info[i];
 
