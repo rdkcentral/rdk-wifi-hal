@@ -788,8 +788,10 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     }
     memcpy((unsigned char *)old_operationParam, (unsigned char *)&radio->oper_param, sizeof(wifi_radio_operationParam_t));
 
+#if !defined(BANANA_PI_PORT) && !defined(CONFIG_GENERIC_MLO)
     nl80211_interface_enable(wifi_hal_get_interface_name(primary_interface),
         operationParam->enable);
+#endif
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
     if (nl80211_set_amsdu_tid(primary_interface, operationParam->amsduTid) != RETURN_OK)
     {
@@ -835,17 +837,58 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                                 __func__, __LINE__, ret);
                         }
                     }
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
+                    if (wifi_hal_is_mld_enabled(interface)) {
+                        if (setup_mlo_vap(interface, &interface->vap_info) != RETURN_OK) {
+                            free(old_operationParam);
+                            old_operationParam = NULL;
+                            return RETURN_ERR;
+                        }
+                    }
+
+                    //Important side effect to this is that this will make sure we trigger the beacon twice
+                    if (restart_interface(interface)) {
+                            free(old_operationParam);
+                            old_operationParam = NULL;
+                            return RETURN_ERR;
+                    }
+
+                    if (nl80211_create_bridge(interface_name, interface->vap_info.bridge_name) != 0) {
+                        wifi_hal_error_print("%s:%d: Failed add interface %s to bridge %s\n",
+                            __func__, __LINE__, interface_name, interface->vap_info.bridge_name);
+                        free(old_operationParam);
+                        old_operationParam = NULL;
+                        return RETURN_ERR;
+                    }
+
+#else
                     if (update_hostap_interface_params(interface) != RETURN_OK) {
                         free(old_operationParam);
                         old_operationParam = NULL;
                         return RETURN_ERR;
                     }
+#endif // defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
                     interface->beacon_set = 0;
                     start_bss(interface);
                     interface->bss_started = true;
                 }
 
                 if (radio->oper_param.enable == false && interface->bss_started) {
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
+                    if (wifi_hal_is_mld_enabled(interface)) {
+                        if (teardown_mlo_vap(interface)) {
+                            free(old_operationParam);
+                            old_operationParam = NULL;
+                            return RETURN_ERR;
+                        }
+                    }
+
+                    if (reload_interface(interface)) {
+                        free(old_operationParam);
+                        old_operationParam = NULL;
+                        return RETURN_ERR;
+                    }
+#else
                     /* Clear beacon interval in wdev by stoping AP */
                     nl80211_interface_enable(interface_name, false);
                     nl80211_interface_enable(interface_name, true);
@@ -872,9 +915,9 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                     }
                     interface->bss_started = false;
                     nl80211_interface_enable(interface_name, false);
+#endif // BANANA_PI_PORT && CONFIG_GENERIC_MLO
                 }
             }
-
             if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
                 if (radio->oper_param.enable == false) {
                     if (interface->u.sta.state == WPA_COMPLETED) {
