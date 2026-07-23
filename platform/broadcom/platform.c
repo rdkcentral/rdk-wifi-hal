@@ -3314,7 +3314,17 @@ int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down)
     {
         wifi_hal_error_print("%s:%d cmd [%s] unsuccessful \n", __func__, __LINE__, cmd);
     }
-
+    char filename[64] = {'\0'};
+    char filecomplete[90] = {'\0'};
+    snprintf(filename, sizeof(filename), "/tmp/ECOMODE_wl%d", wl_idx);
+    snprintf(filecomplete, sizeof(filecomplete), "/tmp/ECOMODE_wl%d_completed", wl_idx);
+    memset(cmd, '\0', sizeof(cmd));
+    snprintf(cmd, sizeof(cmd), filecomplete);
+    if (access(filename, F_OK) == 0)
+    {
+        unlink(filename);
+        system(cmd);
+    }
     return rc;
 }
 #endif // defined (ENABLED_EDPD)
