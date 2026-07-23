@@ -65,6 +65,15 @@ AM_CONDITIONAL(CCSP_ARCH_ATOM, test "x$CCSP_ARCH" = xatom)
 AM_CONDITIONAL(CCSP_ARCH_PC, test "x$CCSP_ARCH" = xpc)
 AM_CONDITIONAL(CCSP_ARCH_MIPS, test "x$CCSP_ARCH" = xmips)
 
+# Extender profile: enable WPS onboarding / need_wps_init logic for STA
+AC_ARG_ENABLE([extender],
+[AC_HELP_STRING([--enable-extender], [build for EasyMesh extender profile (defines UWM_EXT_WPS_SUPPORT)])],
+[enable_extender=$enableval],
+[enable_extender=no])
+if test "x$enable_extender" = xyes; then
+  AC_DEFINE([UWM_EXT_WPS_SUPPORT], [1], [Build for EasyMesh extender profile])
+fi
+
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_INSTALL
