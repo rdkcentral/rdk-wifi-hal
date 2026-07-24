@@ -1,0 +1,83 @@
+name: clang-format-suggestions
+
+# Stage 2/2. Fires when the "clang-format" workflow finishes.
+# Runs in the BASE-repo (trusted) context with a write-capable token, but it
+# NEVER checks out or executes PR code. It only reads the diff artifact from
+# stage 1 as passive data and posts it as review suggestions. 
+# The actual commit to the branch happens only
+# when a human clicks "Commit suggestion".
+on:
+  workflow_run:
+    workflows: ["clang-format"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write        # the only write scope required
+  actions: read               # to download the artifact from the triggering run
+
+jobs:
+  suggest:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: Download the diff artifact
+        id: dl
+        continue-on-error: true                # absent artifact == nothing to suggest
+        uses: actions/download-artifact@v4
+        with:
+          name: clang-format-suggestions
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Nothing to suggest
+        if: steps.dl.outcome != 'success'
+        run: echo "Stage 1 produced no formatting changes; done."
+
+      - name: Load PR metadata (strictly validated)
+        if: steps.dl.outcome == 'success'
+        run: |
+          # A PR can modify stage 1/2 workflow file, so treat pr-meta.env as
+          # attacker-controlled: accept ONLY a bare integer and a 40-hex SHA,
+          # never append the file to GITHUB_ENV directly (env injection).
+          PR="$(grep -oP '^pr_number=\K[0-9]+$' pr-meta.env | head -1)"
+          SHA="$(grep -oP '^head_sha=\K[0-9a-f]{40}$' pr-meta.env | head -1)"
+          if [ -z "$PR" ] || [ -z "$SHA" ]; then
+            echo "::error::Malformed PR metadata; refusing to continue."
+            exit 1
+          fi
+          echo "pr_number=$PR" >> "$GITHUB_ENV"
+          echo "head_sha=$SHA" >> "$GITHUB_ENV"
+
+      - name: Install reviewdog (pinned, no third-party action)
+        if: steps.dl.outcome == 'success'
+        run: |
+          curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh \
+            | sh -s -- -b /usr/local/bin v0.21.0
+          reviewdog -version
+
+      - name: Post clang-format suggestions
+        if: steps.dl.outcome == 'success'
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_NAME: pull_request     # workflow_run's payload lacks fork-PR details,
+        run: |
+          # ...so synthesize a pull_request event that points reviewdog at the right PR.
+          cat > /tmp/event.json <<EOF
+          {
+            "pull_request": { "number": ${pr_number}, "head": { "sha": "${head_sha}" } },
+            "repository": {
+              "name": "${{ github.event.repository.name }}",
+              "owner": { "login": "${{ github.repository_owner }}" }
+            }
+          }
+          EOF
+          export GITHUB_EVENT_PATH=/tmp/event.json
+          export GITHUB_REPOSITORY="${{ github.repository }}"
+          export GITHUB_SHA="${head_sha}"
+          reviewdog \
+            -name="clang-format" \
+            -f=diff -f.diff.strip=1 \
+            -filter-mode=nofilter \
+            -reporter=github-pr-review \
+            -level=warning < clang-format.diff
