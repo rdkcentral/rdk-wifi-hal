@@ -11218,7 +11218,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         interface->wpa_s.conf->mld_allowed_phy = DEFAULT_MLD_ALLOWED_PHY;
 #endif
 #if defined(KERNEL_6_12)
-	interface->wpa_s.conf->disable_mld = 0;
+        interface->wpa_s.conf->disable_mld = 0;
 #endif
         interface->wpa_s.conf->mld_force_single_link = 0;
     }
