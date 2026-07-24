@@ -2201,11 +2201,14 @@ int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *inte
 
     vap->vap_index = 0;
 
-    /* Set interface properties for VAP interfaces */
+    /* Set interface properties for VAP interfaces 
+    * Match by interface name only: phy_index is not checked because the
+     * phy/wiphy index can change after a PCIe power cycle (eco mode power-up)
+     * while interface names remain stable.  Names are unique per platform
+     * (e.g. wl0.1 vs wl1.1) so name-only lookup is unambiguous. */
     for (i = 0; i < get_sizeof_interfaces_index_map(); i++) {
         map = &interface_index_map[i];
-        if ((strcmp(interface->name, map->interface_name) == 0) &&
-            (phy_index == map->phy_index)) {
+        if (strcmp(interface->name, map->interface_name) == 0) {
             vap->radio_index = map->rdk_radio_index;
             vap->vap_index = map->index;
             strcpy(vap->vap_name, map->vap_name);
@@ -2215,11 +2218,10 @@ int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *inte
         }
     }
 
-    /* Set interface properties for radio interfaces */
+    /* Set interface properties for radio interfaces (same reasoning). */
     for (i = 0; i < get_sizeof_radio_interfaces_map(); i++) {
         radio_map = &l_radio_interface_map[i];
-        if ((strcmp(interface->name, radio_map->interface_name) == 0) &&
-            (phy_index == radio_map->phy_index)) {
+        if (strcmp(interface->name, radio_map->interface_name) == 0) {
             vap->radio_index = radio_map->radio_index;
             vap->vap_index = -1;
             return 0;

@@ -775,6 +775,57 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         return RETURN_OK;
     }
 
+    /* After eco mode power_up, the PCIe device re-enumerates with a NEW phy/wiphy
+     * index AND new nl80211 interface indices. Both radio->index (phy index) and
+     * each interface->index (ifindex) must be refreshed before any nl80211 calls.
+     *
+     * 1. Use if_nametoindex() to update each interface->index from the OS -
+     *    immune to any stale radio->index and requires no nl80211.
+     * 2. Read the new phy/wiphy index from /sys/class/net/wl0/phy80211/index
+     *    and update radio->index.  This avoids the circular dependency where
+     *    interface_info_handler() uses the stale radio->index to look up
+     *    the radio via get_radio_by_phy_index().
+     * 3. With radio->index fresh, run the standard GET_INTERFACE dump. */
+    {
+        wifi_interface_info_t *iface_iter;
+        char radio_ifname[IFNAMSIZ];
+
+        /* Step 1: refresh each interface's ifindex by name */
+        hash_map_foreach(radio->interface_map, iface_iter) {
+            unsigned int new_ifidx = if_nametoindex(iface_iter->name);
+            if (new_ifidx > 0) {
+                wifi_hal_dbg_print("%s:%d: radio %d iface %s ifidx %d->%u\n",
+                    __func__, __LINE__, index, iface_iter->name,
+                    iface_iter->index, new_ifidx);
+                iface_iter->index = (int)new_ifidx;
+            }
+        }
+
+        /* Step 2: refresh radio->index (phy/wiphy index) via sysfs.
+         * On this platform /sys/class/net/wl0/phy80211/ is a directory
+         * (not a cfg80211 symlink); read the index file directly. */
+        snprintf(radio_ifname, sizeof(radio_ifname), "wl%d", index);
+        {
+            char sysfs[128];
+            FILE *fp;
+
+            snprintf(sysfs, sizeof(sysfs),
+                "/sys/class/net/%s/phy80211/index", radio_ifname);
+            fp = fopen(sysfs, "r");
+            if (fp) {
+                unsigned int new_phy_idx = radio->index;
+                if (fscanf(fp, "%u", &new_phy_idx) == 1 &&
+                        new_phy_idx != radio->index) {
+                    wifi_hal_dbg_print(
+                        " refresh - %s:%d: radio %d phy index %u->%u\n",
+                        __func__, __LINE__, index,
+                        radio->index, new_phy_idx);
+                    radio->index = new_phy_idx;
+                }
+                fclose(fp);
+            }
+        }
+    }
     primary_interface = get_primary_interface(radio);
     if (primary_interface == NULL) {
         wifi_hal_error_print("%s:%d: Error updating dev:%d no vprimary interface exist\n", __func__, __LINE__, radio->index);
