@@ -5822,6 +5822,8 @@ int wifi_hal_set_mld_id(wifi_interface_info_t *interface, int mld_id)
 }
 
 #ifdef CONFIG_GENERIC_MLO
+// TODO: Considering this function structure, it should be changed to use
+//  MLD id and not rely on the interface itself.
 wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *interface)
 {
     wifi_radio_info_t *radio;
@@ -6202,6 +6204,9 @@ static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
         }
 
         hash_map_foreach(radio->interface_map, interface_iter) {
+            if (interface_iter->vap_info.u.bss_info.enabled == false) {
+                continue;
+            }
 
             if (!wifi_hal_is_mld_enabled(interface_iter)) {
                 continue;
@@ -6235,6 +6240,10 @@ static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
         wifi_radio_info_t *radio = get_radio_by_rdk_index(i);
 
         hash_map_foreach(radio->interface_map, interface_iter) {
+            if (interface_iter->vap_info.u.bss_info.enabled == false) {
+                continue;
+            }
+
             if (!wifi_hal_is_mld_enabled(interface_iter)) {
                 continue;
             }
@@ -6367,7 +6376,7 @@ static int dealloc_mld(wifi_interface_info_t *interface)
     int ret = 0;
 
     if (hapd->mld == NULL) {
-        wifi_hal_info_print("%s:%d hapd->mld empty, nothing to free \n", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d hapd->mld empty, nothing to free \n", __func__, __LINE__);
         return 0;
     }
 
@@ -6392,11 +6401,13 @@ static int dealloc_mld(wifi_interface_info_t *interface)
 
     if (hapd->mld->refcount == 0) {
         remove_mld_from_array(hapd->mld);
+        wifi_hal_dbg_print("%s:%d MLD group destroyed \n", __func__, __LINE__);
     }
 
     hapd->mld = NULL;
     hapd->conf->mld_ap = 0;
     hapd->conf->okc = 0;
+    wifi_hal_dbg_print("%s:%d VAP removed from MLD group \n", __func__, __LINE__);
     return ret;
 }
 
@@ -6410,7 +6421,7 @@ int teardown_mlo_vap(wifi_interface_info_t *interface)
             __LINE__, interface->mld_name, wifi_hal_get_mld_link_id(interface));
     }
 
-    if (hostapd_mld_is_first_bss(&interface->u.ap.hapd)) {
+    if (hostapd_mld_is_first_bss(&interface->u.ap.hapd) && interface->u.ap.hapd.mld != NULL) {
         wifi_interface_info_t *first_interface = NULL;
         // We are removing the first link.
         // First interface pointer could point to invalid data
@@ -6450,7 +6461,8 @@ int teardown_mlo_vap(wifi_interface_info_t *interface)
         }
 
         first_interface = wifi_hal_get_first_mld_interface(interface);
-        if (first_interface != NULL && hostapd_mld_is_first_bss(&first_interface->u.ap.hapd)) {
+        if (first_interface != NULL && first_interface->u.ap.hapd.mld != NULL &&
+            hostapd_mld_is_first_bss(&first_interface->u.ap.hapd)) {
             first_interface->vap_configured = false;
             wifi_drv_set_operstate(first_interface, 1);
         }
@@ -6538,6 +6550,12 @@ int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_con
     if (if_idx == 0) {
         wifi_hal_error_print("%s:%d: Failed to find interface %s for MLD setup\n", __func__,
             __LINE__, interface->mld_name);
+        return -1;
+    }
+
+    if (nl80211_interface_enable(interface->mld_name, true) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to enable MLD interface %s\n", __func__, __LINE__,
+            interface->mld_name);
         return -1;
     }
 
