@@ -775,6 +775,51 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         return RETURN_OK;
     }
 
+#if defined(SKYSR213_PORT) || defined(SCXER10_PORT)
+    /* After eco mode power_up, the PCIe device re-enumerates with a NEW phy/wiphy
+     * index AND new nl80211 interface indices. Both radio->index (phy index) and
+     * each interface->index (ifindex) must be refreshed before any nl80211 calls.
+     */
+    {
+        wifi_interface_info_t *iface_iter;
+        char radio_ifname[IFNAMSIZ];
+
+        /* Step 1: refresh each interface's ifindex by name */
+        hash_map_foreach(radio->interface_map, iface_iter) {
+            unsigned int new_ifidx = if_nametoindex(iface_iter->name);
+            if (new_ifidx > 0) {
+                wifi_hal_dbg_print("%s:%d: radio %d iface %s ifidx %d->%u\n",
+                    __func__, __LINE__, index, iface_iter->name,
+                    iface_iter->index, new_ifidx);
+                iface_iter->index = (int)new_ifidx;
+            }
+        }
+
+        /* Step 2: refresh radio->index (phy/wiphy index) via sysfs. */
+        snprintf(radio_ifname, sizeof(radio_ifname), "wl%d", index);
+        {
+            char sysfs[128];
+            FILE *fp;
+
+            snprintf(sysfs, sizeof(sysfs),
+                "/sys/class/net/%s/phy80211/index", radio_ifname);
+            fp = fopen(sysfs, "r");
+            if (fp) {
+                unsigned int new_phy_idx = radio->index;
+                if (fscanf(fp, "%u", &new_phy_idx) == 1 &&
+                        new_phy_idx != radio->index) {
+                    wifi_hal_dbg_print(
+                        " refresh - %s:%d: radio %d phy index %u->%u\n",
+                        __func__, __LINE__, index,
+                        radio->index, new_phy_idx);
+                    radio->index = new_phy_idx;
+                }
+                fclose(fp);
+            }
+        }
+    }
+#endif /* SKYSR213_PORT || SCXER10_PORT */
+
     primary_interface = get_primary_interface(radio);
     if (primary_interface == NULL) {
         wifi_hal_error_print("%s:%d: Error updating dev:%d no vprimary interface exist\n", __func__, __LINE__, radio->index);
