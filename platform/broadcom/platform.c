@@ -111,6 +111,8 @@ static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
 
 #ifdef CONFIG_IEEE80211BE
 #define MLD_UNIT_COUNT 8
+#define UNDEFINED_MLD_ID (u8)-1
+#define UNDEFINED_MLO_LINK_ID (u8)NL80211_DRV_LINK_ID_NA
 #endif
 
 typedef struct wl_runtime_params {
@@ -767,7 +769,7 @@ void platform_mld_update(wifi_vap_info_t *vap)
             wifi_hal_info_print("### %s: mld%d[%d] vap_index changes from %d to %d ###\n", __func__,
                 mld_unit, vap->radio_index, vapidx, vap->vap_index);
             mld_vapidx[mld_unit][vap->radio_index] = vap->vap_index;
-            _vap_mld_unit[vapidx] = mld_unit;
+            _vap_mld_unit[vap->vap_index] = mld_unit;
         }
     } else {
         /* Clean up the vap_index of this radio */
@@ -2114,9 +2116,39 @@ static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, in
 #endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
-static void platform_rnr_update(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
+#if defined(MLO_ENAB)
+/*
+ * Snapshot each VAP's current MLD unit before platform_mld_update() clears it, so a link removal
+ * can later refresh the RNR of the VAP's former MLD partners.
+ */
+static void platform_snapshot_mld_units(wifi_vap_info_map_t *map, u8 old_mld_unit[MAX_NUM_VAP_PER_RADIO])
+{
+    for (unsigned int index = 0; index < map->num_vaps; index++) {
+        int vap_index;
+        int unit;
+
+        /* Should not happen, but check just in case */
+        if (index >= MAX_NUM_VAP_PER_RADIO) {
+            wifi_hal_error_print("%s:%d: num_vaps %u exceeds MAX_NUM_VAP_PER_RADIO %d, MLD snapshot "
+                "truncated; former partners of remaining VAPs will not be RNR-refreshed\n",
+                __func__, __LINE__, map->num_vaps, MAX_NUM_VAP_PER_RADIO);
+            break;
+        }
+
+        vap_index = map->vap_array[index].vap_index;
+        unit = (vap_index >= 0 && vap_index < MAX_VAP) ? _vap_mld_unit[vap_index] : -1;
+        old_mld_unit[index] = (unit >= 0 && unit < MLD_UNIT_COUNT) ? (u8)unit : UNDEFINED_MLD_ID;
+    }
+}
+#endif /* MLO_ENAB */
+
+static void platform_rnr_update(wifi_radio_index_t r_index, wifi_vap_info_map_t *map,
+    const u8 old_mld_unit[MAX_NUM_VAP_PER_RADIO])
 {
     wifi_radio_info_t *radio = get_radio_by_rdk_index(r_index);
+#if !defined(MLO_ENAB)
+    (void)old_mld_unit;
+#endif /* !MLO_ENAB */
     if (radio == NULL || map == NULL) {
         return;
     }
@@ -2128,11 +2160,19 @@ static void platform_rnr_update(wifi_radio_index_t r_index, wifi_vap_info_map_t 
 
 #if defined(MLO_ENAB)
         wifi_mld_common_info_t *mld_cmn = &(map->vap_array[index].u.bss_info.mld_info.common_info);
+        u8 cur_mld_id = (mld_cmn->mld_enable && mld_cmn->mld_id < MLD_UNIT_COUNT) ?
+            (u8)mld_cmn->mld_id : UNDEFINED_MLD_ID;
+        u8 old_unit = (old_mld_unit != NULL && index < MAX_NUM_VAP_PER_RADIO) ?
+            old_mld_unit[index] : UNDEFINED_MLD_ID;
+        /* On a link removal the VAP arrives with mld_enable == false, so its former partners are
+         * never matched below and keep advertising the departed link in their RNR. Fall back to
+         * the VAP's old MLD unit so those former partners are refreshed instead. */
+        u8 refresh_mld_id = (cur_mld_id != UNDEFINED_MLD_ID) ? cur_mld_id : old_unit;
 #endif /* MLO_ENAB */
 
         if ((radio->oper_param.band == WIFI_FREQUENCY_6_BAND
 #if defined(MLO_ENAB)
-            || (mld_cmn->mld_enable && mld_cmn->mld_id < MLD_UNIT_COUNT)
+            || refresh_mld_id != UNDEFINED_MLD_ID
 #endif /* MLO_ENAB */
             )) {
             for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
@@ -2155,9 +2195,9 @@ static void platform_rnr_update(wifi_radio_index_t r_index, wifi_vap_info_map_t 
                         radio_iter->oper_param.band != WIFI_FREQUENCY_6_BAND;
 
 #if defined(MLO_ENAB)
-                    update_beacon |= mld_cmn->mld_enable &&
+                    update_beacon |= (refresh_mld_id != UNDEFINED_MLD_ID) &&
                         interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_enable &&
-                        mld_cmn->mld_id == interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_id;
+                        (u8)interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_id == refresh_mld_id;
 #endif /* MLO_ENAB */
 
                     if (!update_beacon) {
@@ -2248,6 +2288,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
     wifi_radio_info_t *radio;
     char das_ipaddr[45];
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && defined(MLO_ENAB)
+    u8 old_mld_unit[MAX_NUM_VAP_PER_RADIO];
     bool need_down = platform_down_reqd(r_index, map);
 
     if (need_down)
@@ -2262,11 +2303,15 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
         if (is_mlo_radio(r_index))
             mlo_init_map |= (1 << r_index);
         if (mlo_init_map == mlo_radio_map) {
+            /* TODO Normally apply should be called when all VAPS are initialized */
             nl80211_send_mld_apply(NULL);
         }
     }
-#endif /* MLO_ENAB */
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    platform_snapshot_mld_units(map, old_mld_unit);
+#endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
+#endif /* MLO_ENAB */
     for (index = 0; index < map->num_vaps; index++) {
 
         radio = get_radio_by_rdk_index(r_index);
@@ -2559,7 +2604,11 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
 
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     /* Update beacon info of neighboring APs*/
-    platform_rnr_update(r_index, map);
+#if defined(MLO_ENAB)
+    platform_rnr_update(r_index, map, old_mld_unit);
+#else
+    platform_rnr_update(r_index, map, NULL);
+#endif /* MLO_ENAB */
 #endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
 
     return 0;
@@ -4944,6 +4993,21 @@ static inline unsigned char get_mld_unit(struct hostapd_bss_config *conf)
     return conf->mld_id;
 }
 
+#if defined(MLO_ENAB)
+static bool mlo_has_single_link_group(void)
+{
+    unsigned char mld_unit;
+
+    for (mld_unit = 0; mld_unit < MLD_UNIT_COUNT; mld_unit++) {
+        if (g_mlo_mld[mld_unit].num_links == 1) {
+            return true;
+        }
+    }
+
+    return false;
+}
+#endif /* MLO_ENAB */
+
 int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
     struct wpa_driver_ap_params *params)
 {
@@ -4971,7 +5035,7 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
      * NOTE: According to the new updates of the brcm contract of sending the message
      * `RDK_VENDOR_NL80211_SUBCMD_SET_MLD` we can't send this message for config -1 (`link_id=-1`).
      */
-    if (!params->mld_ap && (u8)hapd->mld_link_id == (u8)-1) {
+    if (!params->mld_ap && (u8)hapd->mld_link_id == UNDEFINED_MLO_LINK_ID) {
         wifi_hal_dbg_print("%s:%d skip Non-MLO iface:%s:\n", __func__, __LINE__, conf->iface);
         return 0;
     }
@@ -4982,7 +5046,7 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
             wifi_hal_error_print("%s:%d: Invalid mld_id:%u\n", __func__, __LINE__, conf->mld_id);
             return -1;
         }
-        if ((u8)params->mld_link_id != (u8)NL80211_DRV_LINK_ID_NA &&
+        if ((u8)params->mld_link_id != UNDEFINED_MLO_LINK_ID &&
             params->mld_link_id >= RDK_VENDOR_MAX_NUM_MLD_LINKS) {
             wifi_hal_error_print("%s:%d: Invalid mld_link_id:%u\n", __func__, __LINE__,
                 params->mld_link_id);
@@ -5002,6 +5066,18 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
      */
     if (params->mld_ap && params->mld_link_id == 0 && !is_zero_ether_addr(hapd->mld->mld_addr))
         set_mld_mac = TRUE;
+
+    /*
+    * A Broadcom AP-MLD requires at least two links. A group with exactly one link is an incomplete
+    * MLD that the driver would reject (-2) on apply. If any group is in that transient one-link state
+    * defer the apply until the group is complete (>= 2 links) or fully dissolved (0 links).
+    */
+    if (apply && mlo_has_single_link_group()) {
+        apply = FALSE;
+        wifi_hal_info_print("%s:%d iface:%s link_id:%u - deferring apply: an MLD group has only "
+            "one link, waiting for it to complete (>=2 links) or dissolve\n",
+            __func__, __LINE__, conf->iface, params->mld_link_id);
+    }
 
     wifi_hal_dbg_print(
         "%s:%d iface:%s - mld_ap:%d mld_enab:%d mld_unit:%u mld_link_id:%u mld_addr:%s apply:%d set_mld_mac:%d\n",
