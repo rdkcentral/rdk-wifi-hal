@@ -3334,23 +3334,26 @@ static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
 #if HOSTAPD_VERSION >= 211
 static int set_mld_shared_resources(struct hostapd_data *hapd)
 {
-    int ret;
+    int ret = RETURN_OK;
 
     if (hapd->mld != NULL && hostapd_mld_is_first_bss(hapd)) {
         struct hostapd_data *link;
+        int link_ret;
         for_each_mld_link(link, hapd) {
             if (hapd == link)
                 continue;
 
-            ret = hostapd_setup_bss_internal(link);
-            if (ret) {
-                wifi_hal_error_print("%s:%d: set shared resources failed for link: %s - first_bss %s\n",
-                    __func__, __LINE__, link->conf->iface, hapd->conf->iface);
-                return RETURN_ERR;
+            wifi_hal_dbg_print("%s:%d: init link iface:%s started:%d\n",
+                __func__, __LINE__, link->conf->iface, link->started);
+            link_ret = hostapd_setup_bss_internal(link);
+            if (link_ret != RETURN_OK) {
+                wifi_hal_error_print("%s:%d: set shared resources failed %d for link: %s - first_bss %s\n",
+                    __func__, __LINE__, link_ret, link->conf->iface, hapd->conf->iface);
+                ret = link_ret;
             }
         }
     }
-    return RETURN_OK;
+    return ret;
 }
 
 static void clear_mld_shared_resources(struct hostapd_data *hapd)
@@ -3360,6 +3363,10 @@ static void clear_mld_shared_resources(struct hostapd_data *hapd)
         for_each_mld_link(link, hapd) {
             if (hapd == link)
                 continue;
+
+            wifi_hal_dbg_print("%s:%d: deinit link iface:%s started:%d\n",
+                __func__, __LINE__, link->conf->iface, link->started);
+
             hostapd_bss_deinit_no_free(link);
             hostapd_free_hapd_data(link);
         }
@@ -3374,6 +3381,10 @@ void deinit_bss(struct hostapd_data *hapd)
 #ifndef CONFIG_GENERIC_MLO
 #ifdef CONFIG_IEEE80211BE
 #if HOSTAPD_VERSION >= 211
+    if (hapd && hapd->conf) {
+        wifi_hal_dbg_print("%s:%d: entry iface:%s started:%d is_first_bss:%d\n",
+            __func__, __LINE__, hapd->conf->iface, hapd->started, hostapd_mld_is_first_bss(hapd));
+    }
     clear_mld_shared_resources(hapd);
 #endif
 #endif
@@ -3384,7 +3395,7 @@ void deinit_bss(struct hostapd_data *hapd)
 
 int start_bss(wifi_interface_info_t *interface)
 {
-    int ret;
+    int ret, ret_mld = RETURN_OK;
     struct hostapd_data *hapd = NULL;
     struct hostapd_bss_config *conf = NULL;
     //struct hostapd_iface *iface;
@@ -3413,17 +3424,17 @@ int start_bss(wifi_interface_info_t *interface)
 #ifndef CONFIG_GENERIC_MLO
 #ifdef CONFIG_IEEE80211BE
 #if HOSTAPD_VERSION >= 211
-    ret = set_mld_shared_resources(hapd);
-    if (ret != RETURN_OK) {
+    ret_mld = set_mld_shared_resources(hapd);
+    if (ret_mld != RETURN_OK) {
         wifi_hal_error_print("%s:%d: vap:%s:%d mld set shared resources failed:%d csa status:%d\n", __func__,
-            __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
+            __LINE__, vap->vap_name, vap->vap_index, ret_mld, interface->u.ap.hapd.csa_in_progress);
     }
 #endif
 #endif
 #endif /* CONFIG_GENERIC_MLO */
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-    return ret;
+    return ret != RETURN_OK ? ret : ret_mld;
 }
 
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio)

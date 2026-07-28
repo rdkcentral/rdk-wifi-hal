@@ -97,6 +97,11 @@ librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/broadcom
 librdk_wifihal_la_SOURCES += ../platform/broadcom/platform.c
 endif
 
+if XER2_PORT
+librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/broadcom
+librdk_wifihal_la_SOURCES += ../platform/broadcom/platform.c
+endif
+
 if TCHCBRV2_PORT
 librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/broadcom
 librdk_wifihal_la_SOURCES += ../platform/broadcom/platform.c
