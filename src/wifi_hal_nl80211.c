@@ -2912,6 +2912,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
     union wpa_event_data event;
     struct ieee802_1x_hdr *hdr;
     mac_addr_str_t src_mac_str, dst_mac_str;
+    bool is_rx_frame = false;  /* true = frame received FROM peer; false = own TX seen on bridge */
 #ifdef CONFIG_GENERIC_MLO
     uint8_t *interface_mac = NULL;
 #endif // CONFIG_GENERIC_MLO
@@ -3105,11 +3106,10 @@ void recv_data_frame(wifi_interface_info_t *interface)
                     wifi_hal_get_mld_mac_address(interface) : interface->mac;
     if (memcmp(eth_hdr->dest, interface_mac, sizeof(mac_address_t)) == 0) {
         // received frame
-        // dir = wifi_direction_uplink;
+        is_rx_frame = true;
         memcpy(sta, eth_hdr->src, sizeof(mac_address_t));
     } else if (memcmp(eth_hdr->src, interface_mac, sizeof(mac_address_t)) == 0) {
         // transmitted frame
-        // dir = wifi_direction_downlink;
         memcpy(sta, eth_hdr->dest, sizeof(mac_address_t));
     } else {
         // drop
@@ -3118,11 +3118,10 @@ void recv_data_frame(wifi_interface_info_t *interface)
 #else
     if (memcmp(eth_hdr->dest, interface->mac, sizeof(mac_address_t)) == 0) {
         // received frame
-      //  dir = wifi_direction_uplink;
+        is_rx_frame = true;
         memcpy(sta, eth_hdr->src, sizeof(mac_address_t));
     } else if (memcmp(eth_hdr->src, interface->mac, sizeof(mac_address_t)) == 0) {
         // transmitted frame
-      //  dir = wifi_direction_downlink;
         memcpy(sta, eth_hdr->dest, sizeof(mac_address_t));
     } else {
         // drop
@@ -3155,9 +3154,15 @@ void recv_data_frame(wifi_interface_info_t *interface)
 #endif /* HOSTAPD_VERSION >= 211 */
 
 #if defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
-        //Capture the EAPOL frames.
+        //Capture the EAPOL frames (both TX and RX for test-suite visibility).
         push_eapol_to_char_dev(buff, buflen, eth_hdr);
 #endif //defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+
+        /* Do not feed AP's own transmitted frames back into hostapd as received
+         * EAPOL.  The STA's Group Key M2 looping back causes an endless flood. */
+        if (!is_rx_frame) {
+            return;
+        }
 
         buflen -= sizeof(struct ieee8023_hdr);
         wifi_hal_info_print("%s:%d: from:%s to:%s interface:%s received eapol m%d "
@@ -3190,9 +3195,13 @@ void recv_data_frame(wifi_interface_info_t *interface)
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     } else if (vap->vap_mode == wifi_vap_mode_sta) {
 #if defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
-        //Capture the EAPOL frames.
+        //Capture the EAPOL frames (both TX and RX for test-suite visibility).
         push_eapol_to_char_dev(buff, buflen, eth_hdr);
 #endif //defined(WIFI_EMULATOR_CHANGE) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+        /* Do not feed STA's own TX frames back into wpa_sm as received EAPOL. */
+        if (!is_rx_frame) {
+            return;
+        }
         if (interface->u.sta.wpa_sm && interface->u.sta.state >= WPA_ASSOCIATED) {
 #if HOSTAPD_VERSION >= 211 //2.11
             if (!interface->u.sta.wpa_sm->eapol || !eapol_sm_rx_eapol(interface->u.sta.wpa_sm->eapol,(unsigned char *)&sta,
