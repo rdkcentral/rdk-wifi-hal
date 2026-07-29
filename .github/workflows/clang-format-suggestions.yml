@@ -49,35 +49,95 @@ jobs:
           echo "pr_number=$PR" >> "$GITHUB_ENV"
           echo "head_sha=$SHA" >> "$GITHUB_ENV"
 
-      - name: Install reviewdog (pinned, no third-party action)
+      - name: Convert diff into review suggestions
         if: steps.dl.outcome == 'success'
         run: |
-          curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh \
-            | sh -s -- -b /usr/local/bin v0.21.0
-          reviewdog -version
+          # A GitHub "Commit suggestion" button is just a review comment whose
+          # body contains a ```suggestion fenced block. No extra tooling needed.
+          #
+          # In stage 1's diff the OLD side (-) is the code currently in the PR
+          # head, so those are the lines we comment on; the NEW side (+) is the
+          # replacement text that goes inside the suggestion block.
+          cat > /tmp/conv.py <<'PYEOF'
+          import json, re, sys
+          HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+          comments, path, old_ln = [], None, 0
+          removed, added, start = [], [], None
 
-      - name: Post clang-format suggestions
+          def flush():
+              global removed, added, start
+              if start is None or (not removed and not added):
+                  removed, added, start = [], [], None
+                  return
+              body = "```suggestion\n" + "".join(l + "\n" for l in added) + "```"
+              c = {"path": path, "side": "RIGHT", "body": body}
+              if removed:
+                  c["line"] = start + len(removed) - 1
+                  if len(removed) > 1:
+                      c["start_line"] = start
+                      c["start_side"] = "RIGHT"
+              else:
+                  c["line"] = max(start - 1, 1)
+              comments.append(c)
+              removed, added, start = [], [], None
+
+          for raw in sys.stdin.read().splitlines():
+              if raw.startswith("diff --git"):
+                  flush(); path = None; continue
+              if raw.startswith("--- "):
+                  continue
+              if raw.startswith("+++ "):
+                  p = raw[4:].strip()
+                  path = p[2:] if p.startswith("b/") else p
+                  continue
+              m = HUNK.match(raw)
+              if m:
+                  flush(); old_ln = int(m.group(1)); continue
+              if path is None:
+                  continue
+              if raw.startswith("-"):
+                  if start is None: start = old_ln
+                  removed.append(raw[1:]); old_ln += 1
+              elif raw.startswith("+"):
+                  if start is None: start = old_ln
+                  added.append(raw[1:])
+              elif raw.startswith("\\"):
+                  continue
+              else:
+                  flush(); old_ln += 1
+          flush()
+          json.dump(comments, open("/tmp/comments.json", "w"))
+          print(f"{len(comments)} suggestion(s) generated")
+          PYEOF
+          python3 /tmp/conv.py < clang-format.diff
+          python3 - <<'PYEOF'
+          import json, os
+          comments = json.load(open("/tmp/comments.json"))
+          review = {
+              "commit_id": os.environ["head_sha"],
+              "event": "COMMENT",
+              "body": "`clang-format` suggests the formatting changes below. "
+                      "Use **Commit suggestion** to apply them.",
+              "comments": comments,
+          }
+          json.dump(review, open("/tmp/review.json", "w"))
+          PYEOF
+
+      - name: Post the review
         if: steps.dl.outcome == 'success'
         env:
-          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_EVENT_NAME: pull_request     # workflow_run's payload lacks fork-PR details,
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # ...so synthesize a pull_request event that points reviewdog at the right PR.
-          cat > /tmp/event.json <<EOF
-          {
-            "pull_request": { "number": ${pr_number}, "head": { "sha": "${head_sha}" } },
-            "repository": {
-              "name": "${{ github.event.repository.name }}",
-              "owner": { "login": "${{ github.repository_owner }}" }
-            }
-          }
-          EOF
-          export GITHUB_EVENT_PATH=/tmp/event.json
-          export GITHUB_REPOSITORY="${{ github.repository }}"
-          export GITHUB_SHA="${head_sha}"
-          reviewdog \
-            -name="clang-format" \
-            -f=diff -f.diff.strip=1 \
-            -filter-mode=nofilter \
-            -reporter=github-pr-review \
-            -level=warning < clang-format.diff
+          if [ "$(python3 -c 'import json;print(len(json.load(open("/tmp/comments.json"))))')" = "0" ]; then
+            echo "No suggestions to post."; exit 0
+          fi
+          # gh is preinstalled on GitHub-hosted runners.
+          if ! gh api --method POST \
+                 "/repos/${{ github.repository }}/pulls/${pr_number}/reviews" \
+                 --input /tmp/review.json > /tmp/resp.json 2>/tmp/err.txt; then
+            echo "::error::Failed to post review:"
+            cat /tmp/err.txt
+            # 422 usually means a suggestion targeted a line outside the PR diff.
+            exit 1
+          fi
+          echo "Review posted: $(python3 -c 'import json;print(json.load(open("/tmp/resp.json")).get("html_url",""))')"
