@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: clang-format-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   clang-format:
     runs-on: ubuntu-latest
