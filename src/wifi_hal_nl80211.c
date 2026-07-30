@@ -2950,6 +2950,22 @@ void recv_data_frame(wifi_interface_info_t *interface)
         struct ethhdr ethhdr;
         memcpy(&ethhdr, buff, sizeof(struct ethhdr));
 
+        /* Drop the 9002 data-over-air flood to the medium MAC, but let EAPOL
+         * through so the 4-way handshake still reaches hostapd. */
+        {
+            static const unsigned char emu_medium_mac[ETH_ALEN] =
+                { 0xe8, 0xd8, 0xd1, 0x33, 0xbb, 0x46 };
+            if (ethhdr.h_proto == ntohs(9002) &&
+                memcmp(ethhdr.h_dest, emu_medium_mac, ETH_ALEN) == 0) {
+                u16 g_rtap = WPA_GET_BE16(buff + sizeof(struct ethhdr) + 2);
+                size_t g_shift = sizeof(struct ethhdr) + ntohs(g_rtap);
+                if ((size_t)buflen < g_shift + 34 ||
+                    WPA_GET_BE16(buff + g_shift + 32) != ETH_P_EAPOL) {
+                    return;
+                }
+            }
+        }
+
         if (ethhdr.h_proto == ntohs(9001)) {
             if (vap->vap_mode == wifi_vap_mode_ap) {
                 int ret;
