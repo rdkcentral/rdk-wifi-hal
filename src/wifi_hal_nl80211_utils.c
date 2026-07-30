@@ -4698,14 +4698,12 @@ int create_ecomode_interfaces(void)
     {
         int found = 0, j;
         wifi_radio_info_t *radio;
-	wifi_hal_dbg_print("%s UMASANKAR radioIndex = %d, get_sizeof_radio_interfaces_map = %d\n", __func__, radioIndex, get_sizeof_radio_interfaces_map());
         for (j = 0; j < g_wifi_hal.num_radios; j++) {
            radio = &g_wifi_hal.radio_info[j];
            if (NULL == radio) {
                wifi_hal_error_print("%s:%d: Failed in creating eco mode interfaces\n", __func__, __LINE__);
                return -1;
            }
-	   wifi_hal_dbg_print("%s UMASANKAR j = %d, g_wifi_hal.num_radios = %d, radio->rdk_radio_index = %d, l_radio_interface_map[%d].radio_index = %d\n", __func__, j, g_wifi_hal.num_radios, radio->rdk_radio_index, radioIndex, l_radio_interface_map[radioIndex].radio_index);
 
            if (radio->rdk_radio_index == l_radio_interface_map[radioIndex].radio_index) {
                //Radio interface not in ECO mode [Added already in g_wifi_hal.radio_info after notification from driver]
