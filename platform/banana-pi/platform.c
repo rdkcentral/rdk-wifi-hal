@@ -44,10 +44,6 @@
 #define MAX_SSID_LEN 33
 #define INVALID_KEY  "12345678"
 
-/* Route debug logging through the level-controlled wifi_hal_*_print APIs so
- * production images do not get noisy stdout logging. */
-#define wifi_dbg_printf(format, ...)        wifi_hal_dbg_print(format, ##__VA_ARGS__)
-#define WIFI_ENTRY_EXIT_DEBUG(format, ...)  wifi_hal_dbg_print(format, ##__VA_ARGS__)
 #define WIFI_HAL_RADIO_NUM_RADIOS 3
 
 #define radioIndex_Check(Index) do { \
@@ -1075,7 +1071,7 @@ INT wifi_getRadioTransmitPower(INT radioIndex, ULONG *output_ulong)	//RDKB
 
 INT wifi_halGetIfStatsNull(wifi_radioTrafficStats2_t *output_struct)
 {
-	WIFI_ENTRY_EXIT_DEBUG("Inside %s:%d\n", __func__, __LINE__);
+	wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
 	POINTER_CHECK(output_struct != NULL);
 	output_struct->radio_BytesSent = 0;
 	output_struct->radio_BytesReceived = 0;
@@ -1085,7 +1081,7 @@ INT wifi_halGetIfStatsNull(wifi_radioTrafficStats2_t *output_struct)
 	output_struct->radio_ErrorsReceived = 0;
 	output_struct->radio_DiscardPacketsSent = 0;
 	output_struct->radio_DiscardPacketsReceived = 0;
-	WIFI_ENTRY_EXIT_DEBUG("Exiting %s:%d\n", __func__, __LINE__);
+	wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
 	return RETURN_OK;
 }
 
@@ -1120,7 +1116,7 @@ INT File_Reading(CHAR *file, char *Value)
 
 INT GetIfacestatus(CHAR *interface_name, CHAR *status)
 {
-	WIFI_ENTRY_EXIT_DEBUG("Inside %s:%d\n", __func__, __LINE__);
+	wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
 	CHAR buf[MAX_CMD_SIZE] = {0};
 
 	if (interface_name != NULL && (strlen(interface_name) > 1) && status != NULL)
@@ -1128,7 +1124,7 @@ INT GetIfacestatus(CHAR *interface_name, CHAR *status)
 		sprintf(buf, "%s%s%s%s%s", "ifconfig -a ", interface_name, " | grep ", interface_name, " | wc -l");
 		File_Reading(buf, status);
 	}
-	WIFI_ENTRY_EXIT_DEBUG("Exiting %s:%d\n", __func__, __LINE__);
+	wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
 
 	return RETURN_OK;
 }
@@ -1158,54 +1154,50 @@ INT wifi_getRadioChannel(INT radioIndex,ULONG *output_ulong)	//RDKB
         return RETURN_OK;
 }
 
+static ULONG read_iface_stat(const char *ifname, const char *field)
+{
+	CHAR path[MAX_BUF_SIZE] = {0};
+	FILE *fp;
+	unsigned long value = 0;
+
+	snprintf(path, sizeof(path), "/sys/class/net/%s/statistics/%s", ifname, field);
+	fp = fopen(path, "r");
+	if (fp == NULL) {
+		wifi_hal_error_print("%s:%d Failed to open %s\n", __func__, __LINE__, path);
+		return 0;
+	}
+
+	if (fscanf(fp, "%lu", &value) != 1) {
+		wifi_hal_error_print("%s:%d Failed to read %s\n", __func__, __LINE__, path);
+		value = 0;
+	}
+	fclose(fp);
+
+	return value;
+}
+
 INT wifi_halGetIfStats(char *ifname, wifi_radioTrafficStats2_t *pStats)
 {
-	WIFI_ENTRY_EXIT_DEBUG("Inside %s:%d\n", __func__, __LINE__);
-	CHAR buf[MAX_CMD_SIZE] = {0};
-	CHAR Value[MAX_BUF_SIZE] = {0};
-
+	wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
 	POINTER_CHECK(pStats != NULL);
 	POINTER_CHECK(ifname != NULL);
 
-	/* Bound the interface name so it cannot overflow the command buffer. */
+	/* Bound the interface name so it cannot overflow the path buffer. */
 	if (wifi_strnlen(ifname, IFNAMSIZ) >= IFNAMSIZ) {
 		wifi_hal_error_print("%s:%d Invalid interface name length\n", __func__, __LINE__);
 		return RETURN_ERR;
 	}
 
-	snprintf(buf, sizeof(buf), "ifconfig %s | grep 'RX packets' | tr -s ' ' | cut -d ':' -f2 | cut -d ' ' -f1",ifname);
-	_syscmd(buf,Value,sizeof(Value));
-	pStats->radio_PacketsReceived = strtoul(Value, NULL, 10);
+	pStats->radio_PacketsReceived        = read_iface_stat(ifname, "rx_packets");
+	pStats->radio_PacketsSent            = read_iface_stat(ifname, "tx_packets");
+	pStats->radio_BytesReceived          = read_iface_stat(ifname, "rx_bytes");
+	pStats->radio_BytesSent              = read_iface_stat(ifname, "tx_bytes");
+	pStats->radio_ErrorsReceived         = read_iface_stat(ifname, "rx_errors");
+	pStats->radio_ErrorsSent             = read_iface_stat(ifname, "tx_errors");
+	pStats->radio_DiscardPacketsReceived = read_iface_stat(ifname, "rx_dropped");
+	pStats->radio_DiscardPacketsSent     = read_iface_stat(ifname, "tx_dropped");
 
-	snprintf(buf, sizeof(buf), "ifconfig %s | grep 'TX packets' | tr -s ' ' | cut -d ':' -f2 | cut -d ' ' -f1",ifname);
-	_syscmd(buf,Value,sizeof(Value));
-	pStats->radio_PacketsSent = strtoul(Value, NULL, 10);
-
-	snprintf(buf, sizeof(buf), "ifconfig %s | grep 'RX bytes' | tr -s ' ' | cut -d ':' -f2 | cut -d ' ' -f1",ifname);
-	_syscmd(buf,Value,sizeof(Value));
-	pStats->radio_BytesReceived = strtoul(Value, NULL, 10);
-
-	snprintf(buf, sizeof(buf), "ifconfig %s | grep 'TX bytes' | tr -s ' ' | cut -d ':' -f3 | cut -d ' ' -f1",ifname);
-	_syscmd(buf,Value,sizeof(Value));
-	pStats->radio_BytesSent = strtoul(Value, NULL, 10);
-
-	snprintf(buf, sizeof(buf), "ifconfig %s | grep 'RX packets' | tr -s ' ' | cut -d ':' -f3 | cut -d ' ' -f1",ifname);
-	_syscmd(buf,Value,sizeof(Value));
-	pStats->radio_ErrorsReceived = strtoul(Value, NULL, 10);
-
-	snprintf(buf, sizeof(buf), "ifconfig %s | grep 'TX packets' | tr -s ' ' | cut -d ':' -f3 | cut -d ' ' -f1",ifname);
-	_syscmd(buf,Value,sizeof(Value));
-	pStats->radio_ErrorsSent = strtoul(Value, NULL, 10);
-
-	snprintf(buf, sizeof(buf), "ifconfig %s | grep 'RX packets' | tr -s ' ' | cut -d ':' -f4 | cut -d ' ' -f1",ifname);
-	_syscmd(buf,Value,sizeof(Value));
-	pStats->radio_DiscardPacketsReceived = strtoul(Value, NULL, 10);
-
-	snprintf(buf, sizeof(buf), "ifconfig %s | grep 'TX packets' | tr -s ' ' | cut -d ':' -f4 | cut -d ' ' -f1",ifname);
-	_syscmd(buf,Value,sizeof(Value));
-	pStats->radio_DiscardPacketsSent = strtoul(Value, NULL, 10);
-
-	WIFI_ENTRY_EXIT_DEBUG("Exiting %s:%d\n", __func__, __LINE__);
+	wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
 	return RETURN_OK;
 }
 
@@ -1219,44 +1211,34 @@ INT wifi_steering_clientDisconnect(UINT steeringgroupIndex, INT apIndex, mac_add
 INT wifi_getRadioTrafficStats2(INT radioIndex, wifi_radioTrafficStats2_t *output_struct) //Tr181
 {
 
-	WIFI_ENTRY_EXIT_DEBUG("Inside %s:%d\n", __func__, __LINE__);
+	wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
         POINTER_CHECK(output_struct != NULL);
         radioIndex_Check(radioIndex);
 	CHAR private_interface_name[MAX_BUF_SIZE] = {0};
 	CHAR private_interface_status[MAX_BUF_SIZE] = {0};
 	wifi_radioTrafficStats2_t private_radioTrafficStats = {0};
 
-	if (radioIndex == 0) //2.4GHz ?
+	switch (radioIndex)
 	{
-		strcpy(private_interface_name, "wifi0");
-		GetIfacestatus(private_interface_name, private_interface_status);
-
-		if (strcmp(private_interface_status, "1") == 0)
-			wifi_halGetIfStats(private_interface_name, &private_radioTrafficStats);
-		else
-			wifi_halGetIfStatsNull(&private_radioTrafficStats);
-
+		case 0: //2.4GHz
+			strcpy(private_interface_name, "wifi0");
+			break;
+		case 1: //5GHz
+			strcpy(private_interface_name, "wifi1");
+			break;
+		case 2: //6GHz
+			strcpy(private_interface_name, "wifi2");
+			break;
+		default:
+			wifi_hal_error_print("%s:%d Unsupported radioIndex %d\n", __func__, __LINE__, radioIndex);
+			return WIFI_HAL_INVALID_ARGUMENTS;
 	}
-	else if (radioIndex == 1) //5GHz ?
-	{
-		strcpy(private_interface_name,"wifi1");
-		GetIfacestatus(private_interface_name, private_interface_status);
-		if (strcmp(private_interface_status, "1") == 0)
-			wifi_halGetIfStats(private_interface_name, &private_radioTrafficStats);
-		else
-			wifi_halGetIfStatsNull(&private_radioTrafficStats);
 
-	}
-	else if (radioIndex == 2) //6GHz ?
-	{
-                strcpy(private_interface_name,"wifi2");
-                GetIfacestatus(private_interface_name, private_interface_status);
-                if (strcmp(private_interface_status, "1") == 0)
-                        wifi_halGetIfStats(private_interface_name, &private_radioTrafficStats);
-                else
-                        wifi_halGetIfStatsNull(&private_radioTrafficStats);
-
-        }
+	GetIfacestatus(private_interface_name, private_interface_status);
+	if (strcmp(private_interface_status, "1") == 0)
+		wifi_halGetIfStats(private_interface_name, &private_radioTrafficStats);
+	else
+		wifi_halGetIfStatsNull(&private_radioTrafficStats);
 
 	output_struct->radio_BytesSent = private_radioTrafficStats.radio_BytesSent;
 	output_struct->radio_BytesReceived = private_radioTrafficStats.radio_BytesReceived;
@@ -1281,7 +1263,7 @@ INT wifi_getRadioTrafficStats2(INT radioIndex, wifi_radioTrafficStats2_t *output
 	output_struct->radio_MedianNoiseFloorOnChannel = -1;  //Median Noise on the channel during the measuring interval.   The metric is updated in this parameter at the end of the interval defined by "Radio Statistics Measuring Interval".  The calculation of this metric MUST only use the data collected in the just completed interval.  If this metric is queried before it has been updated with an initial calculation, it MUST return -1. Units in dBm
 	output_struct->radio_StatisticsStartTime = 0;		  //The date and time at which the collection of the current set of statistics started.  This time must be updated whenever the radio statistics are reset.
 
-	WIFI_ENTRY_EXIT_DEBUG("Exiting %s:%d\n", __func__, __LINE__);
+	wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
 
 	return RETURN_OK;
 }
