@@ -4704,7 +4704,6 @@ int create_ecomode_interfaces(void)
                wifi_hal_error_print("%s:%d: Failed in creating eco mode interfaces\n", __func__, __LINE__);
                return -1;
            }
-
            if (radio->rdk_radio_index == l_radio_interface_map[radioIndex].radio_index) {
                //Radio interface not in ECO mode [Added already in g_wifi_hal.radio_info after notification from driver]
                found = 1;
