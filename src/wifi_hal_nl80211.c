@@ -5254,6 +5254,38 @@ static void phy_info_iftype_copy(struct hostapd_hw_modes *mode,
               len);
     }
 #endif /* CONFIG_IEEE80211BE */
+
+#ifdef CONFIG_IEEE80211BN
+    {
+        struct uhr_capabilities *uhr_capab = &mode->uhr_capab[opmode];
+
+        if (tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_MAC] &&
+            tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_PHY]) {
+            uhr_capab->uhr_supported = true;
+
+            if (nla_len(tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_MAC]) >= 5 &&
+                nla_len(tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_PHY]) >= 1) {
+
+                if ((size_t) nla_len(tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_MAC]) >=
+                    sizeof(uhr_capab->mac))
+                    os_memcpy(uhr_capab->mac,
+                              nla_data(tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_MAC]),
+                              sizeof(uhr_capab->mac));
+
+                if ((size_t) nla_len(tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_PHY]) >=
+                    sizeof(uhr_capab->phy))
+                    os_memcpy(uhr_capab->phy,
+                              nla_data(tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_PHY]),
+                              sizeof(uhr_capab->phy));
+
+                wifi_hal_dbg_print("%s:%d: UHR capabilities parsed: "
+                    "mac[0]=0x%02x phy[0]=0x%02x\n",
+                    __func__, __LINE__,
+                    uhr_capab->mac[0], uhr_capab->phy[0]);
+            }
+        }
+    }
+#endif /* CONFIG_IEEE80211BN */
 }
 
 static int wiphy_info_iface_comb_process(wifi_radio_info_t *radio,
@@ -16301,6 +16333,17 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
             }
         }
 #endif /* CONFIG_IEEE80211BE */
+#ifdef CONFIG_IEEE80211BN
+        if (params->uhr_capab) {
+            wpa_hexdump(MSG_DEBUG, "  * uhr_capab",
+                        params->uhr_capab, params->uhr_capab_len);
+            if (nla_put(msg, NL80211_ATTR_UHR_CAPABILITY,
+                        params->uhr_capab_len, params->uhr_capab)) {
+                goto fail;
+            }
+        }
+#endif /* CONFIG_IEEE80211BN */
+
         if (params->ext_capab) {
             wpa_hexdump(MSG_DEBUG, "  * ext_capab",
                         params->ext_capab, params->ext_capab_len);
@@ -18367,9 +18410,6 @@ static int nl80211_put_freq_params_hal(
     if (nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ, freq->freq))
         return -ENOBUFS;
 
-#ifdef QCA_UD_HOSTAPD
-    wifi_hal_dbg_print("  * uhr_enabled=%d\n", freq->uhr_enabled);
-#endif /* QCA_UD_HOSTAPD */
     wifi_hal_dbg_print("  * eht_enabled=%d\n", freq->eht_enabled);
     wifi_hal_dbg_print("  * he_enabled=%d\n", freq->he_enabled);
     wifi_hal_dbg_print("  * vht_enabled=%d\n", freq->vht_enabled);
@@ -19527,15 +19567,6 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     }
 #endif /* QCA_UD_HOSTAPD */
 
-#ifdef CONFIG_IEEE80211BN
-    if (!params->dps_assist) {
-        wpa_printf(MSG_DEBUG,"%s:%d: Disable DPS Assist\n", __func__, __LINE__);
-        if (nla_put_u8(msg, NL80211_ATTR_DPS_ASSIST, params->dps_assist)) {
-            wpa_printf(MSG_DEBUG,"%s:%d: Failed to set DPS Assist\n", __func__, __LINE__);
-            return -1;
-        }
-    }
-#endif /* CONFIG_IEEE80211BN */
 
     //get_coutry_str_from_code(radio_param->countryCode, country);
 #ifdef CONFIG_DRIVER_NL80211_QCA
