@@ -339,6 +339,10 @@ void init_hostap_bss(wifi_interface_info_t *interface)
     conf->bss_load_update_period = 360000;
 #endif
 
+#ifdef CONFIG_IEEE80211BN
+    conf->disable_11bn = false;
+#endif /* CONFIG_IEEE80211BN */
+
     set_interface_vendor_ies(interface);
 
 }
@@ -2754,6 +2758,18 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
         //iconf->require_eht = 1;
     }
 #endif /* CONFIG_IEEE80211BE */
+#ifdef CONFIG_IEEE80211BN
+    /* Enable 802.11bn (UHR/Wi-Fi 8) if radio variant includes BE and BN is requested.
+     * 11BN requires 11BE which requires 11AX. */
+    iconf->ieee80211bn = 0;
+    if ((param->variant & WIFI_80211_VARIANT_BE)) {
+        /* Enable 11BN when BE is active; hardware capability check is done
+         * at association time via uhr_capab[].uhr_supported */
+        iconf->ieee80211bn = 1;
+        wifi_hal_dbg_print("%s:%d: ieee80211bn enabled for radio %d\n",
+            __func__, __LINE__, radio->index);
+    }
+#endif /* CONFIG_IEEE80211BN */
 
     switch (param->channelWidth) {
     case WIFI_CHANNELBANDWIDTH_80MHZ:
