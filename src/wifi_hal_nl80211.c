@@ -12793,6 +12793,40 @@ static int nl80211_send_frame_cmd(wifi_interface_info_t *interface, unsigned int
         goto fail;
     }
 
+    /* [TEST] log the status/reason code in the frame at the exact point it is
+     * copied into the NL80211_CMD_FRAME message — proves what the kernel gets */
+    if (buf_len >= sizeof(struct ieee80211_hdr)) {
+        const struct ieee80211_mgmt *_m = (const struct ieee80211_mgmt *)buf;
+        u16 _fc = le_to_host16(_m->frame_control);
+        switch (WLAN_FC_GET_STYPE(_fc)) {
+        case WLAN_FC_STYPE_AUTH:
+            wifi_hal_info_print("[TEST] nla_put FRAME: AUTH stype sc=%u seq=%u\n",
+                le_to_host16(_m->u.auth.status_code),
+                le_to_host16(_m->u.auth.auth_transaction));
+            break;
+        case WLAN_FC_STYPE_ASSOC_RESP:
+            wifi_hal_info_print("[TEST] nla_put FRAME: ASSOC_RESP sc=%u\n",
+                le_to_host16(_m->u.assoc_resp.status_code));
+            break;
+        case WLAN_FC_STYPE_REASSOC_RESP:
+            wifi_hal_info_print("[TEST] nla_put FRAME: REASSOC_RESP sc=%u\n",
+                le_to_host16(_m->u.assoc_resp.status_code));
+            break;
+        case WLAN_FC_STYPE_DEAUTH:
+            wifi_hal_info_print("[TEST] nla_put FRAME: DEAUTH reason=%u\n",
+                le_to_host16(_m->u.deauth.reason_code));
+            break;
+        case WLAN_FC_STYPE_DISASSOC:
+            wifi_hal_info_print("[TEST] nla_put FRAME: DISASSOC reason=%u\n",
+                le_to_host16(_m->u.disassoc.reason_code));
+            break;
+        default:
+            wifi_hal_info_print("[TEST] nla_put FRAME: stype=%u\n",
+                WLAN_FC_GET_STYPE(_fc));
+            break;
+        }
+    }
+
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
     if (link_id != NL80211_DRV_LINK_ID_NA &&
         nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0) {
@@ -13781,6 +13815,10 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
                 ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.auth.status_code), fc);
             break;
         case WLAN_FC_STYPE_ASSOC_RESP:
+             if (access("/nvram/disassoc", F_OK) == 0) {
+	          wifi_hal_info_print("%s:%d: File present\n",__func__,__LINE__);
+                  mgmt->u.assoc_resp.status_code = host_to_le16(53);
+             }
             wifi_hal_info_print("%s:%d: interface:%s send assoc resp frame from:%s to:%s cap:0x%x "
                                 "aid:%d sc:%d\n",
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, src_mac_str),
@@ -13790,6 +13828,10 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
                 ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.assoc_resp.status_code), fc);
             break;
         case WLAN_FC_STYPE_REASSOC_RESP:
+             if (access("/nvram/disassoc", F_OK) == 0) {
+	          wifi_hal_info_print("%s:%d: File present\n",__func__,__LINE__);
+                  mgmt->u.assoc_resp.status_code = host_to_le16(53);
+             }
             wifi_hal_info_print("%s:%d: interface:%s send reassoc resp frame from:%s to:%s "
                                 "cap:0x%x aid:%d sc:%d\n",
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, src_mac_str),
