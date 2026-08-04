@@ -596,7 +596,7 @@ int platform_radio_up(int radio_index, bool up)
         rc = wl_ioctl(osifname, WLC_GET_UP, &isup, sizeof(isup));
         if (rc < 0) {
             wifi_hal_error_print("%s:%d failed to get interface status up for %s, err: %d (%s)\n",
-                __func__,__LINE__, osifname, errno, strerror(errno));
+                __func__, __LINE__, osifname, errno, strerror(errno));
         }
         do_ioctl = (rc == 0 && isup != up) ? TRUE : FALSE;
 
