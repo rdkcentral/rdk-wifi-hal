@@ -1540,6 +1540,10 @@ static void wifi_hal_steering_check_sta_status(wifi_interface_info_t *interface)
     static time_t old_time;
     mac_address_t temp_sta_mac;
 
+    if (interface == NULL) {
+        return;
+    }
+
     callbacks = get_hal_device_callbacks();
     if (callbacks->steering_event_callback == 0) {
         return;
@@ -3468,7 +3472,7 @@ void *nl_recv_func(void *arg)
     int ret, res;
     struct timeval tv_towait;
     wifi_hal_priv_t *priv = (wifi_hal_priv_t *)arg;
-    wifi_interface_info_t *interface;
+    wifi_interface_info_t *interface = NULL;
     int eloop_timeout_ms;
 #if defined (_PLATFORM_BANANAPI_R4_)
     size_t stack_size2;
