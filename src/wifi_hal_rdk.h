@@ -172,7 +172,7 @@ typedef struct _wifi_EapStats_t{    // Passpoint stats defined rdkb-1317
 #define PKEX_SUB_COM_REV_RESP 10
 /* RESERVED 11-255 */
 
-#ifdef HOSTAPD_2_11
+#ifdef HOSTAPD_2_12
 #include "common/ieee802_11_defs.h"
 #endif
 #ifndef DPP_OUI_TYPE
