@@ -944,28 +944,22 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
 #if HOSTAPD_VERSION >= 210
     iconf->op_class = op_class;
 #endif
-    if (cf1 > freq) {
-        iconf->secondary_channel = 1;
-    } else if (cf1 && cf1 < freq) {
-        iconf->secondary_channel = -1;
-    } else {
-        iconf->secondary_channel = get_sec_channel_offset(radio, freq);
-    }
+    iconf->secondary_channel = get_sec_channel_offset(radio, freq);
     ieee80211_freq_to_chan(cf1, &seg0_idx);
     ieee80211_freq_to_chan(cf2, &seg1_idx);
     hostapd_set_oper_centr_freq_seg0_idx(iconf, seg0_idx);
     hostapd_set_oper_centr_freq_seg1_idx(iconf, seg1_idx);
     hostapd_set_oper_chwidth(iconf, hostap_channel_width);
 
-#if !defined(QCOM_ATH12K_PORT) /* can be removed after rebasing RDK hostapd patches */
 #ifdef CONFIG_IEEE80211AX
 #if HOSTAPD_VERSION >= 210
+#if !defined(QCOM_ATH12K_PORT) /* can be removed after rebasing RDK hostapd patches */
     if (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND) {
         iconf->he_2ghz_40mhz_width_allowed = hal_channel_width == WIFI_CHANNELBANDWIDTH_40MHZ;
     }
-#endif
-#endif
 #endif /* QCOM_ATH12K_PORT */
+#endif
+#endif
 
     iconf->ht_capab &= ~HT_CAP_INFO_SUPP_CHANNEL_WIDTH_SET;
     if (hal_channel_width >= WIFI_CHANNELBANDWIDTH_40MHZ) {
@@ -980,140 +974,10 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
-#if defined(QCOM_ATH12K_PORT) && defined(QCA_UD_HOSTAPD)
-static int calculate_chan_offset(int width, int freq, int cf1, int cf2)
-{
-    int freq1 = 0;
-
-    switch (convert2width(width)) {
-    case CHAN_WIDTH_20_NOHT:
-    case CHAN_WIDTH_20:
-        return 0;
-    case CHAN_WIDTH_40:
-        freq1 = cf1 - 10;
-        break;
-    case CHAN_WIDTH_80:
-        freq1 = cf1 - 30;
-        break;
-    case CHAN_WIDTH_160:
-        freq1 = cf1 - 70;
-        break;
-    case CHAN_WIDTH_80P80:
-        freq1 = cf1 - 30;
-        break;
-    case CHAN_WIDTH_320:
-        freq1 = cf1 - 150;
-        break;
-    case CHAN_WIDTH_UNKNOWN:
-    case CHAN_WIDTH_2160:
-    case CHAN_WIDTH_4320:
-    case CHAN_WIDTH_6480:
-    case CHAN_WIDTH_8640:
-        /* FIXME: implement this */
-        return 0;
-    }
-
-    return (abs(freq - freq1) / 20) % 2 == 0 ? 1 : -1;
-}
-
-static void wifi_hal_mlme_event_ch_switch(wifi_interface_info_t *interface,
-            int freq, enum nl80211_channel_type ch_type, int bw, int cf1,
-            int cf2, int punct_bmap, int pwr_mode_6ghz, int count, int bw_device,
-            int cf_device, int link_id, int finished)
-{
-    union wpa_event_data data;
-    int ht_enabled = 1;
-    int chan_offset = 0;
-
-    if (!freq)
-        return;
-
-    wifi_hal_info_print("%s:%d: Channel switch%s event for %s freq=%d\n",
-        __func__, __LINE__, finished ? "" : " started", interface->name, freq);
-
-    switch (ch_type) {
-    case NL80211_CHAN_NO_HT:
-        if (cf1 && cf1 != freq) {
-            chan_offset = (cf1 > freq) ? 1 : -1;
-        } else {
-            ht_enabled = 0;
-        }
-        break;
-    case NL80211_CHAN_HT20:
-        break;
-    case NL80211_CHAN_HT40PLUS:
-        chan_offset = 1;
-        break;
-    case NL80211_CHAN_HT40MINUS:
-        chan_offset = -1;
-        break;
-    default:
-        if (bw && cf1) {
-            chan_offset = calculate_chan_offset(bw, freq, cf1, cf2 ? cf2 : 0);
-            wifi_hal_info_print("%s:%d: Calculated channel offset: %d\n",
-                __func__, __LINE__, chan_offset);
-        }
-        break;
-    }
-
-    os_memset(&data, 0, sizeof(data));
-
-    data.ch_switch.freq = freq;
-    if (is_6ghz_freq(freq))
-        ht_enabled = 0;
-    data.ch_switch.ht_enabled = ht_enabled;
-    data.ch_switch.ch_offset  = chan_offset;
-    if (punct_bmap)
-        data.ch_switch.punct_bitmap = (u16)punct_bmap;
-    if (bw)
-        data.ch_switch.ch_width = convert2width(bw);
-    if (cf1)
-        data.ch_switch.cf1 = cf1;
-    if (cf2)
-        data.ch_switch.cf2 = cf2;
-    if (count)
-        data.ch_switch.count = count;
-#ifdef QCA_UD_HOSTAPD
-    if (pwr_mode_6ghz)
-        data.ch_switch.power_mode_6ghz = pwr_mode_6ghz;
-    else
-        data.ch_switch.power_mode_6ghz = interface->u.ap.hapd.iconf->he_6ghz_reg_pwr_type;
-    if (bw_device)
-        data.ch_switch.ch_width_device = convert2width(bw_device);
-    if (cf_device)
-        data.ch_switch.cf_device = cf_device;
-#endif /* QCA_UD_HOSTAPD */
-    data.ch_switch.link_id = (link_id >= 0) ? link_id : NL80211_DRV_LINK_ID_NA;
-
-    wifi_hal_info_print("%s:%d: csa_in_progress=%d freq=%d cs_freq=%d "
-        "drv_flags2=0x%llx DFS_CH_SW=%d cac_started=%d chan_offset=%d\n",
-        __func__, __LINE__,
-        interface->u.ap.hapd.csa_in_progress,
-        freq,
-        interface->u.ap.hapd.cs_freq_params.freq,
-        (unsigned long long)interface->u.ap.iface.drv_flags2,
-        !!(interface->u.ap.iface.drv_flags2 & WPA_DRIVER_FLAGS2_DFS_CHANNEL_SWITCH),  /* QCA_UD_HOSTAPD specific */
-        interface->u.ap.iface.cac_started,chan_offset);
-
-    if (finished)
-        interface->u.ap.iface.freq = freq;
-
-#if !defined(QCOM_ATH12K_PORT)
-    wpa_supplicant_event(&interface->u.ap.hapd,
-        finished ? EVENT_CH_SWITCH : EVENT_CH_SWITCH_STARTED,
-        &data);
-#else
-    hostapd_wpa_event(&interface->u.ap.hapd,
-        finished ? EVENT_CH_SWITCH : EVENT_CH_SWITCH_STARTED,
-        &data);
-#endif
-}
-#endif /* QCOM_ATH12K_PORT && QCA_UD_HOSTAPD */
-
 static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, struct nlattr **tb, wifi_chan_eventType_t wifi_chan_event_type)
 {
     int ifidx = 0, freq = 0, bw = NL80211_CHAN_WIDTH_20_NOHT, cf1 = 0, cf2 = 0;
-#if defined(QCOM_ATH12K_PORT)
+#if defined(CONFIG_GENERIC_MLO)
     int link_id = -1;
 #endif
     enum nl80211_channel_type ch_type = 0;

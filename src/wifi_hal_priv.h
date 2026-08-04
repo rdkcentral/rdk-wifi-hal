@@ -107,7 +107,9 @@ extern "C" {
 
 #define WIFI_HAL_MAJOR  3
 #define WIFI_HAL_MINOR  0
-#ifdef HOSTAPD_2_11
+#ifdef HOSTAPD_2_12
+    #define HOSTAPD_VERSION 212
+#elif HOSTAPD_2_11
     #define HOSTAPD_VERSION 211
 #elif HOSTAPD_2_10
     #define HOSTAPD_VERSION 210
@@ -398,18 +400,20 @@ typedef struct {
     unsigned int fetch_bss_trans_status:1;
     unsigned int roam_vendor_cmd_avail:1;
     unsigned int get_supported_akm_suites_avail:1;
+#if HOSTAPD_VERSION >= 212
     unsigned int puncturing:1;         /* NL80211_EXT_FEATURE_PUNCT: EHT preamble puncturing */
-#ifdef QCOM_ATH12K_PORT
     unsigned int qca_do_acs:1;                      /* QCA_NL80211_VENDOR_SUBCMD_DO_ACS available */
     unsigned int add_sta_node_vendor_cmd_avail:1;   /* QCA_NL80211_VENDOR_SUBCMD_ADD_STA_NODE */
     unsigned int get_sta_info_vendor_cmd_avail:1;   /* QCA_NL80211_VENDOR_SUBCMD_GET_STA_INFO */
     unsigned int secure_ranging_ctx_vendor_cmd_avail:1; /* QCA_NL80211_VENDOR_SUBCMD_SECURE_RANGING_CONTEXT */
     unsigned int connect_ext_vendor_cmd_avail:1;    /* QCA_NL80211_VENDOR_SUBCMD_CONNECT_EXT */
-    unsigned int afc_support:1;
     unsigned int support_ap_scan:1;
+#ifdef QCOM_ATH12K_PORT
+    unsigned int afc_support:1;
     unsigned int afc_retail_support:1;
     unsigned int device_bw:1;
 #endif /* QCOM_ATH12K_PORT */
+#endif /* HOSTAPD_VERSION >= 212 */
 } wifi_driver_data_t;
 
 typedef struct {
@@ -1239,7 +1243,7 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
 #else
 int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reason);
 #endif
-#ifdef HOSTAPD_2_11 //2.11
+#if HOSTAPD_VERSION >= 211 //2.11
  int wifi_drv_send_mlme(void *priv, const u8 *data,
                       size_t data_len,int noack,
                       unsigned int freq, const u16 *csa_offs,
@@ -1328,7 +1332,7 @@ void wifi_get_mld_eml_cap(const u16 mld_cap, const u16 eml_cap, wifi_multi_link_
 void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface);
 #endif
 
-#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO) && defined(QCOM_ATH12K_PORT)
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
 /*
  * update_mld_iface_cross_links - Cross-link MLD-affiliated ifaces for 3-link STA
  * per-STA profile generation. Must be called after update_hostap_mlo() sets

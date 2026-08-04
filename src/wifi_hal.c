@@ -4742,7 +4742,8 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     struct ieee80211_hdr *hdr;
     mac_address_t bssid_buf;
     int res = 0;
-#ifdef HOSTAPD_2_11 // 2.11
+
+#if HOSTAPD_VERSION >= 211
     int link_id = 0;
 #endif
     memset(bssid_buf, 0xff, sizeof(bssid_buf));
@@ -4765,7 +4766,7 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     os_memcpy(hdr->addr3, bssid_buf, ETH_ALEN);
 
     
-#ifdef HOSTAPD_2_11 // 2.11
+#if HOSTAPD_VERSION >= 211
     // Action frames will get rejected by kernel if we pass a valid link_id for non-MLO case.
     if(!wifi_hal_is_mld_enabled(interface)) {
         link_id = -1;
