@@ -3789,9 +3789,9 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
     stats->cli_PacketsSent = stats->cli_DataFramesSentAck + stats->cli_DataFramesSentNoAck;
 
-    wifi_hal_stats_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu cli_PowerSaveMode=%d cli_sleepTime: %lu\n", __func__, __LINE__, 
+    /*wifi_hal_stats_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu cli_PowerSaveMode=%d cli_sleepTime: %lu\n", __func__, __LINE__, 
             stats->cli_DataFramesSentAck, stats->cli_DataFramesSentNoAck,
-            stats->cli_PacketsSent, stats->cli_BytesSent, stats->cli_PowerSaveMode,stats->cli_sleepTime);
+            stats->cli_PacketsSent, stats->cli_BytesSent, stats->cli_PowerSaveMode,stats->cli_sleepTime);*/
 
     return NL_SKIP;
 }
