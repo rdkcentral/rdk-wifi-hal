@@ -7,7 +7,7 @@ name: clang-format
 # clang-format WOULD change and hands that diff to stage 2 as passive data.
 on:
   pull_request:
-    paths:            # they have to match --extension <args> below
+    paths:            # they have to match --extensions <args> below
       - '**/*.c'
       - '**/*.cpp'
       - '**/*.h'

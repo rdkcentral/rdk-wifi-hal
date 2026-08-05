@@ -17,10 +17,10 @@ permissions:
   actions: read               # to download the artifact from the triggering run
 
 # Cancel run when a newer one starts AND dismiss stale/outdated review.
-# Both freshness check and the cancelled-run one MUST use fields populated 
+# Both freshness check and the cancelled-run one MUST use fields populated
 # in a workflow_run context. Use head_repository.full_name + head_branch, they always exist.
 # Alternatives: pull_request.number is absent here, and workflow_run.pull_requests is empty
-# for fork PRs (known GH bug: actions/runner#3444, github/docs#22501). 
+# for fork PRs (known GH bug: actions/runner#3444, github/docs#22501).
 concurrency:
   group: >-
     clang-format-suggest-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
