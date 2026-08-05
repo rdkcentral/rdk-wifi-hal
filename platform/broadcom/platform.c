@@ -3733,7 +3733,7 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
 
     if (tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_SPATIAL_STREAM_NUM]) {
-        stats->cli_CapableNumSpatialStreams =
+        stats->cli_capableNumSpatialStreams =
             nla_get_u8(tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_SPATIAL_STREAM_NUM]);
     }
 
@@ -3780,9 +3780,9 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
 
 
-    wifi_hal_stats_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu\n", __func__, __LINE__, 
+    wifi_hal_stats_dbg_print("%s:%d MJ cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu activeNumSpatialStreams: %u\n", __func__, __LINE__, 
             stats->cli_DataFramesSentAck, stats->cli_DataFramesSentNoAck,
-           stats->cli_PacketsSent, stats->cli_BytesSent);
+           stats->cli_PacketsSent, stats->cli_BytesSent, stats->cli_activeNumSpatialStreams);
 
     /*
      * Assume the default packet size for wifi blaster is 1470
