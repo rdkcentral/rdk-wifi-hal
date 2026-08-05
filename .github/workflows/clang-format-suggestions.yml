@@ -30,7 +30,7 @@ jobs:
   suggest:
     runs-on: ubuntu-latest
     # Exclude cancelled runs at the source (they can leave outdated artifact yet
-    # fire 'completed'). Allow failure too (if stage 1 fails, suggestions are still useful!
+    # fire 'completed'). Allow failure too (if stage 1 fails, suggestions are still useful!)
     if: >-
       github.event.workflow_run.event == 'pull_request'
       && github.event.workflow_run.conclusion != 'cancelled'
@@ -125,7 +125,7 @@ jobs:
           import json, os
           # Large reviews trip rate limiting, and fail (often as a misleading 404).
           # Retrying won't help, and GH doesn't publish a number. Cap instead.
-          # A PR needing more than this, should just be formatted locally.
+          # A PR needing more than this should just be formatted locally.
           MAX = int(os.environ.get("MAX_COMMENTS", "25"))
           comments = json.load(open("/tmp/comments.json"))
           total = len(comments)
