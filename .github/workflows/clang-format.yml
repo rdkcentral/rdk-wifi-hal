@@ -59,7 +59,7 @@ jobs:
           # EXCLUDES+=(':!platform/vendor/*')      # whole directory (recursive)
           # EXCLUDES+=(':!src/example_file.c')     # single file
           # ==================================================================
-          # --extensions c,h is why nothing but C sources is ever formatted.
+          # --extensions c,h,cpp is why nothing but C/C++ sources is ever formatted.
           #
           # git-clang-format exit codes: 0 = nothing to do, 1 = it reformatted
           # something (this is NOT an error), 2+ = genuine failure. The default
