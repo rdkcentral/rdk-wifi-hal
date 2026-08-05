@@ -7,7 +7,7 @@ name: clang-format
 # clang-format WOULD change and hands that diff to stage 2 as passive data.
 on:
   pull_request:
-    paths:
+    paths:            # they have to match --extension <args> below
       - '**/*.c'
       - '**/*.cpp'
       - '**/*.h'
@@ -66,7 +66,7 @@ jobs:
           # shell is `bash -e`, so a bare call would abort the step on the
           # perfectly normal exit 1.
           set +e
-          git-clang-format --style=file --extensions c,h "$BASE_SHA" -- . "${EXCLUDES[@]}"
+          git-clang-format --style=file --extensions c,h,cpp "$BASE_SHA" -- . "${EXCLUDES[@]}"
           rc=$?
           set -e
           if [ "$rc" -ge 2 ]; then
