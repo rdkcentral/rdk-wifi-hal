@@ -2536,11 +2536,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             supplicant_event(&interface->wpa_s, EVENT_RX_MGMT, &event);
 #endif
         } else {
-#if !defined (QCOM_ATH12K_PORT)
             wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
-#else
-            hostapd_wpa_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
-#endif
         }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     }
@@ -2716,11 +2712,7 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
             supplicant_event(&interface->wpa_s, EVENT_RX_FROM_UNKNOWN, &event);
 #endif
         } else {
-#if !defined (QCOM_ATH12K_PORT)
             wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_FROM_UNKNOWN, &event);
-#else
-            hostapd_wpa_event(&interface->u.ap.hapd, EVENT_RX_FROM_UNKNOWN, &event);
-#endif
         }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
@@ -3284,11 +3276,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
             supplicant_event(&interface->wpa_s, EVENT_EAPOL_RX, &event);
 #endif
         } else {
-#if !defined (QCOM_ATH12K_PORT)
             wpa_supplicant_event(&interface->u.ap.hapd, EVENT_EAPOL_RX, &event);
-#else
-            hostapd_wpa_event(&interface->u.ap.hapd, EVENT_EAPOL_RX, &event);
-#endif
         }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     } else if (vap->vap_mode == wifi_vap_mode_sta) {
@@ -6480,8 +6468,13 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 #endif
             radio = &g_wifi_hal.radio_info[i];
             existing_radio_found = 1;
+#ifdef FEATURE_SINGLE_PHY
             wifi_hal_dbg_print("%s:%d existing radio found at slot:%d rdk_radio_idx:%d\n",
                 __func__, __LINE__, i, rdk_radio_indices[j]);
+#else
+            wifi_hal_dbg_print("%s:%d existing radio found at slot:%d phy_index:%u\n",
+                __func__, __LINE__, i, phy_index);
+#endif
             break;
         }
     }
@@ -7330,10 +7323,6 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                         __func__, __LINE__, mld_name, interface->name);
                     nl80211_interface_enable(mld_name, true);
                 }
-            } else {
-                const char *_iname = (interface->name[0] != '\0') ? interface->name : "(unknown)";
-                wifi_hal_error_print("%s:%d: %s is not part of an MLD\n", __func__, __LINE__, _iname);
-            }
 #else /* !QCOM_ATH12K_PORT */
             //TODO: this is legacy way of setting interface to be in MLD
             //group. It is redundant for AP type of VAP, STA still needs
@@ -7410,6 +7399,7 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
                 pthread_mutex_init(&interface->scan_results_mutex, NULL);
             }
         }
+    }
 
     return NL_SKIP;
 }
@@ -8286,11 +8276,10 @@ int init_nl80211()
                 ret, nl_geterror(ret));
     }
 
-    /* wpa_supplicant_event is a function pointer in both QCA UD hostapd and
-     * upstream 2.12 (patched to align with QCA UD).  Always assign it so
-     * that wifi_drv_set_wds_sta and other callers do not crash with a NULL
-     * function pointer. */
-    wpa_supplicant_event=hostapd_wpa_event;
+    /* libhostap leaves its event callbacks unset when used as a library, so
+     * initialize both before registering the nl80211 event handler. */
+    wpa_supplicant_event = hostapd_wpa_event;
+    wpa_supplicant_event_global = hostapd_wpa_event_global;
 
     g_wifi_hal.nl80211_maxattr = genl_family_get_maxattr(family);
     wpa_printf(MSG_DEBUG, "nl80211: Maximum supported attribute ID: %u",
@@ -8484,11 +8473,7 @@ void wifi_hal_nl80211_wps_pbc(unsigned int ap_index)
 
     os_memset(&event, 0, sizeof(event));
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-#if !defined (QCOM_ATH12K_PORT)
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WPS_BUTTON_PUSHED, &event);
-#else
-    hostapd_wpa_event(&interface->u.ap.hapd, EVENT_WPS_BUTTON_PUSHED, &event);
-#endif
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
@@ -8506,11 +8491,7 @@ void wifi_hal_nl80211_wps_cancel(unsigned int ap_index)
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
 #if !defined(PLATFORM_LINUX) || defined(QCOM_ATH12K_PORT)
     union wpa_event_data event = { 0 };
-#endif
-#if !defined(PLATFORM_LINUX) && !defined(QCOM_ATH12K_PORT)
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WPS_CANCEL, &event);
-#elif defined(QCOM_ATH12K_PORT)
-    hostapd_wpa_event(&interface->u.ap.hapd, EVENT_WPS_CANCEL, &event);
 #endif
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
@@ -15181,11 +15162,7 @@ void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len)
         supplicant_event(&interface->wpa_s, EVENT_RX_MGMT, &event);
 #endif
     } else {
-#if !defined (QCOM_ATH12K_PORT)
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
-#else
-        hostapd_wpa_event(&interface->u.ap.hapd, EVENT_RX_MGMT, &event);
-#endif
     }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
@@ -18622,17 +18599,7 @@ static int nl80211_put_control_port_hal(wifi_driver_data_t *drv, struct nl_msg *
 }
 #endif /* QCOM_ATH12K_PORT */
 
-static inline bool nl80211_link_valid_hal(u16 links, s8 link_id)
-{
-       if (link_id < 0 || link_id >= MAX_NUM_MLD_LINKS)
-               return false;
-
-       if (links & BIT(link_id))
-               return true;
-
-       return false;
-}
-
+#if defined(QCOM_ATH12K_PORT)
 static inline bool
 nl80211_attr_supported_hal(unsigned int attr)
 {
@@ -18642,7 +18609,6 @@ nl80211_attr_supported_hal(unsigned int attr)
 /* wpa_ver_supported/wpa_key_mgmt_to_suites are only called from
  * QCOM_ATH12K_PORT code in wifi_drv_set_ap(); guard so legacy platforms
  * don't fail with -Werror=unused-function. */
-#if defined(QCOM_ATH12K_PORT)
 static int wpa_ver_supported(int key_mgmt_suites, int proto)
 {
     enum nl80211_wpa_versions ver = 0;
@@ -18695,21 +18661,6 @@ static int wpa_key_mgmt_to_suites(unsigned int key_mgmt_suites, u32 suites[],
     return num_suites;
 }
 #endif /* QCOM_ATH12K_PORT */
-
-static inline int wpa_key_mgmt_wpa_psk_no_sae_hal(int akm)
-{
-    return !!(akm & (WPA_KEY_MGMT_PSK |
-             WPA_KEY_MGMT_FT_PSK |
-             WPA_KEY_MGMT_PSK_SHA256));
-}
-
-static inline int wpa_key_mgmt_sae_hal(int akm)
-{
-    return !!(akm & (WPA_KEY_MGMT_SAE |
-                WPA_KEY_MGMT_SAE_EXT_KEY |
-                WPA_KEY_MGMT_FT_SAE |
-                WPA_KEY_MGMT_FT_SAE_EXT_KEY));
-}
 
 //use this from hostap nl80211.c
 /* struct mbssid_data was introduced in hostapd 2.12 (replacing the inline
@@ -21075,7 +21026,10 @@ int wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
         int vlan_id               = params->vlan_id;
 #endif
         enum key_flag key_flag    = params->key_flag;
-        int link_id               = params->link_id;
+        int link_id               = -1;
+#if HOSTAPD_VERSION >= 211
+        link_id                   = params->link_id;
+#endif
 
         wifi_hal_dbg_print("%s:%d: alg=%d addr=%p key_idx=%d set_tx=%d "
                            "seq_len=%lu key_len=%lu key_flag=0x%x link_id=%d\n",

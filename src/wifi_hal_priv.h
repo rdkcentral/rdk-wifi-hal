@@ -1613,17 +1613,20 @@ u16 send_assoc_resp(struct hostapd_data *hapd, struct sta_info *sta,
                            int omit_rsnxe);
 void hostapd_wpa_event(void *ctx, enum wpa_event_type event,
                union wpa_event_data *data);
-#endif
+void hostapd_wpa_event_global(void *ctx, enum wpa_event_type event,
+               union wpa_event_data *data);
+
 enum dfs_channel_type {
         DFS_ANY_CHANNEL,
         DFS_AVAILABLE, /* non-radar or radar-available */
         DFS_NO_CAC_YET, /* radar-not-yet-available */
 };
 
-struct hostapd_channel_data * dfs_get_valid_channel(struct hostapd_iface *iface,
+struct hostapd_channel_data *dfs_get_valid_channel(struct hostapd_iface *iface,
                      int *secondary_channel,
                      u8 *oper_centr_freq_seg0_idx,
                      u8 *oper_centr_freq_seg1_idx,
                      enum dfs_channel_type type);
+#endif
 
 #endif // WIFI_HAL_PRIV_H
