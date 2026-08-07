@@ -635,11 +635,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         supplicant_event(&interface->wpa_s, EVENT_TX_STATUS, &event);
 #endif
     } else {
-#if !defined(QCOM_ATH12K_PORT)
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_TX_STATUS, &event);
-#else
-        hostapd_wpa_event(&interface->u.ap.hapd, EVENT_TX_STATUS, &event);
-#endif
     }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
