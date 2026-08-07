@@ -49,8 +49,6 @@ extern const struct wpa_driver_ops g_wpa_driver_nl80211_ops;
 #ifdef CONFIG_IEEE80211BE
 extern void hostapd_bss_link_deinit(struct hostapd_data *hapd);
 #endif /* CONFIG_IEEE80211BE */
-extern void hostapd_wpa_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
-extern void hostapd_wpa_event_global(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
 
 int _syscmd(char *cmd, char *retBuf, int retBufSize)
 {
@@ -417,15 +415,6 @@ int update_hostap_data(wifi_interface_info_t *interface)
     struct hostapd_data *hapd;
     struct hostapd_config *iconf;
     wifi_vap_info_t *vap;
-
-#if defined(QCOM_ATH12K_PORT)
-    if (wpa_supplicant_event == NULL) {
-        wpa_supplicant_event        = hostapd_wpa_event;
-        wpa_supplicant_event_global = hostapd_wpa_event_global;
-        wifi_hal_info_print("%s:%d: wpa_supplicant_event function pointers initialized\n",
-                            __func__, __LINE__);
-    }
-#endif
 
     wifi_radio_info_t *radio;
 
