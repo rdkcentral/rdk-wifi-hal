@@ -35,27 +35,37 @@
 
 **********************************************************************************************/
 
-#include <string.h>
-#include <stdbool.h>
-#include "wifi_hal_priv.h"
-#include "wifi_hal.h"
+/*
+ * Some adapted code from hostapd, which is:
+ * Copyright (c) 2002-2015, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2003-2004, Instant802 Networks, Inc.
+ * Copyright (c) 2005-2006, Devicescape Software, Inc.
+ * Copyright (c) 2007, Johannes Berg <johannes@sipsolutions.net>
+ * Copyright (c) 2009-2010, Atheros Communications
+ * Licensed under the BSD-3 License
+ */
 
-#include <stddef.h>
-#include <string.h>
-#include <stdlib.h>
-#include <sys/ioctl.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <net/if_arp.h>
-#include <net/if.h>
-#include <math.h>
-#include <errno.h>
-#include <sys/stat.h>
-#include "qcconfig_utils.h"
+#include "wifi_hal.h"
+#include "wifi_hal_priv.h"
+
 #include <ctype.h>
+#include <errno.h>
+#include <math.h>
+#include <net/if.h>
+#include <net/if_arp.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#include "ap/rrm.h"
 #include "driver_nl80211.h"
 #include "ieee802_11.h"
-#include "ap/rrm.h"
+#include "qcconfig_utils.h"
 
 /* Use the QCA vendor header for QCA NL80211 vendor command attributes. */
 #include "common/qca-vendor.h"
@@ -71,7 +81,7 @@
 #define MAX_KEYPASSPHRASE_LEN 128
 #define MAX_SSID_LEN 33
 #define DEFAULT_SSID_SIZE 128
-#define DEFAULT_CMD_SIZE 256
+#define DEFAULT_FILE_PATH_SIZE 256
 #define MAX_BUF_SIZE 300
 #define VAP_PREFIX "ath"
 #define RADIO_PREFIX "wifi"
@@ -100,27 +110,27 @@
 #endif
 
 #ifndef QCA_WLAN_VENDOR_ATTR_CONFIG_GENERIC_COMMAND
-#define QCA_WLAN_VENDOR_ATTR_CONFIG_GENERIC_COMMAND  17
-#define QCA_WLAN_VENDOR_ATTR_CONFIG_GENERIC_VALUE    18
-#define QCA_WLAN_VENDOR_ATTR_CONFIG_GENERIC_DATA     19
+#define QCA_WLAN_VENDOR_ATTR_CONFIG_GENERIC_COMMAND 17
+#define QCA_WLAN_VENDOR_ATTR_CONFIG_GENERIC_VALUE 18
+#define QCA_WLAN_VENDOR_ATTR_CONFIG_GENERIC_DATA 19
 #endif
 
 #ifndef QCA_WLAN_VENDOR_ATTR_CONFIG_MLO_LINK_ID
-#define QCA_WLAN_VENDOR_ATTR_CONFIG_MLO_LINK_ID      99
+#define QCA_WLAN_VENDOR_ATTR_CONFIG_MLO_LINK_ID 99
 #endif
 
-#define QCA_NL80211_VENDOR_SUBCMD_WIFI_PARAMS              200
+#define QCA_NL80211_VENDOR_SUBCMD_WIFI_PARAMS 200
 /* Outer subcmds for vdev (VAP-level) and wiphy (radio-level) vendor commands */
-#define QCA_NL80211_VENDOR_SUBCMD_SET_WIFI_CONFIGURATION   74
-#define QCA_NL80211_VENDOR_SUBCMD_GET_WIFI_CONFIGURATION   75
-#define QCA_NL80211_VENDOR_SUBCMD_SET_WIPHY_CONFIGURATION  505
-#define QCA_NL80211_VENDOR_SUBCMD_GET_WIPHY_CONFIGURATION  506
+#define QCA_NL80211_VENDOR_SUBCMD_SET_WIFI_CONFIGURATION 74
+#define QCA_NL80211_VENDOR_SUBCMD_GET_WIFI_CONFIGURATION 75
+#define QCA_NL80211_VENDOR_SUBCMD_SET_WIPHY_CONFIGURATION 505
+#define QCA_NL80211_VENDOR_SUBCMD_GET_WIPHY_CONFIGURATION 506
 /* Attribute ID for radio index in vendor data (from ath12k/vendor.h) */
 #ifndef QCA_WLAN_VENDOR_ATTR_CONFIG_RADIO_INDEX
-#define QCA_WLAN_VENDOR_ATTR_CONFIG_RADIO_INDEX             150
+#define QCA_WLAN_VENDOR_ATTR_CONFIG_RADIO_INDEX 150
 #endif
 /* Generic command value for radio-level wifi params (used by DFS vendor cmds) */
-#define QCA_NL80211_VENDOR_SUBCMD_WIFI_PARAMS_VAL               200
+#define QCA_NL80211_VENDOR_SUBCMD_WIFI_PARAMS_VAL 200
 /*
  * ath12k returns GET_WIPHY_CONFIGURATION responses using a private enum
  * (qca_wlan_genric_data) rather than QCA_WLAN_VENDOR_ATTR_CONFIG_GENERIC_DATA:
@@ -128,39 +138,39 @@
  *   QCA_WLAN_VENDOR_ATTR_PARAM_LENGTH (= 2) — u32 sizeof(value)
  *   QCA_WLAN_VENDOR_ATTR_PARAM_FLAGS  (= 3) — u32 0
  */
-#define QCA_WLAN_VENDOR_ATTR_PARAM_DATA    1
-#define QCA_WLAN_VENDOR_ATTR_PARAM_LENGTH  2
-#define QCA_WLAN_VENDOR_ATTR_PARAM_FLAGS   3
+#define QCA_WLAN_VENDOR_ATTR_PARAM_DATA 1
+#define QCA_WLAN_VENDOR_ATTR_PARAM_LENGTH 2
+#define QCA_WLAN_VENDOR_ATTR_PARAM_FLAGS 3
 
 /* WIFI_PARAMS command ID */
 #define WIFI_PARAMS 200
 
 /* Vdev parameter IDs for REG_PARAMS */
-#define VDEV_PARAM_REG_PARAMS   72  /* disable_opclass_chans */
+#define VDEV_PARAM_REG_PARAMS 72 /* disable_opclass_chans */
 
 #ifndef QCA_NL80211_VENDOR_SUBCMD_REG_PARAMS
-#define QCA_NL80211_VENDOR_SUBCMD_REG_PARAMS   518
+#define QCA_NL80211_VENDOR_SUBCMD_REG_PARAMS 518
 #endif
 
 /* qca_wlan_vendor_attr_reg_params numeric values */
-#define REG_PARAMS_ATTR_CMD      1   /* QCA_WLAN_VENDOR_ATTR_REG_PARAMS_CMD      */
-#define REG_PARAMS_ATTR_LINKID   3   /* QCA_WLAN_VENDOR_ATTR_REG_PARAMS_LINKID   */
-#define REG_PARAMS_ATTR_DISABLE  4   /* QCA_WLAN_VENDOR_ATTR_REG_PARAMS_DISABLE  */
-#define REG_PARAMS_ATTR_OPCLASS  5   /* QCA_WLAN_VENDOR_ATTR_REG_PARAMS_OPCLASS  */
-#define REG_PARAMS_ATTR_CHAN_LIST 6   /* QCA_WLAN_VENDOR_ATTR_REG_PARAMS_CHAN_LIST (nested) */
+#define REG_PARAMS_ATTR_CMD 1 /* QCA_WLAN_VENDOR_ATTR_REG_PARAMS_CMD      */
+#define REG_PARAMS_ATTR_LINKID 3 /* QCA_WLAN_VENDOR_ATTR_REG_PARAMS_LINKID   */
+#define REG_PARAMS_ATTR_DISABLE 4 /* QCA_WLAN_VENDOR_ATTR_REG_PARAMS_DISABLE  */
+#define REG_PARAMS_ATTR_OPCLASS 5 /* QCA_WLAN_VENDOR_ATTR_REG_PARAMS_OPCLASS  */
+#define REG_PARAMS_ATTR_CHAN_LIST 6 /* QCA_WLAN_VENDOR_ATTR_REG_PARAMS_CHAN_LIST (nested) */
 
 /* qca_wlan_vendor_reg_params cmd value for disable_opclass_chans */
 #define REG_PARAMS_CMD_DISABLE_OPCLASS_CHANS 4
 
 /* Radio/Vdev Parameter IDs */
-#define RADIO_PARAM_COUNTRY         84  /* set_country / get_country */
-#define RADIO_PARAM_COUNTRY_ID      85  /* set_country_id / get_country_id */
-#define RADIO_PARAM_REGDOMAIN       86  /* set_regdomain / get_regdomain */
-#define RADIO_PARAM_BANDINFO        81  /* get_bandinfo */
-#define RADIO_PARAM_BAND_CHANS      82  /* display_band_chans */
-#define RADIO_PARAM_SUPER_CHAN_LIST 83  /* display_super_chan_list */
-#define VDEV_PARAM_LIST_CHAN        71  /* list_chan */
-#define VDEV_PARAM_LIST_BAND        70  /* list_band */
+#define RADIO_PARAM_COUNTRY 84 /* set_country / get_country */
+#define RADIO_PARAM_COUNTRY_ID 85 /* set_country_id / get_country_id */
+#define RADIO_PARAM_REGDOMAIN 86 /* set_regdomain / get_regdomain */
+#define RADIO_PARAM_BANDINFO 81 /* get_bandinfo */
+#define RADIO_PARAM_BAND_CHANS 82 /* display_band_chans */
+#define RADIO_PARAM_SUPER_CHAN_LIST 83 /* display_super_chan_list */
+#define VDEV_PARAM_LIST_CHAN 71 /* list_chan */
+#define VDEV_PARAM_LIST_BAND 70 /* list_band */
 
 
 #ifndef NL80211_FREQUENCY_ATTR_6GHZ_REG_POWER_RULE
@@ -168,41 +178,40 @@
 #endif
 
 /* nl80211_6ghz_reg_rule_attr nested attribute IDs */
-#define SCL_6GHZ_RULE_FLAGS       1   /* NL80211_6GHZ_REG_RULE_ATTR_FLAGS      */
-#define SCL_6GHZ_RULE_POWER_RULE  2   /* NL80211_6GHZ_REG_RULE_ATTR_POWER_RULE */
-#define SCL_6GHZ_RULE_MAX         2
+#define SCL_6GHZ_RULE_FLAGS 1 /* NL80211_6GHZ_REG_RULE_ATTR_FLAGS      */
+#define SCL_6GHZ_RULE_POWER_RULE 2 /* NL80211_6GHZ_REG_RULE_ATTR_POWER_RULE */
+#define SCL_6GHZ_RULE_MAX 2
 
 /* nl80211_6ghz_reg_rule_flags */
-#define SCL_6GHZ_LPI  (1 << 0)   /* Low Power Indoor  → PowerMode 1 */
-#define SCL_6GHZ_VLP  (1 << 1)   /* Very Low Power    → PowerMode 3 */
+#define SCL_6GHZ_LPI (1 << 0) /* Low Power Indoor  → PowerMode 1 */
+#define SCL_6GHZ_VLP (1 << 1) /* Very Low Power    → PowerMode 3 */
 /* SP (Standard Power) = neither LPI nor VLP → PowerMode 2 */
 
 /* nl80211_reg_rule_attr IDs inside the nested power rule */
-#define SCL_POWER_RULE_MAX_EIRP  6   /* NL80211_ATTR_POWER_RULE_MAX_EIRP (mBm) */
-#define SCL_POWER_RULE_PSD       8   /* NL80211_ATTR_POWER_RULE_PSD (0.25 dBm) */
-#define SCL_POWER_RULE_MAX       8
+#define SCL_POWER_RULE_MAX_EIRP 6 /* NL80211_ATTR_POWER_RULE_MAX_EIRP (mBm) */
+#define SCL_POWER_RULE_PSD 8 /* NL80211_ATTR_POWER_RULE_PSD (0.25 dBm) */
+#define SCL_POWER_RULE_MAX 8
 
 struct super_chan_ctx {
-    char   *buf;
-    size_t  buf_len;
-    size_t  written;
-    bool    got_data;
-    bool    header_printed;
+    char *buf;
+    size_t buf_len;
+    size_t written;
+    bool got_data;
+    bool header_printed;
 };
 
-#define SCL_W(fmt, ...) \
-    do { \
-        if (ctx->written < ctx->buf_len) \
-            ctx->written += snprintf(ctx->buf + ctx->written, \
-                                     ctx->buf_len - ctx->written, \
-                                     fmt, ##__VA_ARGS__); \
+#define SCL_W(fmt, ...)                                                                         \
+    do {                                                                                        \
+        if (ctx->written < ctx->buf_len)                                                        \
+            ctx->written += snprintf(ctx->buf + ctx->written, ctx->buf_len - ctx->written, fmt, \
+                ##__VA_ARGS__);                                                                 \
     } while (0)
 /* Response context for NL80211 callbacks */
 typedef struct {
-    void   *data;
-    size_t  data_len;
-    size_t  data_received;
-    int     error;
+    void *data;
+    size_t data_len;
+    size_t data_received;
+    int error;
 } nl80211_vendor_response_t;
 
 extern int qca_getRadiosIndex();
@@ -371,6 +380,11 @@ static int read_from_factory_defaults(char *filename, char *key, char *value, in
     if(access(filename, F_OK) == 0)
     {
         fp = fopen(filename, "r");
+        if (fp == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to open %s: %s\n", __func__, __LINE__,
+                filename, strerror(errno));
+            return -1;
+        }
     }
     else
     {
@@ -670,7 +684,7 @@ static int qca_vendor_get_hw_idx(wifi_radio_index_t radioIndex)
             band_freq = 5500;
             break;
         case WIFI_FREQUENCY_6_BAND:
-            band_freq = 6000;
+            band_freq = 5995;
             break;
         default:
             band_freq = 0;
@@ -723,7 +737,7 @@ int check_radio_index(uint8_t radio_index)
     return -1;
 }
 
-int is_interface_exists(const char *fname)
+int if_file_exists(const char *fname)
 {
     FILE *file = fopen(fname, "r");
     if (file)
@@ -761,61 +775,22 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
     return 0;
 }
 
-void getprivatevap2G(unsigned int *index)
+static unsigned int get_private_vap_index(const char *vap_name, unsigned int fallback_index)
 {
     unsigned int idx = 0;
     wifi_interface_name_idex_map_t interface_map[(IPQ_UD_MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
-    if (index == NULL) {
-        wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
-        return;
-    }
 
     get_wifi_interface_info_map(interface_map);
 
     for (idx = 0; idx < ARRAY_SZ(interface_map); idx++) {
-
-        if (strncmp(interface_map[idx].vap_name, "private_ssid_2g", strlen("private_ssid_2g")) == 0) {
-            *index = interface_map[idx].index;
-
+        if (strcmp(interface_map[idx].vap_name, vap_name) == 0) {
+            return interface_map[idx].index;
         }
     }
-}
 
-void getprivatevap5G(unsigned int *index)
-{
-    unsigned int idx = 0;
-    wifi_interface_name_idex_map_t interface_map[(IPQ_UD_MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
-    if (index == NULL) {
-        wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
-        return;
-    }
-
-    get_wifi_interface_info_map(interface_map);
-
-    for (idx = 0; idx < ARRAY_SZ(interface_map); idx++) {
-
-        if (strncmp(interface_map[idx].vap_name, "private_ssid_5g", strlen("private_ssid_5g")) == 0) {
-            *index = interface_map[idx].index;
-        }
-    }
-}
-
-void getprivatevap6G(unsigned int *index)
-{
-    unsigned int idx = 0;
-    wifi_interface_name_idex_map_t interface_map[(IPQ_UD_MAX_NUM_RADIOS * MAX_NUM_VAP_PER_RADIO)];
-    if (index == NULL) {
-        wifi_hal_error_print("%s: NULL param error\n", __FUNCTION__);
-        return;
-    }
-
-    get_wifi_interface_info_map(interface_map);
-
-    for (idx = 0; idx < ARRAY_SZ(interface_map); idx++) {
-        if (strncmp(interface_map[idx].vap_name, "private_ssid_6g", strlen("private_ssid_6g")) == 0) {
-            *index = interface_map[idx].index;
-        }
-    }
+    wifi_hal_error_print("%s:%d: %s not found; using fallback index %u\n", __func__, __LINE__,
+        vap_name, fallback_index);
+    return fallback_index;
 }
 
 
@@ -837,21 +812,23 @@ int platform_set_radio(wifi_radio_index_t index, wifi_radio_operationParam_t *op
     wifi_hal_dbg_print("%s:%d: Enter radio index:%d\n", __func__, __LINE__, index);
     switch (operationParam->band) {
         case WIFI_FREQUENCY_2_4_BAND:
-            getprivatevap2G(&primary_vap_index);
+            primary_vap_index = get_private_vap_index("private_ssid_2g", UD_PRIVATE_VAP_2G_INDEX);
             break;
         case WIFI_FREQUENCY_5_BAND:
         case WIFI_FREQUENCY_5L_BAND:
         case WIFI_FREQUENCY_5H_BAND:
-            getprivatevap5G(&primary_vap_index);
+            primary_vap_index = get_private_vap_index("private_ssid_5g", UD_PRIVATE_VAP_5G_INDEX);
             break;
         case WIFI_FREQUENCY_6_BAND:
         case WIFI_FREQUENCY_60_BAND:
-            getprivatevap6G(&primary_vap_index);
+            primary_vap_index = get_private_vap_index("private_ssid_6g", UD_PRIVATE_VAP_6G_INDEX);
             break;
         default:
             wifi_hal_error_print("%s:%d: Unknown band:%d radio_index:%d\n", __func__, __LINE__, operationParam->band, index);
             break;
     }
+    wifi_hal_dbg_print("%s:%d: primary VAP index for radio %u is %u\n", __func__, __LINE__,
+        index, primary_vap_index);
 
     /* Apply TX power via nl80211 using the transmitPower percentage from operationParam */
     {
@@ -940,7 +917,7 @@ int platform_get_keypassphrase_default(char *password, int vap_index)
                                 value, sizeof(value));
     }
 
-    else if(is_wifi_hal_vap_xhs(vap_index))
+    else if (is_wifi_hal_vap_xhs(vap_index))
     {
         ret = read_from_factory_defaults(FACTORY_DEFAULTS_FILE, DEFAULT_XHS_PASSWORD_KEY,
                                  value, sizeof(value));
@@ -1202,7 +1179,7 @@ int platform_get_country_code_default(char *code)
 #define OUI_QCA_VENDOR_IE "dd088cfdf00101020100"
 int platform_get_vendor_oui(char *vendor_oui, int vendor_oui_len)
 {
-    if (NULL == vendor_oui) {
+    if (vendor_oui == NULL || vendor_oui_len <= 0) {
         wifi_hal_error_print("%s:%d  Invalid parameter \n", __func__, __LINE__);
         return -1;
     }
@@ -1690,7 +1667,7 @@ UINT wifi_freq_to_op_class(UINT freq)
 int platform_update_radio_presence(void)
 {
     unsigned int index = 0;
-    char cmd[DEFAULT_CMD_SIZE] = {0};
+    char file_path[DEFAULT_FILE_PATH_SIZE] = {0};
     wifi_radio_info_t *radio = NULL;
     radio_interface_mapping_t platform_map_t[IPQ_UD_MAX_NUM_RADIOS];
 
@@ -1704,8 +1681,9 @@ int platform_update_radio_presence(void)
             wifi_hal_error_print("%s:%d: radio NULL for index %d\n", __func__, __LINE__, index);
             continue;
         }
-        snprintf(cmd, sizeof(cmd), "/sys/class/net/%s", platform_map_t[index].interface_name);
-        if (is_interface_exists(cmd)) {
+        snprintf(file_path, sizeof(file_path), "/sys/class/net/%s",
+            platform_map_t[index].interface_name);
+        if (if_file_exists(file_path)) {
             radio->radio_presence = true;
         } else {
             radio->radio_presence = false;
@@ -2404,7 +2382,13 @@ int wifi_wnm_send_bss_tm_req(struct wifi_interface_info_t *interface, struct sta
      u8 dialog_token, u8 req_mode, int disassoc_timer, u8 valid_int, const u8 *bss_term_dur,
      const char *url, const u8 *nei_rep, size_t nei_rep_len, const u8 *mbo_attrs, size_t mbo_len)
 {
-        return 0;
+    if (interface == NULL || sta == NULL) {
+        return RETURN_ERR;
+    }
+
+    wifi_hal_error_print("%s:%d: BSS transition management is not supported by QCA libhostap\n",
+        __func__, __LINE__);
+    return RETURN_ERR;
 }
 
 /* Helper: dump hostapd's internal accept_mac / deny_mac list */

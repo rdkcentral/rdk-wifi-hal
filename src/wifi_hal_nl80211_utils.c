@@ -2396,15 +2396,17 @@ wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index, int link
         interface = hash_map_get_first(radio->interface_map);
 
         while (interface != NULL) {
+            unsigned int per_link_ifindex = if_nametoindex(interface->name);
+
             /* For MLO, interface->index is the MLD ifindex (e.g. phy00-mld0).
              * The kernel sends CH_SWITCH_NOTIFY with the per-link ifindex (e.g. mld1).
              * Also check if_nametoindex(interface->name) to match per-link ifindex.
              */
             if (interface->index == if_index ||
-                if_nametoindex(interface->name) == if_index) {
+                per_link_ifindex == if_index) {
                 wifi_hal_dbg_print("%s:%d: MLO per-link ifindex match: if_index=%u interface=%s (index=%u per_link_ifidx=%u) link_id=%d\n",
                     __func__, __LINE__, if_index, interface->name,
-                    interface->index, if_nametoindex(interface->name), link_id);
+                    interface->index, per_link_ifindex, link_id);
 #if defined(CONFIG_GENERIC_MLO)
                 if (link_id == NL80211_DRV_LINK_ID_NA) {
                     return interface;
@@ -4535,7 +4537,7 @@ void print_attributes(char *cmd, struct nlattr *tb[])
     wifi_hal_dbg_print("\n%s attributes:\n", cmd);
     for (i = 0; i < NL80211_ATTR_MAX; i++) {
         if (tb[i] != NULL) {
-            wifi_hal_dbg_print("%s \n", nl80211_attribute_to_string(nla_type(tb[i])));
+            wifi_hal_dbg_print("%s\t", nl80211_attribute_to_string(nla_type(tb[i])));
         }
     }
     wifi_hal_dbg_print("\n\n");
@@ -6102,6 +6104,7 @@ int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, unsigned char lin
     }
 
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+#if defined(QCOM_ATH12K_PORT)
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         /* For AP mode: store the link_id so that wifi_hal_get_mld_link_id()
          * returns the correct per-link ID.  This is used by nl80211_update_wiphy()
@@ -6117,6 +6120,7 @@ int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, unsigned char lin
             __func__, __LINE__, link_id, interface->name);
         return 0;
     }
+#endif /* QCOM_ATH12K_PORT */
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)

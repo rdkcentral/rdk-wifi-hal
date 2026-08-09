@@ -2678,7 +2678,7 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
         event.rx_from_unknown.bssid = &interface->mac[0];
 
         //we need to improve this code later
-#if defined (BANANA_PI_PORT) || (QCOM_ATH12K_PORT)// for reference device platforms
+#if defined(BANANA_PI_PORT) || defined(QCOM_ATH12K_PORT) /* reference platforms */
         //if (gnlh->cmd == NL80211_CMD_UNEXPECTED_4ADDR_FRAME) {
             event.rx_from_unknown.wds = 1;
         //}
@@ -4149,7 +4149,16 @@ struct nl_msg *nl80211_ifindex_msg(int nl80211_id, wifi_interface_info_t *intf, 
 struct nl_msg *nl80211_drv_cmd_msg_wiphy(int nl80211_id, wifi_interface_info_t *intf, int flags, uint8_t cmd)
 {
     struct nl_msg *msg;
-    wifi_radio_info_t *radio = get_radio_by_rdk_index(intf->vap_info.radio_index);
+    wifi_radio_info_t *radio;
+
+    if (intf == NULL) {
+        return NULL;
+    }
+
+    radio = get_radio_by_rdk_index(intf->vap_info.radio_index);
+    if (radio == NULL) {
+        return NULL;
+    }
 
     msg = nlmsg_alloc();
     if (msg == NULL) {
@@ -4161,37 +4170,16 @@ struct nl_msg *nl80211_drv_cmd_msg_wiphy(int nl80211_id, wifi_interface_info_t *
         return NULL;
     }
 
-    if (intf != NULL) {
-        wifi_hal_dbg_print("%s:%d: NL80211_ATTR_WIPHY index:%d\n", __func__, __LINE__, radio->index);
-        nla_put_u32(msg, NL80211_ATTR_IFINDEX, intf->index);
-        nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index);
-    }
+    wifi_hal_dbg_print("%s:%d: NL80211_ATTR_WIPHY index:%d\n", __func__, __LINE__,
+        radio->index);
+    nla_put_u32(msg, NL80211_ATTR_IFINDEX, intf->index);
+    nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index);
 
     return msg;
 }
+#endif /* QCOM_ATH12K_PORT */
 
 struct nl_msg *nl80211_drv_cmd_msg(int nl80211_id, wifi_interface_info_t *intf, int flags, uint8_t cmd)
-{
-    struct nl_msg *msg;
-    msg = nlmsg_alloc();
-    if (msg == NULL) {
-        return NULL;
-    }
-
-    if (genlmsg_put(msg, 0, 0, nl80211_id, 0, flags, cmd, 0) == NULL) {
-        nlmsg_free(msg);
-        return NULL;
-    }
-
-    if (intf != NULL) {
-        nla_put_u32(msg, NL80211_ATTR_IFINDEX, intf->index);
-        nla_put_u32(msg, NL80211_ATTR_WIPHY, intf->index);
-    }
-
-    return msg;
-}
-#else
-struct nl_msg *nl80211_drv_cmd_msg_wiphy(int nl80211_id, wifi_interface_info_t *intf, int flags, uint8_t cmd)
 {
     struct nl_msg *msg;
 
@@ -4212,7 +4200,6 @@ struct nl_msg *nl80211_drv_cmd_msg_wiphy(int nl80211_id, wifi_interface_info_t *
 
     return msg;
 }
-#endif
 
 struct nl_msg *nl80211_drv_vendor_cmd_msg(int nl80211_id, wifi_interface_info_t *intf, int flags,
     uint32_t vendor_id, uint32_t subcmd)
@@ -19370,8 +19357,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
         wpa_printf(MSG_DEBUG, "nl80211: set_ap msg size after 6G_REG_POWER_MODE: %u",
                    nlmsg_hdr(msg)->nlmsg_len);
     }
-#if (HOSTAPD_VERSION >= 210)
-#if defined(CONFIG_SAE)
+#if (HOSTAPD_VERSION >= 210) && defined(CONFIG_SAE)
     if (wpa_key_mgmt_sae(params->key_mgmt_suites)) {
         u8 sae_pwe = -1;
 
@@ -19398,8 +19384,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
         wpa_printf(MSG_DEBUG, "nl80211: set_ap msg size after SAE_PWE: %u",
                    nlmsg_hdr(msg)->nlmsg_len);
     }
-#endif /* CONFIG_SAE */
-#endif /* HOSTAPD_VERSION */
+#endif /* HOSTAPD_VERSION >= 210 && CONFIG_SAE */
 
 
 #ifdef CONFIG_FILS
@@ -19471,8 +19456,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     }
 #endif /* QCA_UD_HOSTAPD */
 
-#ifdef CONFIG_IEEE80211BE
-#ifdef QCA_UD_HOSTAPD
+#if defined(CONFIG_IEEE80211BE) && defined(QCA_UD_HOSTAPD)
     /* TTLM offload parameters (only for new beacon) — QCA-specific */
   if (cmd == NL80211_CMD_NEW_BEACON &&
          wpa_set_offload_adv_ttlm_params(msg, &ttlm_param->est_ttlm,
@@ -19482,8 +19466,7 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
   }
     wpa_printf(MSG_DEBUG, "nl80211: set_ap msg size after ADV_TTLM_PARAMS: %u",
                nlmsg_hdr(msg)->nlmsg_len);
-#endif /* QCA_UD_HOSTAPD */
-#endif /* CONFIG_IEEE80211BE */
+#endif /* CONFIG_IEEE80211BE && QCA_UD_HOSTAPD */
 
 #ifdef QCA_UD_HOSTAPD
     /* Control Frame Protection */
