@@ -109,9 +109,9 @@ extern "C" {
 #define WIFI_HAL_MINOR  0
 #ifdef HOSTAPD_2_12
     #define HOSTAPD_VERSION 212
-#elif HOSTAPD_2_11
+#elif defined(HOSTAPD_2_11)
     #define HOSTAPD_VERSION 211
-#elif HOSTAPD_2_10
+#elif defined(HOSTAPD_2_10)
     #define HOSTAPD_VERSION 210
 #else
     #define HOSTAPD_VERSION 209
