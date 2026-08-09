@@ -271,7 +271,7 @@ void init_hostap_bss(wifi_interface_info_t *interface)
     conf->gas_frag_limit = 1400;
 
     if (interface->u.ap.conf_initialized == false) {
-#if defined(QCOM_ATH12K_PORT)
+#ifdef QCOM_ATH12K_PORT
         hostapd_config_defaults_bss(conf);
 #else
         dl_list_init(&conf->anqp_elem);
@@ -2602,11 +2602,9 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
 #endif /* QCOM_ATH12K_PORT */
     /* obssCoex=1 (enable):  2.4GHz → 300s interval, 5/6GHz → 0 (no OBSS scan needed)
      * obssCoex=0 (disable): always 0 — no OBSS Scan Parameters IE in beacon */
-    if (radio->oper_param.obssCoex) {
-        iconf->obss_interval = radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND ? 300 : 0;
-    } else {
-        iconf->obss_interval = 0;
-    }
+    iconf->obss_interval =
+        (radio->oper_param.obssCoex &&
+         radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND) ? 300 : 0;
 
     iconf->rssi_reject_assoc_rssi = 0;
     iconf->rssi_reject_assoc_timeout = 3;

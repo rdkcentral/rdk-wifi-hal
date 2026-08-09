@@ -1505,27 +1505,29 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #if defined(QCOM_ATH12K_PORT)
             char *mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
             if (mld_name != NULL) {
-                wifi_hal_error_print("%s:%d: dbg mld_name!=null : %s\n",__func__, __LINE__, mld_name);
-                mac_address_t mld_mac = {};
+                wifi_hal_dbg_print("%s:%d: MLD name for %s: %s\n", __func__, __LINE__,
+                    interface->name, mld_name);
+                mac_address_t mld_mac = {0};
 
                 if ((interface->index = if_nametoindex(mld_name)) == 0) {
                     wifi_hal_error_print("%s:%d: Failed to get ifindex for MLD interface %s: %s\n",
                         __func__, __LINE__, mld_name, strerror(errno));
-                    return NL_SKIP;
+                    return RETURN_ERR;
                 }
                 if (wifi_hal_get_mac_address(mld_name, mld_mac) < 0) {
                     wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n",
                         __func__, __LINE__, mld_name);
-                    return NL_SKIP;
+                    return RETURN_ERR;
                 }
                 strncpy(interface->mld_name, mld_name, sizeof(interface->mld_name) - 1);
+                interface->mld_name[sizeof(interface->mld_name) - 1] = '\0';
 
                 // TODO: get MLD configuration from DB
                 wifi_hal_set_mld_enabled(interface, true);
                 wifi_hal_set_mld_mac_address(interface, mld_mac);
                 wifi_hal_set_mld_link_id(interface, radio->rdk_radio_index);
             }
-#endif // QCOM_ATH12K_PORT
+#endif /* QCOM_ATH12K_PORT */
         interface_name = wifi_hal_get_interface_name(interface);
 
 #ifdef CONFIG_GENERIC_MLO
@@ -1693,7 +1695,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 }
 #else
                 nl80211_interface_enable(interface_name, vap->u.bss_info.enabled);
-#endif
+#endif /* QCOM_ATH12K_PORT */
 #if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
 #ifdef CONFIG_MLO
                 if(radio->oper_param.variant & WIFI_80211_VARIANT_BE)
