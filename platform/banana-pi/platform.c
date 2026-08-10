@@ -148,6 +148,10 @@ int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             continue;
         }
 
+        if (!interface->vap_info.u.bss_info.enabled) {
+            continue;
+        }
+
         if (interface->u.ap.conf.disable_11be) {
             continue;
         }
@@ -359,10 +363,12 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             continue;
         }
 
+        // Evaluate the current state vs incoming - do not alter incoming mld_enable or VAP enable
+        bool is_mlo_enabled = interface->vap_info.u.bss_info.enabled && wifi_hal_is_mld_enabled(interface);
+        bool should_enable_mlo = vap->u.bss_info.enabled && vap->u.bss_info.mld_info.common_info.mld_enable;
+
         // Verify the incoming params against current MLD state
-        if (wifi_hal_is_mld_enabled(interface) &&
-            (vap->u.bss_info.mld_info.common_info.mld_enable == false ||
-                vap->u.bss_info.enabled == false)) {
+        if (is_mlo_enabled == true && should_enable_mlo == false) {
             if (teardown_mlo_vap(interface) != 0) {
                 wifi_hal_error_print("%s:%d: Failed to teardown link for MLD ID %d on VAP idx %d\n",
                     __func__, __LINE__, vap->u.bss_info.mld_info.common_info.mld_id,
@@ -370,16 +376,42 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 return -1;
             }
 
+            // Before possibly disabling MLD on interface, get the new first interface.
+            // Currently OneWifi allows for improper config on Bpi where mld_enable is true
+            // even if VAP has been disabled.
+            wifi_interface_info_t *first_interface = wifi_hal_get_first_mld_interface(interface);
+
+            // We need to update data now since at this point vap_info is not yet copied
             interface->vap_info.u.bss_info.mld_info.common_info.mld_enable =
                 vap->u.bss_info.mld_info.common_info.mld_enable;
+            interface->vap_info.u.bss_info.enabled = vap->u.bss_info.enabled;
+
+            //TODO: Above order - first getting interface, then changing the mld_enable/enabled values
+            //seems weird but it is important, as wifi_hal_get_first_mld_interface due to its structure
+            //may return invalid value in some cases. Also, Currently NULL here means there was an
+            //error. This function should be reworked in future.
+            if (first_interface == NULL) {
+                 wifi_hal_error_print("%s:%d: Failed to determine first MLD interface for %s\n",
+                     __func__, __LINE__, interface->mld_name);
+                 return -1;
+            }
 
             // Reload to update MLD
-            wifi_interface_info_t *first_interface = wifi_hal_get_first_mld_interface(interface);
-            if (first_interface != NULL && hostapd_mld_is_first_bss(&first_interface->u.ap.hapd)) {
+            if (first_interface->u.ap.hapd.mld != NULL &&
+                hostapd_mld_is_first_bss(&first_interface->u.ap.hapd)) {
                 if (reload_vap_configuration(first_interface) != 0) {
                     wifi_hal_error_print(
                         "%s:%d: Failed to reload VAP configuration for MLD ID %d\n", __func__,
                         __LINE__, interface->vap_info.u.bss_info.mld_info.common_info.mld_id);
+                    return -1;
+                }
+            }
+
+            // If first interface does not have MLD, then MLD is gone.
+            if (first_interface->u.ap.hapd.mld == NULL) {
+                if (nl80211_interface_enable(interface->mld_name, false) < 0) {
+                    wifi_hal_error_print("%s:%d: Failed to enable MLD interface %s\n", __func__,
+                        __LINE__, interface->mld_name);
                     return -1;
                 }
             }
@@ -389,11 +421,12 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id =
                 NL80211_DRV_LINK_ID_NA;
             continue;
-        } else if (wifi_hal_is_mld_enabled(interface) == false &&
-            (vap->u.bss_info.mld_info.common_info.mld_enable == true &&
-                vap->u.bss_info.enabled == true)) {
+        } else if (is_mlo_enabled == false && should_enable_mlo == true) {
+            // We need to update data now since at this point vap_info is not yet copied
             interface->vap_info.u.bss_info.mld_info.common_info.mld_enable =
                 vap->u.bss_info.mld_info.common_info.mld_enable;
+            interface->vap_info.u.bss_info.enabled = vap->u.bss_info.enabled;
+
             if (setup_mlo_vap(interface, vap) != 0) {
                 wifi_hal_error_print("%s:%d: Failed to setup link for MLD ID %d with VAP idx %d\n",
                     __func__, __LINE__, vap->u.bss_info.mld_info.common_info.mld_id,
@@ -608,6 +641,11 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 }
 
 int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
+{
+    return RETURN_OK;
+}
+
+int platform_set_beacon_prot(uint apIndex, bool isEnabled)
 {
     return RETURN_OK;
 }
@@ -1018,10 +1056,14 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         return 0;
     }
 
+    hapd = &interface->u.ap.hapd;
+
+    if (hapd->mld == NULL) {
+        return 0;
+    }
+
     wifi_hal_info_print("%s:%d: interface:%s link id:%d update MLD links\n", __func__, __LINE__,
         wifi_hal_get_interface_name(interface), wifi_hal_get_mld_link_id(interface));
-
-    hapd = &interface->u.ap.hapd;
 
     /* Links have been removed due to interface down-up. Re-add all links and enable them,
      * but enable the first link BSS before doing that. */

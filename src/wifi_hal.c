@@ -46,6 +46,8 @@
 
 #define MAC_ADDRESS_LEN 6
 
+#define EASYMESH_OFF_FLAG "/nvram/rdkb_user_easymesh_off"
+
 #ifdef CONFIG_WIFI_EMULATOR
 #define RADIO_INDEX_ASSERT_RC(radioIndex, retcode) \
     do { \
@@ -156,7 +158,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 #if defined(_SKY_HUB_COMMON_PRODUCT_REQ_) && !defined(_SR213_PRODUCT_REQ_) && !defined(_SCER11BEL_PRODUCT_REQ_) && !defined(_SCXF11BFL_PRODUCT_REQ_)
     /* For SKY platforms, set as per _SKY macro defined */
     hal->wifi_prop.BssMaxStaAllow = BSS_MAX_NUM_STA_SKY;
-#elif defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(SCXF10_PORT)
+#elif defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(SCXF10_PORT) || defined(XER2_PORT)
     /* For TCHXB8 platforms, set as per _XB8 macro defined */
     hal->wifi_prop.BssMaxStaAllow = BSS_MAX_NUM_STA_XB8;
 #else
@@ -284,6 +286,13 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     }
 #endif
 
+    if (access(EASYMESH_OFF_FLAG, F_OK) == 0) {
+        hal->wifi_prop.colocated_mode = -1;
+        wifi_hal_info_print("%s:%d: %s file exists, easymesh is disabled\n", __func__, __LINE__, EASYMESH_OFF_FLAG);
+    } else {
+        if (errno != ENOENT) {
+            wifi_hal_error_print("%s:%d: access(%s) failed: %s\n", __func__, __LINE__, EASYMESH_OFF_FLAG, strerror(errno));
+        }
     /* Read the al_mac address from EM_CFG_FILE */
     ret = json_parse_string(EM_CFG_FILE, "Al_MAC_ADDR", al_ctrl_mac, sizeof(al_ctrl_mac));
     if (ret == 0) {
@@ -332,6 +341,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
             __func__, __LINE__, EM_CFG_FILE, ret);
         hal->wifi_prop.colocated_mode = -1;
     }
+    } /* EASYMESH_OFF_FLAG not present */
 
     wifi_hal_info_print("%s:%d: serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s "
                         "al_mac_addr=%s colocated_mode:%d\n",
@@ -788,8 +798,10 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     }
     memcpy((unsigned char *)old_operationParam, (unsigned char *)&radio->oper_param, sizeof(wifi_radio_operationParam_t));
 
+#if !defined(BANANA_PI_PORT) && !defined(CONFIG_GENERIC_MLO)
     nl80211_interface_enable(wifi_hal_get_interface_name(primary_interface),
         operationParam->enable);
+#endif
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
     if (nl80211_set_amsdu_tid(primary_interface, operationParam->amsduTid) != RETURN_OK)
     {
@@ -835,17 +847,58 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                                 __func__, __LINE__, ret);
                         }
                     }
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
+                    if (wifi_hal_is_mld_enabled(interface)) {
+                        if (setup_mlo_vap(interface, &interface->vap_info) != RETURN_OK) {
+                            free(old_operationParam);
+                            old_operationParam = NULL;
+                            return RETURN_ERR;
+                        }
+                    }
+
+                    //Important side effect to this is that this will make sure we trigger the beacon twice
+                    if (restart_interface(interface)) {
+                            free(old_operationParam);
+                            old_operationParam = NULL;
+                            return RETURN_ERR;
+                    }
+
+                    if (nl80211_create_bridge(interface_name, interface->vap_info.bridge_name) != 0) {
+                        wifi_hal_error_print("%s:%d: Failed add interface %s to bridge %s\n",
+                            __func__, __LINE__, interface_name, interface->vap_info.bridge_name);
+                        free(old_operationParam);
+                        old_operationParam = NULL;
+                        return RETURN_ERR;
+                    }
+
+#else
                     if (update_hostap_interface_params(interface) != RETURN_OK) {
                         free(old_operationParam);
                         old_operationParam = NULL;
                         return RETURN_ERR;
                     }
+#endif // defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
                     interface->beacon_set = 0;
                     start_bss(interface);
                     interface->bss_started = true;
                 }
 
                 if (radio->oper_param.enable == false && interface->bss_started) {
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
+                    if (wifi_hal_is_mld_enabled(interface)) {
+                        if (teardown_mlo_vap(interface)) {
+                            free(old_operationParam);
+                            old_operationParam = NULL;
+                            return RETURN_ERR;
+                        }
+                    }
+
+                    if (reload_interface(interface)) {
+                        free(old_operationParam);
+                        old_operationParam = NULL;
+                        return RETURN_ERR;
+                    }
+#else
                     /* Clear beacon interval in wdev by stoping AP */
                     nl80211_interface_enable(interface_name, false);
                     nl80211_interface_enable(interface_name, true);
@@ -872,9 +925,9 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                     }
                     interface->bss_started = false;
                     nl80211_interface_enable(interface_name, false);
+#endif // BANANA_PI_PORT && CONFIG_GENERIC_MLO
                 }
             }
-
             if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
                 if (radio->oper_param.enable == false) {
                     if (interface->u.sta.state == WPA_COMPLETED) {
@@ -1360,6 +1413,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     wifi_vap_info_t *vap;
     platform_pre_create_vap_t pre_set_vap_params_fn;
     platform_create_vap_t set_vap_params_fn;
+    platform_set_beacon_prot_t set_vap_beacon_prot_fn;
     unsigned int i;
     char msg[2048];
     int ret = RETURN_OK;
@@ -1704,14 +1758,22 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
 #endif // NL80211_ACL
             re_configure_steering_mac_list(interface);
-        }
-        if (vap->vap_mode == wifi_vap_mode_ap) {
+
             wifi_hal_info_print("%s:%d: vap index:%d set power:%d\n",  __func__, __LINE__,
                 vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             if (wifi_setApManagementFramePowerControl(vap->vap_index,
                 vap->u.bss_info.mgmtPowerControl) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d: vap index:%d failed to set power %d\n", __func__,
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
+            }
+
+            if ((set_vap_beacon_prot_fn = get_platform_set_beacon_prot_fn()) != NULL &&
+                    interface->u.ap.iface.drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION) {
+#ifdef BEACON_PROT
+                wifi_hal_info_print("%s:%d: vap index:%d set beacon prot: %d\n", __func__, __LINE__,
+                        vap->vap_index, interface->u.ap.conf.beacon_prot);
+                set_vap_beacon_prot_fn(vap->vap_index, interface->u.ap.conf.beacon_prot);
+#endif
             }
         }
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
@@ -3882,8 +3944,18 @@ INT wifi_hal_setRMBeaconRequest(UINT apIndex,
 
     // (13)
     if (in_req->channelReportPresent) {
-        ap_ch_rep_len = MAX_CHANNELS;
-        ap_ch_rep_p = in_req->channelReport.channels;
+        /* Count valid channels from the zero-terminated channelReport.channels array and pass the correct length to wifi_rrm_send_beacon_req() */
+        ap_ch_rep_len = 0;
+        while (ap_ch_rep_len < MAX_CHANNELS_REPORT &&
+               in_req->channelReport.channels[ap_ch_rep_len] != 0) {
+            ap_ch_rep_len++;
+        }
+        if (ap_ch_rep_len > 0) {
+            ap_ch_rep_p = in_req->channelReport.channels;
+        } else if (in_req->channel == 255) {
+            wifi_hal_error_print("%s:%d: [BTM] REQ_BEACON - channel report is empty for channel 255\n", __func__, __LINE__);
+            return WIFI_HAL_ERROR;
+        }
     }
 
     // (14)
@@ -4308,6 +4380,20 @@ void wifi_hal_apDeAuthEvent_callback_register(wifi_device_deauthenticated_callba
 
     callbacks->apDeAuthEvent_cb[callbacks->num_apDeAuthEvent_cbs] = func;
     callbacks->num_apDeAuthEvent_cbs++;
+}
+
+void wifi_hal_apFrameDropUnencrypted_callback_register(wifi_apFrameDropUnencrypted_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+
+    if (callbacks == NULL || callbacks->num_frame_drop_unenc_cbs >= MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+
+    callbacks->frame_drop_unenc_cb[callbacks->num_frame_drop_unenc_cbs] = func;
+    callbacks->num_frame_drop_unenc_cbs++;
 }
 
 INT wifi_vapstatus_callback_register(wifi_vapstatus_callback func) {

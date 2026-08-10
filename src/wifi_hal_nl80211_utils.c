@@ -385,6 +385,15 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {0, 2,  "wl2.7",  "", "brlan114", 114,   22,     "mesh_backhaul_6g"},
     {0, 2,  "wl2",    "", "",         0,     23,     "mesh_sta_6g"},
 #endif /* SCXF10_PORT */
+
+#ifdef XER2_PORT // For XER2 Platform
+    {0, 0,  "wl0.1",  "", "brlan0",  100,    0,     "private_ssid_2g"},
+    {1, 1,  "wl1.1",  "", "brlan0",  100,    1,     "private_ssid_5g"},
+    {0, 0,  "wl0.7",  "", "brlan112", 112,  12,     "mesh_backhaul_2g"},
+    {1, 1,  "wl1.7",  "", "brlan113", 113,  13,     "mesh_backhaul_5g"},
+    {0, 0,  "wl0",    "", "",          0,   14,     "mesh_sta_2g"},
+    {1, 1,  "wl1",    "", "",          0,   15,     "mesh_sta_5g"},
+#endif
     // for Intel based platforms
 };
 #endif
@@ -434,7 +443,12 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 1, 1, "radio2", "wl1"},
     { 0, 2, "radio3", "wl2"},
 #endif
- 
+
+#if defined(XER2_PORT) 
+    { 0, 0, "radio1", "wl0"},
+    { 1, 1, "radio2", "wl1"},
+#endif
+
 #ifdef CMXB7_PORT // for Intel based platforms
     { 1, 0, "radio1", "wlan0"},
     { 0, 1, "radio2", "wlan2"},
@@ -492,6 +506,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef BANANA_PI_PORT // for reference device platforms
@@ -526,6 +541,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef TCXB7_PORT // for Broadcom based platforms
@@ -560,6 +576,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef VNTXER5_PORT // for Qualcomm based platforms
@@ -594,6 +611,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef TARGET_GEMINI7_2
@@ -628,6 +646,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif 
 
 #ifdef TCXB8_PORT // for Broadcom based platforms
@@ -662,6 +681,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 
@@ -697,6 +717,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef XB10_PORT // for Broadcom based platforms
@@ -736,6 +757,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef SCXER10_PORT // for Broadcom based platforms
@@ -770,6 +792,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef SCXF10_PORT // for Broadcom based platforms
@@ -804,8 +827,44 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
- 
+
+#ifdef XER2_PORT // For XER2 Broadcom Platform
+    "xer2",
+    "dhd",
+    {"Xfinity Ethernet Router","Arcadyan","XER2","AYER21BEL","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    platform_pre_init,
+    platform_post_init,
+    platform_set_radio,
+    platform_set_radio_pre_init,
+    platform_pre_create_vap,
+    platform_create_vap,
+    platform_get_ssid_default,
+    platform_get_keypassphrase_default,
+    platform_get_radius_key_default,
+    platform_get_wps_pin_default,
+    platform_get_country_code_default,
+    platform_wps_event,
+    platform_flags_init,
+    platform_get_aid,
+    platform_free_aid,
+    platform_sync_done,
+    platform_update_radio_presence,
+    platform_set_txpower,
+    platform_set_offload_mode,
+    platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
+    platform_get_vendor_oui,
+    platform_set_neighbor_report,
+    platform_get_radio_phytemperature,
+    platform_set_dfs,
+    platform_get_radio_caps,
+    platform_get_reg_domain,
+    platform_set_beacon_prot,
+#endif
+
 #ifdef CMXB7_PORT
     "cmxb7",
     "mtlk",
@@ -838,6 +897,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef XLE_PORT // for Broadcom XLE
@@ -872,6 +932,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef SKYSR213_PORT // for Broadcom HUB6
@@ -906,6 +967,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 #ifdef RDKB_ONE_WIFI_PROD // for Broadcom based platforms
     "rdkb",
@@ -939,6 +1001,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
     
 };
@@ -4545,6 +4608,11 @@ platform_get_RegDomain_t get_platform_get_RegDomain_fn()
     return driver_info.platform_get_RegDomain_fn;
 }
 
+platform_set_beacon_prot_t get_platform_set_beacon_prot_fn()
+{
+    return driver_info.platform_set_beacon_prot_fn;
+}
+
 bool lsmod_by_name(const char *name)
 {
     FILE *fp = NULL;
@@ -5857,6 +5925,8 @@ int wifi_hal_set_mld_id(wifi_interface_info_t *interface, int mld_id)
 }
 
 #ifdef CONFIG_GENERIC_MLO
+// TODO: Considering this function structure, it should be changed to use
+//  MLD id and not rely on the interface itself.
 wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *interface)
 {
     wifi_radio_info_t *radio;
@@ -6265,6 +6335,9 @@ static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
         }
 
         hash_map_foreach(radio->interface_map, interface_iter) {
+            if (interface_iter->vap_info.u.bss_info.enabled == false) {
+                continue;
+            }
 
             if (!wifi_hal_is_mld_enabled(interface_iter)) {
                 continue;
@@ -6298,6 +6371,10 @@ static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
         wifi_radio_info_t *radio = get_radio_by_rdk_index(i);
 
         hash_map_foreach(radio->interface_map, interface_iter) {
+            if (interface_iter->vap_info.u.bss_info.enabled == false) {
+                continue;
+            }
+
             if (!wifi_hal_is_mld_enabled(interface_iter)) {
                 continue;
             }
@@ -6447,7 +6524,7 @@ static int dealloc_mld(wifi_interface_info_t *interface)
     int ret = 0;
 
     if (hapd->mld == NULL) {
-        wifi_hal_info_print("%s:%d hapd->mld empty, nothing to free \n", __func__, __LINE__);
+        wifi_hal_dbg_print("%s:%d hapd->mld empty, nothing to free \n", __func__, __LINE__);
         return 0;
     }
 
@@ -6472,11 +6549,13 @@ static int dealloc_mld(wifi_interface_info_t *interface)
 
     if (hapd->mld->refcount == 0) {
         remove_mld_from_array(hapd->mld);
+        wifi_hal_dbg_print("%s:%d MLD group destroyed \n", __func__, __LINE__);
     }
 
     hapd->mld = NULL;
     hapd->conf->mld_ap = 0;
     hapd->conf->okc = 0;
+    wifi_hal_dbg_print("%s:%d VAP removed from MLD group \n", __func__, __LINE__);
     return ret;
 }
 
@@ -6490,7 +6569,7 @@ int teardown_mlo_vap(wifi_interface_info_t *interface)
             __LINE__, interface->mld_name, wifi_hal_get_mld_link_id(interface));
     }
 
-    if (hostapd_mld_is_first_bss(&interface->u.ap.hapd)) {
+    if (hostapd_mld_is_first_bss(&interface->u.ap.hapd) && interface->u.ap.hapd.mld != NULL) {
         wifi_interface_info_t *first_interface = NULL;
         // We are removing the first link.
         // First interface pointer could point to invalid data
@@ -6530,7 +6609,8 @@ int teardown_mlo_vap(wifi_interface_info_t *interface)
         }
 
         first_interface = wifi_hal_get_first_mld_interface(interface);
-        if (first_interface != NULL && hostapd_mld_is_first_bss(&first_interface->u.ap.hapd)) {
+        if (first_interface != NULL && first_interface->u.ap.hapd.mld != NULL &&
+            hostapd_mld_is_first_bss(&first_interface->u.ap.hapd)) {
             first_interface->vap_configured = false;
             wifi_drv_set_operstate(first_interface, 1);
         }
@@ -6618,6 +6698,12 @@ int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_con
     if (if_idx == 0) {
         wifi_hal_error_print("%s:%d: Failed to find interface %s for MLD setup\n", __func__,
             __LINE__, interface->mld_name);
+        return -1;
+    }
+
+    if (nl80211_interface_enable(interface->mld_name, true) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to enable MLD interface %s\n", __func__, __LINE__,
+            interface->mld_name);
         return -1;
     }
 
