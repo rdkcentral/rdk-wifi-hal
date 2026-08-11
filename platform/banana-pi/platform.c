@@ -1020,14 +1020,14 @@ INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
     return 0;
 }
 
-INT wifi_enableCSIEngine(INT apIndex,mac_address_t sta,BOOL enable)
+INT wifi_enableCSIEngine(INT apIndex, mac_address_t sta, BOOL enable)
 {
-        return RETURN_OK;
+    return RETURN_OK;
 }
 INT wifi_getApInterworkingElement(INT apIndex, wifi_InterworkingElement_t *output_struct)
 {
-	//TODO
-	return RETURN_ERR;
+    // TODO
+    return RETURN_ERR;
 }
 INT wifi_getRadioChannels(INT radioIndex, wifi_channelMap_t *outputMap, INT outputMapSize)
 {
@@ -1037,103 +1037,98 @@ INT wifi_getRadioChannels(INT radioIndex, wifi_channelMap_t *outputMap, INT outp
 
 INT wifi_setApMacAddressControlMode(INT apIndex, INT filterMode)
 {
-       return RETURN_OK;
-
+    return RETURN_OK;
 }
 
 INT wifi_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
 {
-        return RETURN_OK;
+    return RETURN_OK;
 }
 
 INT wifi_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
 {
-        return RETURN_OK;
-
+    return RETURN_OK;
 }
 
 INT wifi_delApAclDevices(INT apIndex)
 {
-	return RETURN_OK;
+    return RETURN_OK;
 }
 
-//Get current Transmit Power, eg "75", "100"
-//The transmit power level is in units of full power for this radio.
-INT wifi_getRadioTransmitPower(INT radioIndex, ULONG *output_ulong)	//RDKB
+// Get current Transmit Power, eg "75", "100"
+// The transmit power level is in units of full power for this radio.
+INT wifi_getRadioTransmitPower(INT radioIndex, ULONG *output_ulong) // RDKB
 {
-        radioIndex_Check(radioIndex);
-        POINTER_CHECK(output_ulong != NULL);
+    radioIndex_Check(radioIndex);
+    POINTER_CHECK(output_ulong != NULL);
 
-        INT ret = wifi_hal_getRadioTransmitPower(radioIndex, output_ulong);
-        wifi_hal_info_print("%s:%d radio %d txpower (from NL):%lu ret:%d\n", __func__, __LINE__, radioIndex, *output_ulong, ret);
-        return ret;
+    INT ret = wifi_hal_getRadioTransmitPower(radioIndex, output_ulong);
+    wifi_hal_info_print("%s:%d radio %d txpower (from NL):%lu ret:%d\n", __func__, __LINE__,
+        radioIndex, *output_ulong, ret);
+    return ret;
 }
 
 INT wifi_halGetIfStatsNull(wifi_radioTrafficStats2_t *output_struct)
 {
-	wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
-	POINTER_CHECK(output_struct != NULL);
-	output_struct->radio_BytesSent = 0;
-	output_struct->radio_BytesReceived = 0;
-	output_struct->radio_PacketsSent = 0;
-	output_struct->radio_PacketsReceived = 0;
-	output_struct->radio_ErrorsSent = 0;
-	output_struct->radio_ErrorsReceived = 0;
-	output_struct->radio_DiscardPacketsSent = 0;
-	output_struct->radio_DiscardPacketsReceived = 0;
-	wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
-	return RETURN_OK;
+    wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
+    POINTER_CHECK(output_struct != NULL);
+    output_struct->radio_BytesSent = 0;
+    output_struct->radio_BytesReceived = 0;
+    output_struct->radio_PacketsSent = 0;
+    output_struct->radio_PacketsReceived = 0;
+    output_struct->radio_ErrorsSent = 0;
+    output_struct->radio_ErrorsReceived = 0;
+    output_struct->radio_DiscardPacketsSent = 0;
+    output_struct->radio_DiscardPacketsReceived = 0;
+    wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
+    return RETURN_OK;
 }
 
 INT File_Reading(CHAR *file, char *Value)
 {
-	FILE *fp = NULL;
-	char buf[MAX_CMD_SIZE] = {0};
+    FILE *fp = NULL;
+    char buf[MAX_CMD_SIZE] = { 0 };
 
-	if (file == NULL || Value == NULL)
-	{
-		return RETURN_ERR;
-	}
+    if (file == NULL || Value == NULL) {
+        return RETURN_ERR;
+    }
 
-	fp = popen(file, "r");
-	if (fp == NULL)
-	{
-		return RETURN_ERR;
-	}
+    fp = popen(file, "r");
+    if (fp == NULL) {
+        return RETURN_ERR;
+    }
 
-	if (fgets(buf, sizeof(buf), fp) == NULL)
-	{
-		pclose(fp);
-		Value[0] = '\0';
-		return RETURN_ERR;
-	}
+    if (fgets(buf, sizeof(buf), fp) == NULL) {
+        pclose(fp);
+        Value[0] = '\0';
+        return RETURN_ERR;
+    }
 
-	buf[strcspn(buf, "\n")] = '\0';
-	pclose(fp);
-	snprintf(Value, MAX_BUF_SIZE, "%s", buf);
-	return RETURN_OK;
+    buf[strcspn(buf, "\n")] = '\0';
+    pclose(fp);
+    snprintf(Value, MAX_BUF_SIZE, "%s", buf);
+    return RETURN_OK;
 }
 
 INT GetIfacestatus(CHAR *interface_name, CHAR *status)
 {
-	wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
-	CHAR buf[MAX_CMD_SIZE] = {0};
+    wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
+    CHAR buf[MAX_CMD_SIZE] = { 0 };
 
-	if (interface_name != NULL && (strlen(interface_name) > 1) && status != NULL)
-	{
-		sprintf(buf, "%s%s%s%s%s", "ifconfig -a ", interface_name, " | grep ", interface_name, " | wc -l");
-		File_Reading(buf, status);
-	}
-	wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
+    if (interface_name != NULL && (strlen(interface_name) > 1) && status != NULL) {
+        sprintf(buf, "%s%s%s%s%s", "ifconfig -a ", interface_name, " | grep ", interface_name,
+            " | wc -l");
+        File_Reading(buf, status);
+    }
+    wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
 
-	return RETURN_OK;
+    return RETURN_OK;
 }
 
-
-//Get the running channel number
-INT wifi_getRadioChannel(INT radioIndex,ULONG *output_ulong)	//RDKB
+// Get the running channel number
+INT wifi_getRadioChannel(INT radioIndex, ULONG *output_ulong) // RDKB
 {
-        wifi_radio_info_t *radio;
+    wifi_radio_info_t *radio;
 
         radioIndex_Check(radioIndex);
         POINTER_CHECK(output_ulong != NULL);
