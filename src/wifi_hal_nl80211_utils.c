@@ -6773,10 +6773,10 @@ int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_con
             hapd->mld->next_link_id++;
 #endif
 #if defined(KERNEL_6_12)
-	         if ((hapd->mld->allocated_links & BIT(i)) == 0) {
-                                hapd->mld_link_id = i;
-                                hapd->mld->allocated_links |= BIT(i);
-                        }
+            if ((hapd->mld->allocated_links & BIT(i)) == 0) {
+                hapd->mld_link_id = i;
+                hapd->mld->allocated_links |= BIT(i);
+            }
 #endif
             for_each_mld_link(link_bss, hapd) {
                 if (link_bss == hapd) {
