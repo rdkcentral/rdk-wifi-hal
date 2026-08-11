@@ -3309,9 +3309,10 @@ int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down)
     else
     {
         wifi_hal_error_print("%s:%d cmd [%s] unsuccessful \n", __func__, __LINE__, cmd);
+        return RETURN_ERR;
     }
 
-    return rc;
+    return RETURN_OK;
 }
 #endif // defined (ENABLED_EDPD)
 
