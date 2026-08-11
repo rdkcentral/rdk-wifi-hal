@@ -140,6 +140,35 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {2, 1,  "bhaul-sta-50", "", "",           0,  15,  "mesh_sta_5g"},
 #endif
 
+#ifdef XE2_PORT // Qualcomm IPQ Dakota superpod (3 radios: 2.4GHz + 5GHz-low + 5GHz-high)
+    /* {phy_index, rdk_radio_index, interface_name, mld_interface_name, bridge_name, vlan_id, index, vap_name}
+     * mld_interface_name is "" — XE2 (11ax) has no MLD/802.11be. */
+    {1, 0,  "ath0",   "", "brlan0",   100,    0,      "private_ssid_2g"},
+    {2, 1,  "ath1",   "", "brlan0",   100,    1,      "private_ssid_5gl"},
+    {1, 0,  "ath2",   "", "brlan1",   101,    2,      "iot_ssid_2g"},
+    {2, 1,  "ath3",   "", "brlan1",   101,    3,      "iot_ssid_5gl"},
+    {1, 0,  "ath4",   "", "brlan2",   102,    4,      "hotspot_open_2g"},
+    {2, 1,  "ath5",   "", "brlan3",   103,    5,      "hotspot_open_5gl"},
+    {1, 0,  "ath6",   "", "br106",    106,    6,      "lnf_psk_2g"},
+    {2, 1,  "ath7",   "", "br106",    106,    7,      "lnf_psk_5gl"},
+    {1, 0,  "ath8",   "", "brlan4",   104,    8,      "hotspot_secure_2g"},
+    {2, 1,  "ath9",   "", "brlan5",   105,    9,      "hotspot_secure_5gl"},
+    {1, 0,  "ath10",  "", "br106",    106,    10,     "lnf_radius_2g"},
+    {2, 1,  "ath11",  "", "br106",    106,    11,     "lnf_radius_5gl"},
+    {1, 0,  "ath12",  "", "brlan112", 112,    12,     "mesh_backhaul_2g"},
+    {2, 1,  "ath13",  "", "brlan113", 113,    13,     "mesh_backhaul_5gl"},
+    {1, 0,  "ath14",  "", "",         0,      14,     "mesh_sta_2g"},
+    {2, 1,  "ath15",  "", "",         0,      15,     "mesh_sta_5gl"},
+    {3, 2,  "ath16",  "", "brlan0",   100,    16,     "private_ssid_5gh"},
+    {3, 2,  "ath17",  "", "brlan1",   101,    17,     "iot_ssid_5gh"},
+    {3, 2,  "ath18",  "", "brlan3",   103,    18,     "hotspot_open_5gh"},
+    {3, 2,  "ath19",  "", "br106",    106,    19,     "lnf_psk_5gh"},
+    {3, 2,  "ath20",  "", "brlan5",   105,    20,     "hotspot_secure_5gh"},
+    {3, 2,  "ath21",  "", "br106",    106,    21,     "lnf_radius_5gh"},
+    {3, 2,  "ath22",  "", "brlan113", 114,    22,     "mesh_backhaul_5gh"},
+    {3, 2,  "ath23",  "", "",         0,      23,     "mesh_sta_5gh"},
+#endif
+
 #ifdef CMXB7_PORT // for Intel based platforms
     {1, 0,  "wlan0.0", "",   "brlan0",  100, 0,      "private_ssid_2g"},
     {0, 1,  "wlan2.0", "",   "brlan0",  100, 1,      "private_ssid_5g"},
@@ -414,6 +443,12 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 2, 1, "radio2", "wifi1"},
 #endif
 
+#if defined(XE2_PORT) // Qualcomm IPQ Dakota superpod (3 radios)
+    { 1, 0, "radio1", "wifi0"},
+    { 2, 1, "radio2", "wifi1"},
+    { 3, 2, "radio3", "wifi2"},
+#endif
+
 #if defined(XLE_PORT)
     { 0, 0, "radio1", "wl0"},
     { 1, 1, "radio2", "wl1"},
@@ -583,6 +618,41 @@ const wifi_driver_info_t  driver_info = {
     "vntxer5",
     "wifi_3_0",
     {"Xfinity Wireless Gateway","Vantiva","XER5","XER5","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    platform_pre_init,
+    platform_post_init,
+    platform_set_radio,
+    platform_set_radio_pre_init,
+    platform_pre_create_vap,
+    platform_create_vap,
+    platform_get_ssid_default,
+    platform_get_keypassphrase_default,
+    platform_get_radius_key_default,
+    platform_get_wps_pin_default,
+    platform_get_country_code_default,
+    platform_wps_event,
+    platform_flags_init,
+    platform_get_aid,
+    platform_free_aid,
+    platform_sync_done,
+    platform_update_radio_presence,
+    platform_set_txpower,
+    platform_set_offload_mode,
+    platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
+    platform_get_vendor_oui,
+    platform_set_neighbor_report,
+    platform_get_radio_phytemperature,
+    platform_set_dfs,
+    platform_get_radio_caps,
+    platform_get_reg_domain,
+    platform_set_beacon_prot,
+#endif
+
+#ifdef XE2_PORT // Qualcomm IPQ Dakota superpod (3 radios: 2.4GHz + 5GHz-low + 5GHz-high)
+    "xe2",
+    "wifi_3_0", /* QCA driver module (same family as VNTXER5); verify with `lsmod` on target */
+    {"Xfinity Wireless Extender","Plume","XE2","XE2","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
     platform_pre_init,
     platform_post_init,
     platform_set_radio,

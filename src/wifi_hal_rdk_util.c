@@ -114,7 +114,8 @@ char *get_formatted_time(char *time)
 
     strftime(tmp, 128, "%y%m%d-%T", tm_info);
 
-    snprintf(time, 128, "%s.%06lu", tmp, tv_now.tv_usec);
+    /* tv_usec is suseconds_t (long long on musl/arm); cast to match %lu. */
+    snprintf(time, 128, "%s.%06lu", tmp, (unsigned long)tv_now.tv_usec);
     return time;
 }
 #endif

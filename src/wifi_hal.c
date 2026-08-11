@@ -1767,14 +1767,15 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             }
 
+#ifdef BEACON_PROT
             if ((set_vap_beacon_prot_fn = get_platform_set_beacon_prot_fn()) != NULL &&
                     interface->u.ap.iface.drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION) {
-#ifdef BEACON_PROT
+
                 wifi_hal_info_print("%s:%d: vap index:%d set beacon prot: %d\n", __func__, __LINE__,
                         vap->vap_index, interface->u.ap.conf.beacon_prot);
                 set_vap_beacon_prot_fn(vap->vap_index, interface->u.ap.conf.beacon_prot);
-#endif
             }
+#endif
         }
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         //Init wpa-supplicant params.
@@ -2554,7 +2555,12 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
     }
 #endif //FEATURE_SINGLE_PHY
 
+#if HOSTAPD_VERSION >= 210
     return (nl80211_start_scan(interface, NL80211_SCAN_FLAG_COLOCATED_6GHZ | NL80211_SCAN_FLAG_FLUSH, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+#else
+    /* hostap 2.9 has no 6 GHz: omit the colocated-6GHz scan flag. */
+    return (nl80211_start_scan(interface, NL80211_SCAN_FLAG_FLUSH, freq_num, freq_list, dwell_time, 1, ssid_list) == 0) ? RETURN_OK:RETURN_ERR;
+#endif
 }
 
 /*****************************/
