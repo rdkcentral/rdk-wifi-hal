@@ -3327,8 +3327,8 @@ static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
     if (hapd->conf->mld_ap && !wifi_hal_is_mld_link_exists(hapd)) {
         hostapd_mld_add_link(hapd);
     }
-    wifi_hal_dbg_print("%s:%d: entry iface:%s started:%d is_first_bss:%d\n",
-        __func__, __LINE__, hapd->conf->iface, hapd->started, hostapd_mld_is_first_bss(hapd));
+    wifi_hal_dbg_print("%s:%d: entry iface:%s started:%d is_first_bss:%d\n", __func__, __LINE__,
+        hapd->conf->iface, hapd->started, hostapd_mld_is_first_bss(hapd));
 #endif /* defined(CONFIG_IEEE80211BE) && !defined(CONFIG_GENERIC_MLO) */
     ret = hostapd_setup_bss(hapd, 1, true);
 #elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10

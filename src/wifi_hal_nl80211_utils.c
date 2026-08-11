@@ -2309,7 +2309,6 @@ void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface)
 }
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
-
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index)
 {
     wifi_radio_info_t *radio;

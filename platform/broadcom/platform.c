@@ -1395,7 +1395,8 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
     platform_mlo_post_init();
     platform_vap_enable_update(vap_map, g_wifi_hal.num_radios, -1, NULL); /* Bring all VAPs up, including MLDs */
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
-    /* All links are up now; regenerate every VAP's beacon so RNR and other management frames are complete. */
+    /* All links are up now; regenerate every VAP's beacon so RNR and other management frames are
+     * complete. */
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     wifi_hal_update_beacons(NULL);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
