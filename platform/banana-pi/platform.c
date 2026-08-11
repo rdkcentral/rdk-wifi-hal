@@ -445,8 +445,8 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         memcpy(vap->u.bss_info.mld_info.common_info.mld_addr,
             interface->vap_info.u.bss_info.mld_info.common_info.mld_addr,
             sizeof(vap->u.bss_info.mld_info.common_info.mld_addr));
-    }
 #endif // CONFIG_IEEE80211BE && CONFIG_GENERIC_MLO
+    }
     return 0;
 }
 
