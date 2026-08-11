@@ -291,7 +291,7 @@ static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map)
     }
 }
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 #if defined WIFI_EMULATOR_CHANGE
 #define SEM_NAME "/semlock"
 
@@ -591,18 +591,14 @@ int platform_radio_up(int radio_index, bool up)
             /* Skip ioctl for any non-MLO radio */
             if (is_mlo_radio(i) == FALSE)
                 continue;
-            /* MLO radio, issue ioctl for other MLO radios */
-            do_ioctl = TRUE;
-            isup = -1;	/* don't care */
-        } else {
-            /* non-MLO radio, no need to check other radios */
-            rc = wl_ioctl(osifname, WLC_GET_UP, &isup, sizeof(isup));
-            if (rc < 0) {
-                wifi_hal_error_print("%s:%d failed to get interface status up for %s, err: %d (%s)\n",
-                    __func__,__LINE__, osifname, errno, strerror(errno));
-            }
-            do_ioctl = (rc == 0 && isup != up) ? TRUE : FALSE;
         }
+
+        rc = wl_ioctl(osifname, WLC_GET_UP, &isup, sizeof(isup));
+        if (rc < 0) {
+            wifi_hal_error_print("%s:%d failed to get interface status up for %s, err: %d (%s)\n",
+                __func__, __LINE__, osifname, errno, strerror(errno));
+        }
+        do_ioctl = (rc == 0 && isup != up) ? TRUE : FALSE;
 
         if (do_ioctl) {
             wifi_hal_info_print("### %s: %s ismlo=%d isup=%d up=%d ###\n", __func__,
