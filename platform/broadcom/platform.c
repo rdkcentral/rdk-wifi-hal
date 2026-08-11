@@ -291,7 +291,7 @@ static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map)
     }
 }
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 #if defined WIFI_EMULATOR_CHANGE
 #define SEM_NAME "/semlock"
 
@@ -591,18 +591,14 @@ int platform_radio_up(int radio_index, bool up)
             /* Skip ioctl for any non-MLO radio */
             if (is_mlo_radio(i) == FALSE)
                 continue;
-            /* MLO radio, issue ioctl for other MLO radios */
-            do_ioctl = TRUE;
-            isup = -1;	/* don't care */
-        } else {
-            /* non-MLO radio, no need to check other radios */
-            rc = wl_ioctl(osifname, WLC_GET_UP, &isup, sizeof(isup));
-            if (rc < 0) {
-                wifi_hal_error_print("%s:%d failed to get interface status up for %s, err: %d (%s)\n",
-                    __func__,__LINE__, osifname, errno, strerror(errno));
-            }
-            do_ioctl = (rc == 0 && isup != up) ? TRUE : FALSE;
         }
+
+        rc = wl_ioctl(osifname, WLC_GET_UP, &isup, sizeof(isup));
+        if (rc < 0) {
+            wifi_hal_error_print("%s:%d failed to get interface status up for %s, err: %d (%s)\n",
+                __func__, __LINE__, osifname, errno, strerror(errno));
+        }
+        do_ioctl = (rc == 0 && isup != up) ? TRUE : FALSE;
 
         if (do_ioctl) {
             wifi_hal_info_print("### %s: %s ismlo=%d isup=%d up=%d ###\n", __func__,
@@ -3034,6 +3030,7 @@ static int enable_echo_feature_and_power_control_configs(void)
         wifi_hal_dbg_print("%s:%d cmd [%s] unsuccessful \n", __func__, __LINE__, cmd);
     }
 
+#if !defined(DSPS_ENABLED)
     snprintf(cmd, sizeof(cmd), "%s dpden 1", ECOMODE_SCRIPT_FILE);
     rc = system(cmd);
     if (rc == 0) {
@@ -3041,6 +3038,7 @@ static int enable_echo_feature_and_power_control_configs(void)
     } else {
         wifi_hal_dbg_print("%s:%d cmd [%s] unsuccessful \n", __func__, __LINE__, cmd);
     }
+#endif
 
     return rc;
 }
@@ -3057,8 +3055,14 @@ static int check_dpd_feature_enabled(void)
     char cmd[BUFLEN_128] = {0};
     char buf[BUFLEN_2] = {0};
 
+#ifdef DSPS_ENABLED
+    snprintf(cmd, sizeof(cmd), "sh %s dsps mode 2>/dev/null | cut -d '|' -f1",
+             ECOMODE_SCRIPT_FILE);
+#else
     snprintf(cmd, sizeof(cmd), "%s dpden",
              ECOMODE_SCRIPT_FILE);
+#endif
+
     if ((fp = popen(cmd, "r")) != NULL)
     {
         if (fgets(buf, sizeof(buf), fp) != NULL)
@@ -3281,12 +3285,21 @@ int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down)
     int rc = 0;
 
     /* Put radio into eco mode (power down) */
+#ifdef DSPS_ENABLED
+    if (eco_pwr_down)
+        snprintf(cmd, sizeof(cmd), "sh %s dsps power_down wl%d",
+                 ECOMODE_SCRIPT_FILE, wl_idx);
+    else
+        snprintf(cmd, sizeof(cmd), "sh %s dsps power_up wl%d",
+                 ECOMODE_SCRIPT_FILE, wl_idx);
+#else
     if (eco_pwr_down)
         snprintf(cmd, sizeof(cmd), "sh %s edpddn wl%d",
                  ECOMODE_SCRIPT_FILE, wl_idx);
     else
         snprintf(cmd, sizeof(cmd), "sh %s edpdup wl%d",
                  ECOMODE_SCRIPT_FILE, wl_idx);
+#endif
 
     rc = system(cmd);
     if (rc == 0)
@@ -3296,9 +3309,10 @@ int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down)
     else
     {
         wifi_hal_error_print("%s:%d cmd [%s] unsuccessful \n", __func__, __LINE__, cmd);
+        return RETURN_ERR;
     }
 
-    return rc;
+    return RETURN_OK;
 }
 #endif // defined (ENABLED_EDPD)
 
