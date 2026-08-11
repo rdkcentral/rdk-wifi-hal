@@ -357,6 +357,12 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
 
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+        // Prevent modifications of MLD_Addr and link ID
+        memcpy(vap->u.bss_info.mld_info.common_info.mld_addr,
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_addr, sizeof(mac_address_t));
+        vap->u.bss_info.mld_info.common_info.mld_link_id =
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
+
         if (has_config_changed(&interface->vap_info, vap) == false ||
             (interface->u.ap.conf.disable_11be == true) ||
             (interface->vap_info.vap_mode != wifi_vap_mode_ap)) {
