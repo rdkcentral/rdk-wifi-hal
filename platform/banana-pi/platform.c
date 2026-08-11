@@ -1130,137 +1130,199 @@ INT wifi_getRadioChannel(INT radioIndex, ULONG *output_ulong) // RDKB
 {
     wifi_radio_info_t *radio;
 
-        radioIndex_Check(radioIndex);
-        POINTER_CHECK(output_ulong != NULL);
+    radioIndex_Check(radioIndex);
+    POINTER_CHECK(output_ulong != NULL);
 
-        radio = get_radio_by_rdk_index(radioIndex);
-        if (radio == NULL) {
-                wifi_hal_error_print("%s:%d Failed to get radio for index %d\n", __func__, __LINE__, radioIndex);
-                return RETURN_ERR;
-        }
+    radio = get_radio_by_rdk_index(radioIndex);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d Failed to get radio for index %d\n", __func__, __LINE__,
+            radioIndex);
+        return RETURN_ERR;
+    }
 
-        if (!(radio->configured && radio->oper_param.enable)) {
-                wifi_hal_error_print("%s:%d Radio %d not configured/enabled\n", __func__, __LINE__, radioIndex);
-                return RETURN_ERR;
-        }
+    if (!(radio->configured && radio->oper_param.enable)) {
+        wifi_hal_error_print("%s:%d Radio %d not configured/enabled\n", __func__, __LINE__,
+            radioIndex);
+        return RETURN_ERR;
+    }
 
-        *output_ulong = radio->oper_param.channel;
-        wifi_hal_info_print("%s:%d radio %d channel (cached oper_param):%lu\n", __func__, __LINE__, radioIndex, *output_ulong);
-        return RETURN_OK;
+    *output_ulong = radio->oper_param.channel;
+    wifi_hal_info_print("%s:%d radio %d channel (cached oper_param):%lu\n", __func__, __LINE__,
+        radioIndex, *output_ulong);
+    return RETURN_OK;
 }
 
 static ULONG read_iface_stat(const char *ifname, const char *field)
 {
-	CHAR path[MAX_BUF_SIZE] = {0};
-	FILE *fp;
-	unsigned long value = 0;
+    CHAR path[MAX_BUF_SIZE] = { 0 };
+    FILE *fp;
+    unsigned long value = 0;
 
-	snprintf(path, sizeof(path), "/sys/class/net/%s/statistics/%s", ifname, field);
-	fp = fopen(path, "r");
-	if (fp == NULL) {
-		wifi_hal_error_print("%s:%d Failed to open %s\n", __func__, __LINE__, path);
-		return 0;
-	}
+    snprintf(path, sizeof(path), "/sys/class/net/%s/statistics/%s", ifname, field);
+    fp = fopen(path, "r");
+    if (fp == NULL) {
+        wifi_hal_error_print("%s:%d Failed to open %s\n", __func__, __LINE__, path);
+        return 0;
+    }
 
-	if (fscanf(fp, "%lu", &value) != 1) {
-		wifi_hal_error_print("%s:%d Failed to read %s\n", __func__, __LINE__, path);
-		value = 0;
-	}
-	fclose(fp);
+    if (fscanf(fp, "%lu", &value) != 1) {
+        wifi_hal_error_print("%s:%d Failed to read %s\n", __func__, __LINE__, path);
+        value = 0;
+    }
+    fclose(fp);
 
-	return value;
+    return value;
 }
 
 INT wifi_halGetIfStats(char *ifname, wifi_radioTrafficStats2_t *pStats)
 {
-	wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
-	POINTER_CHECK(pStats != NULL);
-	POINTER_CHECK(ifname != NULL);
+    wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
+    POINTER_CHECK(pStats != NULL);
+    POINTER_CHECK(ifname != NULL);
 
-	/* Bound the interface name so it cannot overflow the path buffer. */
-	if (wifi_strnlen(ifname, IFNAMSIZ) >= IFNAMSIZ) {
-		wifi_hal_error_print("%s:%d Invalid interface name length\n", __func__, __LINE__);
-		return RETURN_ERR;
-	}
+    /* Bound the interface name so it cannot overflow the path buffer. */
+    if (wifi_strnlen(ifname, IFNAMSIZ) >= IFNAMSIZ) {
+        wifi_hal_error_print("%s:%d Invalid interface name length\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
 
-	pStats->radio_PacketsReceived        = read_iface_stat(ifname, "rx_packets");
-	pStats->radio_PacketsSent            = read_iface_stat(ifname, "tx_packets");
-	pStats->radio_BytesReceived          = read_iface_stat(ifname, "rx_bytes");
-	pStats->radio_BytesSent              = read_iface_stat(ifname, "tx_bytes");
-	pStats->radio_ErrorsReceived         = read_iface_stat(ifname, "rx_errors");
-	pStats->radio_ErrorsSent             = read_iface_stat(ifname, "tx_errors");
-	pStats->radio_DiscardPacketsReceived = read_iface_stat(ifname, "rx_dropped");
-	pStats->radio_DiscardPacketsSent     = read_iface_stat(ifname, "tx_dropped");
+    pStats->radio_PacketsReceived = read_iface_stat(ifname, "rx_packets");
+    pStats->radio_PacketsSent = read_iface_stat(ifname, "tx_packets");
+    pStats->radio_BytesReceived = read_iface_stat(ifname, "rx_bytes");
+    pStats->radio_BytesSent = read_iface_stat(ifname, "tx_bytes");
+    pStats->radio_ErrorsReceived = read_iface_stat(ifname, "rx_errors");
+    pStats->radio_ErrorsSent = read_iface_stat(ifname, "tx_errors");
+    pStats->radio_DiscardPacketsReceived = read_iface_stat(ifname, "rx_dropped");
+    pStats->radio_DiscardPacketsSent = read_iface_stat(ifname, "tx_dropped");
 
-	wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
-	return RETURN_OK;
+    wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
+    return RETURN_OK;
 }
 
-INT wifi_steering_clientDisconnect(UINT steeringgroupIndex, INT apIndex, mac_address_t client_mac, wifi_disconnectType_t type, UINT reason)
+INT wifi_steering_clientDisconnect(UINT steeringgroupIndex, INT apIndex, mac_address_t client_mac,
+    wifi_disconnectType_t type, UINT reason)
 {
     // TODO Implement me!
     return RETURN_ERR;
 }
 
-//Get detail radio traffic static info
-INT wifi_getRadioTrafficStats2(INT radioIndex, wifi_radioTrafficStats2_t *output_struct) //Tr181
+// Get detail radio traffic static info
+INT wifi_getRadioTrafficStats2(INT radioIndex, wifi_radioTrafficStats2_t *output_struct) // Tr181
 {
 
-	wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
-        POINTER_CHECK(output_struct != NULL);
-        radioIndex_Check(radioIndex);
-	CHAR private_interface_name[MAX_BUF_SIZE] = {0};
-	CHAR private_interface_status[MAX_BUF_SIZE] = {0};
-	wifi_radioTrafficStats2_t private_radioTrafficStats = {0};
+    wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
+    POINTER_CHECK(output_struct != NULL);
+    radioIndex_Check(radioIndex);
+    CHAR private_interface_name[MAX_BUF_SIZE] = { 0 };
+    CHAR private_interface_status[MAX_BUF_SIZE] = { 0 };
+    wifi_radioTrafficStats2_t private_radioTrafficStats = { 0 };
 
-	switch (radioIndex)
-	{
-		case 0: //2.4GHz
-			strcpy(private_interface_name, "wifi0");
-			break;
-		case 1: //5GHz
-			strcpy(private_interface_name, "wifi1");
-			break;
-		case 2: //6GHz
-			strcpy(private_interface_name, "wifi2");
-			break;
-		default:
-			wifi_hal_error_print("%s:%d Unsupported radioIndex %d\n", __func__, __LINE__, radioIndex);
-			return WIFI_HAL_INVALID_ARGUMENTS;
-	}
+    switch (radioIndex) {
+    case 0: // 2.4GHz
+        strcpy(private_interface_name, "wifi0");
+        break;
+    case 1: // 5GHz
+        strcpy(private_interface_name, "wifi1");
+        break;
+    case 2: // 6GHz
+        strcpy(private_interface_name, "wifi2");
+        break;
+    default:
+        wifi_hal_error_print("%s:%d Unsupported radioIndex %d\n", __func__, __LINE__, radioIndex);
+        return WIFI_HAL_INVALID_ARGUMENTS;
+    }
 
-	GetIfacestatus(private_interface_name, private_interface_status);
-	if (strcmp(private_interface_status, "1") == 0)
-		wifi_halGetIfStats(private_interface_name, &private_radioTrafficStats);
-	else
-		wifi_halGetIfStatsNull(&private_radioTrafficStats);
+    GetIfacestatus(private_interface_name, private_interface_status);
+    if (strcmp(private_interface_status, "1") == 0)
+        wifi_halGetIfStats(private_interface_name, &private_radioTrafficStats);
+    else
+        wifi_halGetIfStatsNull(&private_radioTrafficStats);
 
-	output_struct->radio_BytesSent = private_radioTrafficStats.radio_BytesSent;
-	output_struct->radio_BytesReceived = private_radioTrafficStats.radio_BytesReceived;
-	output_struct->radio_PacketsSent = private_radioTrafficStats.radio_PacketsSent;
-	output_struct->radio_PacketsReceived = private_radioTrafficStats.radio_PacketsReceived;
-	output_struct->radio_ErrorsSent = private_radioTrafficStats.radio_ErrorsSent;
-	output_struct->radio_ErrorsReceived = private_radioTrafficStats.radio_ErrorsReceived;
-	output_struct->radio_DiscardPacketsSent = private_radioTrafficStats.radio_DiscardPacketsSent;
-	output_struct->radio_DiscardPacketsReceived = private_radioTrafficStats.radio_DiscardPacketsReceived;
-	output_struct->radio_PLCPErrorCount = 0;				  //The number of packets that were received with a detected Physical Layer Convergence Protocol (PLCP) header error.
-	output_struct->radio_FCSErrorCount = 0;					  //The number of packets that were received with a detected FCS error. This parameter is based on dot11FCSErrorCount from [Annex C/802.11-2012].
-	output_struct->radio_InvalidMACCount = 0;				  //The number of packets that were received with a detected invalid MAC header error.
-	output_struct->radio_PacketsOtherReceived = 0;			  //The number of packets that were received, but which were destined for a MAC address that is not associated with this interface.
-	output_struct->radio_NoiseFloor = -99;					  //The noise floor for this radio channel where a recoverable signal can be obtained. Expressed as a signed integer in the range (-110:0).  Measurement should capture all energy (in dBm) from sources other than Wi-Fi devices as well as interference from Wi-Fi devices too weak to be decoded. Measured in dBm
-	output_struct->radio_ChannelUtilization = 35;			  //Percentage of time the channel was occupied by the radio\92s own activity (Activity Factor) or the activity of other radios.  Channel utilization MUST cover all user traffic, management traffic, and time the radio was unavailable for CSMA activities, including DIFS intervals, etc.  The metric is calculated and updated in this parameter at the end of the interval defined by "Radio Statistics Measuring Interval".  The calculation of this metric MUST only use the data collected from the just completed interval.  If this metric is queried before it has been updated with an initial calculation, it MUST return -1.  Units in Percentage
-	output_struct->radio_ActivityFactor = 2;				  //Percentage of time that the radio was transmitting or receiving Wi-Fi packets to/from associated clients. Activity factor MUST include all traffic that deals with communication between the radio and clients associated to the radio as well as management overhead for the radio, including NAV timers, beacons, probe responses,time for receiving devices to send an ACK, SIFC intervals, etc.  The metric is calculated and updated in this parameter at the end of the interval defined by "Radio Statistics Measuring Interval".  The calculation of this metric MUST only use the data collected from the just completed interval.   If this metric is queried before it has been updated with an initial calculation, it MUST return -1. Units in Percentage
-	output_struct->radio_CarrierSenseThreshold_Exceeded = 20; //Percentage of time that the radio was unable to transmit or receive Wi-Fi packets to/from associated clients due to energy detection (ED) on the channel or clear channel assessment (CCA). The metric is calculated and updated in this Parameter at the end of the interval defined by "Radio Statistics Measuring Interval".  The calculation of this metric MUST only use the data collected from the just completed interval.  If this metric is queried before it has been updated with an initial calculation, it MUST return -1. Units in Percentage
-	output_struct->radio_RetransmissionMetirc = 0;			  //Percentage of packets that had to be re-transmitted. Multiple re-transmissions of the same packet count as one.  The metric is calculated and updated in this parameter at the end of the interval defined by "Radio Statistics Measuring Interval".   The calculation of this metric MUST only use the data collected from the just completed interval.  If this metric is queried before it has been updated with an initial calculation, it MUST return -1. Units  in percentage
+    output_struct->radio_BytesSent = private_radioTrafficStats.radio_BytesSent;
+    output_struct->radio_BytesReceived = private_radioTrafficStats.radio_BytesReceived;
+    output_struct->radio_PacketsSent = private_radioTrafficStats.radio_PacketsSent;
+    output_struct->radio_PacketsReceived = private_radioTrafficStats.radio_PacketsReceived;
+    output_struct->radio_ErrorsSent = private_radioTrafficStats.radio_ErrorsSent;
+    output_struct->radio_ErrorsReceived = private_radioTrafficStats.radio_ErrorsReceived;
+    output_struct->radio_DiscardPacketsSent = private_radioTrafficStats.radio_DiscardPacketsSent;
+    output_struct->radio_DiscardPacketsReceived =
+        private_radioTrafficStats.radio_DiscardPacketsReceived;
+    output_struct->radio_PLCPErrorCount =
+        0; // The number of packets that were received with a detected Physical Layer Convergence
+           // Protocol (PLCP) header error.
+    output_struct->radio_FCSErrorCount =
+        0; // The number of packets that were received with a detected FCS error. This parameter is
+           // based on dot11FCSErrorCount from [Annex C/802.11-2012].
+    output_struct->radio_InvalidMACCount =
+        0; // The number of packets that were received with a detected invalid MAC header error.
+    output_struct->radio_PacketsOtherReceived =
+        0; // The number of packets that were received, but which were destined for a MAC address
+           // that is not associated with this interface.
+    output_struct->radio_NoiseFloor =
+        -99; // The noise floor for this radio channel where a recoverable signal can be obtained.
+             // Expressed as a signed integer in the range (-110:0).  Measurement should capture all
+             // energy (in dBm) from sources other than Wi-Fi devices as well as interference from
+             // Wi-Fi devices too weak to be decoded. Measured in dBm
+    output_struct->radio_ChannelUtilization =
+        35; // Percentage of time the channel was occupied by the radio\92s own activity (Activity
+            // Factor) or the activity of other radios.  Channel utilization MUST cover all user
+            // traffic, management traffic, and time the radio was unavailable for CSMA activities,
+            // including DIFS intervals, etc.  The metric is calculated and updated in this
+            // parameter at the end of the interval defined by "Radio Statistics Measuring
+            // Interval".  The calculation of this metric MUST only use the data collected from the
+            // just completed interval.  If this metric is queried before it has been updated with
+            // an initial calculation, it MUST return -1.  Units in Percentage
+    output_struct->radio_ActivityFactor =
+        2; // Percentage of time that the radio was transmitting or receiving Wi-Fi packets to/from
+           // associated clients. Activity factor MUST include all traffic that deals with
+           // communication between the radio and clients associated to the radio as well as
+           // management overhead for the radio, including NAV timers, beacons, probe responses,time
+           // for receiving devices to send an ACK, SIFC intervals, etc.  The metric is calculated
+           // and updated in this parameter at the end of the interval defined by "Radio Statistics
+           // Measuring Interval".  The calculation of this metric MUST only use the data collected
+           // from the just completed interval.   If this metric is queried before it has been
+           // updated with an initial calculation, it MUST return -1. Units in Percentage
+    output_struct->radio_CarrierSenseThreshold_Exceeded =
+        20; // Percentage of time that the radio was unable to transmit or receive Wi-Fi packets
+            // to/from associated clients due to energy detection (ED) on the channel or clear
+            // channel assessment (CCA). The metric is calculated and updated in this Parameter at
+            // the end of the interval defined by "Radio Statistics Measuring Interval".  The
+            // calculation of this metric MUST only use the data collected from the just completed
+            // interval.  If this metric is queried before it has been updated with an initial
+            // calculation, it MUST return -1. Units in Percentage
+    output_struct->radio_RetransmissionMetirc =
+        0; // Percentage of packets that had to be re-transmitted. Multiple re-transmissions of the
+           // same packet count as one.  The metric is calculated and updated in this parameter at
+           // the end of the interval defined by "Radio Statistics Measuring Interval".   The
+           // calculation of this metric MUST only use the data collected from the just completed
+           // interval.  If this metric is queried before it has been updated with an initial
+           // calculation, it MUST return -1. Units  in percentage
 
-	output_struct->radio_MaximumNoiseFloorOnChannel = -1; //Maximum Noise on the channel during the measuring interval.  The metric is updated in this parameter at the end of the interval defined by "Radio Statistics Measuring Interval".  The calculation of this metric MUST only use the data collected in the just completed interval.  If this metric is queried before it has been updated with an initial calculation, it MUST return -1.  Units in dBm
-	output_struct->radio_MinimumNoiseFloorOnChannel = -1; //Minimum Noise on the channel. The metric is updated in this Parameter at the end of the interval defined by "Radio Statistics Measuring Interval".  The calculation of this metric MUST only use the data collected in the just completed interval.  If this metric is queried before it has been updated with an initial calculation, it MUST return -1. Units in dBm
-	output_struct->radio_MedianNoiseFloorOnChannel = -1;  //Median Noise on the channel during the measuring interval.   The metric is updated in this parameter at the end of the interval defined by "Radio Statistics Measuring Interval".  The calculation of this metric MUST only use the data collected in the just completed interval.  If this metric is queried before it has been updated with an initial calculation, it MUST return -1. Units in dBm
-	output_struct->radio_StatisticsStartTime = 0;		  //The date and time at which the collection of the current set of statistics started.  This time must be updated whenever the radio statistics are reset.
+    output_struct->radio_MaximumNoiseFloorOnChannel =
+        -1; // Maximum Noise on the channel during the measuring interval.  The metric is updated in
+            // this parameter at the end of the interval defined by "Radio Statistics Measuring
+            // Interval".  The calculation of this metric MUST only use the data collected in the
+            // just completed interval.  If this metric is queried before it has been updated with
+            // an initial calculation, it MUST return -1.  Units in dBm
+    output_struct->radio_MinimumNoiseFloorOnChannel =
+        -1; // Minimum Noise on the channel. The metric is updated in this Parameter at the end of
+            // the interval defined by "Radio Statistics Measuring Interval".  The calculation of
+            // this metric MUST only use the data collected in the just completed interval.  If this
+            // metric is queried before it has been updated with an initial calculation, it MUST
+            // return -1. Units in dBm
+    output_struct->radio_MedianNoiseFloorOnChannel =
+        -1; // Median Noise on the channel during the measuring interval.   The metric is updated in
+            // this parameter at the end of the interval defined by "Radio Statistics Measuring
+            // Interval".  The calculation of this metric MUST only use the data collected in the
+            // just completed interval.  If this metric is queried before it has been updated with
+            // an initial calculation, it MUST return -1. Units in dBm
+    output_struct->radio_StatisticsStartTime =
+        0; // The date and time at which the collection of the current set of statistics started.
+           // This time must be updated whenever the radio statistics are reset.
 
-	wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
+    wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
 
-	return RETURN_OK;
+    return RETURN_OK;
 }
 
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
