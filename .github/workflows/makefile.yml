@@ -173,7 +173,10 @@ jobs:
           # since the HAL runner workspace root is /home/runner/work/rdk-wifi-hal/rdk-wifi-hal/;
           # That string is in every path, the filter degrades to no-op (leaking
           # libhostap/OneWifi). No HAL source path carries other repo name, so exclusion is exact.
+          # The leading 'easymesh_project/' gate tightens this to in-tree sources. Without it,
+          # exclusion would also admit system/toolchain warnings (/usr/include, /usr/lib/gcc).
           warns=$(grep -hE ': warning:' "$LOG" \
+                  | grep -E 'easymesh_project/' \
                   | grep -vE 'OneWifi|rdk-wifi-libhostap|unified-wifi-mesh' \
                   | sed -E 's#[^ ]*/rdk-wifi-hal/+##; s#//#/#g' \
                   | sort -u || true)
