@@ -3005,7 +3005,11 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
 #define GPIO_UNEXPORT_PATH "/sys/class/gpio/unexport"
 #define GPIO_DIRECTION_PATH "/sys/class/gpio/gpio%d/direction"
 #define GPIO_VALUE_PATH "/sys/class/gpio/gpio%d/value"
+#ifdef DSPS_ENABLED
+#define ECOMODE_SCRIPT_FILE  "/lib/rdk/wifi.sh"
+#else
 #define ECOMODE_SCRIPT_FILE "/etc/init/wifi.sh"
+#endif //DSPS_ENABLED
 #define GPIO_DIRECTION_OUT "out"
 #define BUFLEN_2 2
 
