@@ -193,8 +193,6 @@ int platform_get_keypassphrase_default(char *password, int vap_index)
 
 int platform_get_ssid_default(char *ssid, int vap_index)
 {
-    int ret = 0;
-
     wifi_hal_dbg_print("%s:%d \n", __func__, __LINE__);
     /* if the vap_index is that of mesh STA or mesh backhaul then try to obtain the ssid from
        /nvram/EasymeshCfg.json file */

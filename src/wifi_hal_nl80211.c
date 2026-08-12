@@ -7723,7 +7723,6 @@ void wifi_hal_nl80211_wps_pbc(unsigned int ap_index)
 
 void wifi_hal_nl80211_wps_cancel(unsigned int ap_index)
 {
-    union wpa_event_data event = {0};
     const wifi_interface_info_t *interface = get_interface_by_vap_index(ap_index);
 
     wifi_hal_dbg_print("%s:%d: WPS cancel for ap=%d\n", __func__, __LINE__, ap_index);
@@ -7735,6 +7734,7 @@ void wifi_hal_nl80211_wps_cancel(unsigned int ap_index)
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
 #if !defined(PLATFORM_LINUX)
+    union wpa_event_data event = {0};
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WPS_CANCEL, &event);
 #endif /* !defined(PLATFORM_LINUX) */
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -10851,7 +10851,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     }
 #endif
 #endif
-    interface->wpa_s.current_ssid->ieee80211w = security->mfp;
+    interface->wpa_s.current_ssid->ieee80211w = (enum mfp_options)security->mfp;
     interface->wpa_s.current_ssid->key_mgmt = interface->u.sta.wpa_sm->key_mgmt;
     if ((security->mode == wifi_security_mode_wpa3_personal) ||
         (security->mode == wifi_security_mode_wpa3_transition) ||
@@ -13998,8 +13998,10 @@ send_frame_cmd:
 int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int status_code, int rssi)
 {
     int ret = 0;
+#if !defined(PLATFORM_LINUX)
     wifi_interface_info_t *interface = get_interface_by_vap_index(ap_index);
     struct hostapd_data *hapd = &interface->u.ap.hapd;
+#endif /* !defined(PLATFORM_LINUX) */
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
 
@@ -18244,7 +18246,7 @@ int wifi_drv_get_ssid(void *priv, u8 *ssid)
     if (interface->wpa_s.current_bss == NULL) {
        return -1;
     }
-    if (interface->wpa_s.current_bss->ssid != NULL) {
+    if (interface->wpa_s.current_ssid != NULL) {
         os_memcpy(ssid, interface->wpa_s.current_ssid->ssid, strlen(interface->wpa_s.current_ssid->ssid) + 1);
     } else {
         return 0;

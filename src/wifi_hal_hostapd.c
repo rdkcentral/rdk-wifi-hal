@@ -1128,7 +1128,6 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     wifi_vap_info_t *vap;
     wifi_radio_info_t *radio;
     wifi_radio_operationParam_t *op_param;
-    int vlan_id = 0;
     // re-initialize the default parameters
     init_hostap_bss(interface);
 
@@ -1252,7 +1251,7 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     conf->rdk_greylist = vap->u.bss_info.network_initiated_greylist;
     if(conf->rdk_greylist) {
         wifi_hal_dbg_print("%s:%d:rdk_grey_list is %d  and ifacename is %s\n", __func__, __LINE__,conf->rdk_greylist,conf->iface);
-        vlan_id = get_ap_vlan_id(conf->iface);
+        int vlan_id = get_ap_vlan_id(conf->iface);
         wifi_hal_dbg_print(" %s:%d:vlan_id is %d  \n", __func__, __LINE__,vlan_id);
         conf->ap_vlan = vlan_id;
     }
