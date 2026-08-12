@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0                      # need base history to diff changed lines
-          # For pull_request events actions/checkout defaults to the MERGE commit
+          # For pull_request events actions/checkout defaults to the merge commit
           # (refs/pull/N/merge), whose line numbers do not match the PR head.
           # Stage 2 posts review comments against head_sha, so the two must agree
           # or suggestions land on the wrong lines (or are rejected with a 422).
@@ -85,8 +85,13 @@ jobs:
             # exit 1
           fi
 
+      # Record + upload metadata *always* (not only when changed==true). When the
+      # changed lines become clang-format clean there is no diff, but stage 2
+      # still needs the PR identity so it can dismiss any now-obsolete review it
+      # posted on an earlier push. clang-format.diff is present only when
+      # changed==true; if-no-files-found: ignore lets the clean case upload just
+      # pr-meta.env.
       - name: Record PR metadata for the suggester
-        if: steps.fmt.outputs.changed == 'true'
         run: |
           {
             echo "pr_number=${{ github.event.pull_request.number }}"
@@ -94,11 +99,11 @@ jobs:
           } > pr-meta.env
 
       - name: Upload diff + metadata
-        if: steps.fmt.outputs.changed == 'true'
         uses: actions/upload-artifact@v6
         with:
           name: clang-format-suggestions
           path: |
             clang-format.diff
             pr-meta.env
+          if-no-files-found: ignore
           retention-days: 1

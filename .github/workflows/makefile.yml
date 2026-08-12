@@ -6,41 +6,68 @@ on:
   pull_request:
     branches: [ "develop" ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Stage 1 is deliberately read-only: it builds PR-controlled makefiles, so it
+# must hold no write scope. The PR-comment posting (writes) happens only in the
+# trusted workflow_run stage (pr-comments.yml).
+permissions:
+  contents: read
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     strategy:
       matrix:
         platform:
           - name: "Raspberry Pi"
+            id: rpi                   # has to be stable for the ci-summary-<id> stage
             makefile_path: "build/linux/rpi/makefile"
+            extra_coverage: "0"
+            extra_cflags: ""
           - name: "Banana Pi R4 - MLO"
+            id: bpi
             makefile_path: "build/linux/bpi/makefile"
+            extra_coverage: "1"
+            extra_cflags: "-DCONFIG_GENERIC_MLO"
+            clang_tidy: true          # only this leg builds the compile DB + runs clang-tidy
       fail-fast: false
 
     name: Build for ${{ matrix.platform.name }}
 
     steps:
     - name: Checkout current repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         path: 'rdk-wifi-hal'
+        fetch-depth: 0                # clang-tidy diffs changed HAL source against the PR base
+        persist-credentials: false    # nothing here pushes; don't leave the token in .git/config
 
-    - name: Clone unified-wifi-mesh repository
+    # The build makefile lives in OneWifi and compiles three sibling trees
+    # (OneWifi + this rdk-wifi-hal PR + unified-wifi-mesh). Lay them out as
+    # easymesh_project/{OneWifi, rdk-wifi-hal, unified-wifi-mesh} -- the makefile
+    # expects rdk-wifi-hal at $(BASE_DIR)/../rdk-wifi-hal.
+    - name: Clone OneWifi (build makefile) + unified-wifi-mesh
       run: |
         mkdir -p easymesh_project
         git clone https://github.com/rdkcentral/OneWifi.git easymesh_project/OneWifi
         git clone https://github.com/rdkcentral/unified-wifi-mesh.git easymesh_project/unified-wifi-mesh
+        mv rdk-wifi-hal easymesh_project/rdk-wifi-hal
 
     - name: Cache dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: /var/cache/apt
         key: ${{ runner.os }}-apt-${{ hashFiles('**/apt-packages') }}
         restore-keys: |
           ${{ runner.os }}-apt-
 
+    # Keep this list in sync with OneWifi's makefile.yml -- the HAL build compiles
+    # the OneWifi tree, so a dependency OneWifi adds (e.g. libprotobuf-c-dev for
+    # lib/datapipeline) must be here too or the HAL build breaks on a missing header.
     - name: Set up dependencies
       run: |
         sudo apt-get update
@@ -58,6 +85,7 @@ jobs:
                                 libnl-route-3-dev \
                                 libavro-dev \
                                 libcjson1 libcjson-dev \
+                                libprotobuf-c-dev \
                                 libssl-dev \
                                 uuid-dev \
                                 libmysqlcppconn-dev \
@@ -69,32 +97,183 @@ jobs:
                                 golang \
                                 pkg-config \
                                 libperl-dev \
-                                libjson-c-dev
+                                libjson-c-dev \
+                                libgtest-dev \
+                                libgmock-dev \
+                                bear \
+                                clang-tidy-18
 
         # Steps for ucode installation required for hostapd compilation
         git clone https://github.com/jow-/ucode.git ucode
         cd ucode
         mkdir build && cd build
         cmake -DUBUS_SUPPORT=OFF -DUCI_SUPPORT=OFF -DULOOP_SUPPORT=OFF ..
-        make -j$(nproc)
+        make -j"$(nproc)"
         sudo make install
         sudo ldconfig
 
     - name: Setup OneWiFi for ${{ matrix.platform.name }}
       working-directory: easymesh_project/OneWifi
       run: |
-        git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-        git config --global user.name "${{ github.actor }}"
+        # $GITHUB_ACTOR is a built-in runner env var; use it rather than
+        # interpolating ${{ github.actor }} straight into the script.
+        git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+        git config --global user.name "${GITHUB_ACTOR}"
         make -f ${{ matrix.platform.makefile_path }} setup
-        cd ..
-        rm -rf rdk-wifi-hal
-        mv ../rdk-wifi-hal .
-      env:
-        GITHUB_ACTOR: ${{ github.actor }}
 
     - name: Build OneWiFi for ${{ matrix.platform.name }}
+      id: build
       working-directory: easymesh_project/OneWifi
       run: |
-        make -f ${{ matrix.platform.makefile_path }} all
+        # pipefail so make's exit status (not tee's) decides the step result.
+        set -o pipefail
+        # clang-tidy leg only: wrap make in `bear` so ONE build yields the objects
+        # AND compile_commands.json (no second build). Other legs run make plain.
+        ${{ matrix.platform.clang_tidy && 'bear --output compile_commands.json --' || '' }} make -f ${{ matrix.platform.makefile_path }} -j"$(nproc)" all 2>&1 | tee build.log
       env:
-        CFLAGS: ${{matrix.platform.extra_cflags}}
+        # Coverage tier for the bpi target: "1" enables EXTRA_COV_FLAGS
+        # (ONEWIFI_DB_SUPPORT + memwraptool). Ignored by rpi.
+        EXTRA_COVERAGE: ${{ matrix.platform.extra_coverage }}
+        # Extra defines appended to CFLAGS. bpi appends via 'CFLAGS +=' (so the
+        # MLO build picks up -DCONFIG_GENERIC_MLO); rpi uses 'CFLAGS =' and ignores it.
+        CFLAGS: ${{ matrix.platform.extra_cflags }}
+
+    - name: Build summary for ${{ matrix.platform.name }}
+      if: always()   # run on failure too, so the red-build reason is surfaced
+      working-directory: easymesh_project/OneWifi
+      run: |
+        # ci-out/ collects the stage-1 artifacts the PR-comment stage posts.
+        mkdir -p ci-out
+        LOG=build.log
+        if [ ! -f "$LOG" ]; then
+          echo "## ${{ matrix.platform.name }} — no build log captured" \
+            | tee ci-out/build-summary.md >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        # Compiler + linker + make errors: what usually explains a red build.
+        errs=$(grep -hE ': (error|fatal error):|undefined reference to|Error [0-9]+' "$LOG" \
+               | sed -E 's#[^ ]*/(OneWifi|rdk-wifi-hal|rdk-wifi-libhostap)/#\1/#; s#//#/#g' \
+               | sort -u || true)
+        if [ -n "$errs" ]; then
+          printf '%s\n' "$errs" | head -10 | sed 's/%/%25/g; s/\r/%0D/g' \
+            | while IFS= read -r l; do echo "::error::$l"; done
+        fi
+        {
+          echo "## ${{ matrix.platform.name }} — build ${{ steps.build.outcome }}"
+          if [ -n "$errs" ]; then
+            echo "### ❌ Errors ($(printf '%s\n' "$errs" | wc -l) unique)"
+            echo '```'
+            printf '%s\n' "$errs" | head -100
+            echo '```'
+          fi
+          # Warnings from rdk-wifi-hal's OWN sources only, with location. This is
+          # the HAL repo, so the HAL objects (scoped -Werror gate in OneWifi's
+          # makefile) are the signal; OneWifi/hostap/mesh warnings are not shown.
+          warns=$(grep -hE ': warning:' "$LOG" \
+                  | grep -E '/rdk-wifi-hal/' \
+                  | sed -E 's#[^ ]*/rdk-wifi-hal/+##; s#//#/#g' \
+                  | sort -u || true)
+          if [ -n "$warns" ]; then
+            echo "### ⚠️ rdk-wifi-hal warnings ($(printf '%s\n' "$warns" | wc -l))"
+            echo '```'
+            printf '%s\n' "$warns" | head -100
+            echo '```'
+          else
+            echo "### ⚠️ rdk-wifi-hal warnings: 0"
+          fi
+        } | tee ci-out/build-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+    - name: clang-tidy (gate + advisory) for ${{ matrix.platform.name }}
+      if: always() && matrix.platform.clang_tidy
+      working-directory: easymesh_project/OneWifi
+      run: |
+        # Two-tier clang-tidy over the rdk-wifi-hal PR's changed .c/.cpp files.
+        # The compile DB + .clang-tidy live here in the cloned OneWifi; the changed
+        # files + git history live in the sibling ../rdk-wifi-hal checkout, so the
+        # diff runs there (git -C) and clang-tidy is pointed at the config explicitly.
+        #   * WarningsAsErrors checks    -> `error:`   -> FATAL (this step fails the job)
+        #   * rest of enabled bugprone-* -> `warning:` -> advisory only
+        # Gate is changed-LINES-only; clang-diagnostic-* is filtered so it never gates.
+        mkdir -p ci-out
+        HAL=../rdk-wifi-hal
+        CFG="$PWD/.clang-tidy"
+        # Needs OneWifi/develop to already carry the gate config + DB; skip cleanly if not.
+        [ -f compile_commands.json ] || { echo "### 🔎 clang-tidy: no compile DB" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+        [ -f "$CFG" ] || { echo "### 🔎 clang-tidy: no .clang-tidy in OneWifi (nothing to gate)" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+        BASE='${{ github.event.pull_request.base.sha }}'
+        CHANGED=''
+        if [ -n "$BASE" ]; then
+          git -C "$HAL" fetch --no-tags --depth=1 origin "$BASE" >/dev/null 2>&1 || true
+          CHANGED=$(git -C "$HAL" diff --name-only --diff-filter=ACM "$BASE" HEAD -- '*.c' '*.cpp' 2>/dev/null || true)
+        fi
+        : > tidy.log
+        for f in $CHANGED; do
+          [ -f "$HAL/$f" ] || continue
+          # new-side line numbers this PR changed in THIS file (zero-context hunks)
+          lines=$(git -C "$HAL" diff -U0 --diff-filter=ACM "$BASE" HEAD -- "$f" 2>/dev/null \
+                  | awk '/^@@ /{c=$3;sub(/^\+/,"",c);n=1;if(c~/,/){split(c,a,",");c=a[1];n=a[2]}
+                         for(i=0;i<n;i++)if(n>0)print c+i}' | sort -un | paste -sd' ' -)
+          [ -n "$lines" ] || continue
+          # || true: a no-match grep / clang-tidy hiccup must not abort the loop.
+          # clang-tidy runs one file at a time -> filter on the line number alone.
+          clang-tidy-18 -p . --config-file="$CFG" --quiet "$HAL/$f" 2>/dev/null \
+            | grep -E ': (warning|error):' | grep -v clang-diagnostic \
+            | awk -F: -v L="$lines" 'BEGIN{split(L,a," ");for(i in a)k[a[i]]} ($2 in k)' >> tidy.log || true
+        done
+        gated=$(grep -E ': error:'   tidy.log | sed -E 's#[^ ]*/rdk-wifi-hal/+##; s#//#/#g' | sort -u || true)
+        advis=$(grep -E ': warning:' tidy.log | sed -E 's#[^ ]*/rdk-wifi-hal/+##; s#//#/#g' | sort -u || true)
+        if [ -n "$gated" ]; then
+          printf '%s\n' "$gated" | head -10 | sed 's/%/%25/g; s/\r/%0D/g' \
+            | while IFS= read -r l; do echo "::error::$l"; done
+        fi
+        if [ -n "$advis" ]; then
+          printf '%s\n' "$advis" | head -10 | sed 's/%/%25/g; s/\r/%0D/g' \
+            | while IFS= read -r l; do echo "::warning::$l"; done
+        fi
+        {
+          if   [ -z "$CHANGED" ];     then echo "### 🔎 clang-tidy: no changed .c/.cpp to scan"
+          elif [ -z "$gated$advis" ]; then echo "### 🔎 clang-tidy: clean on changed lines"
+          else
+            if [ -n "$gated" ]; then
+              echo "### ❌ clang-tidy gate — $(printf '%s\n' "$gated" | wc -l) fatal"
+              echo '```'; printf '%s\n' "$gated" | head -100; echo '```'
+              echo "_Fix the finding, or if it is a deliberate idiom waive it inline with \`// NOLINT(<check-name>)\` on that line._"
+            fi
+            if [ -n "$advis" ]; then
+              echo "### 🔎 clang-tidy advisory — $(printf '%s\n' "$advis" | wc -l) findings"
+              echo '```'; printf '%s\n' "$advis" | head -100; echo '```'
+            fi
+          fi
+        } | tee ci-out/tidy-summary.md >> "$GITHUB_STEP_SUMMARY"
+        # Gate AFTER the summary + artifact are written, on promoted checks only.
+        if [ -n "$gated" ]; then
+          echo "clang-tidy gate: $(printf '%s\n' "$gated" | wc -l) promoted-check violation(s) on changed lines" >&2
+          exit 1
+        fi
+
+    # ---- Hand-off to the trusted PR-comment stage (pr-comments.yml) ----------
+    # Record the PR identity as passive data for the workflow_run poster to
+    # validate. Only meaningful on PRs; push builds skip it.
+    - name: Record PR metadata for the comment stage
+      if: always() && github.event_name == 'pull_request'
+      working-directory: easymesh_project/OneWifi
+      run: |
+        mkdir -p ci-out
+        {
+          echo "pr_number=${{ github.event.pull_request.number }}"
+          echo "head_sha=${{ github.event.pull_request.head.sha }}"
+        } > ci-out/pr-meta.env
+
+    # Publish the summary artifact the PR-comment stage posts. Uploaded even on
+    # build failure (if: always()) so a red build still gets its summary posted.
+    # tidy-summary.md exists only on the bpi leg. The pr-comments.yml 'build' job
+    # aggregates every ci-summary-* and anchors trust on ci-summary-bpi, so bpi
+    # must always upload.
+    - name: Upload CI summary artifact
+      if: always() && github.event_name == 'pull_request'
+      uses: actions/upload-artifact@v6
+      with:
+        name: ci-summary-${{ matrix.platform.id }}
+        path: easymesh_project/OneWifi/ci-out
+        if-no-files-found: warn
+        retention-days: 1
