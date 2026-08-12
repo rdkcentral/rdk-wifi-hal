@@ -7734,7 +7734,7 @@ void wifi_hal_nl80211_wps_cancel(unsigned int ap_index)
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
 #if !defined(PLATFORM_LINUX)
-    union wpa_event_data event = {0};
+    union wpa_event_data event = { 0 };
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WPS_CANCEL, &event);
 #endif /* !defined(PLATFORM_LINUX) */
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -18246,7 +18246,7 @@ int wifi_drv_get_ssid(void *priv, u8 *ssid)
     if (interface->wpa_s.current_bss == NULL) {
        return -1;
     }
-    if (interface->wpa_s.current_ssid != NULL) {
+    if (interface->wpa_s.current_ssid != NULL && interface->wpa_s.current_ssid->ssid != NULL) {
         os_memcpy(ssid, interface->wpa_s.current_ssid->ssid, strlen(interface->wpa_s.current_ssid->ssid) + 1);
     } else {
         return 0;
