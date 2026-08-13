@@ -5650,7 +5650,7 @@ static inline int init_json_interface_map(void)
             __func__, __LINE__, errno, strerror(errno), TMP_INTERFACE_MAP_JSON);
     } else {
         wifi_hal_info_print("%s:%d: using Interface configuration from interface map file:%s\n",
-            __func__, __LINE__,  TMP_INTERFACE_MAP_JSON);
+            __func__, __LINE__, TMP_INTERFACE_MAP_JSON);
     }
 #endif
 
