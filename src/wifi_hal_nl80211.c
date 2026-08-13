@@ -11214,10 +11214,9 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         interface->wpa_s.drv_flags2 |= WPA_DRIVER_FLAGS2_MLO;
 
     if (interface->wpa_s.conf) {
-#if !defined(KERNEL_6_12)
+#if !defined(HOSTAPD_211_v6)
         interface->wpa_s.conf->mld_allowed_phy = DEFAULT_MLD_ALLOWED_PHY;
-#endif
-#if defined(KERNEL_6_12)
+#else
         interface->wpa_s.conf->disable_mld = 0;
 #endif
         interface->wpa_s.conf->mld_force_single_link = 0;

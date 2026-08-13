@@ -6501,7 +6501,7 @@ static int alloc_mld(wifi_interface_info_t *interface)
     hapd->mld = mld;
     mld->refcount++;
     mld->num_links = 0;
-#if !defined(KERNEL_6_12)
+#if !defined(HOSTAPD_211_V6)
     mld->next_link_id = 0;
 #endif
 
@@ -6768,11 +6768,10 @@ int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_con
         struct hostapd_data *link_bss = NULL;
         for (uint8_t i = 0; i < MAX_NUM_MLD_LINKS; i++) {
             link_id_free = true;
-#if !defined(KERNEL_6_12)
+#if !defined(HOSTAPD_211_V6)
             hapd->mld_link_id = hapd->mld->next_link_id % MAX_NUM_MLD_LINKS;
             hapd->mld->next_link_id++;
-#endif
-#if defined(KERNEL_6_12)
+#else
             if ((hapd->mld->allocated_links & BIT(i)) == 0) {
                 hapd->mld_link_id = i;
                 hapd->mld->allocated_links |= BIT(i);
