@@ -3194,6 +3194,16 @@ void recv_data_frame(wifi_interface_info_t *interface)
         }
         int eapol_type = is_eapol_m4((uint8_t *)hdr, buflen) ? 4 : 2;
         int eapol_retry_counter = get_eapol_reply_counter((uint8_t *)hdr, buflen);
+        wifi_device_callbacks_t *key_callbacks = get_hal_device_callbacks();
+        if (key_callbacks != NULL) {
+            for (int i = 0; i < key_callbacks->num_eapol_key_cbs; i++) {
+                if (key_callbacks->eapol_key_cb[i] != NULL) {
+                    key_callbacks->eapol_key_cb[i](vap->vap_index, src_mac_str,
+                        (eapol_type == 4) ? wifi_eapol_key_msg_m4 : wifi_eapol_key_msg_m2,
+                        (unsigned int)eapol_retry_counter);
+                }
+            }
+        }
         if (eapol_retry_counter >=4) {
 		    wifi_hal_dbg_print("%s:%d eapol_timeout callback is called \n", __func__, __LINE__);
             wifi_drv_eapol_timeouts(interface, sta, eapol_type);
@@ -14889,6 +14899,16 @@ int wifi_drv_hapd_send_eapol(
         get_eapol_reply_counter(data, data_len), link_id);
     int eapol_type = is_eapol_m3(data, data_len) ? 3 : 1 ;
     int eapol_retry_counter = get_eapol_reply_counter(data, data_len);
+    wifi_device_callbacks_t *key_callbacks = get_hal_device_callbacks();
+    if (key_callbacks != NULL) {
+        for (int i = 0; i < key_callbacks->num_eapol_key_cbs; i++) {
+            if (key_callbacks->eapol_key_cb[i] != NULL) {
+                key_callbacks->eapol_key_cb[i](vap->vap_index, dst_mac_str,
+                    (eapol_type == 3) ? wifi_eapol_key_msg_m3 : wifi_eapol_key_msg_m1,
+                    (unsigned int)eapol_retry_counter);
+            }
+        }
+    }
     if ((eapol_retry_counter >=4)) {
 		wifi_hal_dbg_print("%s:%d eapol_timeout callback is called \n", __func__, __LINE__);
         wifi_drv_eapol_timeouts(interface, sta, eapol_type);
