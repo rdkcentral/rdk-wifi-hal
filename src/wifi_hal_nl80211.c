@@ -6463,7 +6463,7 @@ static int wiphy_get_info_handler(struct nl_msg *msg, void *arg)
 #else //FEATURE_SINGLE_PHY
             //Check whether nl_band is applicable to the radio and process only
             //if it is applicable
-            band_type = nl_band->nla_type;
+            band_type = nla_type(nl_band);
             radio_nl80211_band_type = get_nl80211_band_from_rdk_radio_index(radio->rdk_radio_index);
             wifi_hal_dbg_print("%s:%d:band_type:%d radio_band_type:%d processing:%s\n",
                 __func__, __LINE__, band_type, radio_nl80211_band_type,
