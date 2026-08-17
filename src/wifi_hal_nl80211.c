@@ -3361,7 +3361,7 @@ void recv_link_status()
                         }
 #endif // CONFIG_GENERIC_MLO
 
-                        if(strncmp(get_vap_bridge_name(&interface->vap_info), ifName, strlen(get_vap_bridge_name(&interface->vap_info))+1) == 0) {
+                        if (strcmp(get_vap_bridge_name(&interface->vap_info), ifName) == 0) {
                             if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
                                 switch (nlmsgHdr->nlmsg_type)
                                 {
@@ -3430,7 +3430,7 @@ void recv_link_status()
                             }
                         }
 
-                        if(strncmp(interface->name, ifName, strlen(interface->name)+1) == 0) {
+                        if (strcmp(interface->name, ifName) == 0) {
                             found = true;
                             break;
                         }

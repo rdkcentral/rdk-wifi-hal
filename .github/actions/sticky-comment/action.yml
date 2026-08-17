@@ -26,6 +26,15 @@ inputs:
     description: 'Login of the identity that owns our comments (for the ownership match). Change this if you switch to a GitHub App token.'
     required: false
     default: 'github-actions[bot]'
+  recreate:
+    description: >
+      'true' = delete the previous comment and repost, so the single sticky comment always lands
+      at the bottom of the PR timeline (and fires a fresh notification!) - edit-in-place results
+      in comment staying at its original position, which quickly scrolls out of sight on a
+      busy PR. 'false' = do edit in place (stable permalink, no notification, but can get
+      buried). Falls back to edit-in-place automatically if the token cannot delete comment.
+    required: false
+    default: 'true'
 
 runs:
   using: composite
@@ -39,6 +48,7 @@ runs:
         MARKER: ${{ inputs.marker }}
         BODY_FILE: ${{ inputs.body-file }}
         BOT_LOGIN: ${{ inputs.bot-login }}
+        RECREATE: ${{ inputs.recreate }}
       run: |
         set -uo pipefail
         if [ ! -f "$BODY_FILE" ]; then
@@ -79,6 +89,17 @@ runs:
         # no dependence on the '@file' loader. Bodies are small (capped upstream),
         # so passing via one argv is safe.
         body="$(cat sticky-body.md)"
+        # recreate the comment: delete the old comment so the repost below lands at the bottom of a
+        # busy PR timeline (edit-in-place keep its original position, which gets buried after later
+        # commits/comments). If the token can't delete it (needs issues:write), fall back to editing
+        # in place rather than risk a duplicate.
+        if [ -n "$existing" ] && [ "$RECREATE" = "true" ]; then
+          if gh api --method DELETE "/repos/$REPO/issues/comments/$existing" >/dev/null 2>&1; then
+            existing=""
+          else
+            echo "::warning::Could not delete old sticky '$MARKER' comment $existing (token lacks issues:write?); editing in place instead."
+          fi
+        fi
         if [ -n "$existing" ]; then
           if gh api --method PATCH "/repos/$REPO/issues/comments/$existing" \
                -f body="$body" >/dev/null; then

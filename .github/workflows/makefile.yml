@@ -207,6 +207,39 @@ jobs:
         # Needs OneWifi/develop to already habe the gate config + DB; skip cleanly if not.
         [ -f compile_commands.json ] || { echo "### 🔎 clang-tidy: no compile DB" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
         [ -f "$CFG" ] || { echo "### 🔎 clang-tidy: no .clang-tidy in OneWifi (nothing to gate)" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+        # ---- HAL extra clang checks -------------------------------------------
+        # Checks which are clean in rdk-wifi-hal but still dirty in OneWifi, so they cannot
+        # live in OneWifi's shared .clang-tidy WarningsAsErrors var. clang-tidy will combine
+        # a cmdline --warnings-as-errors with ones set in config-file (similarly, --checks
+        # appends to Checks var). So let's gate these on top of OneWifi's baseline without
+        # adding second config file. As OneWifi cleans the same class, drop
+        # it here (redundant, harmless). A check which is clean in both repos belongs in the
+        # shared .clang-tidy, not here.
+        #   HAL_EXTRA_WAE:    checks to PROMOTE to error (check must be enabled first! -- bugprone-*
+        #                     already are, via the config's `Checks: bugprone-*`).
+        #   HAL_EXTRA_CHECKS: checks to ENABLE. If also in WAE -> act as gate. if not (the
+        #                     clang-analyzer-* set below) -> advisory only (prints `warning:`,
+        #                     never fails the job). Findings are still scoped to changed lines only.
+        # clang-analyzer-* is path-sensitive symbolic execution: it runs the whole engine once per
+        # changed file (nl80211.c takes ~23s) and needs the extra-arg below to be able to run.
+        # Kept advisory on purpose - the 0-today core/unix checks (StackAddressEscape /
+        # UndefinedBinaryOperatorResult / MallocSizeof / uninitialized.*) will be promote candidates
+        # only after few weeks of clean runs. NullDereference/CallAndMessage have existing findings
+        # and as such must stay advisory until fixed. Move a check into HAL_EXTRA_WAE
+        # (and keep it here) to promote it later.
+        HAL_EXTRA_WAE='bugprone-not-null-terminated-result'
+        HAL_EXTRA_CHECKS='clang-analyzer-core.StackAddressEscape,clang-analyzer-core.NullDereference,clang-analyzer-core.UndefinedBinaryOperatorResult,clang-analyzer-core.CallAndMessage,clang-analyzer-unix.MallocSizeof,clang-analyzer-core.uninitialized.*'
+        extra=()
+        [ -n "$HAL_EXTRA_CHECKS" ] && extra+=( "--checks=$HAL_EXTRA_CHECKS" )
+        [ -n "$HAL_EXTRA_WAE" ]    && extra+=( "--warnings-as-errors=$HAL_EXTRA_WAE" )
+        # clang-analyzer parse-unblock: clang treats const-discarding pointer assignments as errors,
+        # and the HAL gate: -Werror=incompatible-pointer-types promotes clang's discards-qualifiers
+        # subcategory to a hard error (gcc only warns, and they are suppresed with
+        # -Wno-discarded-qualifiers). That aborts clang's parse of wifi_hal_nl80211.c  before the
+        # clang-analyzer-* engine finished, so any clang-analyzer* check silently skips this file.
+        # De-promote just that class for clang, so the analyzer can run. No effect on the gcc gate.
+        # Harmless until a clang-analyzer-* check is enabled.
+        extra+=( '--extra-arg=-Wno-error=incompatible-pointer-types-discards-qualifiers' )
         BASE='${{ github.event.pull_request.base.sha }}'
         CHANGED=''
         if [ -n "$BASE" ]; then
@@ -223,7 +256,7 @@ jobs:
           [ -n "$lines" ] || continue
           # || true: a no-match grep / clang-tidy hiccup must not abort the loop.
           # clang-tidy runs one file at a time -> filter on the line number alone.
-          clang-tidy-18 -p . --config-file="$CFG" --quiet "$HAL/$f" 2>/dev/null \
+          clang-tidy-18 -p . --config-file="$CFG" "${extra[@]}" --quiet "$HAL/$f" 2>/dev/null \
             | grep -E ': (warning|error):' | grep -v clang-diagnostic \
             | awk -F: -v L="$lines" 'BEGIN{split(L,a," ");for(i in a)k[a[i]]} ($2 in k)' >> tidy.log || true
         done
