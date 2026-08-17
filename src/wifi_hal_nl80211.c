@@ -5872,7 +5872,7 @@ static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
             if(!is_supported_nl_iftype(tbIfTypeBe[NL80211_BAND_IFTYPE_ATTR_IFTYPES])) {
                 continue;
             }
-            if(tbIfTypeBe[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_PHY] != NULL) {
+            if (tbIfTypeBe[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_PHY] != NULL) {
                 supported |= WIFI_80211_VARIANT_BE;
             }
         }
