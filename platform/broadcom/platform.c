@@ -40,8 +40,8 @@
 #endif // defined (ENABLED_EDPD)
 
 #include <sys/stat.h>
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined (SKYSR213_PORT) || \
-    defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || \
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SKYSR213_PORT) || \
+    defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) ||                                        \
     (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 #include <fcntl.h>
 #include <rdk_nl80211_hal.h>
