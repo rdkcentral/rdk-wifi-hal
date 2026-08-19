@@ -137,14 +137,25 @@ jobs:
             exit 0
           fi
 
-          if ! gh api --method POST "/repos/$REPO/pulls/$PR/reviews" \
-                 --input /tmp/review.json > /tmp/resp.json; then
-            echo "::error::Failed to post review (see log above)."
-            # 422 = a suggestion targeted a line outside the PR diff.
-            # 404 = usually rate limit from too many comments (lower MAX_COMMENTS).
+          # A 422 here means a suggestion targeted a line outside the *current* PR
+          # diff. That is benign during a rebase / squash-merge race: a stale-payload
+          # workflow_run posts suggestions computed against the pre-rebase diff, so
+          # some lines no longer exist -> 422. Treat 422 as a soft skip (warn, exit
+          # 0): the stale suggestions simply don't post and the next fresh run (or the
+          # merge itself) supersedes them. Other failures stay fatal (404 = usually a
+          # rate limit from too many comments -> lower MAX_COMMENTS).
+          if gh api --method POST "/repos/$REPO/pulls/$PR/reviews" \
+                 --input /tmp/review.json > /tmp/resp.json 2> /tmp/review_err.txt; then
+            echo "Review posted: $(python3 -c 'import json;print(json.load(open("/tmp/resp.json")).get("html_url",""))')"
+          elif grep -q 'HTTP 422' /tmp/review_err.txt; then
+            echo "::warning::Review POST returned 422 — suggestions no longer match the PR diff (likely a rebase/merge race). Skipping; a fresh run will supersede."
+            cat /tmp/review_err.txt
+            exit 0
+          else
+            echo "::error::Failed to post review:"
+            cat /tmp/review_err.txt
             exit 1
           fi
-          echo "Review posted: $(python3 -c 'import json;print(json.load(open("/tmp/resp.json")).get("html_url",""))')"
 
   # ---------------------------------------------------------------------------
   # gcc build -> one sticky summary comment, aggregating every matrix leg.
