@@ -8239,6 +8239,15 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
 
     while (interface != NULL) {
         if (interface->bss_started) {
+                wifi_hal_error_print("%s:%d PALAKSHA printing the interface name %s\n",__func__, __LINE__, interface->name);
+                if (if_nametoindex(interface->name) == 0)
+                {
+                     wifi_hal_error_print("%s:%d PALAKSHA printing the interface  %s IS PRESENT\n",__func__, __LINE__, interface->name);
+                }
+                else
+                {
+                    wifi_hal_error_print("%s:%d PALAKSHA printing the interface  %s IS NOT PRESENT\n",__func__, __LINE__, interface->name);
+                }
                 reconfigure = true;
                 nl80211_enable_ap(interface, false);
                 pthread_mutex_lock(&g_wifi_hal.hapd_lock);

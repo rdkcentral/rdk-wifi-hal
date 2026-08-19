@@ -1094,8 +1094,13 @@ reload_config:
         return RETURN_ERR;
     }
 
+    if (!radio->configured) {
+        radio->configured = true;
+    }
+
+
     radio->configuration_in_progress = false;
-    return RETURN_ERR;
+    return RETURN_OK;
 
 }
 
