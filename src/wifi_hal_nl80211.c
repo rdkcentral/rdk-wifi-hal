@@ -4876,7 +4876,8 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
     int rem_freq;
     wifi_radio_capabilities_t *cap;
     wifi_channels_list_t *channels;
-    unsigned int freq = 0, freq_band = 0, i;
+    unsigned int freq = 0, i;
+    wifi_freq_bands_t freq_band = WIFI_FREQUENCY_2_4_BAND;
     struct hostapd_hw_modes *mode = NULL;
     struct hostapd_channel_data *chan;
     enum nl80211_dfs_state dfs_state;
@@ -5090,6 +5091,24 @@ skip:   found = 0;
         mode->num_channels, channels_str);
 
     return mode;
+}
+
+static wifi_freq_bands_t nl80211_band_to_wifi_freq_band(enum nl80211_band band)
+{
+    switch (band) {
+    case NL80211_BAND_2GHZ:
+        return WIFI_FREQUENCY_2_4_BAND;
+    case NL80211_BAND_5GHZ:
+        return WIFI_FREQUENCY_5_BAND;
+    case NL80211_BAND_60GHZ:
+        return WIFI_FREQUENCY_60_BAND;
+#if HOSTAPD_VERSION >= 210
+    case NL80211_BAND_6GHZ:
+        return WIFI_FREQUENCY_6_BAND;
+#endif
+    default:
+        return (wifi_freq_bands_t)0;
+    }
 }
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(QCOM_ATH12K_PORT) || defined(TARGET_GEMINI7_2)
@@ -6188,7 +6207,7 @@ static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
         return NL_OK;
     }
 
-    radio->oper_param.band = band;
+    radio->oper_param.band = nl80211_band_to_wifi_freq_band(band);
     wifi_hal_dbg_print("%s:%d: radio->oper_param.band:%d\n", __func__, __LINE__,
         radio->oper_param.band);
 
@@ -14145,9 +14164,11 @@ int wifi_drv_set_qos_map(void *priv, const u8 *qos_map_set, u8 qos_map_set_len)
     wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
     struct nl_msg *msg;
     int ret;
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
     int link_id = -1;
 
     link_id = wifi_hal_get_mld_link_id(interface);
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
     wifi_hal_dbg_print("%s:%d: Enter interface:%s qos_map_set_len:%u\n",
         __func__, __LINE__, interface->name, qos_map_set_len);

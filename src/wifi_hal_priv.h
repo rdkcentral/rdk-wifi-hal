@@ -80,9 +80,11 @@
 #include "sme.h"
 #endif
 
+#ifdef QCOM_ATH12K_PORT
 #include "ap/airtime_policy.h"
 #include "common/dhcp.h"
 #include "ap/ap_config.h"
+#endif /* QCOM_ATH12K_PORT */
 
 /*
 switch to use nl80211_copy.h because 'linux/nl80211.h' from linux header does not contain
@@ -1332,7 +1334,8 @@ void wifi_get_mld_eml_cap(const u16 mld_cap, const u16 eml_cap, wifi_multi_link_
 void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface);
 #endif
 
-#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
+#if defined(QCOM_ATH12K_PORT) && defined(CONFIG_IEEE80211BE) && \
+    defined(CONFIG_MLO) && defined(CONFIG_GENERIC_MLO)
 /*
  * update_mld_iface_cross_links - Cross-link MLD-affiliated ifaces for 3-link STA
  * per-STA profile generation. Must be called after update_hostap_mlo() sets
@@ -1340,7 +1343,7 @@ void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface);
  * (count > 1) and hapd->mld for for_each_mld_link() to work correctly.
  */
 int update_mld_iface_cross_links(void);
-#endif /* CONFIG_IEEE80211BE && CONFIG_MLO */
+#endif /* QCOM_ATH12K_PORT && CONFIG_IEEE80211BE && CONFIG_MLO && CONFIG_GENERIC_MLO */
 
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio);
 void wifi_hal_configure_mbssid(wifi_radio_info_t *radio);
