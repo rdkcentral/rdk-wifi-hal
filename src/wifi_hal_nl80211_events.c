@@ -943,15 +943,11 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
     hostapd_set_oper_centr_freq_seg1_idx(iconf, seg1_idx);
     hostapd_set_oper_chwidth(iconf, hostap_channel_width);
 
-#ifdef CONFIG_IEEE80211AX
-#if HOSTAPD_VERSION >= 210
-#if !defined(QCOM_ATH12K_PORT) /* can be removed after rebasing RDK hostapd patches */
+#if !defined(QCOM_ATH12K_PORT) && defined(CONFIG_IEEE80211AX) && (HOSTAPD_VERSION >= 210)
     if (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND) {
         iconf->he_2ghz_40mhz_width_allowed = hal_channel_width == WIFI_CHANNELBANDWIDTH_40MHZ;
     }
-#endif /* QCOM_ATH12K_PORT */
-#endif
-#endif
+#endif /* !QCOM_ATH12K_PORT && CONFIG_IEEE80211AX && HOSTAPD_VERSION >= 210 */
 
     iconf->ht_capab &= ~HT_CAP_INFO_SUPP_CHANNEL_WIDTH_SET;
     if (hal_channel_width >= WIFI_CHANNELBANDWIDTH_40MHZ) {
