@@ -2180,28 +2180,6 @@ static struct hostapd_mld *find_mld(wifi_interface_info_t *interface)
     return NULL;
 }
 
-static bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
-{
-    struct hostapd_data *link_bss;
-
-    if (hapd->mld == NULL) {
-        return false;
-    }
-
-    wpa_printf(MSG_DEBUG,"%s:%d link %d in MLD %s\n", __func__, __LINE__, hapd->mld_link_id,
-            hapd->conf->iface);
-    dl_list_for_each(link_bss, &hapd->mld->links, struct hostapd_data, link) {
-        if (link_bss == hapd) {
-            wpa_printf(MSG_DEBUG,"%s:%d TRUE link %d in MLD %s\n", __func__, __LINE__, hapd->mld_link_id,
-                    hapd->conf->iface);
-            return true;
-        }
-    }
-    wpa_printf(MSG_DEBUG,"%s:%d FALSE  link %d in MLD %s\n", __func__, __LINE__, hapd->mld_link_id,
-            hapd->conf->iface);
-    return false;
-}
-
 static int alloc_mld(wifi_interface_info_t *interface)
 {
     struct hostapd_mld *mld;

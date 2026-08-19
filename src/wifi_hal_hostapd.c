@@ -2134,7 +2134,8 @@ int update_hostap_interfaces(wifi_radio_info_t *radio)
     return RETURN_OK;
 }
 
-#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
+#if defined(QCOM_ATH12K_PORT) && defined(CONFIG_IEEE80211BE) && \
+    defined(CONFIG_MLO) && defined(CONFIG_GENERIC_MLO)
 /*
  * update_mld_iface_cross_links - Cross-link MLD-affiliated ifaces for 3-link STA
  *
@@ -2276,7 +2277,8 @@ int update_mld_iface_cross_links(void)
                     dl_list_init(&g_wifi_hal.mld_array.mld_unit);
                 dl_list_add_tail(&g_wifi_hal.mld_array.mld_unit, &mld_unit->mld_unit);
 
-                strlcpy(mld->name, interface->mld_name, sizeof(mld->name) - 1);
+                strncpy(mld->name, interface->mld_name, sizeof(mld->name) - 1);
+                mld->name[sizeof(mld->name) - 1] = '\0';
                 dl_list_init(&mld->links);
 #ifdef QCA_UD_HOSTAPD
                 /* ft_ds_ml_stas and free_links are QCA-specific members of hostapd_mld */
@@ -2313,8 +2315,9 @@ int update_mld_iface_cross_links(void)
              * standard name_cmp path works without RDK_ONEWIFI workaround.
              * All affiliated links share the same mld_name (e.g. "phy00-mld0"). */
             if (hapd->conf && interface->mld_name[0] != '\0') {
-                strlcpy(hapd->conf->iface, interface->mld_name,
-                        sizeof(hapd->conf->iface));
+                strncpy(hapd->conf->iface, interface->mld_name,
+                        sizeof(hapd->conf->iface) - 1);
+                hapd->conf->iface[sizeof(hapd->conf->iface) - 1] = '\0';
             }
 
             /* Set link ID */
@@ -2345,8 +2348,9 @@ int update_mld_iface_cross_links(void)
             if (slot < 0) {
                 if (g_mld_group_count < MAX_MLD_GROUPS) {
                     slot = (int)g_mld_group_count++;
-                    strlcpy(g_mld_group_names[slot], interface->mld_name,
+                    strncpy(g_mld_group_names[slot], interface->mld_name,
                             sizeof(g_mld_group_names[slot]) - 1);
+                    g_mld_group_names[slot][sizeof(g_mld_group_names[slot]) - 1] = '\0';
                     g_mld_shared_interfaces[slot].for_each_interface =
                         &hostapd_for_each_interface_adapter;
                 } else {
@@ -2399,7 +2403,7 @@ int update_mld_iface_cross_links(void)
 
     return RETURN_OK;
 }
-#endif /* CONFIG_IEEE80211BE && CONFIG_MLO */
+#endif /* QCOM_ATH12K_PORT && CONFIG_IEEE80211BE && CONFIG_MLO && CONFIG_GENERIC_MLO */
 
 static void print_hw_variants_by_bitmask(uint32_t mask)
 {
@@ -2810,7 +2814,7 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
                 '\0';
         }
     }
-#endif /* CONFIG_GENERIC_MLO */
+#endif /* !CONFIG_GENERIC_MLO || QCOM_ATH12K_PORT */
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     // initialize the default params
@@ -2848,7 +2852,8 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
      * it must be done here so hostapd has the correct flags when
      * starting the BSS. */
     update_hostap_iface_flags(interface);
-#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO) && \
+    defined(QCOM_ATH12K_PORT) && defined(CONFIG_GENERIC_MLO)
     if (update_hostap_mlo(interface) != RETURN_OK) {
         goto exit;
     }
@@ -2865,7 +2870,7 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
             __func__, __LINE__);
         /* Non-fatal: continue without cross-linking */
     }
-#endif /* CONFIG_IEEE80211BE */
+#endif /* CONFIG_IEEE80211BE && CONFIG_MLO && QCOM_ATH12K_PORT && CONFIG_GENERIC_MLO */
 
     ret = RETURN_OK;
 exit:
