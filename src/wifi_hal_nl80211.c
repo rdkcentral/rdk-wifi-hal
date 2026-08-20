@@ -4920,6 +4920,7 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
             }
         }
 #endif // CONFIG_WMM
+       chan->flag &= ~HOSTAPD_CHAN_DISABLED;
 
         if (!found) {
             mode->num_channels++;
