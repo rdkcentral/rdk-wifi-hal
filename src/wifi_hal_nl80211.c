@@ -8506,16 +8506,33 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
     if((channel_data->chan == 0) || (channel_data->flag & HOSTAPD_CHAN_DISABLED))
     {
         wifi_hal_error_print("%s:%d: PALAKSHA INSIDE CHANGING CHANNEL AS CURRENT CONFIGURED CHANNEL IS DISABLED %d\n", __func__, __LINE__,radio->oper_param.channel);
-         for (unsigned int i = 0; i < wifi_5g_channels_count; i++) 
+        if (radio->oper_param.band == WIFI_FREQUENCY_5_BAND ||
+            radio->oper_param.band == WIFI_FREQUENCY_5L_BAND ||
+            radio->oper_param.band == WIFI_FREQUENCY_5H_BAND) {
+                for (unsigned int i = 0; i < wifi_5g_channels_count; i++) 
+                {
+                    if(!(radio->channel_data[radio->oper_param.band][wifi_5g_channels[i]].flag & HOSTAPD_CHAN_DISABLED))
+                    {
+                        radio->oper_param.channel = wifi_5g_channels[i];
+                        wifi_hal_error_print("%s:%d: PALAKSHA PRINTING THE ENABLED CHANNEL %d\n", __func__, __LINE__,radio->oper_param.channel);
+                        break;
+                    }
+                    wifi_hal_error_print("%s:%d: PALAKSHA PRINTING THE DISABLED CHANNEL %d\n", __func__, __LINE__,radio->oper_param.channel);
+                }
+         }
+         else if(radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND)
          {
-            if(!(radio->channel_data[radio->oper_param.band][wifi_5g_channels[i]].flag & HOSTAPD_CHAN_DISABLED))
-            {
-                radio->oper_param.channel = wifi_5g_channels[i];
-                wifi_hal_error_print("%s:%d: PALAKSHA PRINTING THE ENABLED CHANNEL %d\n", __func__, __LINE__,radio->oper_param.channel);
-                 break;
-            }
-            wifi_hal_error_print("%s:%d: PALAKSHA PRINTING THE DISABLED CHANNEL %d\n", __func__, __LINE__,radio->oper_param.channel);
-        }
+             for (unsigned int i = 0; i < wifi_2g_channels_count; i++)
+             {
+                 if(!(radio->channel_data[radio->oper_param.band][wifi_2g_channels[i]].flag & HOSTAPD_CHAN_DISABLED))
+                 {
+                     radio->oper_param.channel = wifi_2g_channels[i];
+                     wifi_hal_error_print("%s:%d: PALAKSHA PRINTING THE ENABLED CHANNEL %d\n", __func__, __LINE__,radio->oper_param.channel);
+                     break;
+                 }
+                 wifi_hal_error_print("%s:%d: PALAKSHA PRINTING THE DISABLED CHANNEL %d\n", __func__, __LINE__,radio->oper_param.channel);
+             }
+         }        
     }
     if (nl80211_fill_chandef(msg, radio, interface) == -1) {
         wifi_hal_error_print("%s:%d: Failed to fill channel definition\n", __func__, __LINE__);
