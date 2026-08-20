@@ -8435,6 +8435,15 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
 
     while (interface != NULL) {
         if (interface->bss_started) {
+                wifi_hal_error_print("%s:%d PALAKSHA printing the interface name %s\n",__func__, __LINE__, interface->name);
+                if (if_nametoindex(interface->name) == 0)
+                {
+                     wifi_hal_error_print("%s:%d PALAKSHA printing the interface  %s IS PRESENT\n",__func__, __LINE__, interface->name);
+                }
+                else
+                {
+                    wifi_hal_error_print("%s:%d PALAKSHA printing the interface  %s IS NOT PRESENT\n",__func__, __LINE__, interface->name);
+                }
                 reconfigure = true;
                 nl80211_enable_ap(interface, false);
                 pthread_mutex_lock(&g_wifi_hal.hapd_lock);
@@ -8490,6 +8499,23 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
         wifi_hal_error_print("%s:%d: Failed to add interface index\n", __func__, __LINE__);
         nlmsg_free(msg);
         return -1;
+    }
+
+    struct hostapd_channel_data *channel_data = &radio->channel_data[radio->oper_param.band][radio->oper_param->channel];
+
+    if((channel_data->chan == 0) || (channel_data->flag & HOSTAPD_CHAN_DISABLED))
+    {
+        wifi_hal_error_print("%s:%d: PALAKSHA INSIDE CHANGING CHANNEL AS CURRENT CONFIGURED CHANNEL IS DISABLED %d\n", __func__, __LINE__,radio->oper_param->channel);
+         for (unsigned int i = 0; i < wifi_5g_channels_count; i++) 
+         {
+            if(!(radio->channel_data[radio->oper_param.band][wifi_5g_channels[i]]->flag & HOSTAPD_CHAN_DISABLED))
+            {
+                radio->oper_param->channel = wifi_5g_channels[i];
+                wifi_hal_error_print("%s:%d: PALAKSHA PRINTING THE ENABLED CHANNEL %d\n", __func__, __LINE__,radio->oper_param->channel);
+                 break;
+            }
+            wifi_hal_error_print("%s:%d: PALAKSHA PRINTING THE DISABLED CHANNEL %d\n", __func__, __LINE__,radio->oper_param->channel);
+        }
     }
     if (nl80211_fill_chandef(msg, radio, interface) == -1) {
         wifi_hal_error_print("%s:%d: Failed to fill channel definition\n", __func__, __LINE__);
