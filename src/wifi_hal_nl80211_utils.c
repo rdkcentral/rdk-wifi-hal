@@ -3300,7 +3300,7 @@ int convert_enum_beaconrate_to_int(wifi_bitrate_t rates)
     switch (rates) {
         case WIFI_BITRATE_1MBPS: return 1;
         case WIFI_BITRATE_2MBPS: return 2;
-        case WIFI_BITRATE_5_5MBPS: return 5.5;
+        case WIFI_BITRATE_5_5MBPS: return 5;
         case WIFI_BITRATE_11MBPS: return 11;
         case WIFI_BITRATE_6MBPS: return 6;
         case WIFI_BITRATE_9MBPS: return 9;
