@@ -1661,6 +1661,14 @@ int update_hostap_iface(wifi_interface_info_t *interface)
             iface->num_rates, rate->rate, rate->flags);
         iface->num_rates++;
     }
+    wifi_hal_info_print(
+        "[RDKB-66453][HAL_TRACE] effective_rates interface=%s band=%d "
+        "configured_basic=%s configured_operational=%s configured_supported=%s "
+        "mode_rates=%u effective_rates=%u\n",
+        interface->name, band, vap->u.bss_info.preassoc.basic_data_transmit_rates,
+        vap->u.bss_info.preassoc.operational_data_transmit_rates,
+        vap->u.bss_info.preassoc.supported_data_transmit_rates,
+        mode->num_rates, iface->num_rates);
     cf1 = iface->freq;
     freq1 = cf1;
 

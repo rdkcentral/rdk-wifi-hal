@@ -1161,6 +1161,11 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, sta_mac_str),
                 to_mac_str(mgmt->da, frame_da_str), len, sig_dbm);
         }
+        wifi_hal_info_print(
+            "[RDKB-66453][HAL_TRACE] frame_parsed interface=%s ap_index=%d type=%d "
+            "sta=%s phy_rate=%d len=%u\n",
+            interface->name, vap->vap_index, mgmt_type,
+            to_mac_str(sta, sta_mac_str), phy_rate, len);
 
 #ifdef NL80211_ACL
         if (is_core_acl_drop_mgmt_frame(interface, sta)) {
@@ -1189,6 +1194,11 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, sta_mac_str),
                 to_mac_str(mgmt->da, frame_da_str), len, sig_dbm);
         }
+        wifi_hal_info_print(
+            "[RDKB-66453][HAL_TRACE] frame_parsed interface=%s ap_index=%d type=%d "
+            "sta=%s phy_rate=%d len=%u\n",
+            interface->name, vap->vap_index, mgmt_type,
+            to_mac_str(sta, sta_mac_str), phy_rate, len);
 
         if (callbacks->steering_event_callback != 0 && vap->u.bss_info.security.mode == wifi_security_mode_none) {
             wifi_steering_evConnect_t connect_steering_event = {0};
@@ -1541,7 +1551,16 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #endif
 
         for (unsigned int i = 0; i < hooks->num_hooks; i++) {
-            if (hooks->frame_hooks_fn[i](vap->vap_index, mgmt_type) == NL_SKIP) {
+            int hook_ret = hooks->frame_hooks_fn[i](vap->vap_index, mgmt_type);
+            wifi_hal_info_print(
+                "[RDKB-66453][HAL_TRACE] frame_hook ap_index=%d interface=%s "
+                "type=%d hook=%u ret=%d\n",
+                vap->vap_index, interface->name, mgmt_type, i, hook_ret);
+            if (hook_ret == NL_SKIP) {
+                wifi_hal_info_print(
+                    "[RDKB-66453][HAL_TRACE] frame_consumed ap_index=%d interface=%s "
+                    "type=%d hook=%u\n",
+                    vap->vap_index, interface->name, mgmt_type, i);
                 return -1;
             }
         }
@@ -10713,17 +10732,31 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, src_mac_str),
                 to_mac_str(mgmt->da, dst_mac_str), le_to_host16(mgmt->u.assoc_resp.capab_info),
                 le_to_host16(mgmt->u.assoc_resp.aid) & 0x3fff,
-                le_to_host16(mgmt->u.assoc_resp.status_code));
-                ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.assoc_resp.status_code), fc);
+                 le_to_host16(mgmt->u.assoc_resp.status_code));
+                 wifi_hal_info_print(
+                     "[RDKB-66453][HAL_TRACE] assoc_response_tx interface=%s ap_index=%d "
+                     "dst=%s status_code=%d aid=%d\n",
+                     interface->name, interface->vap_info.vap_index,
+                     to_mac_str(mgmt->da, dst_mac_str),
+                     le_to_host16(mgmt->u.assoc_resp.status_code),
+                     le_to_host16(mgmt->u.assoc_resp.aid) & 0x3fff);
+                 ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.assoc_resp.status_code), fc);
             break;
         case WLAN_FC_STYPE_REASSOC_RESP:
             wifi_hal_info_print("%s:%d: interface:%s send reassoc resp frame from:%s to:%s "
                                 "cap:0x%x aid:%d sc:%d\n",
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, src_mac_str),
-                to_mac_str(mgmt->da, dst_mac_str), le_to_host16(mgmt->u.assoc_resp.capab_info),
-                le_to_host16(mgmt->u.assoc_resp.aid) & 0x3fff,
-                le_to_host16(mgmt->u.assoc_resp.status_code));
-                ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.assoc_resp.status_code), fc);
+                 to_mac_str(mgmt->da, dst_mac_str), le_to_host16(mgmt->u.assoc_resp.capab_info),
+                 le_to_host16(mgmt->u.assoc_resp.aid) & 0x3fff,
+                 le_to_host16(mgmt->u.assoc_resp.status_code));
+                 wifi_hal_info_print(
+                     "[RDKB-66453][HAL_TRACE] reassoc_response_tx interface=%s ap_index=%d "
+                     "dst=%s status_code=%d aid=%d\n",
+                     interface->name, interface->vap_info.vap_index,
+                     to_mac_str(mgmt->da, dst_mac_str),
+                     le_to_host16(mgmt->u.assoc_resp.status_code),
+                     le_to_host16(mgmt->u.assoc_resp.aid) & 0x3fff);
+                 ratelimit_rc_status_check(mgmt->sa, le_to_host16(mgmt->u.assoc_resp.status_code), fc);
             break;
         case WLAN_FC_STYPE_DISASSOC:
             wifi_hal_info_print("%s:%d: interface:%s send disassoc frame from:%s to:%s sc:%d\n",
@@ -10782,6 +10815,16 @@ send_frame_cmd:
     res = nl80211_send_frame_cmd(interface, freq, wait, data, data_len,
               use_cookie, offchanok, noack, csa_offs, csa_offs_len);
 
+    if (WLAN_FC_GET_TYPE(fc) == WLAN_FC_TYPE_MGMT &&
+        (WLAN_FC_GET_STYPE(fc) == WLAN_FC_STYPE_ASSOC_RESP ||
+         WLAN_FC_GET_STYPE(fc) == WLAN_FC_STYPE_REASSOC_RESP)) {
+        wifi_hal_info_print(
+            "[RDKB-66453][HAL_TRACE] assoc_response_result interface=%s ap_index=%d "
+            "type=%d ret=%d\n",
+            interface->name, interface->vap_info.vap_index,
+            WLAN_FC_GET_STYPE(fc), res);
+    }
+
     return res;
 }
 
@@ -10793,7 +10836,20 @@ int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int 
 {
     int ret = 0;
     wifi_interface_info_t *interface = get_interface_by_vap_index(ap_index);
-    struct hostapd_data *hapd = &interface->u.ap.hapd;
+    struct hostapd_data *hapd;
+
+    if (interface == NULL) {
+        wifi_hal_error_print(
+            "[RDKB-66453][HAL_TRACE] response_failure_invalid_interface ap_index=%d\n",
+            ap_index);
+        return RETURN_ERR;
+    }
+    hapd = &interface->u.ap.hapd;
+
+    wifi_hal_info_print(
+        "[RDKB-66453][HAL_TRACE] response_failure ap_index=%d interface=%s "
+        "frame_type=%d status_code=%d rssi=%d\n",
+        ap_index, interface->name, frame_type, status_code, rssi);
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
 
@@ -10808,6 +10864,12 @@ int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int 
 #else
                 send_assoc_resp(hapd, NULL, mac, status_code, 0, NULL, 0, rssi);
 #endif
+#endif
+#if defined(PLATFORM_LINUX)
+            wifi_hal_info_print(
+                "[RDKB-66453][HAL_TRACE] response_failure_not_sent ap_index=%d "
+                "frame_type=%d status_code=%d reason=PLATFORM_LINUX\n",
+                ap_index, frame_type, status_code);
 #endif
             break;
         case WLAN_FC_STYPE_REASSOC_RESP:
@@ -13558,6 +13620,18 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
     wifi_hal_dbg_print("%s:%d:Enter, interface name:%s vap index:%d radio index:%d beacon_set %d\n", __func__, __LINE__,
         interface->name, vap->vap_index, radio->index, beacon_set);
 
+    wifi_hal_info_print(
+        "[RDKB-66453][HAL_TRACE] beacon_request interface=%s ap_index=%d radio=%d "
+        "cmd=%s head_len=%u tail_len=%u beacon_ies_len=%u proberesp_ies_len=%u "
+        "assocresp_ies_len=%u beacon_rate=%u\n",
+        interface->name, vap->vap_index, radio->index,
+        beacon_set ? "SET_BEACON" : "NEW_BEACON", (unsigned int)params->head_len,
+        (unsigned int)params->tail_len,
+        params->beacon_ies ? (unsigned int)wpabuf_len(params->beacon_ies) : 0,
+        params->proberesp_ies ? (unsigned int)wpabuf_len(params->proberesp_ies) : 0,
+        params->assocresp_ies ? (unsigned int)wpabuf_len(params->assocresp_ies) : 0,
+        params->beacon_rate);
+
     if (beacon_set) {
         cmd = NL80211_CMD_SET_BEACON;
     }
@@ -13782,11 +13856,14 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
             wifi_hal_dbg_print("%s:%d: Failed to set BSS for interface: %s error: %d(%s)\n", __func__, __LINE__, interface->name, ret, strerror(-ret));
             return -1;
         }
-    }
-    else
-    {
+    } else {
         set_bss_param(priv, params);
     }
+
+    wifi_hal_info_print(
+        "[RDKB-66453][HAL_TRACE] beacon_result interface=%s ap_index=%d radio=%d "
+        "ret=%d beacon_set=%d\n",
+        interface->name, vap->vap_index, radio->index, ret, beacon_set);
 
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
     ret = nl80211_send_mlo_msg(msg_mlo);

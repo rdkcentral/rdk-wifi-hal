@@ -645,16 +645,27 @@ INT wifi_hal_hostApGetErouter0Mac(char *out)
 
 INT wifi_hal_send_mgmt_frame_response(int ap_index, int type, int status, int status_code, uint8_t *frame, uint8_t *mac, int len, int rssi)
 {
+    INT ret = RETURN_OK;
+
+    wifi_hal_info_print(
+        "[RDKB-66453][HAL_TRACE] response_request ap_index=%d type=%d status=%d "
+        "status_code=%d len=%d rssi=%d\n",
+        ap_index, type, status, status_code, len, rssi);
+
     if (status == MGMT_FRAME_RESPONSE_STATUS_OK) {
         wifi_send_wpa_supplicant_event(ap_index, frame, len);
     } else if (status == MGMT_FRAME_RESPONSE_STATUS_DENY) {
-        wifi_send_response_failure(ap_index, mac, type, status_code, rssi);
+        ret = wifi_send_response_failure(ap_index, mac, type, status_code, rssi);
     } else {
         wifi_hal_error_print("%s:%d: Undefined status\n", __func__, __LINE__);
-        return RETURN_ERR;
+        ret = RETURN_ERR;
     }
 
-    return RETURN_OK;
+    wifi_hal_info_print(
+        "[RDKB-66453][HAL_TRACE] response_request_complete ap_index=%d type=%d "
+        "status=%d status_code=%d\n",
+        ap_index, type, status, status_code);
+    return ret;
 }
 
 void wifi_hal_deauth(int vap_index, int status, uint8_t *mac)
@@ -3396,8 +3407,17 @@ void wifi_hal_register_frame_hook(wifi_hal_frame_hook_fn_t func)
 {
     wifi_device_frame_hooks_t   *hooks;
     hooks = get_device_frame_hooks();
+    if (func == NULL || hooks->num_hooks >= MAX_APPS) {
+        wifi_hal_error_print(
+            "[RDKB-66453][HAL_TRACE] frame_hook_register_failed valid=%d count=%u\n",
+            func != NULL, hooks->num_hooks);
+        return;
+    }
     hooks->frame_hooks_fn[hooks->num_hooks] = func;
     hooks->num_hooks++;
+    wifi_hal_info_print(
+        "[RDKB-66453][HAL_TRACE] frame_hook_registered count=%u\n",
+        hooks->num_hooks);
 }
 
 /* 802.11v BSS Transition Management APIs */

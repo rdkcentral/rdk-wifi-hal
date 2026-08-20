@@ -129,6 +129,7 @@ static wl_runtime_params_t g_wl_runtime_params[] = {
 static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ctrl, int *mbssid_num_frames);
 #endif
 static bool needs_conf_split_assoc_req(uint vap_index, int hostap_mgt_frame_ctrl, int *assoc_ctrl);
+static int platform_set_per_vap_config_rateset(wifi_radio_index_t index);
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
 static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map);
@@ -1067,6 +1068,15 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         return 0;
     }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    if (platform_set_per_vap_config_rateset(index) != RETURN_OK) {
+        wifi_hal_error_print(
+            "[RDKB-66453][BRCM_TRACE] failed to prepare per-VAP rateset radio=%d\n",
+            index);
+        return RETURN_ERR;
+    }
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
+
     if (radio->oper_param.countryCode != operationParam->countryCode) {
         memset(temp_buff, 0 ,sizeof(temp_buff));
         get_coutry_str_from_code(operationParam->countryCode, temp_buff);
@@ -1841,6 +1851,98 @@ static bool needs_conf_mbssid_num_frames(uint vap_index, int hostap_mgt_frame_ct
     return false;
 }
 #endif // defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || defined(TCXB8_PORT)
+
+static int platform_set_per_vap_config_rateset(wifi_radio_index_t index)
+{
+    char radio_name[IFNAMSIZ];
+    int current = 0;
+    int desired = 1;
+    int was_up = 0;
+    int rc;
+
+    snprintf(radio_name, sizeof(radio_name), "wl%d", index);
+    rc = wl_iovar_getint(radio_name, "per_vap_config_rateset", &current);
+    if (rc < 0) {
+        wifi_hal_info_print(
+            "[RDKB-66453][BRCM_TRACE] per_vap_config_rateset unsupported or unreadable "
+            "radio=%d if=%s rc=%d errno=%d (%s)\n",
+            index, radio_name, rc, errno, strerror(errno));
+        return RETURN_OK;
+    }
+
+    wifi_hal_info_print(
+        "[RDKB-66453][BRCM_TRACE] per_vap_config_rateset read radio=%d if=%s current=%d "
+        "desired=%d\n",
+        index, radio_name, current, desired);
+    if (current == desired) {
+        return RETURN_OK;
+    }
+
+    rc = wl_ioctl(radio_name, WLC_GET_UP, &was_up, sizeof(was_up));
+    if (rc < 0) {
+        wifi_hal_error_print(
+            "[RDKB-66453][BRCM_TRACE] failed to read radio state radio=%d if=%s "
+            "rc=%d errno=%d (%s)\n",
+            index, radio_name, rc, errno, strerror(errno));
+        return RETURN_ERR;
+    }
+
+    if (was_up) {
+        wifi_hal_info_print(
+            "[RDKB-66453][BRCM_TRACE] taking radio down before per_vap_config_rateset "
+            "radio=%d if=%s\n",
+            index, radio_name);
+        rc = platform_radio_up(index, false);
+        if (rc < 0) {
+            wifi_hal_error_print(
+                "[RDKB-66453][BRCM_TRACE] failed to take radio down radio=%d if=%s "
+                "rc=%d errno=%d (%s)\n",
+                index, radio_name, rc, errno, strerror(errno));
+            return RETURN_ERR;
+        }
+    }
+
+    rc = wl_iovar_set(radio_name, "per_vap_config_rateset", &desired, sizeof(desired));
+    if (rc < 0) {
+        wifi_hal_error_print(
+            "[RDKB-66453][BRCM_TRACE] failed to set per_vap_config_rateset radio=%d "
+            "if=%s desired=%d rc=%d errno=%d (%s)\n",
+            index, radio_name, desired, rc, errno, strerror(errno));
+        if (was_up) {
+            (void)platform_radio_up(index, true);
+        }
+        return RETURN_ERR;
+    }
+
+    if (was_up) {
+        rc = platform_radio_up(index, true);
+        if (rc < 0) {
+            wifi_hal_error_print(
+                "[RDKB-66453][BRCM_TRACE] failed to restore radio up radio=%d if=%s "
+                "rc=%d errno=%d (%s)\n",
+                index, radio_name, rc, errno, strerror(errno));
+            return RETURN_ERR;
+        }
+    }
+
+    rc = wl_iovar_getint(radio_name, "per_vap_config_rateset", &current);
+    wifi_hal_info_print(
+        "[RDKB-66453][BRCM_TRACE] per_vap_config_rateset verify radio=%d if=%s "
+        "value=%d rc=%d after_up=%d\n",
+        index, radio_name, current, rc, was_up);
+    if (rc < 0 || current != desired) {
+        wifi_hal_error_print(
+            "[RDKB-66453][BRCM_TRACE] per_vap_config_rateset verification failed "
+            "radio=%d if=%s expected=%d actual=%d rc=%d after_up=%d\n",
+            index, radio_name, desired, current, rc, was_up);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print(
+        "[RDKB-66453][BRCM_TRACE] per_vap_config_rateset applied radio=%d if=%s value=%d\n",
+        index, radio_name, current);
+    return RETURN_OK;
+}
 
 static int platform_set_hostap_ctrl(wifi_radio_info_t *radio, uint vap_index, int enable)
 {
