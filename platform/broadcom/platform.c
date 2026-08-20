@@ -40,8 +40,9 @@
 #endif // defined (ENABLED_EDPD)
 
 #include <sys/stat.h>
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
-    defined(RDKB_ONE_WIFI_PROD) || (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SKYSR213_PORT) || \
+    defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) ||                                        \
+    (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 #include <fcntl.h>
 #include <rdk_nl80211_hal.h>
 #include <semaphore.h>
@@ -925,9 +926,14 @@ static int platform_vap_enable_update(wifi_vap_info_map_t *vap_map, int vap_maps
                         radio_index, vap_index);
                     return -2;
                 }
+                interface = get_interface_by_vap_index(vap_index);
+                if (interface == NULL) {
+                    wifi_hal_error_print("### %s: vap_idx=%d interface is NULL, skip ###\n", __func__, vap_index);
+                    continue;
+                }
                 radio_enabled = platform_is_radio_enabled(radio_index);
                 vap_enabled = platform_is_vap_enabled(&vap_map[i].vap_array[j]);
-                vap_enabled = vap_enabled && radio_enabled;
+                vap_enabled = vap_enabled && radio_enabled && interface->bss_started;
                 _vap_enable[vap_index] = vap_enabled;
                 update_mld_enable(radio_index, vap_index, vap_enabled);
             } /*for vap_map[radio_index].vap_array[vap_index]*/
@@ -944,7 +950,7 @@ static int platform_vap_enable_update(wifi_vap_info_map_t *vap_map, int vap_maps
                 if (interface->vap_info.radio_index == target_radio_index) {
                     vap_enabled = platform_is_vap_enabled(&interface->vap_info);
                     radio_enabled = target_oper_param->enable;
-                    vap_enabled = vap_enabled && radio_enabled;
+                    vap_enabled = vap_enabled && radio_enabled && interface->bss_started;
                     _vap_enable[i] = vap_enabled;
                     update_mld_enable(target_radio_index, i, vap_enabled);
                 }
@@ -3358,7 +3364,8 @@ int platform_get_vendor_oui(char *vendor_oui, int vendor_oui_len)
 }
 #endif /*_SR213_PRODUCT_REQ_ */
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || \
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SKYSR213_PORT) || \
+    defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) ||                                        \
     (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 
 typedef struct sta_list {

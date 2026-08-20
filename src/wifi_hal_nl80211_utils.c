@@ -48,6 +48,8 @@ static wifi_interface_name_idex_map_t *interface_index_map = NULL;
 #define MAX_CLIENTS 3
 #else
 #define INTERFACE_MAP_JSON "/nvram/InterfaceMap.json"
+#define TMP_INTERFACE_MAP_JSON "/tmp/InterfaceMap.json"
+
 static unsigned int interface_index_map_size;
 
 static wifi_interface_name_idex_map_t static_interface_index_map[] = {
@@ -3301,7 +3303,7 @@ int convert_enum_beaconrate_to_int(wifi_bitrate_t rates)
     switch (rates) {
         case WIFI_BITRATE_1MBPS: return 1;
         case WIFI_BITRATE_2MBPS: return 2;
-        case WIFI_BITRATE_5_5MBPS: return 5.5;
+        case WIFI_BITRATE_5_5MBPS: return 5;
         case WIFI_BITRATE_11MBPS: return 11;
         case WIFI_BITRATE_6MBPS: return 6;
         case WIFI_BITRATE_9MBPS: return 9;
@@ -5642,16 +5644,21 @@ static inline int json_parse_interface_map(cJSON *json)
 
 static inline int init_json_interface_map(void)
 {
-    FILE *fp;
+    FILE *fp = NULL;
     cJSON *json;
     size_t len;
     int ret;
 
-    fp = fopen(INTERFACE_MAP_JSON, "r");
+    fp = fopen(TMP_INTERFACE_MAP_JSON, "r");
+
     if (fp == NULL) {
-        wifi_hal_error_print("%s:%d: Failed (err=%d, msg=%s) to opening interface map file:%s\n",
-            __func__, __LINE__, errno, strerror(errno), INTERFACE_MAP_JSON);
-        return -1;
+        fp = fopen(INTERFACE_MAP_JSON, "r");
+        if (fp == NULL) {
+            wifi_hal_error_print(
+                "%s:%d: Failed (err=%d, msg=%s) to opening interface map file:%s\n", __func__,
+                __LINE__, errno, strerror(errno), INTERFACE_MAP_JSON);
+            return -1;
+        }
     }
 
     fseek(fp, 0, SEEK_END);
