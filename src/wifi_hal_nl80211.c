@@ -4824,6 +4824,15 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
             goto skip;
         }
 
+        if (tb_freq[NL80211_FREQUENCY_ATTR_DISABLED])
+        {
+            chan->flag |= HOSTAPD_CHAN_DISABLED;
+        }
+        else
+        {
+            chan->flag &= ~HOSTAPD_CHAN_DISABLED;
+        }
+
         if (tb_freq[NL80211_FREQUENCY_ATTR_NO_IR]) {
             chan->flag |= HOSTAPD_CHAN_NO_IR;
         }
@@ -8162,7 +8171,6 @@ static int nl80211_fill_chandef(struct nl_msg *msg, wifi_radio_info_t *radio, wi
     nla_put_u32(msg, NL80211_ATTR_CENTER_FREQ1, freq1);
     nla_put_u32(msg, NL80211_ATTR_CENTER_FREQ2, 0);
     nla_put_u32(msg, NL80211_ATTR_CHANNEL_WIDTH, width);
-    nla_put_flag(msg, NL80211_FREQUENCY_ATTR_DISABLED, false);
 
     wifi_hal_dbg_print("%s:%d Setting channel freq:%d freq1:%d width:%d on interface:%d\n", __func__, __LINE__, freq, freq1, width, interface->index);
     return 0;
