@@ -792,7 +792,8 @@ void platform_mld_update(wifi_vap_info_t *vap)
 }
 
 #if 0
-/* DISABLED: Logic moved to nl80211_drv_mlo_msg() called from start_bss(). */
+/* DISABLED: Logic moved to nl80211_drv_mlo_msg() called from start_bss(). 
+ * Remove post Oct 2026 if revert wont happen. */
 /*
  * Send SET_MLD subcommand with RDK_VENDOR_ATTR_MLD_CONFIG_APPLY
  */
