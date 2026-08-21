@@ -1398,4 +1398,14 @@ static inline int mxl_clamp(int val, int min_val, int max_val)
 int platform_get_nasta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi_na_sta_info_t *sta_info);
 #endif /* MXL_WIFI */
 
+int reload_vap_configuration(wifi_interface_info_t *interface);
+int reload_interface(wifi_interface_info_t *interface);
+int restart_interface(wifi_interface_info_t *interface);
+#if defined(CONFIG_IEEE80211BE)
+bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd);
+#if defined(CONFIG_GENERIC_MLO)
+int teardown_mlo_vap(wifi_interface_info_t *interface);
+int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_config);
+#endif /* CONFIG_GENERIC_MLO */
+#endif /* CONFIG_IEEE80211BE */
 #endif // WIFI_HAL_PRIV_H
