@@ -40,9 +40,10 @@
 #endif // defined (ENABLED_EDPD)
 
 #include <sys/stat.h>
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SKYSR213_PORT) || \
-    defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) ||                                        \
-    (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
+    defined(RDKB_ONE_WIFI_PROD) ||                                                              \
+    ((defined(SCXER10_PORT) || defined(SKYSR213_PORT)) &&                                       \
+        (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 #include <fcntl.h>
 #include <rdk_nl80211_hal.h>
 #include <semaphore.h>
@@ -3364,9 +3365,10 @@ int platform_get_vendor_oui(char *vendor_oui, int vendor_oui_len)
 }
 #endif /*_SR213_PRODUCT_REQ_ */
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SKYSR213_PORT) || \
-    defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) ||                                        \
-    (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
+    defined(RDKB_ONE_WIFI_PROD) ||                                                              \
+    ((defined(SCXER10_PORT) || defined(SKYSR213_PORT)) &&                                       \
+        (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 
 typedef struct sta_list {
     mac_address_t *macs;
