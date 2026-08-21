@@ -2218,6 +2218,32 @@ wifi_radio_info_t *get_radio_by_rdk_index(wifi_radio_index_t index)
     return NULL;
 }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface)
+{
+    for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+        wifi_interface_info_t *interface_iter = NULL;
+        wifi_radio_info_t *radio_iter;
+
+        if (skip_radio_iface != NULL && radio_index == skip_radio_iface->vap_info.radio_index) {
+            continue;
+        }
+        radio_iter = get_radio_by_rdk_index(radio_index);
+        if (radio_iter == NULL) {
+            continue;
+        }
+        hash_map_foreach(radio_iter->interface_map, interface_iter) {
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap ||
+                !interface_iter->vap_info.u.bss_info.enabled ||
+                !interface_iter->vap_info.u.bss_info.hostap_mgt_frame_ctrl ||
+                !interface_iter->u.ap.hapd.iface) {
+                continue;
+            }
+            ieee802_11_update_beacons(interface_iter->u.ap.hapd.iface);
+        }
+    }
+}
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index)
 {
@@ -5951,3 +5977,22 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac)
 
     return 0;
 }
+
+#if defined(CONFIG_IEEE80211BE)
+bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
+{
+    struct hostapd_data *link_bss = NULL;
+
+    if (hapd->mld == NULL) {
+        return false;
+    }
+
+    dl_list_for_each(link_bss, &hapd->mld->links, struct hostapd_data, link) {
+        if (link_bss == hapd) {
+            return true;
+        }
+    }
+
+    return false;
+}
+#endif /* CONFIG_IEEE80211BE */
