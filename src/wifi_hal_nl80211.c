@@ -7949,17 +7949,18 @@ int nl80211_init_radio_info()
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = &g_wifi_hal.radio_info[i];
 
+        if (radio->radio_presence == false) {
+            wifi_hal_error_print("%s:%d: Skip the Radio %d .This is sleeping in ECO mode \n",
+                __func__, __LINE__, radio->index);
+            continue;
+        }
+
         radio->capab.numSupportedFreqBand = 0;
         radio->capab.cipherSupported = 0;
         memset(radio->capab.mode, 0, sizeof(radio->capab.mode));
         memset(radio->capab.band, 0, sizeof(radio->capab.band));
         memset(radio->capab.channel_list, 0, sizeof(radio->capab.channel_list));
         memset((unsigned char *)radio->hw_modes, 0, NUM_NL80211_BANDS*sizeof(struct hostapd_hw_modes));
-
-        if (radio->radio_presence == false) {
-           wifi_hal_error_print("%s:%d: Skip the Radio %d .This is sleeping in ECO mode \n", __func__, __LINE__, radio->index);
-           continue;
-        }
 
         // get information about phy
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
