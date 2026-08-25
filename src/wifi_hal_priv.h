@@ -1292,6 +1292,10 @@ void wifi_get_mld_eml_cap(const u16 mld_cap, const u16 eml_cap, wifi_multi_link_
 #endif
 #endif /* CONFIG_IEEE80211BE */
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface);
+#endif
+
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio);
 void wifi_hal_configure_mbssid(wifi_radio_info_t *radio);
 
@@ -1549,8 +1553,11 @@ int platform_get_nasta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi
 int reload_vap_configuration(wifi_interface_info_t *interface);
 int reload_interface(wifi_interface_info_t *interface);
 int restart_interface(wifi_interface_info_t *interface);
-#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+#if defined(CONFIG_IEEE80211BE)
+bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd);
+#if defined(CONFIG_GENERIC_MLO)
 int teardown_mlo_vap(wifi_interface_info_t *interface);
 int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_config);
-#endif
+#endif /* CONFIG_GENERIC_MLO */
+#endif /* CONFIG_IEEE80211BE */
 #endif // WIFI_HAL_PRIV_H

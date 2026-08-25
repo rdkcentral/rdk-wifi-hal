@@ -1151,6 +1151,9 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
             if (interface->beacon_set) {
                 ieee802_11_set_beacon(&interface->u.ap.hapd);
             }
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+            wifi_hal_update_beacons(interface);
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
             pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         }
     }
