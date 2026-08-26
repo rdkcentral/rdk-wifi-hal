@@ -44,7 +44,6 @@
     defined(RDKB_ONE_WIFI_PROD) ||                                                              \
     ((defined(SCXER10_PORT) || defined(SKYSR213_PORT)) &&                                       \
         (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
-#include <fcntl.h>
 #include <rdk_nl80211_hal.h>
 #include <sys/mman.h>
 #include <fcntl.h>
