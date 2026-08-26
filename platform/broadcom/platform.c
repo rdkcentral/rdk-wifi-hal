@@ -788,6 +788,9 @@ void platform_mld_update(wifi_vap_info_t *vap)
     }
 }
 
+#if 0
+/* DISABLED: Logic moved to nl80211_drv_mlo_msg() called from start_bss(). 
+ * Remove post Oct 2026 if revert wont happen. */
 /*
  * Send SET_MLD subcommand with RDK_VENDOR_ATTR_MLD_CONFIG_APPLY
  */
@@ -828,6 +831,7 @@ int nl80211_send_mld_apply(wifi_interface_info_t *interface)
     wifi_hal_info_print("### %s: ret=%d ###\n", __func__, ret);
     return ret;
 }
+#endif
 
 /*
  * Send SET_MLD subcommand with RDK_VENDOR_ATTR_MLD_ENABLE = false
@@ -923,9 +927,14 @@ static int platform_vap_enable_update(wifi_vap_info_map_t *vap_map, int vap_maps
                         radio_index, vap_index);
                     return -2;
                 }
+                interface = get_interface_by_vap_index(vap_index);
+                if (interface == NULL) {
+                    wifi_hal_error_print("### %s: vap_idx=%d interface is NULL, skip ###\n", __func__, vap_index);
+                    continue;
+                }
                 radio_enabled = platform_is_radio_enabled(radio_index);
                 vap_enabled = platform_is_vap_enabled(&vap_map[i].vap_array[j]);
-                vap_enabled = vap_enabled && radio_enabled;
+                vap_enabled = vap_enabled && radio_enabled && interface->bss_started;
                 _vap_enable[vap_index] = vap_enabled;
                 update_mld_enable(radio_index, vap_index, vap_enabled);
             } /*for vap_map[radio_index].vap_array[vap_index]*/
@@ -942,7 +951,7 @@ static int platform_vap_enable_update(wifi_vap_info_map_t *vap_map, int vap_maps
                 if (interface->vap_info.radio_index == target_radio_index) {
                     vap_enabled = platform_is_vap_enabled(&interface->vap_info);
                     radio_enabled = target_oper_param->enable;
-                    vap_enabled = vap_enabled && radio_enabled;
+                    vap_enabled = vap_enabled && radio_enabled && interface->bss_started;
                     _vap_enable[i] = vap_enabled;
                     update_mld_enable(target_radio_index, i, vap_enabled);
                 }
@@ -1383,6 +1392,13 @@ int platform_post_init(wifi_vap_info_map_t *vap_map)
 #if defined(MLO_ENAB)
     platform_mlo_post_init();
     platform_vap_enable_update(vap_map, g_wifi_hal.num_radios, -1, NULL); /* Bring all VAPs up, including MLDs */
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    /* All links are up now; regenerate every VAP's beacon so RNR and other management frames are
+     * complete. */
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    wifi_hal_update_beacons(NULL);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+#endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
     _platform_init_done = TRUE;
 #endif /* MLO_ENAB */
 
@@ -2198,7 +2214,7 @@ static void platform_snapshot_mld_units(wifi_vap_info_map_t *map, u8 old_mld_uni
 }
 #endif /* MLO_ENAB */
 
-static void platform_rnr_update(wifi_radio_index_t r_index, wifi_vap_info_map_t *map,
+static void platform_beacon_update(wifi_radio_index_t r_index, wifi_vap_info_map_t *map,
     const u8 old_mld_unit[MAX_NUM_VAP_PER_RADIO])
 {
     wifi_radio_info_t *radio = get_radio_by_rdk_index(r_index);
@@ -2376,20 +2392,9 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
     memset(param_name, 0 ,sizeof(param_name));
     memset(interface_name, 0, sizeof(interface_name));
 
-#if defined(MLO_ENAB)
-    if (_platform_init_done == FALSE) {
-        if (is_mlo_radio(r_index))
-            mlo_init_map |= (1 << r_index);
-        if (mlo_init_map == mlo_radio_map) {
-            /* TODO Normally apply should be called when all VAPS are initialized */
-            nl80211_send_mld_apply(NULL);
-        }
-    }
-
-#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+#if defined(MLO_ENAB) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     platform_snapshot_mld_units(map, old_mld_unit);
-#endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
-#endif /* MLO_ENAB */
+#endif /* MLO_ENAB && FEATURE_HOSTAP_MGMT_FRAME_CTRL */
     for (index = 0; index < map->num_vaps; index++) {
 
         radio = get_radio_by_rdk_index(r_index);
@@ -2683,19 +2688,17 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
     }
 #endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
 
-    if (_platform_init_done)
+    if (_platform_init_done) {
         platform_vap_enable_update(map, 1, -1, NULL); /* Bring all VAPs up, including MLDs */
-#endif /* MLO_ENAB */
-
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
-    /* Update beacon info of neighboring APs*/
-#if defined(MLO_ENAB)
-    platform_rnr_update(r_index, map, old_mld_unit);
-#else
-    platform_rnr_update(r_index, map, NULL);
-#endif /* MLO_ENAB */
+        platform_beacon_update(r_index, map, old_mld_unit);
 #endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
-
+    }
+#else /* !MLO_ENAB */
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    platform_beacon_update(r_index, map, NULL);
+#endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
+#endif /* MLO_ENAB */
     return 0;
 }
 
@@ -4887,7 +4890,6 @@ int platform_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
 #ifdef CONFIG_IEEE80211BE
 
 static struct hostapd_mld g_mlo_mld[MLD_UNIT_COUNT] = {0};
-extern void hostapd_bss_link_deinit(struct hostapd_data *hapd);
 
 /*
  * Get MLD entry index.
@@ -4975,7 +4977,6 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
         (void)to_mac_str(hapd->mld->mld_addr, mld_addr);
     }
 
-    apply = (_platform_init_done) ? TRUE : FALSE;
     mld_enable = (params->mld_ap && get_mld_unit(conf) < MLD_UNIT_COUNT) ? 1 : 0;
 
     /*
@@ -4991,8 +4992,8 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
     * MLD that the driver would reject (-2) on apply. If any group is in that transient one-link state
     * defer the apply until the group is complete (>= 2 links) or fully dissolved (0 links).
     */
-    if (apply && mlo_has_single_link_group()) {
-        apply = FALSE;
+    apply = mlo_has_single_link_group() ? FALSE : TRUE;
+    if (!apply) {
         wifi_hal_info_print("%s:%d iface:%s link_id:%u - deferring apply: an MLD group has only "
             "one link, waiting for it to complete (>=2 links) or dissolve\n",
             __func__, __LINE__, conf->iface, params->mld_link_id);
@@ -5235,75 +5236,16 @@ static struct hostapd_mld *get_mlo_mld(unsigned char mld_unit, char *mac)
     return &g_mlo_mld[mld_unit];
 }
 
-
-/**
- * @brief Add MLO link and reorganize links to be main link (link_id 0) first_bss
- *
- * @param hapd - pointer to hostapd per-BSS data structure
- * @return int - RETURN_OK upon successful, RETURN_ERR upon error
- */
-static void mlo_add_link(struct hostapd_data *hapd)
-{
-    unsigned char is_first_bss;
-
-    if (hapd->mld_link_id == 0 && hapd->mld->num_links > 0) {
-        struct hostapd_data *old_first;
-
-        old_first = hostapd_mld_get_first_bss(hapd);
-        deinit_bss(old_first);
-    }
-
-    hostapd_mld_add_link(hapd);
-
-    is_first_bss = hostapd_mld_is_first_bss(hapd);
-    wifi_hal_info_print("%s:%d: Adding mld link: %s link_id:%d, is_first_bss %d\n",
-        __func__, __LINE__, hapd->mld->name, hapd->mld_link_id, is_first_bss);
-    if (hapd->mld_link_id == 0 && !is_first_bss) {
-        int i;
-        int cache_size = 0;
-        struct hostapd_data *hapd_cache[MAX_NUM_RADIOS] = { 0 };
-
-        wifi_hal_info_print("%s:%d: hapd->mld_link_id(0) is not first, Going to reorganize links\n",
-            __func__, __LINE__);
-
-        for (i = 0; i < MAX_NUM_RADIOS; i++) {
-            /* loop until current hapd will be first bss */
-            if (!hostapd_mld_is_first_bss(hapd)) {
-                hapd_cache[i] = hostapd_mld_get_first_bss(hapd);
-                hostapd_mld_remove_link(hapd_cache[i]);
-                cache_size++;
-                wifi_hal_dbg_print("Removed link mld_link_id %d - i: %d\n",
-                    hapd_cache[i]->mld_link_id, i);
-            } else {
-                break;
-            }
-        }
-        if (cache_size > 0) {
-            for (int i = 0; i < cache_size; i++) {
-                hostapd_mld_add_link(hapd_cache[i]);
-                wifi_hal_dbg_print("Link added back: mld_link_id %d idx i:%d \n",
-                    hapd_cache[i]->mld_link_id, i);
-            }
-        }
-    }
-}
-
 static void mlo_remove_link(struct hostapd_data *hapd)
 {
-    wifi_hal_info_print("%s:%d - iface:%s removing VAP from MLD group - mld links num: %d\n",
-        __func__, __LINE__, hapd->conf->iface, hapd->mld->num_links);
-    if (hapd->mld && hapd->mld->num_links > 1) {
-        if (hostapd_mld_is_first_bss(hapd)) {
-            /* Leave the shared recources for rest of the links staying in the MLO group */
-            hostapd_mld_remove_link(hapd);
-            hostapd_mld_add_link(hapd);
-        }
-    }
-    /* We need to detatch/release shared rources before changing mld configuration of BSS.
-     * For non first bss are shared resources just set to NULL for first BSS free + set NULL*/
-    deinit_bss(hapd);
+    struct hostapd_mld *mld = hapd->mld;
 
-    hostapd_bss_link_deinit(hapd);
+    wifi_hal_info_print("%s:%d - iface:%s removing VAP from MLD group - num_links:%d "
+        "is_first_bss:%d link_id:%d\n", __func__, __LINE__, hapd->conf->iface,
+        mld ? mld->num_links : 0, hostapd_mld_is_first_bss(hapd), hapd->mld_link_id);
+
+    /* deinit_bss removes link from MLD group and cleans up data gracefully */
+    deinit_bss(hapd);
 }
 
 int update_hostap_mlo(wifi_interface_info_t *interface)
@@ -5316,7 +5258,6 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     struct hostapd_mld *new_mld = NULL;
     wifi_mld_common_info_t *mld_conf;
     u8 mld_ap;
-    u8 old_mld_link_id;
     int nvram_changed = 0;
     bool is_vap_private = false;
 
@@ -5348,7 +5289,6 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
             mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
     }
 
-    old_mld_link_id = hapd->mld_link_id;
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
     mld_ap = vap->u.bss_info.enabled && radio_enabled && (!conf->disable_11be && mld_conf->mld_enable &&
         (hapd->mld_link_id < MAX_NUM_MLD_LINKS));
@@ -5373,16 +5313,14 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
             * will be problems with PMKID for link AP
             */
         conf->okc = 1;
-        if (hapd->mld != new_mld || old_mld_link_id != hapd->mld_link_id) {
+
+        if (hapd->mld != new_mld) {
+            wifi_hal_info_print("%s:%d: iface:%s mld group transition to mld_id:%u link_id:%u vap_name:%s\n",
+                __func__, __LINE__, conf->iface, mld_conf->mld_id, hapd->mld_link_id, vap->vap_name);
             if (hapd->mld)
                 mlo_remove_link(hapd);
             hapd->mld = new_mld;
-            mlo_add_link(hapd);
         }
-
-        wifi_hal_dbg_print("%s:%d: Setup of first (%d) link (%u) BSS of MLO %s for VAP %s\n",
-            __func__, __LINE__, hostapd_mld_is_first_bss(hapd), hapd->mld_link_id,
-            hapd->mld->name, vap->vap_name);
     } else {
         if (hapd->mld) {
             mlo_remove_link(hapd);
