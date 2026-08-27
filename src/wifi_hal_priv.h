@@ -36,6 +36,13 @@
 #include "crypto/crypto.h"
 #include "crypto/tls.h"
 #include "hostapd.h"
+/* hostap-2.11 pulls in ucode (hostapd.h -> ap/ucode.h -> utils/ucode.h ->
+ * ucode/vm.h -> ucode/util.h), which leaks a bare `unused` macro. OpenSSL's
+ * safestack.h (below, via wifi_hal_rdk_framework.h -> <openssl/sha.h>) expands
+ * ossl_unused -> __attribute__((unused)); the rescanned `unused` token then
+ * gets re-expanded again, producing a parse error. Undef immediately --
+ * nothing downstream needs ucode's macro (verified). */
+#undef unused
 #include "accounting.h"
 #include "ieee802_1x.h"
 #include "ieee802_11.h"
