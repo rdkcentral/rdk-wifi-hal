@@ -40,9 +40,10 @@
 #endif // defined (ENABLED_EDPD)
 
 #include <sys/stat.h>
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SKYSR213_PORT) || \
-    defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) ||                                        \
-    (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
+    defined(RDKB_ONE_WIFI_PROD) ||                                                              \
+    ((defined(SCXER10_PORT) || defined(SKYSR213_PORT)) &&                                       \
+        (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 #include <fcntl.h>
 #include <rdk_nl80211_hal.h>
 #include <semaphore.h>
@@ -116,9 +117,6 @@ static void platform_set_eht(wifi_radio_index_t index, bool enable);
 #define RADIO_INDEX_6G 2
 
 #ifdef CONFIG_IEEE80211BE
-#define MLD_UNIT_COUNT 8
-#define UNDEFINED_MLD_ID (u8)-1
-#define UNDEFINED_MLO_LINK_ID (u8)NL80211_DRV_LINK_ID_NA
 #define USER_NVRAM_CHANGED      0x01
 #define KERNEL_NVRAM_CHANGED    0x02
 #endif
@@ -3378,9 +3376,10 @@ int platform_get_vendor_oui(char *vendor_oui, int vendor_oui_len)
 }
 #endif /*_SR213_PRODUCT_REQ_ */
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SKYSR213_PORT) || \
-    defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) ||                                        \
-    (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
+    defined(RDKB_ONE_WIFI_PROD) ||                                                              \
+    ((defined(SCXER10_PORT) || defined(SKYSR213_PORT)) &&                                       \
+        (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 
 typedef struct sta_list {
     mac_address_t *macs;
@@ -3578,6 +3577,7 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
         [RDK_VENDOR_ATTR_STA_INFO_TX_RATE_MAX] = { .type = NLA_U32 },
         [RDK_VENDOR_ATTR_STA_INFO_RX_RATE_MAX] = { .type = NLA_U32 },
         [RDK_VENDOR_ATTR_STA_INFO_SPATIAL_STREAM_NUM] = { .type = NLA_U8 },
+        [RDK_VENDOR_ATTR_STA_INFO_ACTIVE_SPATIAL_STREAM_NUM] = { .type = NLA_U8 },
         [RDK_VENDOR_ATTR_STA_INFO_TX_FRAMES] = {.type = NLA_U64 },
         [RDK_VENDOR_ATTR_STA_INFO_RX_RETRIES] = { .type = NLA_U64 },
         [RDK_VENDOR_ATTR_STA_INFO_RX_ERRORS] = {. type = NLA_U64 },
@@ -3746,8 +3746,13 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
 
     if (tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_SPATIAL_STREAM_NUM]) {
-        stats->cli_activeNumSpatialStreams =
+        stats->cli_capableNumSpatialStreams =
             nla_get_u8(tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_SPATIAL_STREAM_NUM]);
+    }
+
+    if (tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_ACTIVE_SPATIAL_STREAM_NUM]) {
+        stats->cli_activeNumSpatialStreams =
+            nla_get_u8(tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_ACTIVE_SPATIAL_STREAM_NUM]);
     }
 
     if (tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_TX_FRAMES]) {
@@ -3788,9 +3793,9 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
 
 
-    wifi_hal_stats_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu\n", __func__, __LINE__, 
+    wifi_hal_stats_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu activeNumSpatialStreams: %u cli_capableNumSpatialStreams: %u\n", __func__, __LINE__, 
             stats->cli_DataFramesSentAck, stats->cli_DataFramesSentNoAck,
-           stats->cli_PacketsSent, stats->cli_BytesSent);
+           stats->cli_PacketsSent, stats->cli_BytesSent, stats->cli_activeNumSpatialStreams, stats->cli_capableNumSpatialStreams);
 
     /*
      * Assume the default packet size for wifi blaster is 1470
@@ -4975,7 +4980,7 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
      * NOTE: According to the new updates of the brcm contract of sending the message
      * `RDK_VENDOR_NL80211_SUBCMD_SET_MLD` we can't send this message for config -1 (`link_id=-1`).
      */
-    if (!params->mld_ap && (u8)hapd->mld_link_id == UNDEFINED_MLO_LINK_ID) {
+    if (!params->mld_ap && (u8)hapd->mld_link_id == UNDEFINED_MLD_LINK_ID) {
         wifi_hal_dbg_print("%s:%d skip Non-MLO iface:%s:\n", __func__, __LINE__, conf->iface);
         return 0;
     }
@@ -4986,7 +4991,7 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
             wifi_hal_error_print("%s:%d: Invalid mld_id:%u\n", __func__, __LINE__, conf->mld_id);
             return -1;
         }
-        if ((u8)params->mld_link_id != UNDEFINED_MLO_LINK_ID &&
+        if ((u8)params->mld_link_id != UNDEFINED_MLD_LINK_ID &&
             params->mld_link_id >= RDK_VENDOR_MAX_NUM_MLD_LINKS) {
             wifi_hal_error_print("%s:%d: Invalid mld_link_id:%u\n", __func__, __LINE__,
                 params->mld_link_id);
