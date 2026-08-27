@@ -106,6 +106,15 @@ jobs:
         # Steps for ucode installation required for hostapd compilation
         git clone https://github.com/jow-/ucode.git ucode
         cd ucode
+        # Pin ucode: PR#398 (LibFFI module) merged to master 2026-08-27 and broke the bpi
+        # build (ucode's `unused` macro collides with OpenSSL's ossl_unused in HAL TUs).
+        # 655ca6d = a0ca7b1^1 = last master BEFORE the FFI merge = last known-good state.
+        # The colliding `unused` macro was added by abb80c6 ON the PR#398 branch, so any
+        # commit on that branch -- incl. 19ffa8a -- still ships the poisoned util.h. Use
+        # first-parent (a0ca7b1^1), NOT plain `git log`, when moving this pin.
+        # NB: the wifi_hal_priv.h `#undef unused` on this branch is the complementary,
+        # version-independent guard; the pin also freezes ucode against future churn.
+        git checkout 655ca6d
         mkdir build && cd build
         cmake -DUBUS_SUPPORT=OFF -DUCI_SUPPORT=OFF -DULOOP_SUPPORT=OFF ..
         make -j"$(nproc)"
