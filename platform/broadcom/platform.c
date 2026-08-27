@@ -1066,11 +1066,19 @@ static int enable_spect_management(int radio_index, int enable)
         return -1;
     }
 
+#if defined(MLO_ENAB)
+    if (platform_radio_up(radio_index, TRUE) < 0) {
+        wifi_hal_error_print("%s:%d failed to set radio up for %s, err: %d (%s)\n", __func__,
+            __LINE__, radio_dev, errno, strerror(errno));
+        return -1;
+    }
+#else
     if (wl_ioctl(radio_dev, WLC_UP, NULL, 0) < 0) {
         wifi_hal_error_print("%s:%d failed to set radio up for %s, err: %d (%s)\n", __func__,
             __LINE__, radio_dev, errno, strerror(errno));
         return -1;
     }
+#endif /* MLO_ENAB */
 #endif // TCXB7_PORT || TCXB8_PORT
     return 0;
 }
@@ -1095,11 +1103,19 @@ static int disable_dfs_auto_channel_change(int radio_index, int disable)
         return -1;
     }
 
+#if defined(MLO_ENAB)
+    if (platform_radio_up(radio_index, TRUE) < 0) {
+        wifi_hal_error_print("%s:%d failed to set radio up for %s, err: %d (%s)\n", __func__,
+            __LINE__, radio_dev, errno, strerror(errno));
+        return -1;
+    }
+#else
     if (wl_ioctl(radio_dev, WLC_UP, NULL, 0) < 0) {
         wifi_hal_error_print("%s:%d failed to set radio up for %s, err: %d (%s)\n", __func__,
             __LINE__, radio_dev, errno, strerror(errno));
         return -1;
     }
+#endif /* MLO_ENAB */
 #endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
     return 0;
 }
