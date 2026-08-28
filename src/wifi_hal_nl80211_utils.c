@@ -5979,9 +5979,6 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac)
     return 0;
 }
 
-<<<<<<< HEAD
-#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
-=======
 int bw_enum_to_mhz(wifi_channelBandwidth_t chwid)
 {
     switch (chwid) {
@@ -6219,8 +6216,7 @@ int reload_vap_configuration(wifi_interface_info_t *interface)
     return 0;
 }
 
-#if defined(CONFIG_IEEE80211BE)
->>>>>>> cdc049a (XB10-2899: Fix incorrect/absent RNR / AP channel report IE in beacons (#811))
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
 bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 {
     struct hostapd_data *link_bss = NULL;
@@ -6237,10 +6233,7 @@ bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 
     return false;
 }
-<<<<<<< HEAD
 #endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
-=======
-#endif /* CONFIG_IEEE80211BE */
 
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
 static struct hostapd_mld *find_mld(struct wifi_interface_info_t *interface)
@@ -6603,4 +6596,3 @@ int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_con
     return 0;
 }
 #endif /* CONFIG_IEEE80211BE && CONFIG_GENERIC_MLO */
->>>>>>> cdc049a (XB10-2899: Fix incorrect/absent RNR / AP channel report IE in beacons (#811))
