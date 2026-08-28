@@ -1560,11 +1560,11 @@ int platform_get_nasta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi
 int reload_vap_configuration(wifi_interface_info_t *interface);
 int reload_interface(wifi_interface_info_t *interface);
 int restart_interface(wifi_interface_info_t *interface);
-#if defined(CONFIG_IEEE80211BE)
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
 bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd);
 #if defined(CONFIG_GENERIC_MLO)
 int teardown_mlo_vap(wifi_interface_info_t *interface);
 int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_config);
 #endif /* CONFIG_GENERIC_MLO */
-#endif /* CONFIG_IEEE80211BE */
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
 #endif // WIFI_HAL_PRIV_H

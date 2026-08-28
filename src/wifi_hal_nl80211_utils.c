@@ -6450,7 +6450,7 @@ int reload_vap_configuration(wifi_interface_info_t *interface)
     return 0;
 }
 
-#if defined(CONFIG_IEEE80211BE)
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
 bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 {
     struct hostapd_data *link_bss = NULL;
@@ -6467,7 +6467,7 @@ bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 
     return false;
 }
-#endif /* CONFIG_IEEE80211BE */
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
 
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
 static struct hostapd_mld *find_mld(struct wifi_interface_info_t *interface)
