@@ -5978,7 +5978,7 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac)
     return 0;
 }
 
-#if defined(CONFIG_IEEE80211BE)
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
 bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 {
     struct hostapd_data *link_bss = NULL;
@@ -5995,4 +5995,4 @@ bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 
     return false;
 }
-#endif /* CONFIG_IEEE80211BE */
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
