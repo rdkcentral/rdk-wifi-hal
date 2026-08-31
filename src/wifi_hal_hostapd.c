@@ -3343,13 +3343,13 @@ void deinit_bss(struct hostapd_data *hapd)
 {
     hostapd_bss_deinit_no_free(hapd);
 #ifndef CONFIG_GENERIC_MLO
-#ifdef CONFIG_IEEE80211BE
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
     wifi_hal_dbg_print("%s:%d: entry iface:%s started:%d is_first_bss:%d\n",
         __func__, __LINE__, hapd->conf->iface, hapd->started, hostapd_mld_is_first_bss(hapd));
     if (hapd->conf->mld_ap && hapd->mld != NULL && wifi_hal_is_mld_link_exists(hapd)) {
         hostapd_bss_link_deinit(hapd);
     }
-#endif /* CONFIG_IEEE80211BE */
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
 #endif /* CONFIG_GENERIC_MLO */
     hostapd_free_hapd_data(hapd);
 }

@@ -77,9 +77,10 @@ void wifi_drv_eapol_timeouts(wifi_interface_info_t *interface, mac_address_t sta
 #include "wpa_supplicant/config.h"
 #endif
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SKYSR213_PORT) || \
-    defined(RDKB_ONE_WIFI_PROD) ||                                                                \
-    (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
+    defined(RDKB_ONE_WIFI_PROD) ||                                      \
+    ((defined(SCXER10_PORT) || defined(SKYSR213_PORT)) &&               \
+        (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 #include <rdk_nl80211_hal.h>
 #endif
 
@@ -10049,7 +10050,8 @@ static int wifi_hal_emu_set_assoc_clients_stats_data(unsigned int vap_index, boo
             nla_put_u64(msg, RDK_VENDOR_ATTR_STA_INFO_TX_BYTES64, cli_BytesSent) < 0 ||
             nla_put_u32(msg, RDK_VENDOR_ATTR_STA_INFO_RX_RATE_MAX, stats[i].cli_MaxUplinkRate) < 0 ||
             nla_put_u64(msg, RDK_VENDOR_ATTR_STA_INFO_RX_BYTES64, cli_BytesReceived) < 0 ||
-            nla_put_u8(msg, RDK_VENDOR_ATTR_STA_INFO_SPATIAL_STREAM_NUM, stats[i].cli_activeNumSpatialStreams) < 0 ||
+            nla_put_u8(msg, RDK_VENDOR_ATTR_STA_INFO_SPATIAL_STREAM_NUM, stats[i].cli_capableNumSpatialStreams) < 0 ||
+            nla_put_u8(msg, RDK_VENDOR_ATTR_STA_INFO_ACTIVE_SPATIAL_STREAM_NUM, stats[i].cli_activeNumSpatialStreams) < 0 ||
             nla_put_u32(msg, RDK_VENDOR_ATTR_STA_INFO_TX_FRAMES, stats[i].cli_TxFrames) < 0 ||
             nla_put_u64(msg, RDK_VENDOR_ATTR_STA_INFO_RX_PACKETS64, cli_PacketsReceived) < 0 ||
             nla_put_u64(msg, RDK_VENDOR_ATTR_STA_INFO_TX_ERRORS, cli_ErrorsSent) < 0 ||
