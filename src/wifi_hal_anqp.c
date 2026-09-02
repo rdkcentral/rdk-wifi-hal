@@ -263,12 +263,27 @@ void callback_anqp_gas_init_frame_received(int ap_index, mac_address_t sta, unsi
     {
         buff = attrib;
 
-        while (buff < (attrib+len))
+        unsigned char *end = attrib + len;
+        while (buff < end)
         {
+            size_t remain = (size_t)(end - buff);
+
+            if (remain < sizeof(wifi_anqp_element_format_t)) {
+                wifi_anqp_dbg_print(1, "%s:%d: truncated ANQP header\n", __func__,__LINE__);
+                break;
+            }
             anqp_info = (wifi_anqp_element_format_t *)buff;
 
+            if ((size_t)anqp_info -> len > (remain - sizeof(wifi_anqp_element_format_t))) {
+                 wifi_anqp_dbg_print(1, "%s:%d: invalid ANQP length\n",     __func__,__LINE__);
+                 break;
+            }
             if (anqp_info->info_id == wifi_anqp_element_name_vendor_specific)
             {
+                if (anqp_hs_2_info->len < 6) {
+                    wifi_anqp_dbg_print(1, "%s:%d: invalid HS2.0\n", __func__,__LINE__);
+                    break;
+                }
                 anqp_hs_2_info = (wifi_hs_2_anqp_element_format_t *)buff;
 
                 if (memcmp(anqp_hs_2_info->oi, wfa_oui, sizeof(wfa_oui)) != 0)
@@ -314,6 +329,10 @@ void callback_anqp_gas_init_frame_received(int ap_index, mac_address_t sta, unsi
             }
             else if (anqp_info->info_id == wifi_anqp_element_name_query_list)
             {
+                if ((anqp_info -> len % sizeof(unsigned short)) != 0) {
+                     wifi_anqp_dbg_print(1, "%s:%d: malformed query_list\n", __func__,__LINE__);
+                     break;
+                }
                 anqp_queries_len = anqp_info->len;
 
                 query_list_id = (unsigned short *)anqp_info->info;
@@ -348,7 +367,7 @@ void callback_anqp_gas_init_frame_received(int ap_index, mac_address_t sta, unsi
                     query_list_id++;
                 }
 
-                buff = (unsigned char *)query_list_id;
+                buff += sizeof(wifi_anqp_element_format_t) + anqp_info->len;
             }
             else 
             {
