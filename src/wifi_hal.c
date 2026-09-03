@@ -1280,20 +1280,28 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
     }
     *bss_array = bss_info;
     *num_bss = num;
+    unsigned int out_idx = 0;
 
     bss = hash_map_get_first(interface->scan_info_map);
     while (bss != NULL) {
-        if (channel->channel == 0) {
-            memcpy(bss_info, bss, sizeof(wifi_bss_info_t));
-        } else {
-            ieee80211_freq_to_chan(bss->freq, &chan);
-            if (chan == channel->channel) {
-                memcpy(bss_info, bss, sizeof(wifi_bss_info_t));
-            }
-        }
-        bss = hash_map_get_next(interface->scan_info_map, bss);
-        bss_info++;
-    }
+	    bool copy_this = false;
+	if (channel->channel == 0) {
+		copy_this = true;
+	} else {
+		ieee80211_freq_to_chan(bss->freq, &chan);
+		copy_this = (chan == channel->channel);
+	}
+	if (copy_this) {
+		if (out_idx >= num) {
+			wifi_hal_error_print("%s:%d: scan map size drift detected\n", __func__, __LINE__);
+			break;
+		}
+		memcpy(&(*bss_array)[out_idx], bss, sizeof(wifi_bss_info_t));
+		out_idx++;
+	}
+	bss = hash_map_get_next(interface->scan_info_map, bss);
+}
+    *num_bss = out_idx;
     pthread_mutex_unlock(&interface->scan_info_mutex);
 
     return RETURN_OK;

@@ -606,9 +606,9 @@ INT wifi_hal_getRadioIfName(INT radioIndex, CHAR *output_string)
 {
     wifi_hal_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
 
-    if (radioIndex > g_wifi_hal.num_radios){
-        wifi_hal_dbg_print("%s:%d: radio index %d out of range.\n", __func__, __LINE__, radioIndex);
-        return -1;
+    if (radioIndex < 0 || radioIndex >= g_wifi_hal.num_radios) {
+	    wifi_hal_dbg_print("%s:%d: radio index %d out of range\n", __func__, __LINE__, radioIndex);
+	    return -1;
     }
 
     if (!output_string){
@@ -619,7 +619,10 @@ INT wifi_hal_getRadioIfName(INT radioIndex, CHAR *output_string)
     wifi_hal_dbg_print("%s:%d: Requested radio index %d GW name %s translated to cloud name %s .\n", __func__, __LINE__,
                                 radioIndex, cloud_radio_map[radioIndex].gw_radio_name, cloud_radio_map[radioIndex].cloudradioname);
 
-    strcpy(output_string, cloud_radio_map[radioIndex].cloudradioname);
+    if (snprintf(output_string, 64, "%s", cloud_radio_map[radioIndex].cloudradioname) >= 64) {
+	    wifi_hal_error_print("%s:%d: output_string truncated\n", __func__, __LINE__);
+	    return -1;
+    }
 
     return 0;
 }
