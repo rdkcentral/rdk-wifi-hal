@@ -80,6 +80,12 @@
 #include "sme.h"
 #endif
 
+#ifdef QCOM_ATH12K_PORT
+#include "ap/airtime_policy.h"
+#include "common/dhcp.h"
+#include "ap/ap_config.h"
+#endif /* QCOM_ATH12K_PORT */
+
 /*
 switch to use nl80211_copy.h because 'linux/nl80211.h' from linux header does not contain
 6GHz definitions. The 6GHz defines for nl80211 are in hostapd 2.10 but not hostapd 2.9.
@@ -103,9 +109,11 @@ extern "C" {
 
 #define WIFI_HAL_MAJOR  3
 #define WIFI_HAL_MINOR  0
-#ifdef HOSTAPD_2_11
+#ifdef HOSTAPD_2_12
+    #define HOSTAPD_VERSION 212
+#elif defined(HOSTAPD_2_11)
     #define HOSTAPD_VERSION 211
-#elif HOSTAPD_2_10
+#elif defined(HOSTAPD_2_10)
     #define HOSTAPD_VERSION 210
 #else
     #define HOSTAPD_VERSION 209
@@ -394,6 +402,20 @@ typedef struct {
     unsigned int fetch_bss_trans_status:1;
     unsigned int roam_vendor_cmd_avail:1;
     unsigned int get_supported_akm_suites_avail:1;
+#if HOSTAPD_VERSION >= 212
+    unsigned int puncturing:1;         /* NL80211_EXT_FEATURE_PUNCT: EHT preamble puncturing */
+    unsigned int qca_do_acs:1;                      /* QCA_NL80211_VENDOR_SUBCMD_DO_ACS available */
+    unsigned int add_sta_node_vendor_cmd_avail:1;   /* QCA_NL80211_VENDOR_SUBCMD_ADD_STA_NODE */
+    unsigned int get_sta_info_vendor_cmd_avail:1;   /* QCA_NL80211_VENDOR_SUBCMD_GET_STA_INFO */
+    unsigned int secure_ranging_ctx_vendor_cmd_avail:1; /* QCA_NL80211_VENDOR_SUBCMD_SECURE_RANGING_CONTEXT */
+    unsigned int connect_ext_vendor_cmd_avail:1;    /* QCA_NL80211_VENDOR_SUBCMD_CONNECT_EXT */
+    unsigned int support_ap_scan:1;
+#ifdef QCOM_ATH12K_PORT
+    unsigned int afc_support:1;
+    unsigned int afc_retail_support:1;
+    unsigned int device_bw:1;
+#endif /* QCOM_ATH12K_PORT */
+#endif /* HOSTAPD_VERSION >= 212 */
 } wifi_driver_data_t;
 
 typedef struct {
@@ -743,6 +765,8 @@ typedef struct {
 #endif
     int ignite_sta_sock_fd;
     int ignite_sta_sock_fd_count;
+    unsigned int nl80211_maxattr;
+    struct nl_sock *nl_cache;
 } wifi_hal_priv_t;
 
 extern wifi_hal_priv_t g_wifi_hal;
@@ -1034,6 +1058,13 @@ void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *e
 int     nl80211_connect_sta(wifi_interface_info_t *interface);
 int     init_wpa_supplicant(wifi_interface_info_t *interface);
 
+#ifdef QCOM_ATH12K_PORT
+int wifi_hal_set_intf_offload_type(void *priv, unsigned int vendor_id,
+                              unsigned int subcmd, const u8 *data,
+                              size_t data_len, int flags, void *buf,
+                              const char *ifname, u8 intf_offload_type,
+                              bool is_bss);
+#endif
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 int     nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
 #endif
@@ -1203,7 +1234,7 @@ int get_bw320_center_freq(wifi_radio_operationParam_t *param, const char *countr
 #endif /* CONFIG_IEEE80211BE */
 int pick_akm_suite(int sel);
 int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const u8 *data,size_t data_len,unsigned int freq, unsigned int wait);
-#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+#if (defined(BANANA_PI_PORT) && defined(KERNEL_6_6)) || defined(QCOM_ATH12K_PORT)
 int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason, int link_id);
 #else
 int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason);
@@ -1214,7 +1245,7 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
 #else
 int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reason);
 #endif
-#ifdef HOSTAPD_2_11 //2.11
+#if HOSTAPD_VERSION >= 211 //2.11
  int wifi_drv_send_mlme(void *priv, const u8 *data,
                       size_t data_len,int noack,
                       unsigned int freq, const u16 *csa_offs,
@@ -1302,6 +1333,17 @@ void wifi_get_mld_eml_cap(const u16 mld_cap, const u16 eml_cap, wifi_multi_link_
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface);
 #endif
+
+#if defined(QCOM_ATH12K_PORT) && defined(CONFIG_IEEE80211BE) && \
+    defined(CONFIG_MLO) && defined(CONFIG_GENERIC_MLO)
+/*
+ * update_mld_iface_cross_links - Cross-link MLD-affiliated ifaces for 3-link STA
+ * per-STA profile generation. Must be called after update_hostap_mlo() sets
+ * conf->mld_ap. Groups interfaces by mld_id and sets up shared hapd_interfaces
+ * (count > 1) and hapd->mld for for_each_mld_link() to work correctly.
+ */
+int update_mld_iface_cross_links(void);
+#endif /* QCOM_ATH12K_PORT && CONFIG_IEEE80211BE && CONFIG_MLO && CONFIG_GENERIC_MLO */
 
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio);
 void wifi_hal_configure_mbssid(wifi_radio_info_t *radio);
@@ -1567,4 +1609,27 @@ int teardown_mlo_vap(wifi_interface_info_t *interface);
 int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_config);
 #endif /* CONFIG_GENERIC_MLO */
 #endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
+#if defined(QCOM_ATH12K_PORT)
+u16 send_assoc_resp(struct hostapd_data *hapd, struct sta_info *sta,
+                           const u8 *addr, u16 status_code, int reassoc,
+                           const u8 *ies, size_t ies_len, int rssi,
+                           int omit_rsnxe);
+void hostapd_wpa_event(void *ctx, enum wpa_event_type event,
+               union wpa_event_data *data);
+void hostapd_wpa_event_global(void *ctx, enum wpa_event_type event,
+               union wpa_event_data *data);
+
+enum dfs_channel_type {
+        DFS_ANY_CHANNEL,
+        DFS_AVAILABLE, /* non-radar or radar-available */
+        DFS_NO_CAC_YET, /* radar-not-yet-available */
+};
+
+struct hostapd_channel_data *dfs_get_valid_channel(struct hostapd_iface *iface,
+                     int *secondary_channel,
+                     u8 *oper_centr_freq_seg0_idx,
+                     u8 *oper_centr_freq_seg1_idx,
+                     enum dfs_channel_type type);
+#endif
+
 #endif // WIFI_HAL_PRIV_H

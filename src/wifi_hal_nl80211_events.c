@@ -500,11 +500,11 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             station = ap_get_sta(&interface->u.ap.hapd, sta);
             if (station) {
-#if !defined(PLATFORM_LINUX)
+#if !defined(PLATFORM_LINUX) && defined(FEATURE_SUPPORT_RADIUSGREYLIST)
                 if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
                     reason = station->disconnect_reason_code;
                 }
-#endif
+#endif /* !PLATFORM_LINUX && FEATURE_SUPPORT_RADIUSGREYLIST */
 #if !defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210)
                 ap_free_sta(&interface->u.ap.hapd, station);
 #endif // !defined(CONFIG_GENERIC_MLO)
@@ -555,12 +555,12 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             station = ap_get_sta(&interface->u.ap.hapd, sta);
             if (station) {
-#if !defined(PLATFORM_LINUX)
+#if !defined(PLATFORM_LINUX) && defined(FEATURE_SUPPORT_RADIUSGREYLIST)
                 if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
                     reason = station->disconnect_reason_code;
                     wifi_hal_info_print("reason from disconnect reason code is %d\n",reason);
                 }
-#endif
+#endif /* !PLATFORM_LINUX && FEATURE_SUPPORT_RADIUSGREYLIST */
 #if !defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210)
                 ap_free_sta(&interface->u.ap.hapd, station);
 #endif // !defined(CONFIG_GENERIC_MLO)
@@ -943,13 +943,11 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
     hostapd_set_oper_centr_freq_seg1_idx(iconf, seg1_idx);
     hostapd_set_oper_chwidth(iconf, hostap_channel_width);
 
-#ifdef CONFIG_IEEE80211AX
-#if HOSTAPD_VERSION >= 210
+#if !defined(QCOM_ATH12K_PORT) && defined(CONFIG_IEEE80211AX) && (HOSTAPD_VERSION >= 210)
     if (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND) {
         iconf->he_2ghz_40mhz_width_allowed = hal_channel_width == WIFI_CHANNELBANDWIDTH_40MHZ;
     }
-#endif
-#endif
+#endif /* !QCOM_ATH12K_PORT && CONFIG_IEEE80211AX && HOSTAPD_VERSION >= 210 */
 
     iconf->ht_capab &= ~HT_CAP_INFO_SUPP_CHANNEL_WIDTH_SET;
     if (hal_channel_width >= WIFI_CHANNELBANDWIDTH_40MHZ) {
@@ -967,6 +965,9 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
 static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, struct nlattr **tb, wifi_chan_eventType_t wifi_chan_event_type)
 {
     int ifidx = 0, freq = 0, bw = NL80211_CHAN_WIDTH_20_NOHT, cf1 = 0, cf2 = 0;
+#if defined(CONFIG_GENERIC_MLO)
+    int link_id = -1;
+#endif
     enum nl80211_channel_type ch_type = 0;
     u8 channel;
     wifi_channel_change_event_t radio_channel_param;
@@ -985,6 +986,21 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     if (tb[NL80211_ATTR_IFINDEX]) {
         ifidx = nla_get_u32(tb[NL80211_ATTR_IFINDEX]);
     }
+
+#if defined(CONFIG_GENERIC_MLO)
+    if (tb[NL80211_ATTR_MLO_LINK_ID]) {
+        link_id = nla_get_u8(tb[NL80211_ATTR_MLO_LINK_ID]);
+        if (link_id >= 0) {
+            wifi_interface_info_t *link_iface = get_interface_by_if_index(ifidx, link_id);
+            if (link_iface != NULL) {
+                interface = link_iface;
+            }
+            wifi_hal_info_print("%s:%d: [MLO-LINK] ifidx=%d link_id=%d link_iface=%s\n",
+            __func__, __LINE__, ifidx, link_id,
+            link_iface ? link_iface->name : "NULL");
+        }
+    }
+#endif
 
     if(tb[NL80211_ATTR_WIPHY_FREQ] == NULL) {
         wifi_hal_dbg_print("%s:%d: channel attribute not present\n", __func__, __LINE__);
