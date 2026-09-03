@@ -31,8 +31,8 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include "wifi_hal.h"
-#include "wifi_hal_rdk.h"
 #include "wifi_hal_priv.h"
+#include "wifi_hal_rdk.h"
 #include "pcap.h"
 #include "ieee80211.h"
 
