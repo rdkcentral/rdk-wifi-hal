@@ -160,6 +160,17 @@ typedef struct _wifi_EapStats_t{    // Passpoint stats defined rdkb-1317
     unsigned int EAPFailedSent;
 } wifi_EapStats_t;
 
+typedef enum {
+    wifi_eapol_key_msg_unknown = 0,
+    wifi_eapol_key_msg_m1 = 1,
+    wifi_eapol_key_msg_m2 = 2,
+    wifi_eapol_key_msg_m3 = 3,
+    wifi_eapol_key_msg_m4 = 4
+} wifi_eapol_key_msg_t;
+
+typedef int (*wifi_eapol_key_callback)(int ap_index, char *mac,
+    wifi_eapol_key_msg_t msg_type, unsigned int replay_counter);
+
 #define DPP_SUB_AUTH_REQUEST 0
 #define DPP_SUB_AUTH_RESPONSE 1
 #define DPP_SUB_AUTH_CONFIRM 2
