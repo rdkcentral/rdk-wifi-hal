@@ -26,23 +26,32 @@
 #include <inttypes.h>
 #include "wifi_hal_rdk.h"
 
+#define TLV_HDR_SIZE (2 * sizeof(unsigned short))
+
 wifi_tlv_t *get_tlv(unsigned char *buff, unsigned short attrib, unsigned short len)
 {
     unsigned int total_len = 0;
-    bool found = false;
     wifi_tlv_t *tlv = (wifi_tlv_t *)buff;
 
     while (total_len < len) {
-        if (tlv->type == attrib) {
-            found = true;
-            break;
-        }
+        unsigned int remaining = len - total_len;
 
-        total_len += (2*sizeof(unsigned short) + tlv->length);
-        tlv = (wifi_tlv_t *)((unsigned char *)tlv + 2*sizeof(unsigned short) + tlv->length);
+        /* Ensure the 4-byte TLV header fits before dereferencing */
+        if (remaining < TLV_HDR_SIZE)
+            break;
+
+        /* Ensure the full TLV (header + value) fits within the buffer */
+        if (tlv->length > remaining - TLV_HDR_SIZE)
+            break;
+
+        if (tlv->type == attrib)
+            return tlv;
+
+        total_len += TLV_HDR_SIZE + tlv->length;
+        tlv = (wifi_tlv_t *)((unsigned char *)tlv + TLV_HDR_SIZE + tlv->length);
     }
 
-    return (found == true) ? tlv:NULL;
+    return NULL;
 }
 
 
