@@ -6450,7 +6450,7 @@ int reload_vap_configuration(wifi_interface_info_t *interface)
     return 0;
 }
 
-#if defined(CONFIG_IEEE80211BE)
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
 bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 {
     struct hostapd_data *link_bss = NULL;
@@ -6467,7 +6467,7 @@ bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
 
     return false;
 }
-#endif /* CONFIG_IEEE80211BE */
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
 
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
 static struct hostapd_mld *find_mld(struct wifi_interface_info_t *interface)
@@ -6530,7 +6530,9 @@ static int alloc_mld(wifi_interface_info_t *interface)
     hapd->mld = mld;
     mld->refcount++;
     mld->num_links = 0;
+#if !defined(HOSTAPD_211_V6)
     mld->next_link_id = 0;
+#endif
 
     g_wifi_hal.mld_array.mld_count++;
 
@@ -6795,8 +6797,15 @@ int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_con
         struct hostapd_data *link_bss = NULL;
         for (uint8_t i = 0; i < MAX_NUM_MLD_LINKS; i++) {
             link_id_free = true;
+#if !defined(HOSTAPD_211_V6)
             hapd->mld_link_id = hapd->mld->next_link_id % MAX_NUM_MLD_LINKS;
             hapd->mld->next_link_id++;
+#else
+            if ((hapd->mld->allocated_links & BIT(i)) == 0) {
+                hapd->mld_link_id = i;
+                hapd->mld->allocated_links |= BIT(i);
+            }
+#endif
             for_each_mld_link(link_bss, hapd) {
                 if (link_bss == hapd) {
                     continue;
