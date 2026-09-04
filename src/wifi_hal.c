@@ -36,6 +36,7 @@
 #include "hostapd/eap_register.h"
 #include "ap/rrm.h"
 #include "ap/neighbor_db.h"
+#include "ap/ctrl_iface_ap.h"
 
 #ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
@@ -2003,6 +2004,75 @@ INT wifi_hal_getScanResults(wifi_radio_index_t index, wifi_channel_t *channel, w
         scan_info = hash_map_get_next(interface->scan_info_map, scan_info);
     }
     pthread_mutex_unlock(&interface->scan_info_mutex);
+
+    return RETURN_OK;
+}
+
+/*
+* EasyMesh CACR enforcement uses hostapd's dynamic deny ACL mechanism.
+* STA MAC addresses are added/removed through the upstream hostapd ACL
+* helper APIs, which update hapd->conf->deny_mac and refresh the ACL
+* configuration via hostapd_set_acl().
+*/
+INT wifi_hal_addHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress)
+{
+    wifi_hal_dbg_print("%s:%d:Enter\n", __func__, __LINE__);
+    wifi_interface_info_t *interface;
+    struct hostapd_data *hapd;
+
+    interface = get_interface_by_vap_index(apIndex);
+
+    if ((!interface) || (interface->vap_info.vap_mode != wifi_vap_mode_ap)  || (DeviceMacAddress == NULL))
+        return RETURN_ERR;
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    hapd = &interface->u.ap.hapd;
+
+    if (!hapd->conf) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d: CACR: Adding STAs to hostapd ACL list\n", __func__, __LINE__);
+    if (hostapd_ctrl_iface_acl_add_mac(&hapd->conf->deny_mac, &hapd->conf->num_deny_mac, DeviceMacAddress)) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
+    }
+
+    hostapd_set_acl(hapd);
+    hostapd_disassoc_deny_mac(hapd);
+
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+    return RETURN_OK;
+}
+
+INT wifi_hal_delHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress)
+{
+    wifi_hal_dbg_print("%s:%d:Enter\n", __func__, __LINE__);
+    wifi_interface_info_t *interface;
+    struct hostapd_data *hapd;
+
+    interface = get_interface_by_vap_index(apIndex);
+
+    if ((!interface) || (interface->vap_info.vap_mode != wifi_vap_mode_ap)  || (DeviceMacAddress == NULL))
+        return RETURN_ERR;
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    hapd = &interface->u.ap.hapd;
+
+    if (!hapd->conf) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d: CACR: Removing STAs from hostapd ACL list\n", __func__, __LINE__);
+    if (hostapd_ctrl_iface_acl_del_mac(&hapd->conf->deny_mac, &hapd->conf->num_deny_mac, DeviceMacAddress)) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
+    }
+
+    hostapd_set_acl(hapd);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     return RETURN_OK;
 }
