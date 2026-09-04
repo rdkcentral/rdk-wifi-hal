@@ -696,7 +696,6 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     mac_address_t mac;
     mac_addr_str_t mac_str;
     unsigned short status;
-    char *assoc_req, *assoc_rsp;
     mac_addr_str_t bssid_str;
     wifi_bss_info_t *backhaul;
     wifi_vap_security_t *sec;
@@ -711,32 +710,28 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         to_mac_str(backhaul->bssid, bssid_str), backhaul->freq, backhaul->ssid);
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
     radio_param = &radio->oper_param;
+    size_t req_ie_len = 0, resp_ie_len = 0;
 
 
-    assoc_req = interface->u.sta.assoc_req;
-    assoc_rsp = interface->u.sta.assoc_rsp;
-
-    if (tb[NL80211_ATTR_STATUS_CODE] == NULL) {
-        wifi_hal_error_print("%s:%d: status code attribute absent\n", __func__, __LINE__);
-        return;
-    } else {
-        memcpy((unsigned char *)&status, nla_data(tb[NL80211_ATTR_STATUS_CODE]), nla_len(tb[NL80211_ATTR_STATUS_CODE]));
-    }
+    if ((tb[NL80211_ATTR_STATUS_CODE] == NULL) || nla_len(tb[NL80211_ATTR_STATUS_CODE]) != sizeof(status)) {
+         wifi_hal_error_print("%s:%d: invalid status code attribute length\n", __func__, __LINE__);
+         return;
+     } else {
+        memcpy((unsigned char *)&status, nla_data(tb[NL80211_ATTR_STATUS_CODE]), sizeof(status));
+     }
 
     if (status != WLAN_STATUS_SUCCESS) {
         wifi_hal_error_print("%s:%d: status code %d unsuccessful, returning\n", __func__, __LINE__, status);
         send_sta_connection_status_to_cb(backhaul->bssid, interface->vap_info.vap_index, wifi_connection_status_ap_not_found);
         return;    
     }
-
-    if (tb[NL80211_ATTR_MAC] == NULL) {
-        wifi_hal_error_print("%s:%d: mac attribute absent\n", __func__, __LINE__);
-        return;
-    } else {
-        memcpy(mac, nla_data(tb[NL80211_ATTR_MAC]), nla_len(tb[NL80211_ATTR_MAC]));
-        wifi_hal_dbg_print("%s:%d: Connect indication for %s\n", __func__, __LINE__,
-            to_mac_str(mac, mac_str));
-
+    if ((tb[NL80211_ATTR_MAC] == NULL) || nla_len(tb[NL80211_ATTR_MAC]) != sizeof(mac)) {
+        wifi_hal_error_print("%s:%d: invalid mac attribute length\n", __func__, __LINE__);
+         return;
+     } else {
+        memcpy(mac, nla_data(tb[NL80211_ATTR_MAC]), sizeof(mac));
+         wifi_hal_dbg_print("%s:%d: Connect indication for %s\n", __func__, __LINE__,
+             to_mac_str(mac, mac_str));
     }
 
     if (ieee80211_freq_to_channel_ext(backhaul->freq,0,0,(unsigned char*)&radio_param->operatingClass,
@@ -748,16 +743,28 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     if (tb[NL80211_ATTR_REQ_IE] == NULL) { 
         wifi_hal_dbg_print("%s:%d: req ie attribute absent\n", __func__, __LINE__);
     } else {
-        interface->u.sta.assoc_req_len = nla_len(tb[NL80211_ATTR_REQ_IE]);
-        memcpy(assoc_req, nla_data(tb[NL80211_ATTR_REQ_IE]), nla_len(tb[NL80211_ATTR_REQ_IE])); 
+        req_ie_len = nla_len(tb[NL80211_ATTR_REQ_IE]);
+        if (req_ie_len > sizeof(interface->u.sta.assoc_req)) {
+	        wifi_hal_error_print("%s:%d: req IE too large (%zu > %zu)\n",
+	           __func__, __LINE__,req_ie_len,sizeof(interface->u.sta.assoc_req));
+	    return;
     }
+        memcpy(interface->u.sta.assoc_req, nla_data(tb[NL80211_ATTR_REQ_IE]), req_ie_len);
+        interface->u.sta.assoc_req_len = req_ie_len;
+}
 
     if (tb[NL80211_ATTR_RESP_IE] == NULL) {
         wifi_hal_dbg_print("%s:%d: resp ie attribute absent\n", __func__, __LINE__);
     } else {
-        interface->u.sta.assoc_rsp_len = nla_len(tb[NL80211_ATTR_RESP_IE]);
-        memcpy(assoc_rsp, nla_data(tb[NL80211_ATTR_RESP_IE]), nla_len(tb[NL80211_ATTR_RESP_IE])); 
-    }
+        resp_ie_len = nla_len(tb[NL80211_ATTR_RESP_IE]);
+        if (resp_ie_len > sizeof(interface->u.sta.assoc_rsp)) {
+            wifi_hal_error_print("%s:%d: resp IE too large (%zu > %zu)\n",
+            __func__, __LINE__, resp_ie_len, sizeof(interface->u.sta.assoc_rsp));
+        return;
+        }
+        memcpy(interface->u.sta.assoc_rsp, nla_data(tb[NL80211_ATTR_RESP_IE]), resp_ie_len);
+        interface->u.sta.assoc_rsp_len = resp_ie_len;
+}
 
     if (tb[NL80211_ATTR_TIMED_OUT] == NULL) {
         wifi_hal_dbg_print("%s:%d: timed out attribute absent\n", __func__, __LINE__);
