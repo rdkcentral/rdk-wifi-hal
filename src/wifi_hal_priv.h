@@ -943,6 +943,8 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress);
 INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress);
 #endif
 INT wifi_hal_delApAclDevices(INT apIndex);
+INT wifi_hal_addHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress);
+INT wifi_hal_delHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress);
 INT wifi_hal_steering_eventRegister(wifi_steering_eventCB_t event_cb);
 INT wifi_hal_setRadioTransmitPower(wifi_radio_index_t radioIndex, uint txpower);
 INT wifi_hal_getRadioTransmitPower(INT radioIndex, ULONG *tx_power);
