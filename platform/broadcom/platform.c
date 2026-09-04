@@ -110,9 +110,8 @@ static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
 #define WIFI_BLASTER_DEFAULT_PKTSIZE 1470
 
 #ifdef CONFIG_IEEE80211BE
-#define MLD_UNIT_COUNT 8
-#define UNDEFINED_MLD_ID (u8)-1
-#define UNDEFINED_MLO_LINK_ID (u8)NL80211_DRV_LINK_ID_NA
+#define USER_NVRAM_CHANGED      0x01
+#define KERNEL_NVRAM_CHANGED    0x02
 #endif
 
 typedef struct wl_runtime_params {
@@ -5082,7 +5081,7 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
      * NOTE: According to the new updates of the brcm contract of sending the message
      * `RDK_VENDOR_NL80211_SUBCMD_SET_MLD` we can't send this message for config -1 (`link_id=-1`).
      */
-    if (!params->mld_ap && (u8)hapd->mld_link_id == UNDEFINED_MLO_LINK_ID) {
+    if (!params->mld_ap && (u8)hapd->mld_link_id == UNDEFINED_MLD_LINK_ID) {
         wifi_hal_dbg_print("%s:%d skip Non-MLO iface:%s:\n", __func__, __LINE__, conf->iface);
         return 0;
     }
@@ -5093,7 +5092,7 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
             wifi_hal_error_print("%s:%d: Invalid mld_id:%u\n", __func__, __LINE__, conf->mld_id);
             return -1;
         }
-        if ((u8)params->mld_link_id != UNDEFINED_MLO_LINK_ID &&
+        if ((u8)params->mld_link_id != UNDEFINED_MLD_LINK_ID &&
             params->mld_link_id >= RDK_VENDOR_MAX_NUM_MLD_LINKS) {
             wifi_hal_error_print("%s:%d: Invalid mld_link_id:%u\n", __func__, __LINE__,
                 params->mld_link_id);
