@@ -1213,12 +1213,7 @@ static void nl80211_dfs_radar_event(wifi_interface_info_t *interface, struct nla
         return;
     }
 
-    if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_UPDATE_WIPHY_ON_PRIMARY) {
-        mgt_interface = get_primary_interface(radio);
-    }
-    else {
-        mgt_interface = get_private_vap_interface(radio);
-    }
+    mgt_interface = get_first_radio_interface(radio);
 
     if (mgt_interface == NULL) {
         wifi_hal_error_print("%s:%d failed to get primary/private interface\n", __func__, __LINE__);
