@@ -2685,7 +2685,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
     int sel, key_mgmt = 0;
     int wpa_key_mgmt_11w = 0;
     unsigned short max_wpa_ie_len = 500;
-    ieee80211_tlv_t *rsn_ie = NULL;
+    const unsigned char *rsn_ie = NULL;
 #if HOSTAPD_VERSION >= 210
     unsigned short max_rsnx_ie_len = 50;
 #endif
@@ -2785,11 +2785,32 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
     wpa_sm_set_pmk(sm, pmk, PMK_LEN, NULL, NULL);
     wpa_sm_set_param(sm, WPA_PARAM_RSN_ENABLED, 1);
     wpa_sm_set_param(sm, WPA_PARAM_PROTO, WPA_PROTO_RSN);
+#if HOSTAPD_VERSION >= 211 //2.11
+    wpa_sm_set_param(sm, WPA_PARAM_RSN_OVERRIDE_SUPPORT, false);
+    wpa_sm_set_param(sm, WPA_PARAM_RSN_OVERRIDE, RSN_OVERRIDE_NOT_USED);
 
-    rsn_ie = (ieee80211_tlv_t *)get_ie(backhaul->ie, backhaul->ie_len, WLAN_EID_RSN);
+#if defined(CONFIG_WIFI_EMULATOR)
+#ifdef CONFIG_IEEE80211BE
+    if (sec->mode == wifi_security_mode_wpa3_compatibility && ((rsn_ie =
+        get_vendor_ie_by_type(backhaul->ie, backhaul->ie_len, RSNE_OVERRIDE_2_IE_VENDOR_TYPE)) != NULL)) {
+            wpa_sm_set_param(sm, WPA_PARAM_RSN_OVERRIDE, RSN_OVERRIDE_RSNE_OVERRIDE_2);
+            wifi_hal_dbg_print("%s:%d: Using RSNO2\n", __func__, __LINE__);
+    }
+    else
+#endif //CONFIG_IEEE80211BE
+    if (sec->mode == wifi_security_mode_wpa3_compatibility && ((rsn_ie =
+        get_vendor_ie_by_type(backhaul->ie, backhaul->ie_len, RSNE_OVERRIDE_IE_VENDOR_TYPE)) != NULL)) {
+            wifi_hal_dbg_print("%s:%d: Using RSNO\n", __func__, __LINE__);
+    } else
+#endif
+#endif //2.11
+    {
+        rsn_ie = get_ie(backhaul->ie, backhaul->ie_len, WLAN_EID_RSN);
+        wifi_hal_dbg_print("%s:%d: Using RSN\n", __func__, __LINE__);
+    }
+
     if (rsn_ie &&
-        (wpa_parse_wpa_ie_rsn((const unsigned char *)rsn_ie,
-             rsn_ie->length + sizeof(ieee80211_tlv_t), &data) == 0)) {
+        (wpa_parse_wpa_ie_rsn(rsn_ie, ((ieee80211_tlv_t *)rsn_ie)->length + 2, &data) == 0)) {
         wpa_sm_set_param(sm, WPA_PARAM_PAIRWISE, WPA_CIPHER_CCMP);
         wpa_sm_set_param(sm, WPA_PARAM_GROUP, data.group_cipher);
 
@@ -2814,7 +2835,19 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                 } else if (sec->mode == wifi_security_mode_enhanced_open) {
                     sel = (WPA_KEY_MGMT_OWE | wpa_key_mgmt_11w) & data.key_mgmt;
                 } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
-                    sel = (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE) & data.key_mgmt;
+#if HOSTAPD_VERSION >= 211 //2.11
+                    wpa_sm_set_param(sm, WPA_PARAM_RSN_OVERRIDE_SUPPORT, true);
+#ifdef CONFIG_IEEE80211BE
+                    if (wpa_sm_get_rsn_override(sm) == RSN_OVERRIDE_RSNE_OVERRIDE_2) {
+                        wpa_sm_set_param(sm, WPA_PARAM_PAIRWISE, data.pairwise_cipher);
+                        wpa_sm_set_param(sm, WPA_PARAM_MGMT_GROUP, data.mgmt_group_cipher);
+                        sel = (wpa_key_mgmt_11w | WPA_KEY_MGMT_SAE_EXT_KEY) & data.key_mgmt;
+                    } else
+#endif //CONFIG_IEEE80211BE
+#endif //2.11
+                    {
+                        sel = (wpa_key_mgmt_11w | WPA_KEY_MGMT_SAE) & data.key_mgmt;
+                    }
                 } else {
                     wifi_hal_error_print("Unsupported security mode : 0x%x\n", sec->mode);
                     return;
@@ -2838,8 +2871,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, key_mgmt);
         }
 
-        wifi_hal_dbg_print("%s:%d:%x %x %x\n", __func__, __LINE__, data.group_cipher,
-            data.pairwise_cipher, key_mgmt);
+        wifi_hal_dbg_print("%s:%d:%x %x %x %x\n", __func__, __LINE__, data.group_cipher,
+            data.pairwise_cipher, data.mgmt_group_cipher, key_mgmt);
     } else {
         if (get_vap_security_mode(vap,sec) == wifi_security_mode_none) {
             wpa_sm_set_param(sm, WPA_PARAM_KEY_MGMT, WPA_KEY_MGMT_NONE);
