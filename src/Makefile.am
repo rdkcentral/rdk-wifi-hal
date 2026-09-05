@@ -67,6 +67,11 @@ librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/qualcomm
 librdk_wifihal_la_SOURCES += ../platform/qualcomm/platform_xer5.c
 endif
 
+if XE2_PORT
+librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/qualcomm
+librdk_wifihal_la_SOURCES += ../platform/qualcomm/platform_xe2.c
+endif
+
 if DEVICE_EXTENDER
 librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/qualcomm
 librdk_wifihal_la_SOURCES += ../platform/qualcomm/platform_ext.c
