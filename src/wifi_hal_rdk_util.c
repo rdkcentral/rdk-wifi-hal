@@ -430,6 +430,11 @@ int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg
     }
 
 #if defined(WIFI_HAL_VERSION_3)
+    if (bss_info->security.mode == wifi_security_mode_wpa3_compatibility &&
+        bss_info->security.mfp == wifi_mfp_cfg_disabled) {
+        bss_info->security.mfp = wifi_mfp_cfg_optional;
+    }
+
     switch (bss_info->security.mfp) {
     case wifi_mfp_cfg_disabled:
     case wifi_mfp_cfg_optional:
