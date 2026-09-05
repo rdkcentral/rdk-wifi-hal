@@ -1011,12 +1011,22 @@ int ipc_server_output(struct hal_ipc_processor_desc *desc,
                 wifi_hal_error_print("%s:%d FAIL %s allocate %d bytes of memory for req_ies_out array.\n", __func__, __LINE__, desc->name, HAL_IPC_ASSOC_REQ_IES_BUF_SIZE);
                 goto error_happened;
             }
-
+            unsigned int req_ies_size_in = desc->in.get_association_req_ies.req_ies_size;
+            if (req_ies_size_in > HAL_IPC_ASSOC_REQ_IES_BUF_SIZE) {
+	            wifi_hal_error_print("%s:%d: req_ies_size too large (%u)\n", __func__, __LINE__, req_ies_size_in);
+	            free(req_ies_out);
+	            goto error_happened;
+            }
             desc->ret = wifi_hal_getAssociationReqIEs(  desc->in.get_association_req_ies.ap_index,
                                                         &desc->in.get_association_req_ies.client_mac_addr,
                                                         req_ies_out,
                                                         desc->in.get_association_req_ies.req_ies_size,
                                                         &req_ies_size_out);
+            if (req_ies_size_out > HAL_IPC_ASSOC_REQ_IES_BUF_SIZE) {
+	            wifi_hal_error_print("%s:%d: req_ies_size_out too large (%u)\n", __func__, __LINE__, req_ies_size_out);
+	            free(req_ies_out);
+	            goto error_happened;
+            }
 
             if (desc->ret) {
                 wifi_hal_error_print("%s:%d FAIL call to %s returned %d code\n", __func__, __LINE__, desc->name, desc->ret);
@@ -1050,13 +1060,17 @@ int ipc_server_output(struct hal_ipc_processor_desc *desc,
                 wifi_hal_error_print("%s:%d FAIL %s allocate memory for %d wifi_NeighborReport_t array.\n", __func__, __LINE__, desc->name, HAL_IPC_MAX_NEIGHBOR_AP_COUNT);
                 goto error_happened;
             }
+            size_t expected = desc->in.set_neighbor_reports.num_neighbor_reports * sizeof(wifi_NeighborReport_t);
+	        size_t max_allowed = HAL_IPC_MAX_NEIGHBOR_AP_COUNT * sizeof(wifi_NeighborReport_t);
 
-            if (!memcpy((unsigned char*) reports, (unsigned char*) desc->scratch_buf, desc->scratch_buf_size)) {
-                wifi_hal_error_print("%s:%d FAIL memcpy %s of %d wifi_NeighborReport_t structs\n", __func__, __LINE__, desc->name, desc->in.set_neighbor_reports.num_neighbor_reports);
-                free(reports);
-                goto error_happened;
-            }
-
+	        if (desc->in.set_neighbor_reports.num_neighbor_reports > HAL_IPC_MAX_NEIGHBOR_AP_COUNT ||
+		            desc->scratch_buf_size != expected || expected > max_allowed) {
+		                wifi_hal_error_print("%s:%d: invalid neighbor report payload size\n",
+                             __func__, __LINE__);
+		        free(reports);
+		        goto error_happened;
+	        }
+           memcpy((unsigned char *)reports, (unsigned char *)desc->scratch_buf, expected);
             wifi_hal_info_print("%s:%d name:%s ap_index:%d\n", __func__, __LINE__, desc->name, desc->in.set_neighbor_reports.ap_index);
             desc->ret = wifi_hal_setNeighborReports(desc->in.set_neighbor_reports.ap_index,
                                                     desc->in.set_neighbor_reports.num_neighbor_reports,
