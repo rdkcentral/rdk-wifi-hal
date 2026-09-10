@@ -227,7 +227,7 @@ unsigned short channel_to_frequency(unsigned int channel)
     } else if ((channel >= 149) && (channel <= 165)) {
         frequency = 5745 + 5*(channel - 149);
     }
-
+    printf("%s: Test Coverity workflow = \n");
     return frequency;
 }
 
