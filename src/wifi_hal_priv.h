@@ -1129,6 +1129,10 @@ void wifi_get_mld_eml_cap(const u16 mld_cap, const u16 eml_cap, wifi_multi_link_
 #endif
 #endif /* CONFIG_IEEE80211BE */
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface);
+#endif
+
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio);
 void wifi_hal_configure_mbssid(wifi_radio_info_t *radio);
 
@@ -1381,4 +1385,7 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
 int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
     size_t ifname_out_len);
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
+bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd);
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
 #endif // WIFI_HAL_PRIV_H
