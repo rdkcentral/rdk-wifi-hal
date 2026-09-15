@@ -19732,6 +19732,57 @@ int nl80211_dfs_nop_finished (wifi_interface_info_t *interface, int freq, int ht
     return 0;
 }
 
+#if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+static int nl80211_dfs_xle_disconnect_backhaul_sta(wifi_radio_info_t *radio)
+{
+    wifi_interface_info_t *interface;
+    bool connected_sta_found = false;
+    int ret = RETURN_OK;
+    int disconnect_ret;
+
+    if (radio == NULL || radio->interface_map == NULL) {
+        wifi_hal_error_print("%s:%d: [DFS-XLE] invalid radio or interface map while handling radar\n",
+            __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    interface = hash_map_get_first(radio->interface_map);
+    while (interface != NULL) {
+        if (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
+            is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+            wifi_hal_info_print("%s:%d: [DFS-XLE] mesh STA %s state=%d on radio=%u\n",
+                __func__, __LINE__, interface->name, interface->u.sta.state,
+                radio->rdk_radio_index);
+
+            if (interface->u.sta.state >= WPA_ASSOCIATED) {
+                connected_sta_found = true;
+                disconnect_ret = nl80211_disconnect_sta(interface);
+                if (disconnect_ret != 0) {
+                    wifi_hal_error_print("%s:%d: [DFS-XLE] failed to disconnect mesh STA %s ret=%d\n",
+                        __func__, __LINE__, interface->name, disconnect_ret);
+                    ret = RETURN_ERR;
+                } else {
+                    wifi_hal_info_print("%s:%d: [DFS-XLE] disconnected mesh STA %s before evacuation\n",
+                        __func__, __LINE__, interface->name);
+                }
+            } else {
+                wifi_hal_info_print("%s:%d: [DFS-XLE] mesh STA %s is not associated, skip disconnect\n",
+                    __func__, __LINE__, interface->name);
+            }
+        }
+
+        interface = hash_map_get_next(radio->interface_map, interface);
+    }
+
+    if (!connected_sta_found) {
+        wifi_hal_info_print("%s:%d: [DFS-XLE] no associated mesh STA found on radio=%u\n",
+            __func__, __LINE__, radio->rdk_radio_index);
+    }
+
+    return ret;
+}
+#endif /* XLE_PORT && FEATURE_HOSTAP_MGMT_FRAME_CTRL */
+
 //When radio is operating in a DFS Channel and radar is detected, this function will switch radio to a Non-DFS Channel
 int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int ht_enabled,
                                int sec_chan_offset, int bandwidth, int bw, int cf1, int cf2)
@@ -19744,11 +19795,18 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
     int dfs_start = 52, dfs_end = 144;
     u8 orig_chan_width = 0;
     int orig_secondary_chan = 0;
+    int set_params_ret;
 
     wifi_hal_info_print("%s:%d name:%s freq:%d cf1:%d cf2:%d sec_chan:%d bandwidth:%d ht_enabled:%d \n", __func__, __LINE__,
                     interface->name, freq, cf1, cf2, sec_chan_offset, bw, ht_enabled);
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: failed to get radio for index %d while handling radar\n",
+            __func__, __LINE__, interface->vap_info.radio_index);
+        return RETURN_ERR;
+    }
 
     if (((radio->oper_param.channel < dfs_start) || (radio->oper_param.channel > dfs_end)) &&
         (bandwidth != WIFI_CHANNELBANDWIDTH_160MHZ)) {
@@ -19770,6 +19828,13 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
         wifi_hal_error_print("%s:%d: malloc failed\n", __func__, __LINE__);
         return RETURN_ERR;
     }
+
+#if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    if (nl80211_dfs_xle_disconnect_backhaul_sta(radio) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: [DFS-XLE] mesh STA disconnect failed; continue DFS evacuation\n",
+            __func__, __LINE__);
+    }
+#endif
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy((unsigned char *)radio_param, (unsigned char *)&radio->oper_param, sizeof(wifi_radio_operationParam_t));
@@ -19795,10 +19860,32 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d \n", radio_param->channel, oper_centr_freq_seg0_idx, oper_centr_freq_seg1_idx, sec_chan_offset);
+#if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    wifi_hal_info_print("%s:%d: [DFS-XLE] evacuating radio=%u from channel=%u to channel=%u\n",
+        __func__, __LINE__, radio->rdk_radio_index, radio->oper_param.channel,
+        radio_param->channel);
+#endif
 
-    if ( wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, radio_param) ) {
+    set_params_ret = wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, radio_param);
+    if (set_params_ret) {
         wifi_hal_error_print("%s %d wifi_hal_setRadioOperatingParameters failed \n", __FUNCTION__, __LINE__);
+#if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+        wifi_hal_error_print("%s:%d: [DFS-XLE] evacuation channel switch failed for radio=%u ret=%d\n",
+            __func__, __LINE__, radio->rdk_radio_index, set_params_ret);
+#endif
+        radio->radar_detected = true;
+        if (update_channel_flags() != 0) {
+            wifi_hal_error_print("%s:%d update_channel_flags failed after evacuation failure\n",
+                __func__, __LINE__);
+        }
+        free(radio_param);
+        radio_param = NULL;
+        return RETURN_ERR;
     }
+#if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    wifi_hal_info_print("%s:%d: [DFS-XLE] evacuation channel switch requested successfully for radio=%u\n",
+        __func__, __LINE__, radio->rdk_radio_index);
+#endif
 
     if (update_channel_flags() != 0) {
         wifi_hal_error_print("%s:%d update_channel_flags failed \n", __func__, __LINE__);
