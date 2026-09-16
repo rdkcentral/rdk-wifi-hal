@@ -1046,6 +1046,11 @@ get_config_frame_wrapped_data(unsigned char *ptr, unsigned int attrib_len, wifi_
         return -1;
     }
 
+    if ((tlv->length < AES_BLOCK_SIZE) || ((tlv->length - AES_BLOCK_SIZE) > len)) {
+        printf("%s:%d: Invalid wrapped data length:%u output capacity:%u\n",
+            __func__, __LINE__, tlv->length, len);
+        return -1;
+    }
 
     decrypted_len = siv_decrypt(&ctx, &tlv->value[AES_BLOCK_SIZE], plain, tlv->length - AES_BLOCK_SIZE, tlv->value, 0);
 	if (decrypted_len < 0) {
@@ -2234,7 +2239,10 @@ wifi_dppProcessReconfigAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
 
     if ((tlv = get_tlv(frame->attrib, wifi_dpp_attrib_id_connector, attrib_len)) == NULL) {
 		return RETURN_ERR;
-    } 
+        } else if (tlv->length >= sizeof(connector)) {
+                wifi_dpp_dbg_print("%s:%d invalid connector length=%u\n", __func__, __LINE__, tlv->length);
+                return RETURN_ERR;
+        }
 		
 	memset(connector, 0, 1024);
     memcpy((unsigned char *)connector, (unsigned char *)tlv->value, tlv->length);
@@ -2447,6 +2455,13 @@ wifi_dppProcessConfigResult(wifi_device_dpp_context_t *dpp_ctx)
     attrib_len = len - sizeof(wifi_dppPublicActionFrameBody_t);
     if ((tlv = get_tlv(frame->attrib, wifi_dpp_attrib_id_wrapped_data, attrib_len)) == NULL) {
         dpp_ctx->enrollee_status = RESPONDER_STATUS_CONFIGURATION_FAILURE;
+		return RETURN_ERR;
+    }
+
+	if ((tlv->length < AES_BLOCK_SIZE) || ((tlv->length - AES_BLOCK_SIZE) > sizeof(plain))) {
+        dpp_ctx->enrollee_status = RESPONDER_STATUS_CONFIGURATION_FAILURE;
+        printf("%s:%d: Invalid wrapped data length:%u output capacity:%zu\n",
+            __func__, __LINE__, tlv->length, sizeof(plain));
 		return RETURN_ERR;
     }
 
@@ -2746,6 +2761,13 @@ INT wifi_dppProcessAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
 		dpp_ctx->enrollee_status = RESPONDER_STATUS_AUTH_FAILURE;
         return RETURN_ERR;
 
+    }
+
+    if ((tlv->length < AES_BLOCK_SIZE) || ((tlv->length - AES_BLOCK_SIZE) > sizeof(secondary))) {
+        printf("%s:%d: Invalid wrapped data length:%u output capacity:%zu\n",
+            __func__, __LINE__, tlv->length, sizeof(secondary));
+		dpp_ctx->enrollee_status = RESPONDER_STATUS_AUTH_FAILURE;
+        return RETURN_ERR;
     }
 
     switch(instance->digestlen) {
