@@ -4079,8 +4079,8 @@ INT wifi_hal_setRMBeaconRequest(UINT apIndex,
     }
 
     *out_DialogToken = ret_dialog_token;
-    //g_DialogToken[apIndex][*out_DialogToken] = 1;
-    set_bit_u8(g_DialogToken[apIndex], *out_DialogToken);
+    /* g_DialogToken bit is set inside wifi_rrm_send_beacon_req() against the VAP
+     * that actually transmitted the request (may differ from apIndex for MLO). */
 
     return WIFI_HAL_SUCCESS;
 }
