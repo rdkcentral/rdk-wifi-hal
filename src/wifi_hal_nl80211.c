@@ -3203,7 +3203,7 @@ void recv_data_frame(wifi_interface_info_t *interface)
             for (int i = 0; i < key_callbacks->num_eapol_key_cbs; i++) {
                 if (key_callbacks->eapol_key_cb[i] != NULL) {
                     key_callbacks->eapol_key_cb[i](vap->vap_index, src_mac_str,
-                        (eapol_type == 4) ? wifi_eapol_key_msg_m4 : wifi_eapol_key_msg_m2,
+                        (eapol_type == 4) ?  EAPOL_MSG_M4: EAPOL_MSG_M2,
                         replay_counter);
                 }
             }
@@ -14997,7 +14997,7 @@ int wifi_drv_hapd_send_eapol(
         for (int i = 0; i < key_callbacks->num_eapol_key_cbs; i++) {
             if (key_callbacks->eapol_key_cb[i] != NULL) {
                 key_callbacks->eapol_key_cb[i](vap->vap_index, dst_mac_str,
-                    (eapol_type == 3) ? wifi_eapol_key_msg_m3 : wifi_eapol_key_msg_m1,
+                    (eapol_type == 3) ? EAPOL_MSG_M3 : EAPOL_MSG_M1,
                     replay_counter);
             }
         }
