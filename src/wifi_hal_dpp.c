@@ -2218,7 +2218,12 @@ wifi_dppProcessReconfigAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
     if ((tlv = get_tlv(frame->attrib, wifi_dpp_attrib_id_proto_version, attrib_len)) == NULL) {
 		return RETURN_ERR;
     } else {
-        memcpy((unsigned char *)&dpp_ctx->enrollee_version, (unsigned char *)tlv->value, tlv->length);
+        if (tlv->length != sizeof(dpp_ctx->enrollee_version)) {
+            wifi_dpp_dbg_print("%s:%d invalid protocol version length=%u\n", __func__, __LINE__, tlv->length);
+            dpp_ctx->enrollee_status = RESPONDER_STATUS_AUTH_FAILURE;
+            return RETURN_ERR;
+        }
+        dpp_ctx->enrollee_version = tlv->value[0];
         wifi_dpp_dbg_print("%s:%d dpp_ctx->enrollee_version = %d\n", __func__, __LINE__, dpp_ctx->enrollee_version);
     }
 
@@ -2306,7 +2311,13 @@ wifi_dppProcessReconfigAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
 
     printf("Responder nonce: ");
     print_hex_dump(tlv->length, tlv->value);
-    memcpy(instance->responder_nonce, tlv->value, tlv->length);
+    if (tlv->length != instance->noncelen) {
+        wifi_dpp_dbg_print("%s:%d responder nonce length mismatch %u/%u\n", __func__, __LINE__,
+            tlv->length, instance->noncelen);
+        dpp_ctx->enrollee_status = RESPONDER_STATUS_AUTH_FAILURE;
+        return RETURN_ERR;
+    }
+    memcpy(instance->responder_nonce, tlv->value, instance->noncelen);
 
     if ((tlv = get_tlv(primary, wifi_dpp_attrib_id_responder_cap, decrypted_len)) == NULL) {
         wifi_dpp_dbg_print("%s:%d: Failed to get responder capabilitie\n", __func__, __LINE__);
@@ -2320,7 +2331,8 @@ wifi_dppProcessReconfigAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
         wifi_dpp_dbg_print("%s:%d: Failed to get initiator nonce nonce\n", __func__, __LINE__);
         dpp_ctx->enrollee_status = RESPONDER_STATUS_AUTH_FAILURE;
         return RETURN_ERR;
-    } else if (memcmp(tlv->value, instance->initiator_nonce, tlv->length) != 0) {
+    } else if (tlv->length != instance->noncelen ||
+        memcmp(tlv->value, instance->initiator_nonce, instance->noncelen) != 0) {
         wifi_dpp_dbg_print("%s:%d: initiator nonce mismatch\n", __func__, __LINE__);
         dpp_ctx->enrollee_status = RESPONDER_STATUS_AUTH_FAILURE;
         return RETURN_ERR;
