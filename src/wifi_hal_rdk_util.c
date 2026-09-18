@@ -352,14 +352,14 @@ int validate_radius_vap_security_param(wifi_vap_security_t *security, char *msg,
     if ((strlen(security->u.radius.ip) == 0) || (security->u.radius.port == 0) ||
         (strlen(security->u.radius.key) == 0)) {
         ret = RETURN_ERR;
-        snprintf(msg + strlen(msg), len - strlen(msg), " Failed to validate vap security params radius ip:%s port:%d key:%s\n",
-                                security->u.radius.ip, security->u.radius.port, security->u.radius.key);
+        snprintf(msg + strlen(msg), len - strlen(msg), " Failed to validate vap security params radius ip:%s port:%d key:<redacted>\n",
+                                security->u.radius.ip, security->u.radius.port);
     }
     if ((strlen(security->u.radius.s_ip) == 0) || (security->u.radius.s_port == 0) ||
         (strlen(security->u.radius.s_key) == 0)) {
         ret = RETURN_ERR;
-        snprintf(msg + strlen(msg), len - strlen(msg), " Failed to validate vap security params radius s_ip:%s s_port:%d s_key:%s\n",
-                                security->u.radius.s_ip, security->u.radius.s_port, security->u.radius.s_key);
+        snprintf(msg + strlen(msg), len - strlen(msg), " Failed to validate vap security params radius s_ip:%s s_port:%d s_key:<redacted>\n",
+                                security->u.radius.s_ip, security->u.radius.s_port);
     }
     return ret;
 }
