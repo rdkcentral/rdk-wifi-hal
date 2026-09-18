@@ -2373,12 +2373,7 @@ INT wifi_hal_setRadioTransmitPower(wifi_radio_index_t radioIndex, uint txpower)
         return RETURN_ERR;
     }
 
-    if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_UPDATE_WIPHY_ON_PRIMARY) {
-        interface = get_primary_interface(radio);
-    }
-    else {
-        interface = get_private_vap_interface(radio);
-    }
+    interface = get_first_radio_interface(radio);
 
     if (!interface) {
         wifi_hal_error_print("%s:%d: Error updating dev:%d no interfaces exist\n", __func__, __LINE__, radio->index);

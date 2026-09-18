@@ -8437,61 +8437,54 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
 
 int nl80211_update_wiphy(wifi_radio_info_t *radio)
 {
+    wifi_hal_dbg_print("%s:%d Entering\n", __func__, __LINE__);
     struct nl_msg *msg;
     int ret;
     wifi_interface_info_t *interface;
-    bool reconfigure = false;
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-    int link_id = -1;
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
     interface = hash_map_get_first(radio->interface_map);
-
     while (interface != NULL) {
-        if (interface->bss_started) {
-                reconfigure = true;
-                nl80211_enable_ap(interface, false);
-                pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-                deinit_bss(&interface->u.ap.hapd);
-                if (interface->u.ap.hapd.conf != NULL && interface->u.ap.hapd.conf->ssid.wpa_psk != NULL && !interface->u.ap.hapd.conf->ssid.wpa_psk->next)
-                    hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
+        if (interface->bss_started &&
+            interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+#if defined(CONFIG_GENERIC_MLO) && defined(CONFIG_IEEE80211BE)
+            if (wifi_hal_is_mld_enabled(interface)) {
+                if (teardown_mlo_vap(interface)) {
+                    return -1;
+                }
 
-                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-                nl80211_interface_enable(wifi_hal_get_interface_name(interface), false);
+                if (reload_interface(interface)) {
+                    return -1;
+                }
+            } else {
+                if (reload_interface(interface)) {
+                    return -1;
+                }
+                nl80211_interface_enable(interface->name, false);
+            }
+#else
+            if (reload_interface(interface)) {
+                return -1;
+            }
+            nl80211_interface_enable(interface->name, false);
+#endif
         }
         interface = hash_map_get_next(radio->interface_map, interface);
     }
 
-    if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_UPDATE_WIPHY_ON_PRIMARY) {
-        interface = get_primary_interface(radio);
-    }
-    else {
-        interface = get_private_vap_interface(radio);
-        if (interface == NULL) {
-            interface = get_primary_interface(radio);
-        }
-    }
-
+    interface = get_first_radio_interface(radio);
     if (!interface) {
         wifi_hal_error_print("%s:%d: Error updating dev:%d no interfaces exist\n", __func__, __LINE__, radio->index);
         return -1;
     }
 
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-    link_id = wifi_hal_get_mld_link_id(interface);
-    if (link_id != NL80211_DRV_LINK_ID_NA &&
-        hostapd_drv_link_add(&interface->u.ap.hapd, link_id, interface->mac) < 0) {
-        wifi_hal_error_print("%s:%d: Failed to add MLD link %d, MAC: " MACSTR " for %s\n", __func__,
-            __LINE__, link_id, MAC2STR(interface->mac), wifi_hal_get_interface_name(interface));
-        return -1;
-    }
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
-
+    // TODO: Does it even make sense ? If radio is not configured, so
+    // are interfaces - why do we have to manually set this to false
+    //? Also - above causes for all AP interfaces to get disabled.
     if (!radio->configured) {
         nl80211_enable_ap(interface, false);
         wifi_hal_dbg_print("%s:%d: Radio is not configured, set beacon to 0 for %s\n", __func__, __LINE__, interface->name);
     }
-    
+
     wifi_hal_dbg_print("%s:%d: update transmitPower:%d\n", __func__, __LINE__, radio->oper_param.transmitPower);
     wifi_drv_set_txpower(interface, radio->oper_param.transmitPower);
 
@@ -8511,84 +8504,17 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
         return -1;
     }
 
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-    if (link_id != NL80211_DRV_LINK_ID_NA &&
-        nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0) {
-        wifi_hal_error_print("%s:%d: Failed to add MLO link ID\n", __func__, __LINE__);
-        nlmsg_free(msg);
-        return -1;
-    }
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
-
 #if defined(VNTXER5_PORT)
     platform_set_radio_mld_bonding(radio);
 #endif
-    if ((ret = nl80211_send_and_recv(msg, wiphy_set_info_handler, &g_wifi_hal, NULL, NULL))) {
-        wifi_hal_info_print("%s:%d: Error updating dev:%d error: %d (%s)\n",
-            __func__, __LINE__, radio->index, ret, strerror(-ret));
 
-        if(!reconfigure) {
-            interface = hash_map_get_first(radio->interface_map);
-
-            while (interface != NULL) {
-                if(is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index) == false) {
-                    nl80211_enable_ap(interface, false);
-                    nl80211_interface_enable(wifi_hal_get_interface_name(interface), false);
-                }
-                interface = hash_map_get_next(radio->interface_map, interface);
-            }
-
-            if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_UPDATE_WIPHY_ON_PRIMARY) {
-                interface = get_primary_interface(radio);
-            }
-            else {
-                interface = get_private_vap_interface(radio);
-                if (interface == NULL) {
-                    interface = get_primary_interface(radio);
-                }
-            }
-
-            if (!interface) {
-                wifi_hal_error_print("%s:%d: Error updating dev:%d no interfaces exist\n", __func__, __LINE__, radio->index);
-                return -1;
-            }
-
-           msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_SET_WIPHY);
-           if (msg == NULL) {
-               return -1;
-           }
-
-           if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index) < 0) {
-               wifi_hal_error_print("%s:%d: Failed to add interface index\n", __func__, __LINE__);
-               nlmsg_free(msg);
-               return -1;
-           }
-           if (nl80211_fill_chandef(msg, radio, interface) == -1) {
-                wifi_hal_error_print("%s:%d: Failed to fill channel definition\n", __func__, __LINE__);
-                nlmsg_free(msg);
-                return -1;
-            }
-
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-            if (link_id != NL80211_DRV_LINK_ID_NA &&
-                nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) < 0) {
-                wifi_hal_error_print("%s:%d: Failed to add MLO link ID\n", __func__, __LINE__);
-                nlmsg_free(msg);
-                return -1;
-            }
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
-
-           if ((ret = nl80211_send_and_recv(msg, wiphy_set_info_handler, &g_wifi_hal, NULL, NULL))) {
-               wifi_hal_error_print("%s:%d: reconfig error, updating dev:%d error: %d (%s) \n",
-                                  __func__, __LINE__, radio->index, ret, strerror(-ret));
-               return -1;
-           }
-           wifi_hal_info_print("%s:%d: reconfig success\n", __func__, __LINE__);
-           goto Exit;
-       }
+    ret = nl80211_send_and_recv(msg, wiphy_set_info_handler, &g_wifi_hal, NULL, NULL);
+    if (ret != 0) {
+        wifi_hal_info_print("%s:%d: Error updating dev:%d error: %d (%s)\n", __func__, __LINE__,
+            radio->index, ret, strerror(-ret));
         return -1;
     }
-Exit:
+
     if (wifi_setApRetrylimit(interface) != RETURN_OK) {
         wifi_hal_error_print("%s:%d:failed to set retrylimit\n", __func__,__LINE__);
     }
@@ -8601,10 +8527,39 @@ Exit:
         wifi_hal_error_print("%s:%d:failed to set proberq offload mode\n", __func__,__LINE__);
     }
 
-    if(reconfigure) {
-        interface = hash_map_get_first(radio->interface_map);
-        while (interface != NULL) {
-            if (interface->bss_started) {
+    interface = hash_map_get_first(radio->interface_map);
+    while (interface != NULL) {
+        if (interface->bss_started &&
+            interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+#if defined(CONFIG_GENERIC_MLO) && defined(CONFIG_IEEE80211BE)
+            if (interface->vap_info.u.bss_info.mld_info.common_info.mld_enable == true) {
+                if (setup_mlo_vap(interface, &interface->vap_info)) {
+                    return -1;
+                }
+
+                if (nl80211_create_bridge(wifi_hal_get_interface_name(interface), interface->bridge) != 0) {
+                    wifi_hal_error_print("%s:%d: Failed to add interface: %s to bridge %s\n", __func__, __LINE__,
+                        wifi_hal_get_interface_name(interface), interface->bridge);
+                    return -1;
+                }
+
+                interface->vap_initialized = true;
+                if (reload_vap_configuration(interface) < 0) {
+                    return -1;
+                }
+
+                struct hostapd_data *link_bss = NULL;
+                struct hostapd_data *hapd = &interface->u.ap.hapd;
+                for_each_mld_link(link_bss, hapd) {
+                    if (ieee802_11_set_beacon(link_bss) != 0) {
+                        wifi_hal_error_print(
+                            "%s:%d: Failed to set beacon for interface: %s link id: %d\n", __func__,
+                            __LINE__, wifi_hal_get_interface_name(interface),
+                            link_bss->mld_link_id);
+                        return -1;
+                    }
+                }
+            } else {
                 if (nl80211_interface_enable(wifi_hal_get_interface_name(interface), true) != 0) {
                     ret = nl80211_retry_interface_enable(interface, true);
                     if (ret != 0) {
@@ -8612,18 +8567,38 @@ Exit:
                             __func__, __LINE__, ret);
                     }
                 }
-                if (update_hostap_interface_params(interface) != RETURN_OK) {
-                    wifi_hal_error_print("%s:%d - Failed to update_hostap_interface_params\n", __func__, __LINE__);
-                    return RETURN_ERR;
-                }
 
-                interface->beacon_set = 0;
-                start_bss(interface);
+                if (restart_interface(interface) < 0) {
+                    return -1;
+                }
             }
-            interface = hash_map_get_next(radio->interface_map, interface);
+#else
+            if (nl80211_interface_enable(wifi_hal_get_interface_name(interface), true) != 0) {
+                ret = nl80211_retry_interface_enable(interface, true);
+                if (ret != 0) {
+                    wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n", __func__,
+                        __LINE__, ret);
+                }
+            }
+
+            if (restart_interface(interface) < 0) {
+                return -1;
+            }
+#endif
+
+#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
+            if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
+                if (platform_is_bss_up(wifi_hal_get_interface_name(interface))) {
+                    wifi_hal_error_print("%s:%d %s BSS is down. Bringing it up.\n", __func__,
+                        __LINE__, wifi_hal_get_interface_name(interface));
+                    platform_bss_enable(wifi_hal_get_interface_name(interface), true);
+                }
+            }
+#endif
         }
-        wifi_hal_configure_mbssid(radio);
+        interface = hash_map_get_next(radio->interface_map, interface);
     }
+    wifi_hal_configure_mbssid(radio);
 
     wifi_hal_info_print("%s:%d: Updating dev:%d successful\n",
             __func__, __LINE__, radio->index);
@@ -19397,12 +19372,7 @@ int dfs_chan_change_event(int radio_index, u8 channel, int bw, u8 op_class) {
 int reenable_prim_interface(wifi_radio_info_t *radio) {
     wifi_interface_info_t *prim_interface;
 
-    if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_UPDATE_WIPHY_ON_PRIMARY) {
-        prim_interface = get_primary_interface(radio);
-    }
-    else {
-        prim_interface = get_private_vap_interface(radio);
-    }
+    prim_interface = get_first_radio_interface(radio);
 
     if(prim_interface == NULL) {
         wifi_hal_error_print("%s prim_interface is NULL\n", __FUNCTION__);
@@ -19436,12 +19406,7 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
     freq1 = freq;
     sec_chan_offset = get_sec_channel_offset(radio, freq);
 
-    if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_UPDATE_WIPHY_ON_PRIMARY) {
-        interface = get_primary_interface(radio);
-    }
-    else {
-        interface = get_private_vap_interface(radio);
-    }
+    interface = get_first_radio_interface(radio);
 
     if(interface == NULL) {
         wifi_hal_error_print("%s:%d Primary interface is NULL \n", __func__, __LINE__);
