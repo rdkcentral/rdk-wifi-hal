@@ -1031,9 +1031,19 @@ static void *rdk_hal_server_func(void *arg)
         target_bytes = 0;
         nbytes = 0;
 
+        if (desc.len < sizeof(hal_ipc_processor_desc_t)) {
+            wifi_hal_error_print("%s:%d: Invalid descriptor length\n", __func__, __LINE__);
+            close(cli_sock);
+            continue;
+        }
+
         // check if there is more data to be received
         if (desc.len > sizeof(hal_ipc_processor_desc_t)) {
-            assert(desc.scratch_buf_size == (desc.len - sizeof(hal_ipc_processor_desc_t)));
+            if ((desc.scratch_buf_size != (desc.len - sizeof(hal_ipc_processor_desc_t))) || (desc.len > MAX_HAL_IPC_PROTO_BUFF)) {
+                wifi_hal_error_print("%s:%d: Invalid scratch size\n", __func__, __LINE__);
+                close(cli_sock);
+                continue;
+            }
             wifi_hal_dbg_print("%s:%d: Receiving scratch buf of size %d bytes ...\n", __func__, __LINE__, desc.scratch_buf_size);
 
             // allocate memory for client's data
@@ -1080,7 +1090,11 @@ static void *rdk_hal_server_func(void *arg)
 
         wifi_hal_dbg_print("%s:%d: Received command to execute: %s, bytes: %zu, expected: %d\n", __func__, __LINE__, desc.name, sizeof(hal_ipc_processor_desc_t) + nbytes, desc.len);
 
-        assert((sizeof(hal_ipc_processor_desc_t) + nbytes) == desc.len);
+        if ((sizeof(hal_ipc_processor_desc_t) + nbytes) != desc.len) {
+           wifi_hal_error_print("%s:%d malformed IPC request len=%u received=%zu\n", __func__, __LINE__);
+           close(cli_sock);
+           continue;
+        }
         ///**************************************************************************************///
         ///                 call the associated descriptor processor                             ///
         ///**************************************************************************************///
