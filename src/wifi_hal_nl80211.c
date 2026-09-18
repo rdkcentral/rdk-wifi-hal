@@ -2791,7 +2791,16 @@ static void push_eapol_to_char_dev(char *buff, int buflen, struct ieee8023_hdr *
         memcpy(t_buff, &ops_type, sizeof(unsigned int));
         t_buff += sizeof(unsigned int);
 
-        unsigned int len = buflen + sizeof(eapol_qos_info) + sizeof(llc_info);
+        if (buflen < (int)sizeof(struct ieee8023_hdr)) {
+            close(fd_c);
+            return;
+        }
+        unsigned int payload_len = (unsigned int)(buflen - sizeof(struct ieee8023_hdr));
+        unsigned int len = payload_len + sizeof(eapol_qos_info) + sizeof(llc_info);
+        if (len > (sizeof(c_buff) - (3 * sizeof(unsigned int) + 2 * ETH_ALEN))) {
+            close(fd_c);
+            return;
+        }
         memcpy(t_buff, &len, sizeof(unsigned int));
         t_buff += sizeof(unsigned int);
 
@@ -2812,9 +2821,9 @@ static void push_eapol_to_char_dev(char *buff, int buflen, struct ieee8023_hdr *
 
         unsigned char *eapol_tmp_buff = NULL;
 
-        eapol_tmp_buff = buff + 14;
+        eapol_tmp_buff = (unsigned char *)buff + sizeof(struct ieee8023_hdr);
 
-        memcpy(t_buff, eapol_tmp_buff, len);
+        memcpy(t_buff, eapol_tmp_buff, payload_len);
 
         if (write(fd_c, c_buff, 2048) < 0) {
             wifi_hal_error_print("%s:%d: failed to write to char dev\n", __func__, __LINE__);
@@ -17065,11 +17074,16 @@ static void nl80211_control_port_frame (wifi_interface_info_t* interface, struct
                     }
 #endif
                 } else {
+                    size_t eapol_len = nla_len(tb[NL80211_ATTR_FRAME]);
+                    if (eapol_len == 0 || eapol_len > sizeof(interface->u.sta.rx_eapol_buff)) {
+                        wifi_hal_error_print("%s:%d invalid control-port EAPOL len=%zu\n", __func__, __LINE__, eapol_len);
+                        return;
+                    }
+
                     interface->u.sta.pending_rx_eapol = true;
-                    memcpy(interface->u.sta.rx_eapol_buff, nla_data(tb[NL80211_ATTR_FRAME]),
-                        nla_len(tb[NL80211_ATTR_FRAME]));
-                    interface->u.sta.buff_len = nla_len(tb[NL80211_ATTR_FRAME]);
-                    memcpy(interface->u.sta.src_addr, src_addr, strlen((char *)src_addr) + 1);
+                    memcpy(interface->u.sta.rx_eapol_buff, nla_data(tb[NL80211_ATTR_FRAME]), eapol_len);
+                    interface->u.sta.buff_len = (int)eapol_len;
+                    memcpy(interface->u.sta.src_addr, src_addr, sizeof(mac_address_t));
                 }
             }
             break;
