@@ -7901,6 +7901,8 @@ int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wif
     wifi_interface_info_t *intf;
     char ifname[32];
     int ret;
+    static const unsigned char zero_mac[ETH_ALEN] = { 0 };
+    unsigned char mac_to_use[ETH_ALEN];
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_NEW_INTERFACE);
     if (msg == NULL) {
@@ -7928,7 +7930,41 @@ int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wif
         return -1;
     }
 
-    if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, vap->u.bss_info.bssid) < 0) {
+    /* vap->u.bss_info.bssid is only populated *after* an interface has been
+     * created successfully (see wifi_hal_createVAP()); for a VAP being
+     * created for the first time it is still all-zero here. Sending an
+     * all-zero NL80211_ATTR_MAC gets NL80211_CMD_NEW_INTERFACE rejected
+     * with -EADDRNOTAVAIL by the kernel's is_valid_ether_addr() check
+     * before the request ever reaches the driver. Rather than relying on
+     * unverified kernel/driver behavior when the attribute is simply
+     * omitted, derive a guaranteed-valid, unique, locally-administered MAC
+     * ourselves from the radio's already-initialized primary interface MAC
+     * (the same convention the Broadcom driver uses internally for
+     * auto-assigned VIF addresses: primary MAC + locally-administered bit +
+     * per-VAP offset), so the value we attach here is always valid.
+     */
+    if (memcmp(vap->u.bss_info.bssid, zero_mac, ETH_ALEN) != 0) {
+        memcpy(mac_to_use, vap->u.bss_info.bssid, ETH_ALEN);
+    } else {
+        wifi_interface_info_t *primary = get_primary_interface(radio);
+
+        if (primary == NULL) {
+            wifi_hal_error_print("%s:%d: vap index:%d bssid not derived and no primary "
+                "interface available to derive one from\n", __func__, __LINE__,
+                vap->vap_index);
+            nlmsg_free(msg);
+            return -1;
+        }
+
+        memcpy(mac_to_use, primary->mac, ETH_ALEN);
+        mac_to_use[0] |= 0x02;    /* set locally-administered bit */
+        mac_to_use[5] = (unsigned char)(mac_to_use[5] + vap->vap_index + 1);
+
+        wifi_hal_info_print("%s:%d: vap index:%d bssid not yet derived, using generated "
+            "MAC " MACSTR "\n", __func__, __LINE__, vap->vap_index, MAC2STR(mac_to_use));
+    }
+
+    if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, mac_to_use) < 0) {
         nlmsg_free(msg);
         return -1;
     }
