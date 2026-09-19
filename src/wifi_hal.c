@@ -1548,7 +1548,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 wifi_hal_info_print("%s:%d: interface:%s create bridge:%s\n", __func__, __LINE__,
                     interface_name, vap->bridge_name);
 #if (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && defined(CONFIG_MLO)
-                if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
+                if (radio->oper_param.variant & (WIFI_80211_VARIANT_BE | WIFI_80211_VARIANT_BN)) {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d",  vap->vap_index);
                     if (nl80211_create_bridge(mld_ifname, vap->bridge_name) != 0) {
                         wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
@@ -1622,7 +1622,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 nl80211_interface_enable(interface_name, vap->u.bss_info.enabled);
 #if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
 #ifdef CONFIG_MLO
-                if(radio->oper_param.variant & WIFI_80211_VARIANT_BE)
+                if (radio->oper_param.variant & (WIFI_80211_VARIANT_BE | WIFI_80211_VARIANT_BN))
                 {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d", vap->vap_index);
                     nl80211_interface_enable(mld_ifname, vap->u.bss_info.enabled);
