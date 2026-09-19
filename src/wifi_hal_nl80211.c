@@ -8767,11 +8767,19 @@ INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band n
         } else if (op->mode == HOSTAPD_MODE_IEEE80211A) {
             /* Op classes 131-137 are 6 GHz (UHB); all others with this mode are 5 GHz. */
             int op_is_6ghz = (op->op_class >= 131 && op->op_class <= 137);
+#if HOSTAPD_VERSION >= 210
             int band_is_6ghz = (nl_band == NL80211_BAND_6GHZ);
             if (op_is_6ghz != band_is_6ghz)
                 continue;
             if (nl_band != NL80211_BAND_5GHZ && nl_band != NL80211_BAND_6GHZ)
                 continue;
+#else
+            /* hostap 2.9 has no 6 GHz band: keep only 5 GHz op classes. */
+            if (op_is_6ghz)
+                continue;
+            if (nl_band != NL80211_BAND_5GHZ)
+                continue;
+#endif
         } else if (op->mode == HOSTAPD_MODE_IEEE80211AD) {
             if (nl_band != NL80211_BAND_60GHZ)
                 continue;
@@ -8836,7 +8844,9 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
             mode = HOSTAPD_MODE_IEEE80211G;
             break;
         case NL80211_BAND_5GHZ:
+#if HOSTAPD_VERSION >= 210
         case NL80211_BAND_6GHZ:
+#endif
             mode = HOSTAPD_MODE_IEEE80211A;
             break;
 	    default:
