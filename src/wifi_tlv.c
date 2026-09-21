@@ -33,6 +33,15 @@ wifi_tlv_t *get_tlv(unsigned char *buff, unsigned short attrib, unsigned short l
     wifi_tlv_t *tlv = (wifi_tlv_t *)buff;
 
     while (total_len < len) {
+        unsigned int remaining = len - total_len;
+
+        if (remaining < 2*sizeof(unsigned short))
+            break;
+
+        /* Ensure the TLV header and value fit within the remaining buffer */
+        if (tlv->length > remaining - 2*sizeof(unsigned short))
+            break;
+
         if (tlv->type == attrib) {
             found = true;
             break;
@@ -42,7 +51,7 @@ wifi_tlv_t *get_tlv(unsigned char *buff, unsigned short attrib, unsigned short l
         tlv = (wifi_tlv_t *)((unsigned char *)tlv + 2*sizeof(unsigned short) + tlv->length);
     }
 
-    return (found == true) ? tlv:NULL;
+    return (found == true) ? tlv : NULL;
 }
 
 
