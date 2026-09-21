@@ -2338,20 +2338,26 @@ wifi_dppProcessReconfigAnnouncement(unsigned char *frame, unsigned int len, unsi
 
 	action = (wifi_dppPublicActionFrameBody_t *)frame;
 
+	unsigned int header_size = sizeof(wifi_dppPublicActionFrameBody_t) - sizeof(action->attrib);
+	if (len < header_size) {
+		return RETURN_ERR;
+	}
+	unsigned int attrib_len = len - header_size;
+
 	tlv = (wifi_tlv_t *)action->attrib;
-        tlv = get_tlv((unsigned char*)tlv, wifi_dpp_attrib_id_C_sign_key_hash, len);
+        tlv = get_tlv((unsigned char*)tlv, wifi_dpp_attrib_id_C_sign_key_hash, attrib_len);
 	if (tlv == NULL) {
 		return RETURN_ERR;
 
 	}
 
-	printf("%s:%d Matching C-sign\n", __func__, __LINE__);
-	print_hex_dump(tlv->length, tlv->value);
-	print_hex_dump(tlv->length, key_hash);
-
 	if ((tlv->length != SHA256_DIGEST_LENGTH) || (memcmp(tlv->value, key_hash, SHA256_DIGEST_LENGTH) != 0)) {
 		return RETURN_ERR;
 	}
+
+	printf("%s:%d Matching C-sign\n", __func__, __LINE__);
+	print_hex_dump(tlv->length, tlv->value);
+	print_hex_dump(SHA256_DIGEST_LENGTH, key_hash);
 
 	return RETURN_OK;
 }
@@ -3419,13 +3425,22 @@ static void *wifi_dppTestFrameHandler(void *arg)
 
 		wifi_dpp_dbg_print("%s:%d: Received data: %d, select returned:%d\n", __func__, __LINE__, ret, retval);
 
+        if (ret < sizeof(wifi_common_hal_test_signature)) {
+            continue;
+        }
+
         if (memcmp(msg, wifi_common_hal_test_signature, sizeof(wifi_common_hal_test_signature)) != 0) {
             continue;
         }
 
         wifi_dpp_dbg_print("%s:%d: Received test signature\n", __func__, __LINE__);
 
-        if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_cmd, ret)) == NULL) {
+        unsigned int tlv_len = ret - sizeof(wifi_common_hal_test_signature);
+
+        if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_cmd, tlv_len)) == NULL) {
+            continue;
+        }
+        if (tlv->length != sizeof(wifi_test_command_id_t)) {
             continue;
         }
         memcpy((unsigned char *)&cmd, tlv->value, tlv->length);
@@ -3434,18 +3449,28 @@ static void *wifi_dppTestFrameHandler(void *arg)
             case wifi_test_command_id_chirp:
 			case wifi_test_command_id_reconf_auth_resp:
                 wifi_dpp_dbg_print("%s:%d: Received chirp test command\n", __func__, __LINE__);
-                if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_vap_name, ret)) == NULL) {
+                if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_vap_name, tlv_len)) == NULL) {
+                    continue;
+                }
+                if (tlv->length >= sizeof(interface_name)) {
                     continue;
                 }
                 memcpy(interface_name, tlv->value, tlv->length);
+                interface_name[tlv->length] = '\0';
                 sscanf(interface_name, "ath%d", &ap_index);
 
-                if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_sta_mac, ret)) == NULL) {
+                if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_sta_mac, tlv_len)) == NULL) {
+                    continue;
+                }
+                if (tlv->length != sizeof(mac_address_t)) {
                     continue;
                 }
                 memcpy(bmac, tlv->value, tlv->length);
 
-                if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_raw, ret)) == NULL) {
+                if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_raw, tlv_len)) == NULL) {
+                    continue;
+                }
+                if (tlv->length > sizeof(frame)) {
                     continue;
                 }
                 memcpy(frame, tlv->value, tlv->length);
