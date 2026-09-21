@@ -39,12 +39,12 @@
 #include <linux/rtnetlink.h>
 #include <pthread.h>
 #include <sys/prctl.h>
-#if defined (RDK_ONEWIFI)
-#include "wifi_hal_priv.h"
-#endif
 #include <wifi_hal_rdk_framework.h>
 #include <collection.h>
 #include <cjson/cJSON.h>
+#if defined (RDK_ONEWIFI)
+#include "wifi_hal_priv.h"
+#endif
 #if defined(PLATFORM_LINUX)
 unsigned char wifi_common_hal_test_signature[8] = {0x11, 0x22, 0x22, 0x33, 0x44, 0x44, 0x55, 0x66};
 #else 
