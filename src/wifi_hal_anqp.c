@@ -759,6 +759,11 @@ void *wifi_anqpTestFrameHandler(void *arg)
             continue;
         }
 
+        if (ret < sizeof(wifi_common_hal_test_signature))
+        {
+            continue;
+        }
+
         if (memcmp(msg, wifi_common_hal_test_signature, sizeof(wifi_common_hal_test_signature)) != 0)
         {
             continue;
@@ -766,8 +771,13 @@ void *wifi_anqpTestFrameHandler(void *arg)
 
         wifi_anqp_dbg_print(1, "%s:%d: Received test signature\n", __func__, __LINE__);
 
-        if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_cmd, ret)) == NULL)
+        unsigned int tlv_len = ret - sizeof(wifi_common_hal_test_signature);
+
+        if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_cmd, tlv_len)) == NULL)
         {
+            continue;
+        }
+        if (tlv->length != sizeof(wifi_test_command_id_t)) {
             continue;
         }
         memcpy((unsigned char *)&cmd, tlv->value, tlv->length);
@@ -776,24 +786,35 @@ void *wifi_anqpTestFrameHandler(void *arg)
         {
         case wifi_test_command_id_anqp:
             wifi_anqp_dbg_print(1, "%s:%d: Received anqp test command\n", __func__, __LINE__);
-            if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_vap_name, ret)) == NULL)
+            if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_vap_name, tlv_len)) == NULL)
             {
                 continue;
             }
+            if (tlv->length >= sizeof(interface_name)) {
+                continue;
+            }
             memcpy(interface_name, tlv->value, tlv->length);
+            interface_name[tlv->length] = '\0';
             sscanf(interface_name, "ath%d", &ap_index);
 
-            if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_sta_mac, ret)) == NULL)
+            if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_sta_mac, tlv_len)) == NULL)
             {
+                continue;
+            }
+            if (tlv->length != sizeof(mac_address_t)) {
                 continue;
             }
             memcpy(bmac, tlv->value, tlv->length);
 
-            if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_raw, ret)) == NULL)
+            if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_raw, tlv_len)) == NULL)
             {
                 continue;
             }
+            if (tlv->length > sizeof(frame)) {
+                continue;
+            }
             memcpy(frame, tlv->value, tlv->length);
+            len = tlv->length;
             wifi_anqp_dbg_print(1, "%s:%d: Calling mgmt frame receive\n", __func__, __LINE__);
 
             mgmt_frame_received_callback(ap_index, bmac, frame, len, WIFI_MGMT_FRAME_TYPE_ACTION, wifi_direction_uplink);
