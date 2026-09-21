@@ -48,12 +48,14 @@ static wifi_interface_name_idex_map_t *interface_index_map = NULL;
 #define MAX_CLIENTS 3
 #else
 #define INTERFACE_MAP_JSON "/nvram/InterfaceMap.json"
+#define TMP_INTERFACE_MAP_JSON "/tmp/InterfaceMap.json"
+
 static unsigned int interface_index_map_size;
 
 static wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #ifdef RASPBERRY_PI_PORT
 #if defined(PLATFORM_LINUX)
-    {0, 0,  "wlan0",     "brlan0",    0,    0,     "private_ssid_5g"},
+    {0, 0,  "wlan0",   "",  "brlan0",    0,    0,     "private_ssid_5g"},
 #else
     {0, 0,  "wlan0",   "",  "brlan0",    0,    0,      "private_ssid_2g"},
     {1, 1,  "wlan1",   "",  "brlan0",    0,    1,      "private_ssid_5g"},
@@ -492,6 +494,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef BANANA_PI_PORT // for reference device platforms
@@ -518,11 +521,15 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef TCXB7_PORT // for Broadcom based platforms
@@ -557,6 +564,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef VNTXER5_PORT // for Qualcomm based platforms
@@ -591,6 +599,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef TARGET_GEMINI7_2
@@ -625,6 +634,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif 
 
 #ifdef TCXB8_PORT // for Broadcom based platforms
@@ -659,6 +669,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 
@@ -694,6 +705,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef XB10_PORT // for Broadcom based platforms
@@ -733,6 +745,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef SCXER10_PORT // for Broadcom based platforms
@@ -767,6 +780,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef SCXF10_PORT // for Broadcom based platforms
@@ -801,6 +815,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef CMXB7_PORT
@@ -833,6 +848,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef XLE_PORT // for Broadcom XLE
@@ -867,6 +883,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef SKYSR213_PORT // for Broadcom HUB6
@@ -901,6 +918,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 #ifdef RDKB_ONE_WIFI_PROD // for Broadcom based platforms
     "rdkb",
@@ -934,6 +952,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
     
 };
@@ -2199,6 +2218,32 @@ wifi_radio_info_t *get_radio_by_rdk_index(wifi_radio_index_t index)
     return NULL;
 }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface)
+{
+    for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+        wifi_interface_info_t *interface_iter = NULL;
+        wifi_radio_info_t *radio_iter;
+
+        if (skip_radio_iface != NULL && radio_index == skip_radio_iface->vap_info.radio_index) {
+            continue;
+        }
+        radio_iter = get_radio_by_rdk_index(radio_index);
+        if (radio_iter == NULL) {
+            continue;
+        }
+        hash_map_foreach(radio_iter->interface_map, interface_iter) {
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap ||
+                !interface_iter->vap_info.u.bss_info.enabled ||
+                !interface_iter->vap_info.u.bss_info.hostap_mgt_frame_ctrl ||
+                !interface_iter->u.ap.hapd.iface) {
+                continue;
+            }
+            ieee802_11_update_beacons(interface_iter->u.ap.hapd.iface);
+        }
+    }
+}
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index)
 {
@@ -2503,37 +2548,14 @@ int get_security_encryption_mode_str_from_int(wifi_encryption_method_t encryptio
         break;
 
     case wifi_encryption_aes:
-#ifdef CONFIG_IEEE80211BE
-        {
-            const wifi_interface_info_t * const interface = get_interface_by_vap_index(vap_index);
-            if (NULL == interface) {
-                wifi_hal_error_print("%s:%d NULL pointer!\n", __FUNCTION__, __LINE__);
-                return RETURN_ERR;
-            }
-            unsigned char has_gcmp256 = 0;
-            if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
-                const wifi_security_modes_t security_mode = interface->vap_info.u.bss_info.security.mode;
-                switch (security_mode) {
-                case wifi_security_mode_wpa3_personal:
-                case wifi_security_mode_wpa3_transition:
-                case wifi_security_mode_wpa3_enterprise:
-                case wifi_security_mode_wpa3_compatibility:
-                    has_gcmp256 = !interface->u.ap.conf.disable_11be;
-                    break;
-                default:
-                    break;
-                }
-            }
-            if (has_gcmp256) {
-                strcpy(encryption_mode_str, "aes+gcmp256");
-            } else {
-                strcpy(encryption_mode_str, "aes");
-            }
-        }
-#else
         strcpy(encryption_mode_str, "aes");
-#endif /* CONFIG_IEEE80211BE */
         break;
+
+#ifdef CONFIG_IEEE80211BE
+    case wifi_encryption_aes_gcmp256:
+        strcpy(encryption_mode_str, "aes+gcmp256");
+        break;
+#endif /* CONFIG_IEEE80211BE */
 
     case wifi_encryption_aes_tkip:
         strcpy(encryption_mode_str, "tkip+aes");
@@ -2627,6 +2649,12 @@ void get_cipher_suites(wifi_security_modes_t mode, wifi_encryption_method_t encr
     }
 
     switch (encr) {
+#ifdef CONFIG_IEEE80211BE
+    case wifi_encryption_aes_gcmp256:
+        *pairwise = RSN_CIPHER_SUITE_GCMP_256;
+        *group = RSN_CIPHER_SUITE_CCMP;
+        break;
+#endif
     case wifi_encryption_aes:
         *pairwise = RSN_CIPHER_SUITE_CCMP;
         *group = RSN_CIPHER_SUITE_CCMP;
@@ -2903,6 +2931,9 @@ int pick_akm_suite(int sel)
     } else if (sel & WPA_KEY_MGMT_PSK) {
         wifi_hal_dbg_print("%s:%d: WPA: using KEY_MGMT WPA-PSK\n", __func__, __LINE__);
         return WPA_KEY_MGMT_PSK;
+    } else if (sel & WPA_KEY_MGMT_OWE) {
+        wifi_hal_dbg_print("%s:%d: WPA: using OWE key mgmt\n", __func__, __LINE__);
+        return WPA_KEY_MGMT_OWE;
     } else {
         wifi_hal_dbg_print("%s:%d: WPA: Failed to select authenticated key management type\n", __func__, __LINE__);
         return -1;
@@ -3054,52 +3085,6 @@ static int find_country_code_match(const char *const cc[], const char *const cou
     return RETURN_ERR;
 }
 #ifdef RDKB_ONE_WIFI_PROD
-
-static bool parse_wiphy_band_mapping(FILE *fp, int *pcie_index) {
-    char line[LINE_MAX];
-    int curr_phy_idx;
-    bool in_wiphy = false;
-
-    while (fgets(line, sizeof(line), fp)) {
-        // Detect start of Wiphy
-        char *wiphy_ptr = strstr(line, "Wiphy ");
-        if (wiphy_ptr == line) {
-            // Example: "Wiphy phy2"
-            if (sscanf(line, "Wiphy phy%d", &curr_phy_idx) == 1) {
-                in_wiphy = true;
-            }
-            continue;
-        }
-        // If in a Wiphy stanza, look for "Band N:"
-        if (in_wiphy) {
-            // Skip leading spaces
-            char *trimmed = line;
-            while (*trimmed == ' ' || *trimmed == '\t') ++trimmed;
-
-            // Look for "Band N:"
-            if (strncmp(trimmed, "Band ", 5) == 0) {
-                int band_num;
-                if (sscanf(trimmed, "Band %d:", &band_num) == 1) {
-                    --band_num; /* The iw tool prints nl_band->nla_type + 1 */
-                    if (curr_phy_idx < MAX_NUM_RADIOS &&
-                        ((band_num < NUM_NL80211_BANDS) && (band_num >= 0)))
-                        pcie_index[curr_phy_idx] = ((band_num == NL80211_BAND_6GHZ) ? 2 : band_num);
-                    else {
-                        wifi_hal_error_print("%s:%d: Recieved phy_index:%d Num Radios:%d \
-                            band_num:%d NUM_NL80211_BANDS:%d\n", __func__, __LINE__, \
-                            curr_phy_idx, MAX_NUM_RADIOS, band_num, NUM_NL80211_BANDS);
-                        return false;
-                    }
-                } else {
-                    wifi_hal_error_print("%s:%d: Unable to read the band num %s\n", __func__, __LINE__, trimmed);
-                    return false;
-                }
-                in_wiphy = false;
-            }
-        }
-    }
-    return true;
-}
 static void remap_phy_index(wifi_interface_name_idex_map_t *map, int map_size, const int *pcie_index, int pcie_size)
 {
     for (int i = 0; i < map_size; ++i) {
@@ -3127,14 +3112,79 @@ static void remap_phy_index(wifi_interface_name_idex_map_t *map, int map_size, c
 }
 
 void remap_wifi_interface_name_index_map() {
-    FILE *fp;
-    int pcie_index[MAX_NUM_RADIOS] = {-1, -1, -1};
+    /*
+     * Determine which kernel phy number is assigned to each wlN base interface
+     * by reading /sys/class/net/wlN/phy80211/name.  This sysfs entry is created
+     * the moment the interface is registered with cfg80211 — well before full
+     * band-capability information is published — and is far more reliable than
+     * spawning a subprocess to run "iw list".
+     *
+     * pcie_index[N] will hold the kernel phy number for wlN (e.g. pcie_index[0]=2
+     * means wl0 is registered as phy2).  remap_phy_index() then sets every
+     * interface_index_map entry whose name starts with "wlN" to use that phy
+     * number, correcting the static map's phy_index values.
+     */
+    int pcie_index[MAX_NUM_RADIOS];
+    int retries = 30;
 
-    fp = popen("iw list", "r");
-    if (parse_wiphy_band_mapping(fp, pcie_index)) {
-        remap_phy_index(interface_index_map, interface_index_map_size, pcie_index, MAX_NUM_RADIOS);
-    }
-    pclose(fp);
+    memset(pcie_index, -1, sizeof(pcie_index));
+
+    do {
+        int i;
+        bool all_found = true;
+
+        for (i = 0; i < MAX_NUM_RADIOS; i++) {
+            char sysfs_path[64];
+            char phy_name[32];
+            int kern_phy;
+            FILE *f;
+
+            if (pcie_index[i] != -1)
+                continue; /* already resolved */
+
+            snprintf(sysfs_path, sizeof(sysfs_path),
+                     "/sys/class/net/wl%d/phy80211/name", i);
+            f = fopen(sysfs_path, "r");
+            if (!f) {
+                all_found = false;
+                continue;
+            }
+
+            phy_name[0] = '\0';
+            if (fgets(phy_name, sizeof(phy_name), f) &&
+                sscanf(phy_name, "phy%d", &kern_phy) == 1) {
+                pcie_index[i] = kern_phy;
+                wifi_hal_dbg_print("%s:%d: wl%d -> phy%d (from sysfs)\n",
+                                   __func__, __LINE__, i, kern_phy);
+            } else {
+                wifi_hal_error_print("%s:%d: could not parse phy name from %s\n",
+                                     __func__, __LINE__, sysfs_path);
+                all_found = false;
+            }
+            fclose(f);
+        }
+
+        if (all_found) {
+            remap_phy_index(interface_index_map, interface_index_map_size,
+                            pcie_index, MAX_NUM_RADIOS);
+            wifi_hal_dbg_print("%s:%d: phy remap complete\n", __func__, __LINE__);
+            return;
+        }
+
+        /* Log which base interfaces are still missing */
+        for (i = 0; i < MAX_NUM_RADIOS; i++) {
+            if (pcie_index[i] == -1) {
+                wifi_hal_error_print(
+                    "%s:%d: wl%d not yet visible in sysfs, retrying (%d left)\n",
+                    __func__, __LINE__, i, retries - 1);
+            }
+        }
+        sleep(1);
+    } while (--retries > 0);
+
+    wifi_hal_error_print(
+        "%s:%d: wl base interfaces did not appear in sysfs after retries; skipping phy_index remap\n",
+        __func__, __LINE__);
 }
 
 #endif /* RDKB_ONE_WIFI_PROD */
@@ -4510,6 +4560,11 @@ platform_get_RegDomain_t get_platform_get_RegDomain_fn()
     return driver_info.platform_get_RegDomain_fn;
 }
 
+platform_set_beacon_prot_t get_platform_set_beacon_prot_fn()
+{
+    return driver_info.platform_set_beacon_prot_fn;
+}
+
 bool lsmod_by_name(const char *name)
 {
     FILE *fp = NULL;
@@ -5402,16 +5457,21 @@ static inline int json_parse_interface_map(cJSON *json)
 
 static inline int init_json_interface_map(void)
 {
-    FILE *fp;
+    FILE *fp = NULL;
     cJSON *json;
     size_t len;
     int ret;
 
-    fp = fopen(INTERFACE_MAP_JSON, "r");
+    fp = fopen(TMP_INTERFACE_MAP_JSON, "r");
+
     if (fp == NULL) {
-        wifi_hal_error_print("%s:%d: Failed (err=%d, msg=%s) to opening interface map file:%s\n",
-            __func__, __LINE__, errno, strerror(errno), INTERFACE_MAP_JSON);
-        return -1;
+        fp = fopen(INTERFACE_MAP_JSON, "r");
+        if (fp == NULL) {
+            wifi_hal_error_print(
+                "%s:%d: Failed (err=%d, msg=%s) to opening interface map file:%s\n", __func__,
+                __LINE__, errno, strerror(errno), INTERFACE_MAP_JSON);
+            return -1;
+        }
     }
 
     fseek(fp, 0, SEEK_END);
@@ -5800,7 +5860,8 @@ wifi_interface_info_t *wifi_hal_get_mld_interface_by_link_id(wifi_interface_info
                 continue;
             }
 
-            if (interface_iter->index != interface->index) {
+            if (interface_iter->vap_info.u.bss_info.mld_info.common_info.mld_id !=
+                interface->vap_info.u.bss_info.mld_info.common_info.mld_id) {
                 continue;
             }
 
@@ -5916,3 +5977,22 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac)
 
     return 0;
 }
+
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
+bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
+{
+    struct hostapd_data *link_bss = NULL;
+
+    if (hapd->mld == NULL) {
+        return false;
+    }
+
+    dl_list_for_each(link_bss, &hapd->mld->links, struct hostapd_data, link) {
+        if (link_bss == hapd) {
+            return true;
+        }
+    }
+
+    return false;
+}
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */

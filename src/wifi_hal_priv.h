@@ -531,6 +531,8 @@ typedef struct {
     bool radio_presence; //True for ECO mode Active radio, false for ECO mode power down sleeping radio
     bool radar_detected;
     bool configuration_in_progress;
+    unsigned int dfs_evacuation_channel;              /* 0 = default (ch.44/157 by band) */
+    wifi_channelBandwidth_t dfs_evacuation_channel_width; /* 0 = default 80 MHz */
 #ifndef FEATURE_SINGLE_PHY
     rnr_scan_t rnr;
     bool rnr_enabled;
@@ -665,6 +667,7 @@ typedef int    (* platform_get_radio_phytemperature_t)(wifi_radio_index_t index,
 typedef int    (* platform_set_dfs_t)(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
 typedef int    (* platform_get_radio_caps_t)(wifi_radio_index_t index);
 typedef int    (* platform_get_RegDomain_t)(wifi_radio_index_t index, uint *reg_domain);
+typedef int    (* platform_set_beacon_prot_t)(uint apIndex, bool enabled);
 
 int wifi_hal_parse_rrm_beacon_rep(wifi_interface_info_t *interface, char *buff,
         size_t len, struct rrm_measurement_beacon_report *meas_rep);
@@ -753,6 +756,7 @@ typedef struct {
     platform_set_dfs_t                platform_set_dfs_fn;
     platform_get_radio_caps_t         platform_get_radio_caps_fn;
     platform_get_RegDomain_t platform_get_RegDomain_fn;
+    platform_set_beacon_prot_t platform_set_beacon_prot_fn;
 } wifi_driver_info_t;
 
 INT wifi_hal_init();
@@ -771,6 +775,7 @@ void wifi_hal_deauth(int vap_index, int status, uint8_t *mac);
 INT wifi_hal_getInterfaceMap(wifi_interface_name_idex_map_t *if_map, unsigned int max_entries,
     unsigned int *if_map_size);
 INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal);
+INT wifi_hal_sm_deinit(INT vap_index);
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss);
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map);
@@ -806,10 +811,12 @@ void wifi_hal_newApAssociatedDevice_callback_register(wifi_newApAssociatedDevice
 void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_callback func);
 void wifi_hal_stamode_callback_register(wifi_stamode_callback func);
 void wifi_hal_handshake_callback_register(wifi_handshake_callback func);
+void wifi_hal_eapol_timeouts_callback_register(wifi_eapol_timeouts_callback func);
 void wifi_hal_apStatusCode_callback_register(wifi_apStatusCode_callback func);
 void wifi_hal_radiusEapFailure_callback_register(wifi_radiusEapFailure_callback func);
 void wifi_hal_radiusFallback_failover_callback_register(wifi_radiusFallback_failover_callback func);
 void wifi_hal_apDeAuthEvent_callback_register(wifi_device_deauthenticated_callback func);
+void wifi_hal_apFrameDropUnencrypted_callback_register(wifi_apFrameDropUnencrypted_callback func);
 void wifi_hal_ap_max_client_rejection_callback_register(wifi_apMaxClientRejection_callback func);
 INT wifi_hal_BTMQueryRequest_callback_register(UINT apIndex,
                                             wifi_BTMQueryRequest_callback btmQueryCallback,
@@ -1117,7 +1124,14 @@ int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
 int nl80211_send_mlo_msg(struct nl_msg *msg);
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb);
 int update_hostap_mlo(wifi_interface_info_t *interface);
+#if (HOSTAPD_VERSION >= 211)
+void wifi_get_mld_eml_cap(const u16 mld_cap, const u16 eml_cap, wifi_multi_link_modes_t *mode_val, BOOL *tid_neg);
+#endif
 #endif /* CONFIG_IEEE80211BE */
+
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface);
+#endif
 
 wifi_interface_info_t *wifi_hal_get_mbssid_tx_interface(wifi_radio_info_t *radio);
 void wifi_hal_configure_mbssid(wifi_radio_info_t *radio);
@@ -1204,6 +1218,7 @@ extern int platform_get_sta_measurements(void *priv, const u8 *sta_addr, struct 
 #endif
 extern int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
 extern int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain);
+extern int platform_set_beacon_prot(uint apIndex, bool isEnabled);
 
 #if defined(VNTXER5_PORT)
 INT platform_create_interface_attributes(struct nl_msg **msg_ptr, wifi_radio_info_t *radio,
@@ -1226,6 +1241,10 @@ void platform_set_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t
 #endif
 #endif
 
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+extern void supplicant_event(void *ctx, enum wpa_event_type event,
+     union wpa_event_data *data);
+#endif
 
 platform_pre_init_t     	get_platform_pre_init_fn();
 platform_post_init_t    	get_platform_post_init_fn();
@@ -1255,6 +1274,7 @@ platform_set_offload_mode_t         get_platform_set_offload_mode_fn();
 platform_set_dfs_t                  get_platform_dfs_set_fn();
 platform_get_radio_caps_t           get_platform_get_radio_caps_fn();
 platform_get_RegDomain_t get_platform_get_RegDomain_fn();
+platform_set_beacon_prot_t get_platform_set_beacon_prot_fn();
 
 INT wifi_hal_wps_event(wifi_wps_event_t data);
 INT wifi_hal_get_default_wps_pin(char *pin);
@@ -1365,4 +1385,7 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
 int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
     size_t ifname_out_len);
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
+bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd);
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
 #endif // WIFI_HAL_PRIV_H
