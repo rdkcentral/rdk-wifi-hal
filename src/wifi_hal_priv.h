@@ -23,6 +23,7 @@
 
 #include <stdint.h>
 #include <utils/includes.h>
+#include <linux/version.h>
 #include "utils/common.h"
 #include "utils/eloop.h"
 #include "utils/uuid.h"
@@ -428,6 +429,11 @@ typedef struct ie_info {
 } wifi_ie_info_t;
 #endif
 
+struct txpwr_context {
+    ULONG *tx_power;
+    int radio_index;
+};
+
 typedef struct wifi_interface_info_t {
     char name[32];
     char bridge[32];
@@ -796,6 +802,8 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress);
 INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress);
 #endif
 INT wifi_hal_delApAclDevices(INT apIndex);
+INT wifi_hal_addHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress);
+INT wifi_hal_delHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress);
 INT wifi_hal_steering_eventRegister(wifi_steering_eventCB_t event_cb);
 INT wifi_hal_setRadioTransmitPower(wifi_radio_index_t radioIndex, uint txpower);
 INT wifi_hal_getRadioTransmitPower(INT radioIndex, ULONG *tx_power);
@@ -851,9 +859,10 @@ char *to_mac_str    (mac_address_t mac, mac_addr_str_t key);
 const char *wifi_freq_bands_to_string(wifi_freq_bands_t band);
 const char *wpa_alg_to_string(enum wpa_alg alg);
 int nl80211_update_wiphy(wifi_radio_info_t *radio);
+int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_iface *iface);
+INT wifi_get_radio_capability_data(wifi_radio_info_t *radio, enum nl80211_band band);
 wifi_interface_info_t* get_private_vap_interface(wifi_radio_info_t *radio);
 wifi_interface_info_t* get_primary_interface(wifi_radio_info_t *radio);
-wifi_interface_info_t* get_private_vap_interface(wifi_radio_info_t *radio);
 int wifi_hal_get_vap_interface_type(wifi_vap_name_t vap_name, wifi_vap_type_t vap_type);
 wifi_interface_info_t *wifi_hal_get_vap_interface_by_type(wifi_radio_info_t *radio,
     wifi_vap_type_t vap_type);
@@ -1003,7 +1012,6 @@ int convert_enum_beaconrate_to_int(wifi_bitrate_t rates);
 int get_op_class_from_radio_params(wifi_radio_operationParam_t *param);
 void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len);
 int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int status_code, int rssi);
-wifi_interface_info_t* get_primary_interface(wifi_radio_info_t *radio);
 int nl80211_disconnect_sta(wifi_interface_info_t *interface);
 int wifi_hal_purgeScanResult(unsigned int vap_index, unsigned char *sta_mac);
 void get_wifi_interface_info_map(wifi_interface_name_idex_map_t *interface_map);
@@ -1047,7 +1055,11 @@ int get_bw320_center_freq(wifi_radio_operationParam_t *param, const char *countr
 #endif /* CONFIG_IEEE80211BE */
 int pick_akm_suite(int sel);
 int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const u8 *data,size_t data_len,unsigned int freq, unsigned int wait);
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason, int link_id);
+#else
 int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason);
+#endif
 void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac);
 #if HOSTAPD_VERSION >= 211 //2.11
 int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reason,int link_id);
@@ -1227,18 +1239,9 @@ INT platform_set_radio_mld_bonding(wifi_radio_info_t *radio);
 INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_t *interface);
 #endif
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
+#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
 extern bool (*g_eht_event_notify)(wifi_interface_info_t *interface);
 int platform_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
-#if defined(KERNEL_NO_320MHZ_SUPPORT)
-void platform_switch_channel(wifi_interface_info_t *interface, struct csa_settings *settings);
-void platform_config_eht_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
-bool platform_is_bss_up(char* ifname);
-void platform_bss_enable(char* ifname, bool enable);
-enum nl80211_chan_width platform_get_bandwidth(wifi_interface_info_t *interface);
-void platform_set_csa(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
-void platform_set_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam, bool b_check_radio);
-#endif
 #endif
 
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
@@ -1385,7 +1388,26 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac);
 unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
 int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
     size_t ifname_out_len);
+int bw_to_nl80211_chan_width(int bw, int cf2);
+
+#ifdef MXL_WIFI
+static inline int mxl_clamp(int val, int min_val, int max_val)
+{
+    return (val < min_val) ? min_val : ((val > max_val) ? max_val : val);
+}
+#define MXL_CLAMP(x_, min_, max_) mxl_clamp((x_), (min_), (max_))
+
+int platform_get_nasta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi_na_sta_info_t *sta_info);
+#endif /* MXL_WIFI */
+
+int reload_vap_configuration(wifi_interface_info_t *interface);
+int reload_interface(wifi_interface_info_t *interface);
+int restart_interface(wifi_interface_info_t *interface);
 #if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
 bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd);
+#if defined(CONFIG_GENERIC_MLO)
+int teardown_mlo_vap(wifi_interface_info_t *interface);
+int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_config);
+#endif /* CONFIG_GENERIC_MLO */
 #endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
 #endif // WIFI_HAL_PRIV_H

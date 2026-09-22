@@ -125,6 +125,7 @@ static int move_radio_capability(wifi_radio_capabilities_t *tmp_cap, wifi_radio_
     unsigned j = 0;
 
     tmp_cap->index = cap->index;
+    tmp_cap->rdk_radio_index = cap->rdk_radio_index;
     tmp_cap->numSupportedFreqBand = 1;
     tmp_cap->band[0] = cap->band[arr_loc];
     memcpy(&tmp_cap->channel_list[0], &cap->channel_list[arr_loc], sizeof(wifi_channels_list_t));
@@ -162,6 +163,34 @@ static int move_radio_capability(wifi_radio_capabilities_t *tmp_cap, wifi_radio_
     for (j=0 ; j<tmp_cap->numcountrySupported ; j++) {
         tmp_cap->countrySupported[j] = cap->countrySupported[j];
     }
+    // Copy HT and VHT capability fields
+    tmp_cap->ht_capab = cap->ht_capab;
+    memcpy(tmp_cap->mcs_set, cap->mcs_set, HT_MCS_SET_LEN);
+    tmp_cap->ampdu_params = cap->ampdu_params;
+    tmp_cap->vht_capab = cap->vht_capab;
+    memcpy(tmp_cap->vht_mcs_set, cap->vht_mcs_set, VHT_MCS_SET_LEN);
+
+    // Copy HE (WiFi6) and EHT (WiFi7) capability fields
+    tmp_cap->wifi6_supported = cap->wifi6_supported;
+    memcpy(tmp_cap->he_phy_cap, cap->he_phy_cap, HE_MAX_PHY_CAPAB_SIZE);
+    memcpy(tmp_cap->he_mac_cap, cap->he_mac_cap, HE_MAX_MAC_CAPAB_SIZE);
+    memcpy(tmp_cap->he_mcs_nss_set, cap->he_mcs_nss_set, HE_MAX_MCS_CAPAB_SIZE);
+    memcpy(tmp_cap->he_ppet, cap->he_ppet, HE_MAX_PPET_CAPAB_SIZE);
+    tmp_cap->he_6ghz_capa = cap->he_6ghz_capa;
+    tmp_cap->wifi7_supported = cap->wifi7_supported;
+    tmp_cap->eht_mac_cap = cap->eht_mac_cap;
+    memcpy(tmp_cap->eht_phy_cap, cap->eht_phy_cap, EHT_PHY_CAPAB_LEN);
+    memcpy(tmp_cap->eht_mcs, cap->eht_mcs, EHT_MCS_NSS_CAPAB_LEN);
+    memcpy(tmp_cap->eht_ppet, cap->eht_ppet, EHT_PPE_THRESH_CAPAB_LEN);
+
+    tmp_cap->boot_only = cap->boot_only;
+    tmp_cap->scan_impact = cap->scan_impact;
+    tmp_cap->min_scan_interval = cap->min_scan_interval;
+    size_t max_entries = sizeof(tmp_cap->op_class_ch_list) / sizeof(tmp_cap->op_class_ch_list[0]);
+    size_t n = cap->num_op_class_entries < max_entries ? cap->num_op_class_entries : max_entries;
+    tmp_cap->num_op_class_entries = (UINT)n;
+    memcpy(tmp_cap->op_class_ch_list, cap->op_class_ch_list,
+            n * sizeof(tmp_cap->op_class_ch_list[0]));
     memcpy(cap, tmp_cap, sizeof(wifi_radio_capabilities_t));
     return RETURN_OK;
 }
@@ -174,7 +203,7 @@ int adjust_radio_capability_band(wifi_radio_capabilities_t *cap, unsigned int ra
     unsigned int i = 0;
 
     memset(&tmp_cap, 0, sizeof(wifi_radio_capabilities_t));
-    for (i = 0; i <= cap->numSupportedFreqBand; i++) {
+    for (i = 0; i < MAX_NUM_FREQ_BAND; i++) {
         // The driver reports 5G low and high bands as 5G band. We fix the band based on VAP name.
         if (cap->band[i] == WIFI_FREQUENCY_5_BAND && (radio_band == WIFI_FREQUENCY_5H_BAND ||
             radio_band == WIFI_FREQUENCY_5L_BAND)) {

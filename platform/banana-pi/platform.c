@@ -35,6 +35,7 @@
 #define NEW_LINE '\n'
 #define MAX_BUF_SIZE 128
 #define MAX_CMD_SIZE 1024
+#define BPI_LEN_64 64
 #define BPI_LEN_32 32
 #define BPI_LEN_16 16
 #define BPI_LEN_8 8
@@ -220,7 +221,30 @@ int platform_get_ssid_default(char *ssid, int vap_index)
             return 0;
         }
     }
-    snprintf(ssid, BPI_LEN_16, "BPI-RDKB-MLO-AP");
+    char serial[BPI_LEN_8] = {0};
+    FILE *fp = NULL;
+    size_t bytes_read = 0;
+
+    if((fp = fopen("/nvram/serial_number.txt", "rb")) != NULL)
+    {
+        if(fseek(fp, -7, SEEK_END))
+        {
+            wifi_hal_dbg_print("%s:%d, fseek() failed \n", __func__, __LINE__);
+	        fclose(fp);
+	        return -1;
+        }
+	    bytes_read = fread(serial, 1, sizeof(serial)-1, fp);
+	    fclose(fp);
+	    if(!bytes_read)
+	        return -1;
+	    serial[strcspn(serial, "\n")] = 0;
+	    wifi_hal_dbg_print("%s:%d, appending serial is :%s \n", __func__, __LINE__, serial);
+    }
+#ifdef CONFIG_GENERIC_MLO
+    snprintf(ssid, BPI_LEN_32, "BPI-RDKB-MLO-AP-%s", serial);
+#else    
+    snprintf(ssid, BPI_LEN_32, "BPI_RDKB-AP%d-%s", vap_index, serial);
+#endif    
     return 0;
 }
 
@@ -255,7 +279,11 @@ int nvram_get_current_password(char *l_password, int vap_index)
 int nvram_get_current_ssid(char *l_ssid, int vap_index)
 {
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+#ifdef CONFIG_GENERIC_MLO    
     snprintf(l_ssid, BPI_LEN_16, "BPI-RDKB-MLO-AP");
+#else    
+    snprintf(l_ssid,BPI_LEN_16,"BPI_RDKB-AP%d",vap_index);
+#endif    
     return 0;
 }
 
@@ -274,19 +302,30 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     }
     for (i = 0; i < map->num_vaps; i++)
     {
-      if (map->vap_array[i].vap_mode == wifi_vap_mode_ap)
-      {
-	    if ((get_security_mode_support_radius(map->vap_array[i].u.bss_info.security.mode)) || is_wifi_hal_vap_lnf_radius(map->vap_array[i].vap_index) || is_wifi_hal_vap_hotspot_secure(map->vap_array[i].vap_index)) {
-	//   Assigning default radius values
-	    wifi_nvram_defaultRead("radius_s_port",output_val);
-	    map->vap_array[i].u.bss_info.security.u.radius.s_port = atoi(output_val);
-	    map->vap_array[i].u.bss_info.security.u.radius.port = atoi(output_val);
-	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.s_ip);
-	    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.ip);
-	    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.s_key);
-	    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.key);
-	    }
-      }
+        if (map->vap_array[i].vap_mode == wifi_vap_mode_ap)
+        {
+            if ((get_security_mode_support_radius(map->vap_array[i].u.bss_info.security.mode)) ||
+                is_wifi_hal_vap_lnf_radius(map->vap_array[i].vap_index) ||
+                is_wifi_hal_vap_hotspot_secure(map->vap_array[i].vap_index)) {
+                /* Set Default Primary RADIUS Configurations if not already configured */
+                if (strcmp(map->vap_array[i].u.bss_info.security.u.radius.ip, "0.0.0.0") == 0) {
+                    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.ip);
+                    wifi_nvram_defaultRead("radius_s_port",output_val);
+                    map->vap_array[i].u.bss_info.security.u.radius.port = atoi(output_val);
+                    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.key);
+                }
+                /* Set Default Secondary RADIUS Configurations if not already configured */
+                if (strcmp(map->vap_array[i].u.bss_info.security.u.radius.s_ip, "0.0.0.0") == 0) {
+                    wifi_nvram_defaultRead("radius_s_ip",map->vap_array[i].u.bss_info.security.u.radius.s_ip);
+                    wifi_nvram_defaultRead("radius_s_port",output_val);
+                    map->vap_array[i].u.bss_info.security.u.radius.s_port = atoi(output_val);
+                    wifi_nvram_defaultRead("radius_key",map->vap_array[i].u.bss_info.security.u.radius.s_key);
+                }
+                wifi_hal_dbg_print("%s:%d: Primary RADIUS server IP address:%s Port:%d \n Secondary RADIUS server IP address:%s Port:%d \n",
+                    __func__, __LINE__, map->vap_array[i].u.bss_info.security.u.radius.ip, map->vap_array[i].u.bss_info.security.u.radius.port,
+                    map->vap_array[i].u.bss_info.security.u.radius.s_ip, map->vap_array[i].u.bss_info.security.u.radius.s_port);
+            }
+        }
     }
 
     for (unsigned int i = 0; i < map->num_vaps; i++) {
@@ -450,11 +489,46 @@ int platform_get_radio_caps(wifi_radio_index_t index)
 #if HOSTAPD_VERSION >= 211
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
+    wifi_multi_link_modes_t mld_oper_cap = 0;
+    BOOL tid_negotiation = false;
+    u16 eml_capa = 0, mld_capa_and_ops = 0;
+    unsigned int i;
+    BOOL ap_ext_capa_present = false;
+
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
         wifi_hal_dbg_print("%s:%d failed to get radio for index\n", __func__, __LINE__);
         return RETURN_ERR;
     }
+
+    for (i = 0; i < radio->driver_data.num_iface_ext_capa; i++) {
+        if (radio->driver_data.iface_ext_capa[i].iftype == NL80211_IFTYPE_AP) {
+            ap_ext_capa_present = true;
+            eml_capa = radio->driver_data.iface_ext_capa[i].eml_capa;
+            mld_capa_and_ops = radio->driver_data.iface_ext_capa[i].mld_capa_and_ops;
+            break;
+        }
+    }
+
+    /* Fallback to UNSPECIFIED if AP-specific data is not present */
+    if (!ap_ext_capa_present) {
+        for (i = 0; i < radio->driver_data.num_iface_ext_capa; i++) {
+            if (radio->driver_data.iface_ext_capa[i].iftype == NL80211_IFTYPE_UNSPECIFIED) {
+                eml_capa = radio->driver_data.iface_ext_capa[i].eml_capa;
+                mld_capa_and_ops = radio->driver_data.iface_ext_capa[i].mld_capa_and_ops;
+                break;
+            }
+        }
+    }
+
+    wifi_get_mld_eml_cap(mld_capa_and_ops, eml_capa, &mld_oper_cap, &tid_negotiation);
+
+    if (mld_capa_and_ops || eml_capa) {
+        radio->driver_data.capa.flags2 |= WPA_DRIVER_FLAGS2_MLO;
+    }
+
+    radio->capab.TIDLinkMapNegotiation = tid_negotiation;
+    radio->capab.mldOperationalCap = mld_oper_cap;
 
     for (interface = hash_map_get_first(radio->interface_map); interface != NULL;
         interface = hash_map_get_next(radio->interface_map, interface)) {
@@ -554,6 +628,24 @@ static int get_sta_list(wifi_interface_info_t *interface, sta_list_t *sta_list)
     return 0;
 }
 
+static void set_wifi_standard_from_rate(struct nlattr **rate, char *cli_OperatingStandard)
+{
+#if defined(NL80211_RATE_INFO_EHT_MCS) && defined(CONFIG_IEEE80211BE)
+    if (rate[NL80211_RATE_INFO_EHT_MCS]) {
+        snprintf(cli_OperatingStandard, BPI_LEN_64, "be");
+    } else
+#endif
+    if (rate[NL80211_RATE_INFO_HE_MCS]) {
+        snprintf(cli_OperatingStandard, BPI_LEN_64, "ax");
+    } else if (rate[NL80211_RATE_INFO_VHT_MCS]) {
+        snprintf(cli_OperatingStandard, BPI_LEN_64, "ac");
+    } else if (rate[NL80211_RATE_INFO_MCS]) {
+        snprintf(cli_OperatingStandard, BPI_LEN_64, "n");
+    } else {
+        cli_OperatingStandard[0] = '\0';
+    }
+}
+
 static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
 {
     wifi_associated_dev3_t *dev = (wifi_associated_dev3_t *)arg;
@@ -567,7 +659,13 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
                 [NL80211_STA_INFO_RX_PACKETS] = { .type = NLA_U32 },
                 [NL80211_STA_INFO_TX_PACKETS] = { .type = NLA_U32 },
                 [NL80211_STA_INFO_TX_FAILED] = { .type = NLA_U32 },
+                [NL80211_STA_INFO_TX_RETRIES] = { .type = NLA_U32 },
                 [NL80211_STA_INFO_CONNECTED_TIME] = { .type = NLA_U32 },
+                [NL80211_STA_INFO_TX_BITRATE] = { .type = NLA_NESTED },
+                [NL80211_STA_INFO_RX_BITRATE] = { .type = NLA_NESTED },
+                [NL80211_STA_INFO_STA_FLAGS] = { .minlen = sizeof(struct nl80211_sta_flag_update) },
+                [NL80211_STA_INFO_RX_DROP_MISC] = { .type = NLA_U64 },
+                [NL80211_STA_INFO_SIGNAL] = { .type = NLA_U8 },
     };
     struct nlattr *rate[NL80211_RATE_INFO_MAX + 1];
     static struct nla_policy rate_policy[NL80211_RATE_INFO_MAX + 1] = {
@@ -611,16 +709,34 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
         dev->cli_ErrorsSent = nla_get_u32(stats[NL80211_STA_INFO_TX_FAILED]);
     }
 
+    if (stats[NL80211_STA_INFO_RX_DROP_MISC]) {
+        dev->cli_RxErrors = nla_get_u64(stats[NL80211_STA_INFO_RX_DROP_MISC]);
+    }
+
+    if (stats[NL80211_STA_INFO_TX_RETRIES]) {
+        dev->cli_RetransCount = nla_get_u32(stats[NL80211_STA_INFO_TX_RETRIES]);
+    }
+
+    if (stats[NL80211_STA_INFO_SIGNAL]) {
+        dev->cli_RSSI = (int8_t)nla_get_u8(stats[NL80211_STA_INFO_SIGNAL]);
+    }
+
     if (stats[NL80211_STA_INFO_TX_BITRATE] &&
         nla_parse_nested(rate, NL80211_RATE_INFO_MAX, stats[NL80211_STA_INFO_TX_BITRATE], rate_policy) == 0) {
         if (rate[NL80211_RATE_INFO_BITRATE32]){
             dev->cli_LastDataDownlinkRate = nla_get_u32(rate[NL80211_RATE_INFO_BITRATE32]) * 100;
         }
+        set_wifi_standard_from_rate(rate, dev->cli_OperatingStandard);
     }
+
     if (stats[NL80211_STA_INFO_RX_BITRATE] &&
         nla_parse_nested(rate, NL80211_RATE_INFO_MAX, stats[NL80211_STA_INFO_RX_BITRATE], rate_policy) == 0) {
         if (rate[NL80211_RATE_INFO_BITRATE32]) {
                 dev->cli_LastDataUplinkRate = nla_get_u32(rate[NL80211_RATE_INFO_BITRATE32]) * 100;
+        }
+        // Wi-Fi Standard fallback from RX bitrate
+        if (dev->cli_OperatingStandard[0] == '\0') {
+            set_wifi_standard_from_rate(rate, dev->cli_OperatingStandard);
         }
     }
 
@@ -801,7 +917,7 @@ INT wifi_setApManagementFramePowerControl(INT apIndex, INT dBm)
     return 0;
 }
 
-#ifdef CONFIG_IEEE80211BE
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
 int nl80211_drv_mlo_msg(struct nl_msg *msg, struct nl_msg **msg_mlo, void *priv,
     struct wpa_driver_ap_params *params)
 {
@@ -819,7 +935,9 @@ int nl80211_send_mlo_msg(struct nl_msg *msg)
 
     return 0;
 }
+#endif /* CONFIG_IEEE80211BE && CONFIG_MLO */
 
+#if defined(CONFIG_IEEE80211BE)
 void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nlattr **tb)
 {
     if (tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC] &&
@@ -830,7 +948,9 @@ void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nla
         eht_capab->mac_cap = WPA_GET_LE16(pos);
     }
 }
+#endif /* CONFIG_IEEE80211BE */
 
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
 static struct hostapd_mld *find_mld(struct wifi_interface_info_t *interface)
 {
     struct hostapd_mld *mld_it = NULL;
@@ -972,5 +1092,5 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
 #endif
     return 0;
 }
-#endif /* CONFIG_IEEE80211BE */
+#endif /* CONFIG_IEEE80211BE && CONFIG_MLO */
 
