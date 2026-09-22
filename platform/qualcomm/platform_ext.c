@@ -1175,6 +1175,11 @@ int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain)
     return RETURN_OK;
 }
 
+int platform_set_beacon_prot(uint apIndex, bool isEnabled)
+{
+    return RETURN_OK;
+}
+
 static int qca_add_intf_to_bridge(wifi_interface_info_t *interface, bool is_mld)
 {
     char mld_ifname[32];

@@ -1055,31 +1055,6 @@ Exit:
 
     free(old_operationParam);
     old_operationParam = NULL;
-
-#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && (HOSTAPD_VERSION >= 210)
-    for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
-        wifi_interface_info_t *interface_iter = NULL;
-
-        if (index == radio_index) {
-            continue;
-        }
-        wifi_radio_info_t *radio_iter = get_radio_by_rdk_index(radio_index);
-        if (radio_iter == NULL) {
-            continue;
-        }
-
-        hash_map_foreach(radio_iter->interface_map, interface_iter) {
-            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap ||
-                !interface_iter->vap_info.u.bss_info.enabled ||
-                !interface_iter->vap_info.u.bss_info.hostap_mgt_frame_ctrl) {
-                continue;
-            }
-
-            ieee802_11_set_beacon(&interface_iter->u.ap.hapd);
-        }
-    }
-
-#endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) &&  (HOSTAPD_VERSION >= 210)
     radio->configuration_in_progress = false;
     return RETURN_OK;
 
@@ -1597,6 +1572,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     wifi_vap_info_t *vap;
     platform_pre_create_vap_t pre_set_vap_params_fn;
     platform_create_vap_t set_vap_params_fn;
+    platform_set_beacon_prot_t set_vap_beacon_prot_fn;
     unsigned int i;
     char msg[2048];
     int set_acl = 0;
@@ -1941,6 +1917,15 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 vap->u.bss_info.mgmtPowerControl) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d: vap index:%d failed to set power %d\n", __func__,
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
+            }
+
+            if ((set_vap_beacon_prot_fn = get_platform_set_beacon_prot_fn()) != NULL &&
+                    interface->u.ap.iface.drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION) {
+#ifdef BEACON_PROT
+                wifi_hal_info_print("%s:%d: vap index:%d set beacon prot: %d\n", __func__, __LINE__,
+                        vap->vap_index, interface->u.ap.conf.beacon_prot);
+                set_vap_beacon_prot_fn(vap->vap_index, interface->u.ap.conf.beacon_prot);
+#endif
             }
         }
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
@@ -4400,6 +4385,20 @@ void wifi_hal_apDeAuthEvent_callback_register(wifi_device_deauthenticated_callba
 
     callbacks->apDeAuthEvent_cb[callbacks->num_apDeAuthEvent_cbs] = func;
     callbacks->num_apDeAuthEvent_cbs++;
+}
+
+void wifi_hal_apFrameDropUnencrypted_callback_register(wifi_apFrameDropUnencrypted_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+
+    if (callbacks == NULL || callbacks->num_frame_drop_unenc_cbs >= MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+
+    callbacks->frame_drop_unenc_cb[callbacks->num_frame_drop_unenc_cbs] = func;
+    callbacks->num_frame_drop_unenc_cbs++;
 }
 
 INT wifi_vapstatus_callback_register(wifi_vapstatus_callback func) {
