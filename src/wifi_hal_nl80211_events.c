@@ -499,6 +499,12 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
 
         case WLAN_FC_STYPE_DISASSOC:
             mgmt_type = WIFI_MGMT_FRAME_TYPE_DISASSOC;
+            /* A TX status event has no reason attribute, the reason is in the frame. */
+            if (event.tx_status.data_len >=
+                offsetof(struct ieee80211_mgmt, u.disassoc.reason_code) +
+                    sizeof(((struct ieee80211_mgmt *)0)->u.disassoc.reason_code)) {
+                reason = WPA_GET_LE16((const u8 *)&mgmt->u.disassoc.reason_code);
+            }
             wifi_hal_dbg_print("%s:%d: Received disassoc frame from: %s\n", __func__, __LINE__,
                            to_mac_str(sta, sta_mac_str));
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
