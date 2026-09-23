@@ -495,6 +495,12 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
 
         case WLAN_FC_STYPE_DISASSOC:
             mgmt_type = WIFI_MGMT_FRAME_TYPE_DISASSOC;
+            /* A TX status event has no reason attribute, the reason is in the frame. */
+            if (event.tx_status.data_len >=
+                offsetof(struct ieee80211_mgmt, u.disassoc.reason_code) +
+                    sizeof(((struct ieee80211_mgmt *)0)->u.disassoc.reason_code)) {
+                reason = WPA_GET_LE16((const u8 *)&mgmt->u.disassoc.reason_code);
+            }
             wifi_hal_dbg_print("%s:%d: Received disassoc frame from: %s\n", __func__, __LINE__,
                            to_mac_str(sta, sta_mac_str));
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
@@ -826,9 +832,43 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     wifi_vap_info_t *vap;
     wifi_bss_info_t bss;
     wifi_station_stats_t sta;
+#if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *mgt_interface;
+#endif /* XLE_PORT && FEATURE_HOSTAP_MGMT_FRAME_CTRL */
 
     vap = &interface->vap_info;
     interface->u.sta.state = WPA_DISCONNECTED;
+
+#if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
+        is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+        radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+        if (radio != NULL && radio->radar_detected) {
+            if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_UPDATE_WIPHY_ON_PRIMARY) {
+                mgt_interface = get_primary_interface(radio);
+            } else {
+                mgt_interface = get_private_vap_interface(radio);
+            }
+
+            radio->radar_detected = false;
+            if (mgt_interface == NULL) {
+                wifi_hal_error_print(
+                    "%s:%d: [DFS-XLE] failed to find AP interface after mesh STA disconnect\n",
+                    __func__, __LINE__);
+            } else {
+                wifi_hal_info_print(
+                    "%s:%d: [DFS-XLE] mesh STA disconnect confirmed; continue evacuation\n",
+                    __func__, __LINE__);
+                nl80211_dfs_radar_detected(mgt_interface, interface->u.sta.backhaul.freq,
+                    radio->iconf.ieee80211n,
+                    get_sec_channel_offset(radio, interface->u.sta.backhaul.freq),
+                    radio->oper_param.channelWidth, 0, interface->u.sta.backhaul.freq, 0);
+            }
+        }
+    }
+#endif /* XLE_PORT && FEATURE_HOSTAP_MGMT_FRAME_CTRL */
+
     callbacks = get_hal_device_callbacks();
 
     if (callbacks->sta_conn_status_callback) {
