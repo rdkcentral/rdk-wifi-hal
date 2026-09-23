@@ -48,6 +48,8 @@ static wifi_interface_name_idex_map_t *interface_index_map = NULL;
 #define MAX_CLIENTS 3
 #else
 #define INTERFACE_MAP_JSON "/nvram/InterfaceMap.json"
+#define TMP_INTERFACE_MAP_JSON "/tmp/InterfaceMap.json"
+
 static unsigned int interface_index_map_size;
 
 static wifi_interface_name_idex_map_t static_interface_index_map[] = {
@@ -492,6 +494,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef BANANA_PI_PORT // for reference device platforms
@@ -518,11 +521,15 @@ const wifi_driver_info_t  driver_info = {
     platform_set_txpower,
     platform_set_offload_mode,
     platform_get_acl_num,
+    platform_get_chanspec_list,
+    platform_set_acs_exclusion_list,
     platform_get_vendor_oui,
     platform_set_neighbor_report,
     platform_get_radio_phytemperature,
     platform_set_dfs,
     platform_get_radio_caps,
+    platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef TCXB7_PORT // for Broadcom based platforms
@@ -557,6 +564,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef VNTXER5_PORT // for Qualcomm based platforms
@@ -591,6 +599,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef TARGET_GEMINI7_2
@@ -625,6 +634,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif 
 
 #ifdef TCXB8_PORT // for Broadcom based platforms
@@ -659,6 +669,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 
@@ -694,6 +705,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef XB10_PORT // for Broadcom based platforms
@@ -733,6 +745,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef SCXER10_PORT // for Broadcom based platforms
@@ -767,6 +780,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef SCXF10_PORT // for Broadcom based platforms
@@ -801,6 +815,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef CMXB7_PORT
@@ -833,6 +848,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef XLE_PORT // for Broadcom XLE
@@ -867,6 +883,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 
 #ifdef SKYSR213_PORT // for Broadcom HUB6
@@ -901,6 +918,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
 #ifdef RDKB_ONE_WIFI_PROD // for Broadcom based platforms
     "rdkb",
@@ -934,6 +952,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_dfs,
     platform_get_radio_caps,
     platform_get_reg_domain,
+    platform_set_beacon_prot,
 #endif
     
 };
@@ -2199,6 +2218,32 @@ wifi_radio_info_t *get_radio_by_rdk_index(wifi_radio_index_t index)
     return NULL;
 }
 
+#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface)
+{
+    for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+        wifi_interface_info_t *interface_iter = NULL;
+        wifi_radio_info_t *radio_iter;
+
+        if (skip_radio_iface != NULL && radio_index == skip_radio_iface->vap_info.radio_index) {
+            continue;
+        }
+        radio_iter = get_radio_by_rdk_index(radio_index);
+        if (radio_iter == NULL) {
+            continue;
+        }
+        hash_map_foreach(radio_iter->interface_map, interface_iter) {
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap ||
+                !interface_iter->vap_info.u.bss_info.enabled ||
+                !interface_iter->vap_info.u.bss_info.hostap_mgt_frame_ctrl ||
+                !interface_iter->u.ap.hapd.iface) {
+                continue;
+            }
+            ieee802_11_update_beacons(interface_iter->u.ap.hapd.iface);
+        }
+    }
+}
+#endif // FEATURE_HOSTAP_MGMT_FRAME_CTRL
 
 wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index)
 {
@@ -2300,6 +2345,27 @@ BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len,
     }
 
     return false;
+}
+
+const u8 * get_vendor_ie_by_type(const u8 *pos, size_t len, u32 vendor_type)
+{
+    const u8 *end;
+
+    end = pos + len;
+
+    while (end - pos > 1) {
+        if (2 + pos[1] > end - pos) {
+            break;
+        }
+
+        if (pos[0] == WLAN_EID_VENDOR_SPECIFIC && pos[1] >= 4 && vendor_type == WPA_GET_BE32(&pos[2])) {
+            return pos;
+        }
+
+        pos += 2 + pos[1];
+    }
+
+    return NULL;
 }
 
 int get_radio_variant_str_from_int(unsigned int variant, char *variant_str)
@@ -4515,6 +4581,11 @@ platform_get_RegDomain_t get_platform_get_RegDomain_fn()
     return driver_info.platform_get_RegDomain_fn;
 }
 
+platform_set_beacon_prot_t get_platform_set_beacon_prot_fn()
+{
+    return driver_info.platform_set_beacon_prot_fn;
+}
+
 bool lsmod_by_name(const char *name)
 {
     FILE *fp = NULL;
@@ -5407,16 +5478,21 @@ static inline int json_parse_interface_map(cJSON *json)
 
 static inline int init_json_interface_map(void)
 {
-    FILE *fp;
+    FILE *fp = NULL;
     cJSON *json;
     size_t len;
     int ret;
 
-    fp = fopen(INTERFACE_MAP_JSON, "r");
+    fp = fopen(TMP_INTERFACE_MAP_JSON, "r");
+
     if (fp == NULL) {
-        wifi_hal_error_print("%s:%d: Failed (err=%d, msg=%s) to opening interface map file:%s\n",
-            __func__, __LINE__, errno, strerror(errno), INTERFACE_MAP_JSON);
-        return -1;
+        fp = fopen(INTERFACE_MAP_JSON, "r");
+        if (fp == NULL) {
+            wifi_hal_error_print(
+                "%s:%d: Failed (err=%d, msg=%s) to opening interface map file:%s\n", __func__,
+                __LINE__, errno, strerror(errno), INTERFACE_MAP_JSON);
+            return -1;
+        }
     }
 
     fseek(fp, 0, SEEK_END);
@@ -5922,3 +5998,22 @@ int wifi_hal_get_mac_address(const char *ifname, mac_address_t mac)
 
     return 0;
 }
+
+#if defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211)
+bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
+{
+    struct hostapd_data *link_bss = NULL;
+
+    if (hapd->mld == NULL) {
+        return false;
+    }
+
+    dl_list_for_each(link_bss, &hapd->mld->links, struct hostapd_data, link) {
+        if (link_bss == hapd) {
+            return true;
+        }
+    }
+
+    return false;
+}
+#endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
