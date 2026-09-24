@@ -41,7 +41,7 @@
 
 #include <sys/stat.h>
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
-    defined(RDKB_ONE_WIFI_PROD)
+    defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT)
 #include <rdk_nl80211_hal.h>
 #include <sys/mman.h>
 #include <fcntl.h>
