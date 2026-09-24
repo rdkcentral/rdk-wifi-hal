@@ -42,7 +42,6 @@
 #include <sys/stat.h>
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
     defined(RDKB_ONE_WIFI_PROD) || (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
-#include <fcntl.h>
 #include <rdk_nl80211_hal.h>
 #include <sys/mman.h>
 #include <fcntl.h>
@@ -77,11 +76,6 @@
 #if defined(CONFIG_IEEE80211BE) && defined(XB10_PORT)
 #define MLO_ENAB 1
 #endif
-
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
-static bool l_eht_set = false;
-static int l_eht_interface_count = 0;
-bool (*g_eht_event_notify)(wifi_interface_info_t *interface) = NULL;
 
 /*
 If include secure_wrapper.h, will need to convert other system calls with v_secure_system calls
