@@ -3255,6 +3255,7 @@ int get_wifi_op_class_info(wifi_countrycode_type_t country_code, wifi_country_ra
     return RETURN_OK;
 }
 
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
 /* US/CA: Check if global operating class matches bandwidth */
 static bool matches_bandwidth_us(unsigned int global_op_class, wifi_channelBandwidth_t bw)
 {
@@ -3429,6 +3430,7 @@ static bool matches_bandwidth_for_country(unsigned int global_op_class, wifi_cha
     /* Default to global for all other countries */
     return matches_bandwidth_global(global_op_class, bw);
 }
+#endif
 
 int convert_enum_beaconrate_to_int(wifi_bitrate_t rates)
 {
@@ -3514,7 +3516,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
     // Search country-specific op_class table: match channel AND bandwidth
     for (i = 0; i < ARRAY_SZ(cc_op_class.op_class); i++) {
         op_class = &cc_op_class.op_class[i];
-
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
         // Skip invalid/empty entries (not all countries use all 19 slots)
         if (op_class->op_class == 0 || op_class->global_op_class == 0) {
             continue;
@@ -3525,7 +3527,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
                 cc_op_class.cc)) {
             continue;
         }
-
+#endif
         // Check if requested channel is in this op_class
         for (j = 0; j < op_class->num; j++) {
             if (op_class->ch_list[j] == param->channel) {
@@ -3541,7 +3543,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
     // Fallback: search global op_class table: match channel AND bandwidth
     for (i = 0; i < ARRAY_SZ(other_op_class.op_class); i++) {
         op_class = &other_op_class.op_class[i];
-
+#ifndef CONFIG_WIFI_EMULATOR_EXT_AGENT
         // Skip invalid/empty entries
         if (op_class->op_class == 0 || op_class->global_op_class == 0) {
             continue;
@@ -3552,7 +3554,7 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
                 param->countryCode)) {
             continue;
         }
-
+#endif
         // Check if requested channel is in this op_class
         for (j = 0; j < op_class->num; j++) {
             if (op_class->ch_list[j] == param->channel) {
