@@ -1046,6 +1046,10 @@ get_config_frame_wrapped_data(unsigned char *ptr, unsigned int attrib_len, wifi_
         return -1;
     }
 
+    if (tlv->length < AES_BLOCK_SIZE || tlv->length > (len + AES_BLOCK_SIZE)) {
+		wifi_dpp_dbg_print("%s:%d invalid wrapped_data length=%u\n", __func__, __LINE__, tlv->length);
+		return -1;
+	}
 
     decrypted_len = siv_decrypt(&ctx, &tlv->value[AES_BLOCK_SIZE], plain, tlv->length - AES_BLOCK_SIZE, tlv->value, 0);
 	if (decrypted_len < 0) {
@@ -1095,6 +1099,11 @@ get_auth_frame_wrapped_data(wifi_dppPublicActionFrameBody_t *frame, unsigned int
     printf("%s:%d: Non wrapped length:%d, must match with %d attrib_len:%d\n", __func__, __LINE__, 
         non_wrapped_len, attrib_len - tlv->length, attrib_len);
 
+    if ((tlv->length < AES_BLOCK_SIZE) || ((tlv->length - AES_BLOCK_SIZE) > len)) {
+        printf("%s:%d: Invalid wrapped data length:%u output capacity:%u\n",
+            __func__, __LINE__, tlv->length, len);
+        return -1;
+    }
     decrypted_len = siv_decrypt(&ctx, &tlv->value[AES_BLOCK_SIZE], plain, tlv->length - AES_BLOCK_SIZE, tlv->value, 2,
                         frame, sizeof(wifi_dppPublicActionFrameBody_t),
                         frame->attrib, non_wrapped_len);
@@ -2201,8 +2210,12 @@ wifi_dppProcessReconfigAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
 
     if ((tlv = get_tlv(frame->attrib, wifi_dpp_attrib_id_transaction_id, attrib_len)) == NULL) {
 		return RETURN_ERR;
+    } else if(tlv->length != sizeof(tran_id)) {
+        wifi_dpp_dbg_print("%s:%d invalid transaction id len=%u\n",__func__, __LINE__, tlv->length);
+        return RETURN_ERR;
     } else {
         memcpy(&tran_id, (unsigned char *)tlv->value, tlv->length);
+        wifi_dpp_dbg_print("%s:%d transaction id=%d\n",__func__, __LINE__, tran_id);
         for(i=(dpp_ctx->dpp_init_retries); i >= 0; i--){ 
             if (tran_id == data->u.reconfig_data.tran_id[i]){
             	wifi_dpp_dbg_print("%s:%d: transaction id match\n", __func__, __LINE__);
@@ -2217,6 +2230,11 @@ wifi_dppProcessReconfigAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
     }
     if ((tlv = get_tlv(frame->attrib, wifi_dpp_attrib_id_proto_version, attrib_len)) == NULL) {
 		return RETURN_ERR;
+    }
+    else if (tlv->length != sizeof(dpp_ctx->enrollee_version)) {
+            wifi_dpp_dbg_print("%s:%d invalid protocol version length=%u\n", __func__, __LINE__, tlv->length);
+            dpp_ctx->enrollee_status = RESPONDER_STATUS_AUTH_FAILURE;
+            return RETURN_ERR;
     } else {
         memcpy((unsigned char *)&dpp_ctx->enrollee_version, (unsigned char *)tlv->value, tlv->length);
         wifi_dpp_dbg_print("%s:%d dpp_ctx->enrollee_version = %d\n", __func__, __LINE__, dpp_ctx->enrollee_version);
@@ -2245,6 +2263,14 @@ wifi_dppProcessReconfigAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
 
     primelen = BN_num_bytes(instance->prime);
     printf("primelen: %d\n", primelen);
+    primelen = BN_num_bytes(instance->prime);
+
+    if (tlv->length != (2 * primelen)) {
+    wifi_dpp_dbg_print("%s:%d Invalid responder protocol key length:%u expected:%u\n",
+        __func__, __LINE__, tlv->length, 2 * primelen);
+    dpp_ctx->enrollee_status = RESPONDER_STATUS_AUTH_FAILURE;
+    return RETURN_ERR;
+    }
 
     instance->x = BN_bin2bn(tlv->value, primelen, instance->x);
     instance->y = BN_bin2bn(tlv->value + primelen, primelen, instance->y);
@@ -2306,6 +2332,13 @@ wifi_dppProcessReconfigAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
 
     printf("Responder nonce: ");
     print_hex_dump(tlv->length, tlv->value);
+
+    if (tlv->length != instance->noncelen) {
+        wifi_dpp_dbg_print("%s:%d responder nonce length mismatch %u/%u\n", __func__, __LINE__,
+            tlv->length, instance->noncelen);
+        dpp_ctx->enrollee_status = RESPONDER_STATUS_AUTH_FAILURE;
+        return RETURN_ERR;
+    }
     memcpy(instance->responder_nonce, tlv->value, tlv->length);
 
     if ((tlv = get_tlv(primary, wifi_dpp_attrib_id_responder_cap, decrypted_len)) == NULL) {
@@ -2453,6 +2486,10 @@ wifi_dppProcessConfigResult(wifi_device_dpp_context_t *dpp_ctx)
             return RETURN_ERR;
     }
 
+    if (tlv->length < AES_BLOCK_SIZE || tlv->length > (len + AES_BLOCK_SIZE)) {
+		wifi_dpp_dbg_print("%s:%d invalid wrapped_data length=%u\n", __func__, __LINE__, tlv->length);
+		return -1;
+	}
 	if ((decrypted_len = siv_decrypt(&ctx, &tlv->value[AES_BLOCK_SIZE], plain, tlv->length - AES_BLOCK_SIZE, 
 							tlv->value, 1, frame, sizeof(wifi_dppPublicActionFrameBody_t))) < 0) {
         dpp_ctx->enrollee_status = RESPONDER_STATUS_CONFIGURATION_FAILURE;
@@ -2465,8 +2502,12 @@ wifi_dppProcessConfigResult(wifi_device_dpp_context_t *dpp_ctx)
     if ((tlv = get_tlv(plain, wifi_dpp_attrib_id_status, len)) == NULL) {
         dpp_ctx->enrollee_status = RESPONDER_STATUS_CONFIGURATION_FAILURE;
 		return RETURN_ERR;
-	}
 
+	} else if (tlv->length != sizeof(status)) {
+        wifi_dpp_dbg_print("%s:%d invalid status length=%u\n",__func__, __LINE__, tlv->length);
+        dpp_ctx->enrollee_status = RESPONDER_STATUS_CONFIGURATION_FAILURE;
+        return RETURN_ERR;
+    }
 	memcpy(&status, tlv->value, tlv->length);
 	if (status != 0) {
         dpp_ctx->enrollee_status = RESPONDER_STATUS_CONFIGURATION_FAILURE;
@@ -2682,8 +2723,14 @@ INT wifi_dppProcessAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
         return RETURN_ERR;
     }
 
+    else if (tlv->length != instance->noncelen || tlv->length > sizeof(instance->responder_nonce)) {
+        wifi_dpp_dbg_print("%s:%d: Invalid responder nonce length=%u\n",__func__, __LINE__, tlv->length);
+        dpp_ctx->enrollee_status = RESPONDER_STATUS_AUTH_FAILURE;
+        return RETURN_ERR;
+    }
     printf("Responder nonce: ");
     print_hex_dump(tlv->length, tlv->value);
+
     memcpy(instance->responder_nonce, tlv->value, tlv->length);
 
     if ((tlv = get_tlv(primary, wifi_dpp_attrib_id_responder_cap, decrypted_len)) == NULL) {
@@ -2736,6 +2783,10 @@ INT wifi_dppProcessAuthResponse(wifi_device_dpp_context_t *dpp_ctx)
 			dpp_ctx->enrollee_status = RESPONDER_STATUS_AUTH_FAILURE;
         	return RETURN_ERR;
     }
+    if (tlv->length < AES_BLOCK_SIZE || tlv->length > (len + AES_BLOCK_SIZE)) {
+		wifi_dpp_dbg_print("%s:%d invalid wrapped_data length=%u\n", __func__, __LINE__, tlv->length);
+		return -1;
+	}
 
     if (siv_decrypt(&ctx, &tlv->value[AES_BLOCK_SIZE], secondary,
             tlv->length - AES_BLOCK_SIZE, tlv->value, 0) < 1) {
