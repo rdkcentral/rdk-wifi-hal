@@ -3419,33 +3419,54 @@ static void *wifi_dppTestFrameHandler(void *arg)
 
 		wifi_dpp_dbg_print("%s:%d: Received data: %d, select returned:%d\n", __func__, __LINE__, ret, retval);
 
+        if ((size_t)ret < sizeof(wifi_common_hal_test_signature)) {
+            continue;
+        }
+
         if (memcmp(msg, wifi_common_hal_test_signature, sizeof(wifi_common_hal_test_signature)) != 0) {
             continue;
         }
 
         wifi_dpp_dbg_print("%s:%d: Received test signature\n", __func__, __LINE__);
 
-        if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_cmd, ret)) == NULL) {
+        size_t tlv_section_len = (size_t)(ret - sizeof(wifi_common_hal_test_signature));
+
+        if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_cmd, (unsigned short)tlv_section_len)) == NULL) {
             continue;
         }
-        memcpy((unsigned char *)&cmd, tlv->value, tlv->length);
+        if (tlv->length != sizeof(cmd)) {
+            continue;
+        }
+        memcpy((unsigned char *)&cmd, tlv->value, sizeof(cmd));
 
         switch (cmd) {
             case wifi_test_command_id_chirp:
 			case wifi_test_command_id_reconf_auth_resp:
                 wifi_dpp_dbg_print("%s:%d: Received chirp test command\n", __func__, __LINE__);
-                if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_vap_name, ret)) == NULL) {
+                if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_vap_name, (unsigned short)tlv_section_len)) == NULL) {
+                    continue;
+                }
+                if (tlv->length == 0 || tlv->length >= sizeof(interface_name)) {
                     continue;
                 }
                 memcpy(interface_name, tlv->value, tlv->length);
-                sscanf(interface_name, "ath%d", &ap_index);
+                interface_name[tlv->length] = '\0';
 
-                if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_sta_mac, ret)) == NULL) {
+                if (sscanf(interface_name, "ath%d", &ap_index) != 1) {
                     continue;
                 }
-                memcpy(bmac, tlv->value, tlv->length);
+                if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_sta_mac, (unsigned short)tlv_section_len)) == NULL) {
+                    continue;
+                }
+                if (tlv->length != sizeof(bmac)) {
+                    continue;
+                }
+                memcpy(bmac, tlv->value, sizeof(bmac));
 
-                if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_raw, ret)) == NULL) {
+                if ((tlv = get_tlv(&msg[sizeof(wifi_common_hal_test_signature)], wifi_test_attrib_raw, (unsigned short)tlv_section_len)) == NULL) {
+                    continue;
+                }
+                if (tlv->length > sizeof(frame)) {
                     continue;
                 }
                 memcpy(frame, tlv->value, tlv->length);
