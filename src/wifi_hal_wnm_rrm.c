@@ -598,7 +598,6 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
 {
     struct wpabuf *buf;
     struct sta_info *sta = NULL;
-    u8 *len;
     int ret, i;
     static const u8 wildcard_bssid[ETH_ALEN] = {
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff
@@ -636,51 +635,74 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
                 __func__, __LINE__, MAC2STR(addr), MAC2STR(hapd->own_addr));
         }
     }
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
-    /* Final fallback for MLO: Search all AP interface hapds globally so
-     * the STA is always found regardless of which interface was requested. */
-    if (!sta) {
-        for (unsigned int _r = 0; _r < g_wifi_hal.num_radios && !sta; _r++) {
-            wifi_radio_info_t *_radio = get_radio_by_rdk_index(_r);
-            if (_radio == NULL) continue;
-            wifi_interface_info_t *_iface;
-            hash_map_foreach(_radio->interface_map, _iface) {
-                if (_iface == interface || _iface->vap_info.vap_mode != wifi_vap_mode_ap) {
+#ifdef CONFIG_IEEE80211BE
+    /* We may have matched a per-link STA object rather than the assoc-link one:
+     * hostapd only keeps WLAN_STA_AUTHORIZED, rrm_enabled_capa and other connection
+     * state on the assoc STA. mld_assoc_sta points there from any link STA. */
+    if (sta && sta->mld_assoc_sta) {
+        wifi_hal_dbg_print("%s:%d: Request beacon: matched link STA " MACSTR " (flags=0x%x), "
+                           "following mld_assoc_sta to assoc STA " MACSTR " (flags=0x%x)\n",
+            __func__, __LINE__, MAC2STR(sta->addr), sta->flags, MAC2STR(sta->mld_assoc_sta->addr),
+            sta->mld_assoc_sta->flags);
+        sta = sta->mld_assoc_sta;
+    }
+#endif // CONFIG_IEEE80211BE
+
+    if (!sta || !(sta->flags & WLAN_STA_AUTHORIZED)) {
+        wifi_hal_error_print("%s:%d: Request beacon: no authorized STA matched for " MACSTR "\n",
+            __func__, __LINE__, MAC2STR(addr));
+        return -1;
+    }
+
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+    /* hostapd mirrors mld_info across every linked BSS's sta_list, so the STA can be
+     * found via a link the driver itself considers inactive/disconnected for this STA
+     * (seen as kernel error -67 "Link has been severed" on send). Retarget to a link
+     * the driver reports as valid for this STA before sending the action frame. */
+    wifi_hal_dbg_print("%s:%d: Request beacon: resolved sta=" MACSTR
+                       " mld_sta=%d hapd link=%d (" MACSTR ")\n",
+        __func__, __LINE__, MAC2STR(sta->addr), sta->mld_info.mld_sta, hapd->mld_link_id,
+        MAC2STR(hapd->own_addr));
+
+    if (sta->mld_info.mld_sta) {
+        struct hostapd_data *target_bss = NULL;
+
+#ifdef CONFIG_IEEE80211BE
+        /* Select the STA's primary link. */
+        u8 target_link_id = sta->mld_assoc_link_id;
+#if defined(CONFIG_DRIVER_BRCM)
+        target_link_id = sta->rx_link_id;
+#endif /* CONFIG_DRIVER_BRCM */
+
+        if (hapd->mld_link_id != target_link_id)
+            target_bss = hostapd_mld_get_link_bss(hapd, target_link_id);
+#endif // CONFIG_IEEE80211BE
+
+        /* Fall back to any link the driver reports as valid for this STA. */
+        if (!target_bss &&
+            (hapd->mld_link_id >= MAX_NUM_MLD_LINKS ||
+                !sta->mld_info.links[hapd->mld_link_id].valid)) {
+            for (i = 0; i < MAX_NUM_MLD_LINKS; i++) {
+                if (!sta->mld_info.links[i].valid)
                     continue;
-                }
-                if (_iface->u.ap.hapd.iface == NULL) {
-                     continue;
-                }
-                for (int _b = 0; _b < _iface->u.ap.hapd.iface->num_bss && !sta; _b++) {
-                    struct hostapd_data *_hapd = _iface->u.ap.hapd.iface->bss[_b];
-                    sta = ap_get_sta(_hapd, addr);
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE)
-                    if (!sta) {
-                        struct sta_info *s;
-                        for (s = _hapd->sta_list; s != NULL; s = s->next) {
-                            if (os_memcmp(s->mld_info.common_info.mld_addr, addr, ETH_ALEN) == 0) {
-                                sta = s;
-                                break;
-                            }
-                        }
-                    }
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE
-                    if (sta) {
-                        hapd = _hapd;
-                        wifi_hal_dbg_print("%s:%d: Found STA " MACSTR " via global hapd search (BSS " MACSTR ")\n",
-                            __func__, __LINE__, MAC2STR(addr), MAC2STR(hapd->own_addr));
-                    }
-                }
-                if (sta) break;
+
+                target_bss = hostapd_mld_get_link_bss(hapd, i);
+                if (target_bss)
+                    break;
             }
+        }
+
+        if (target_bss && target_bss != hapd) {
+            wifi_hal_dbg_print(
+                "%s:%d: Request beacon: retargeting send from link %d to link %d (" MACSTR ")\n",
+                __func__, __LINE__, hapd->mld_link_id, target_bss->mld_link_id,
+                MAC2STR(target_bss->own_addr));
+            hapd = target_bss;
         }
     }
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
-
-    if (!sta || !(sta->flags & WLAN_STA_AUTHORIZED)) {
-        wifi_hal_error_print("%s:%d: Request beacon: Destination address is not connected\n", __func__, __LINE__);
-        return -1;
-    }
 
 #ifndef EM_APP
     if ((mode == BEACON_REPORT_MODE_PASSIVE &&
@@ -700,8 +722,8 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
         return -1;
     }
 
-    /* Measurement request (5) + Measurement element with beacon (18) + optional sub-elements (255)*/
-    buf = wpabuf_alloc(5 + 18 + 255);
+    /* Measurement request (5) + one Measurement element per MLD link (18 + 255 each) */
+    buf = wpabuf_alloc(5 + (MAX_NUM_MLD_LINKS + 1) * (18 + 255));
     if (!buf)
         return -1;
 
@@ -715,90 +737,196 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
     wpabuf_put_u8(buf, hapd->beacon_req_token);
     wpabuf_put_le16(buf, num_of_repetitions);
 
-    /* IEEE P802.11-REVmc/D5.0, 9.4.2.21 */
-    wpabuf_put_u8(buf, WLAN_EID_MEASURE_REQUEST);
-    len = wpabuf_put(buf, 1); /* Length will be set later */
+    /* Build one Measurement Request element for each request in the list. */
+    struct {
+        u8 op_class;
+        u8 channel;
+        u16 duration;
+        const u8 *bssid;
+    } reqs[MAX_NUM_MLD_LINKS + 1];
+    int num_reqs = 0;
 
-    wpabuf_put_u8(buf, hapd->beacon_req_token); /* Measurement Token */
-    wpabuf_put_u8(buf, measurement_request_mode);
-    wpabuf_put_u8(buf, MEASURE_TYPE_BEACON);
+    reqs[num_reqs].op_class = oper_class;
+    reqs[num_reqs].channel = channel;
+    reqs[num_reqs].duration = measurement_duration;
+    reqs[num_reqs].bssid = bssid;
+    num_reqs++;
 
-    /* IEEE P802.11-REVmc/D4.0, 8.4.2.20.7 */
-    wpabuf_put_u8(buf, oper_class);
-    wpabuf_put_u8(buf, channel);
-    wpabuf_put_le16(buf, random_interval);
-    wpabuf_put_le16(buf, measurement_duration);
-    wpabuf_put_u8(buf, mode); /* Measurement Mode */
-    if (!bssid) {
-        /* use wildcard BSSID instead of a specific BSSID */
-        bssid = wildcard_bssid;
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+    /* addr may be the STA's MLD MAC address rather than a per-link address. */
+    if (sta->mld_info.mld_sta) {
+        /* Include the STA's other links when the caller targets the MLD
+         * as a whole: no bssid, wildcard bssid, or the AP's own MLD address.
+         * A bssid matching one specific link's real BSSID means the caller
+         * deliberately wants only that one link, so it must stay a single tag. */
+        bool target_is_mld = (!bssid || os_memcmp(bssid, wildcard_bssid, ETH_ALEN) == 0 ||
+            (hapd->mld && os_memcmp(bssid, hapd->mld->mld_addr, ETH_ALEN) == 0));
+
+        /* For an MLD-wide request, add every established link of this
+         * MLD client, so the response covers all its operating channels rather
+         * than only the link the request happened to be sent on. The caller's
+         * primary request (index 0) may carry a stale/unrelated channel - add every
+         * valid link, including hapd's, with its own real channel/bssid. */
+        for (i = 0; target_is_mld && i < MAX_NUM_MLD_LINKS && num_reqs <= MAX_NUM_MLD_LINKS; i++) {
+            struct mld_link_info *link = &sta->mld_info.links[i];
+            struct hostapd_data *link_bss;
+            u8 link_op_class, link_channel;
+            u16 link_duration;
+
+            if (!link->valid)
+                continue;
+
+            link_bss = hostapd_mld_get_link_bss(hapd, i);
+            if (!link_bss || !link_bss->iface || !link_bss->iconf)
+                continue;
+
+            if (ieee80211_freq_to_channel_ext(link_bss->iface->freq,
+                    link_bss->iconf->secondary_channel, hostapd_get_oper_chwidth(link_bss->iconf),
+                    &link_op_class, &link_channel) == NUM_HOSTAPD_MODES)
+                continue;
+
+            /* Skip requests for channels already in the list. */
+            bool already_queued = false;
+            int j;
+
+            for (j = 0; j < num_reqs; j++) {
+                if (reqs[j].op_class == link_op_class && reqs[j].channel == link_channel) {
+                    already_queued = true;
+                    /* Replace a wildcard or MLD address with the link BSSID. */
+                    if (!reqs[j].bssid || os_memcmp(reqs[j].bssid, wildcard_bssid, ETH_ALEN) == 0 ||
+                        (hapd->mld &&
+                            os_memcmp(reqs[j].bssid, hapd->mld->mld_addr, ETH_ALEN) == 0)) {
+                        reqs[j].bssid = link_bss->own_addr;
+                    }
+                    break;
+                }
+            }
+            if (already_queued)
+                continue;
+
+            /* Allow time for the STA to switch to this link. */
+            link_duration = measurement_duration;
+            if (link_duration && link_duration <= 0xffff / 2)
+                link_duration = (u16)(link_duration * 2);
+
+            reqs[num_reqs].op_class = link_op_class;
+            reqs[num_reqs].channel = link_channel;
+            reqs[num_reqs].duration = link_duration;
+            reqs[num_reqs].bssid = link_bss->own_addr;
+            num_reqs++;
+        }
+
+        /* Remove the invalid primary request link. Keep it if it's the only
+         * entry left, rather than sending zero requests. */
+        if (target_is_mld && num_reqs > 1 && reqs[0].bssid == bssid) {
+            wifi_hal_dbg_print(
+                "%s:%d: Request beacon: dropping primary request "
+                "(op_class=%u channel=%u), not one of this STA's established links\n",
+                __func__, __LINE__, reqs[0].op_class, reqs[0].channel);
+            num_reqs--;
+            os_memmove(&reqs[0], &reqs[1], num_reqs * sizeof(reqs[0]));
+        }
     }
-    wpabuf_put_data(buf, bssid, ETH_ALEN);
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
-    /* optional sub-elements should go here */
+    u8 token = hapd->beacon_req_token;
 
-    if (ssid) {
-        wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_SSID);
-        wpabuf_put_u8(buf, ssid->ssid_len);
-        wpabuf_put_data(buf, ssid->ssid, ssid->ssid_len);
-    }
+    for (int r = 0; r < num_reqs; r++) {
+        u8 *len;
+        size_t content_start;
 
-    /*
-    * Note:
-    * The Beacon Reporting subelement indicates the condition for issuing a
-    * Beacon report. The Beacon Reporting subelement is optionally present in
-    * a Beacon request for repeated measurements; otherwise it is not present.
-    * Mandatory for MBO test plan, redundant according to specifications.
-    */
-    if (rep_cond && *rep_cond <= 10 && rep_cond_threshold) {
-        wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_INFO);
-        wpabuf_put_u8(buf, 2);
-        wpabuf_put_u8(buf, *rep_cond);
-        wpabuf_put_u8(buf, *rep_cond_threshold);
-    }
+        if (r > 0) {
+            token++;
+            if (!token) /* For wraparounds */
+                token++;
+        }
 
-    if (rep_detail && (*rep_detail == 0 || *rep_detail == 1 || *rep_detail == 2)) {
-        wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_DETAIL);
-        wpabuf_put_u8(buf, 1);
-        wpabuf_put_u8(buf, *rep_detail);
-    }
+        /* IEEE P802.11-REVmc/D5.0, 9.4.2.21 */
+        wpabuf_put_u8(buf, WLAN_EID_MEASURE_REQUEST);
+        len = wpabuf_put(buf, 1); /* Length will be set later */
+        content_start = wpabuf_len(buf);
 
-    if (req_elem && req_elem_len) {
-        wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_REQUEST);
-        wpabuf_put_u8(buf, req_elem_len); /* size */
-        wpabuf_put_data(buf, req_elem, req_elem_len); /* data */
-    }
+        wpabuf_put_u8(buf, token); /* Measurement Token */
+        wpabuf_put_u8(buf, measurement_request_mode);
+        wpabuf_put_u8(buf, MEASURE_TYPE_BEACON);
 
-    /* in case channel is not 255, this IE is omitted */
-    if (ap_ch_rep && ap_ch_rep_len && channel == 255) {
-        wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_AP_CHANNEL);
-        wpabuf_put_u8(buf, ap_ch_rep_len + 1);
-        wpabuf_put_u8(buf, oper_class);
-        wpabuf_put_data(buf, ap_ch_rep, ap_ch_rep_len);
-    }
+        /* IEEE P802.11-REVmc/D4.0, 8.4.2.20.7 */
+        wpabuf_put_u8(buf, reqs[r].op_class);
+        wpabuf_put_u8(buf, reqs[r].channel);
+        wpabuf_put_le16(buf, random_interval);
+        wpabuf_put_le16(buf, reqs[r].duration);
+        wpabuf_put_u8(buf, mode); /* Measurement Mode */
+        wpabuf_put_data(buf, reqs[r].bssid ? reqs[r].bssid : wildcard_bssid, ETH_ALEN);
 
-    if (ch_width && ch_center_freq0 && ch_center_freq1) {
-        wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_WIDE_BW_CHSWITCH); /* wide bandwidth channel switch sub element id */
-        wpabuf_put_u8(buf, 5);   /* sub element length */
+        /* optional sub-elements should go here */
+        if (ssid) {
+            wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_SSID);
+            wpabuf_put_u8(buf, ssid->ssid_len);
+            wpabuf_put_data(buf, ssid->ssid, ssid->ssid_len);
+        }
+
+        /* Add the optional reporting condition for repeated measurements. */
+        if (rep_cond && *rep_cond <= 10 && rep_cond_threshold) {
+            wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_INFO);
+            wpabuf_put_u8(buf, 2);
+            wpabuf_put_u8(buf, *rep_cond);
+            wpabuf_put_u8(buf, *rep_cond_threshold);
+        }
+
+        if (rep_detail && (*rep_detail == 0 || *rep_detail == 1 || *rep_detail == 2)) {
+            wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_DETAIL);
+            wpabuf_put_u8(buf, 1);
+            wpabuf_put_u8(buf, *rep_detail);
+        }
+
+        if (req_elem && req_elem_len) {
+            wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_REQUEST);
+            wpabuf_put_u8(buf, req_elem_len); /* size */
+            wpabuf_put_data(buf, req_elem, req_elem_len); /* data */
+        }
+
+        /* in case channel is not 255, this IE is omitted (only applies to the
+         * caller's own, primary request) */
+        if (r == 0 && ap_ch_rep && ap_ch_rep_len && reqs[r].channel == 255) {
+            wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_AP_CHANNEL);
+            wpabuf_put_u8(buf, ap_ch_rep_len + 1);
+            wpabuf_put_u8(buf, reqs[r].op_class);
+            wpabuf_put_data(buf, ap_ch_rep, ap_ch_rep_len);
+        }
+
+        /* wide bandwidth channel switch info only applies to the caller's own,
+         * primary request */
+        if (r == 0 && ch_width && ch_center_freq0 && ch_center_freq1) {
+            wpabuf_put_u8(buf,
+                WLAN_BEACON_REQUEST_SUBELEM_WIDE_BW_CHSWITCH); /* wide bandwidth channel switch sub
+                                                                    element id */
+            wpabuf_put_u8(buf, 5); /* sub element length */
 #if HOSTAPD_VERSION >= 211 // 2.11
-        wpabuf_put_u8(buf, WLAN_EID_WIDE_BW_CHSWITCH); /* wide bandwidth channel switch element id */
+            wpabuf_put_u8(buf,
+                WLAN_EID_WIDE_BW_CHSWITCH); /* wide bandwidth channel switch element id */
 #else
-        wpabuf_put_u8(buf, WLAN_EID_VHT_WIDE_BW_CHSWITCH); /* wide bandwidth channel switch element id */
+            wpabuf_put_u8(buf,
+                WLAN_EID_VHT_WIDE_BW_CHSWITCH); /* wide bandwidth channel switch element id */
 #endif //2.11
-        wpabuf_put_u8(buf, 3);   /* element length */
-        wpabuf_put_u8(buf, *ch_width);
-        wpabuf_put_u8(buf, *ch_center_freq0);
-        wpabuf_put_u8(buf, *ch_center_freq1);
+            wpabuf_put_u8(buf, 3); /* element length */
+            wpabuf_put_u8(buf, *ch_width);
+            wpabuf_put_u8(buf, *ch_center_freq0);
+            wpabuf_put_u8(buf, *ch_center_freq1);
+        }
+
+        if (last_indication) {
+            wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_LAST_INDICATION);
+            wpabuf_put_u8(buf, 1); /* size */
+            wpabuf_put_u8(buf, last_indication);
+        }
+
+        *len = wpabuf_len(buf) - content_start;
     }
 
-    if (last_indication) {
-        wpabuf_put_u8(buf, WLAN_BEACON_REQUEST_SUBELEM_LAST_INDICATION);
-        wpabuf_put_u8(buf, 1); /* size */
-        wpabuf_put_u8(buf, last_indication);
-    }
+    hapd->beacon_req_token = token;
 
-    /* Action + measurement type + token + reps + EID + len = 7 */
-    *len = wpabuf_len(buf) - 7;
+    wifi_hal_dbg_print("%s:%d: Request beacon: sending %d request(s) to " MACSTR "\n", __func__,
+        __LINE__, num_reqs, MAC2STR(addr));
 
     ret = hostapd_drv_send_action(hapd, hapd->iface->freq, 0, addr,
                     wpabuf_head(buf), wpabuf_len(buf));
