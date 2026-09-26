@@ -81,6 +81,10 @@ INT wifi_hal_getRadioChannelStats(INT radioIndex,
 {
     wifi_hal_dbg_print("%s:%d: Enter. Array size %d\n", __func__, __LINE__, array_size);
 
+    if (array_size <= 0) {
+        return RETURN_ERR;
+    }
+    
     if (array_size > HAL_IPC_RADIO_CHANNELS_MAX){
         wifi_hal_dbg_print("%s:%d: array_size %d is too big. Truncate.\n", __func__, __LINE__, array_size);
         array_size = HAL_IPC_RADIO_CHANNELS_MAX;
@@ -479,10 +483,17 @@ INT wifi_hal_getAssociationReqIEs(  UINT apIndex,
     }
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     station = ap_get_sta(&interface->u.ap.hapd, (const u8 *) clientMacAddress);
-    if (req_ies_size < station->assoc_req_len) {
-      wifi_hal_error_print("%s:%d: req_ies_size %u is too small (should be at least %zu)\n", __func__, __LINE__, req_ies_size, station->assoc_req_len);
-      pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-      return RETURN_ERR;
+    if (station == NULL) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        wifi_hal_error_print("%s:%d station not found\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    if (station->assoc_req_len > req_ies_size) {
+        wifi_hal_error_print("%s:%d req_ies_size %u too small for assoc_req_len %zu\n",
+        __func__, __LINE__, req_ies_size, station->assoc_req_len);
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
     }
 
     memcpy(req_ies, station->assoc_req, station->assoc_req_len);
