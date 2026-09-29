@@ -220,6 +220,7 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
     const struct ieee80211_mgmt *mgmt;
     u16 status = 0;
     size_t len = 0;
+    uint32_t radio_index = 0;
 
     memset(&event, 0, sizeof(event));
     wifi_hal_dbg_print("%s:%d: Enter \n", __func__, __LINE__);
@@ -260,9 +261,12 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
     }
 
     if (interface->vap_info.radio_index < MAX_NUM_RADIOS) {
-        wifi_hal_dbg_print("%s:%d: set beacon ie for radio_index:%d\n", __func__,
-            __LINE__, interface->vap_info.radio_index);
-        wifi_ie_info_t *bss_ie = &interface->bss_elem_ie[interface->vap_info.radio_index];
+        wifi_convert_freq_band_to_radio_index(interface->u.sta.backhaul.oper_freq_band,
+            (int *)&radio_index);
+
+        wifi_hal_dbg_print("%s:%d: set beacon ie for radio_index:%d sta radio:%d\n", __func__,
+            __LINE__, interface->vap_info.radio_index, radio_index);
+        wifi_ie_info_t *bss_ie = &interface->bss_elem_ie[radio_index];
         wpa_hexdump(MSG_MSGDUMP, "ASSOC_BSS_IE", bss_ie->buff, bss_ie->buff_len);
         event.assoc_info.beacon_ies = bss_ie->buff;
         event.assoc_info.beacon_ies_len = bss_ie->buff_len;
@@ -973,18 +977,10 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         ch_type = nla_get_u32(tb[NL80211_ATTR_WIPHY_CHANNEL_TYPE]);
     }
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
-    if (radio && radio->oper_param.band == WIFI_FREQUENCY_6_BAND) { 
-        bw = platform_get_bandwidth(interface);
-    } else {
-#endif
+
     if(tb[NL80211_ATTR_CHANNEL_WIDTH]) {
         bw = nla_get_u32(tb[NL80211_ATTR_CHANNEL_WIDTH]);
     }
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-    }
-#endif
 
     if(tb[NL80211_ATTR_CENTER_FREQ1]) {
         cf1 = nla_get_u32(tb[NL80211_ATTR_CENTER_FREQ1]);
@@ -1148,7 +1144,7 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     radio->prev_channel = channel;
     radio->prev_channelWidth = l_channel_width;
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
+#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
 /*  XER10-530
     XER10 needs to go through 'wl' commands to enable/disable the EHT.
     It will generate a notify event from driver and the platform EHT function

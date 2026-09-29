@@ -23,6 +23,7 @@
 
 #include <stdint.h>
 #include <utils/includes.h>
+#include <linux/version.h>
 #include "utils/common.h"
 #include "utils/eloop.h"
 #include "utils/uuid.h"
@@ -846,6 +847,7 @@ wifi_interface_info_t *get_interface_by_vap_index(unsigned int vap_index);
 wifi_interface_info_t *get_interface_by_if_index(unsigned int if_index, int link_id);
 BOOL get_ie_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, size_t *ie_out_len);
 BOOL get_ie_ext_by_eid(unsigned int eid, unsigned char *buff, unsigned int buff_len, unsigned char **ie_out, unsigned short *ie_out_len);
+const u8 * get_vendor_ie_by_type(const u8 *pos, size_t len, u32 vendor_type);
 INT get_coutry_str_from_code(wifi_countrycode_type_t code, char *country);
 INT get_coutry_str_from_oper_params(wifi_radio_operationParam_t *operParams, char *country);
 char *to_mac_str    (mac_address_t mac, mac_addr_str_t key);
@@ -888,7 +890,7 @@ int     nl80211_connect_sta(wifi_interface_info_t *interface);
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 int     nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
 #endif
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 
 // emu_neighbor_stats_t is used by both CCI and Onewifi
 typedef struct {
@@ -1228,18 +1230,9 @@ INT platform_set_radio_mld_bonding(wifi_radio_info_t *radio);
 INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_t *interface);
 #endif
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
+#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
 extern bool (*g_eht_event_notify)(wifi_interface_info_t *interface);
 int platform_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
-#if defined(KERNEL_NO_320MHZ_SUPPORT)
-void platform_switch_channel(wifi_interface_info_t *interface, struct csa_settings *settings);
-void platform_config_eht_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
-bool platform_is_bss_up(char* ifname);
-void platform_bss_enable(char* ifname, bool enable);
-enum nl80211_chan_width platform_get_bandwidth(wifi_interface_info_t *interface);
-void platform_set_csa(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
-void platform_set_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam, bool b_check_radio);
-#endif
 #endif
 
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)

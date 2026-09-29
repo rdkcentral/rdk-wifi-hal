@@ -414,6 +414,13 @@ INT wifi_hal_init()
     char *drv_name;
 
     wifi_hal_info_print("%s:%d: start\n", __func__, __LINE__);
+#if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211) && defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
+    void supplicant_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
+    wpa_supplicant_event = supplicant_event;
+#elif defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+    void hostapd_wpa_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
+    wpa_supplicant_event = hostapd_wpa_event;
+#endif // BANANA_PI_PORT
     if ((drv_name = get_wifi_drv_name()) == NULL) {
         wifi_hal_error_print("%s:%d: driver not found, get drv name failed\n", __func__, __LINE__);
         return RETURN_ERR;
@@ -685,40 +692,7 @@ void wifi_hal_deauth(int vap_index, int status, uint8_t *mac)
     return;
 }
 
-#if defined(CONFIG_IEEE80211BE) && defined(SCXER10_PORT) && defined(KERNEL_NO_320MHZ_SUPPORT)
-INT _wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
-
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
-{
-    int status;
-    bool b_320mhz = false;
-    wifi_radio_info_t *radio;
-
-    radio = get_radio_by_rdk_index(index);
-    if ((operationParam->channelWidth == WIFI_CHANNELBANDWIDTH_320MHZ) && operationParam->enable) {
-        b_320mhz = true;
-        operationParam->channelWidth = WIFI_CHANNELBANDWIDTH_160MHZ;
-    }
-
-    status = _wifi_hal_setRadioOperatingParameters(index, operationParam);
-
-    if (b_320mhz) {
-        radio->oper_param.channelWidth = WIFI_CHANNELBANDWIDTH_320MHZ;
-        if (radio->oper_param.enable) {
-            platform_set_csa(index, &radio->oper_param);
-        } else {
-            platform_set_chanspec(index, &radio->oper_param, true);
-        }
-        operationParam->channelWidth = WIFI_CHANNELBANDWIDTH_320MHZ;
-    }
-
-    return status;
-}
-
-INT _wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
-#else
-INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
-#endif
 {
     wifi_radio_info_t *radio;
     int op_class;
@@ -1537,35 +1511,7 @@ static int reload_vap_configuration(wifi_interface_info_t *interface)
     return reload_single_vap_configuration(interface);
 }
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && defined(KERNEL_NO_320MHZ_SUPPORT)
-INT _wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map);
-
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
-{
-    int status;
-    bool b_320mhz = false;
-    wifi_radio_info_t *radio;
-
-    radio = get_radio_by_rdk_index(index);
-    if (radio->oper_param.channelWidth == WIFI_CHANNELBANDWIDTH_320MHZ) {
-        b_320mhz = true;
-        radio->oper_param.channelWidth = WIFI_CHANNELBANDWIDTH_160MHZ;
-    }
-
-    status = _wifi_hal_createVAP(index, map);
-
-    if (b_320mhz) {
-        radio->oper_param.channelWidth = WIFI_CHANNELBANDWIDTH_320MHZ;
-        platform_set_csa(index, &radio->oper_param);
-    }
-
-    return status;
-}
-
-INT _wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
-#else
-INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
-#endif
 {
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface, *mbssid_tx_interface;

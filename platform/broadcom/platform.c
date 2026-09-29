@@ -41,14 +41,14 @@
 
 #include <sys/stat.h>
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
-    defined(RDKB_ONE_WIFI_PROD)
+    defined(RDKB_ONE_WIFI_PROD) || (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 #include <rdk_nl80211_hal.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <semaphore.h>
 #include <stdint.h>
 #include <unistd.h>
-#elif defined(SCXER10_PORT) || defined(TCHCBRV2_PORT)
+#elif (defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))) || defined(TCHCBRV2_PORT)
 #include <rdk_nl80211_hal.h>
 #endif /* TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXF10_PORT || TCHCBRV2_PORT ||
           RDKB_ONE_WIFI_PROD */
@@ -64,9 +64,9 @@
 #define wpa_ptk _wpa_ptk
 #define wpa_gtk _wpa_gtk
 #define mld_link_info _mld_link_info
-#if defined(SCXER10_PORT)
+#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
 #include <wifi-include/wlioctl.h>
-#elif defined(SKYSR213_PORT) || defined(SCXF10_PORT)
+#elif defined(SKYSR213_PORT) || defined(SCXF10_PORT) || (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 #include <wlioctl.h>
 #else
 #include <wifi/wlioctl.h>
@@ -77,11 +77,6 @@
 #define MLO_ENAB 1
 #endif
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
-static bool l_eht_set = false;
-static int l_eht_interface_count = 0;
-bool (*g_eht_event_notify)(wifi_interface_info_t *interface) = NULL;
-
 /*
 If include secure_wrapper.h, will need to convert other system calls with v_secure_system calls
 #include <secure_wrapper.h>
@@ -90,18 +85,17 @@ int v_secure_system(const char *command, ...);
 FILE *v_secure_popen(const char *direction, const char *command, ...);
 int v_secure_pclose(FILE *);
 
+#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
+static bool l_eht_set = false;
+static int l_eht_interface_count = 0;
+bool (*g_eht_event_notify)(wifi_interface_info_t *interface) = NULL;
+
 static bool platform_radio_state(wifi_radio_index_t index);
 static bool platform_is_eht_enabled(wifi_radio_index_t index);
 static bool platform_set_eht_hal_callback(wifi_interface_info_t *interface);
 static void platform_wait_for_eht(void);
 static void platform_create_bss_states_string(wifi_radio_index_t index, char *cmd, size_t size);
 static void platform_set_eht(wifi_radio_index_t index, bool enable);
-#if defined(KERNEL_NO_320MHZ_SUPPORT)
-static void platform_csa_to_chanspec(struct csa_settings *settings, char *chspec);
-static bool platform_is_same_chanspec(wifi_radio_index_t index, char *new_chanspec);
-static enum nl80211_chan_width bandwidth_str_to_nl80211_width(char *bandwidth);
-static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec);
-#endif
 #endif
 
 #define BUFFER_LENGTH_WIFIDB 256
@@ -283,7 +277,7 @@ static void set_wl_runtime_configs (const wifi_vap_info_map_t *vap_map)
     }
 }
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 #if defined WIFI_EMULATOR_CHANGE
 #define SEM_NAME "/semlock"
 
@@ -1328,7 +1322,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     }
 
 #if defined(CONFIG_IEEE80211BE)
-#if defined(SCXER10_PORT)
+#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
     platform_set_eht(index, (operationParam->variant & WIFI_80211_VARIANT_BE) ? true : false);
 #elif defined(XB10_PORT)
     int eht_enab = (operationParam->variant & WIFI_80211_VARIANT_BE) ? 1 : 0;
@@ -2277,7 +2271,8 @@ static void platform_beacon_update(wifi_radio_index_t r_index, wifi_vap_info_map
 #endif /* FEATURE_HOSTAP_MGMT_FRAME_CTRL */
 
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
-    defined(RDKB_ONE_WIFI_PROD) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT)
+    defined(RDKB_ONE_WIFI_PROD) || defined(TCHCBRV2_PORT) || \
+    (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 // ToDo: Add Beacon rate NL support for HUB6
 
 int nl_set_beacon_rate(int vap_index, int beacon_rate)
@@ -2405,7 +2400,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             // ToDo: Add Beacon rate NL support for HUB6
             wifi_hal_dbg_print("%s:%d: beacon rate for vap_index:%d is %d\n", __func__, __LINE__,
                 map->vap_array[index].vap_index, map->vap_array[index].u.bss_info.beaconRate);
-#if defined(SCXER10_PORT)
+#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
             // XER10 uses kernel 4.19 which doesn't have NL support
             char beacon_rate_str[8];
             memset(beacon_rate_str, 0, sizeof(beacon_rate_str));
@@ -2435,7 +2430,7 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             wifi_hal_dbg_print("%s:%d: current beacon rate for vap_index:%d is %d\n", __func__,
                 __LINE__, map->vap_array[index].vap_index, current_beacon_rate / 2);
             if (beacon_rate != (current_beacon_rate / 2)) {
-#if defined(SCXER10_PORT)
+#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
                 // XER10 uses kernel 4.19 which doesn't have NL support
                 if (wifi_setApBeaconRate(map->vap_array[index].vap_index, beacon_rate_str) !=
                     RETURN_OK) {
@@ -3322,7 +3317,8 @@ int platform_get_vendor_oui(char *vendor_oui, int vendor_oui_len)
 }
 #endif /*_SR213_PRODUCT_REQ_ */
 
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD)
+#if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || \
+    (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
 
 typedef struct sta_list {
     mac_address_t *macs;
@@ -3520,6 +3516,7 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
         [RDK_VENDOR_ATTR_STA_INFO_TX_RATE_MAX] = { .type = NLA_U32 },
         [RDK_VENDOR_ATTR_STA_INFO_RX_RATE_MAX] = { .type = NLA_U32 },
         [RDK_VENDOR_ATTR_STA_INFO_SPATIAL_STREAM_NUM] = { .type = NLA_U8 },
+        [RDK_VENDOR_ATTR_STA_INFO_ACTIVE_SPATIAL_STREAM_NUM] = { .type = NLA_U8 },
         [RDK_VENDOR_ATTR_STA_INFO_TX_FRAMES] = {.type = NLA_U64 },
         [RDK_VENDOR_ATTR_STA_INFO_RX_RETRIES] = { .type = NLA_U64 },
         [RDK_VENDOR_ATTR_STA_INFO_RX_ERRORS] = {. type = NLA_U64 },
@@ -3688,8 +3685,13 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
 
     if (tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_SPATIAL_STREAM_NUM]) {
-        stats->cli_activeNumSpatialStreams =
+        stats->cli_capableNumSpatialStreams =
             nla_get_u8(tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_SPATIAL_STREAM_NUM]);
+    }
+
+    if (tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_ACTIVE_SPATIAL_STREAM_NUM]) {
+        stats->cli_activeNumSpatialStreams =
+            nla_get_u8(tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_ACTIVE_SPATIAL_STREAM_NUM]);
     }
 
     if (tb_sta_info[RDK_VENDOR_ATTR_STA_INFO_TX_FRAMES]) {
@@ -3730,9 +3732,9 @@ static int get_sta_stats_handler(struct nl_msg *msg, void *arg)
     }
 
 
-    wifi_hal_stats_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu\n", __func__, __LINE__, 
+    wifi_hal_stats_dbg_print("%s:%d cli_DataFramesSentAck: %lu cli_DataFramesSentNoAck: %lu cli_PacketsSent: %lu cli_BytesSent: %lu activeNumSpatialStreams: %u cli_capableNumSpatialStreams: %u\n", __func__, __LINE__, 
             stats->cli_DataFramesSentAck, stats->cli_DataFramesSentNoAck,
-           stats->cli_PacketsSent, stats->cli_BytesSent);
+           stats->cli_PacketsSent, stats->cli_BytesSent, stats->cli_activeNumSpatialStreams, stats->cli_capableNumSpatialStreams);
 
     /*
      * Assume the default packet size for wifi blaster is 1470
@@ -4357,7 +4359,7 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x02, 0x03, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
 #endif // SCXER10_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
-#if defined(SCXER10_PORT)
+#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
     static const u8 eht_phy_cap[EHT_PHY_CAPAB_LEN] = { 0x2c, 0x00, 0x03, 0xe0, 0x00, 0xe7, 0x00,
         0x7e, 0x00 };
 #endif // SCXER10_PORT
@@ -4398,7 +4400,7 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
 #endif /* HOSTAPD_VERSION >= 211 */
 
 // XER-10 uses old kernel that does not support EHT cap NL parameters
-#if defined(SCXER10_PORT)
+#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
         iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].eht_supported = true;
         iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].mac_cap = 0x0082;
         memcpy(iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].phy_cap, eht_phy_cap,
@@ -4456,7 +4458,7 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x02, 0x1b, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
 #endif // TCXB8_PORT || SCXER10_PORT || SCXF10_PORT
-#if defined(SCXER10_PORT)
+#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
     static const u8 eht_phy_cap[EHT_PHY_CAPAB_LEN] = { 0x2c, 0x00, 0x1b, 0xe0, 0x00, 0xe7, 0x00,
         0x7e, 0x00 };
 #endif // SCXER10_PORT
@@ -4510,7 +4512,7 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT
 
 // XER-10 uses old kernel that does not support EHT cap NL parameters
-#if defined(SCXER10_PORT)
+#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
         iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].eht_supported = true;
         iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].mac_cap = 0x00c2;
         memcpy(iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].phy_cap, eht_phy_cap,
@@ -4557,7 +4559,7 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x7b, 0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71,
         0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || SCXF10_PORT
-#if defined(SCXER10_PORT)
+#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
     static const u8 eht_phy_cap[EHT_PHY_CAPAB_LEN] = { 0x2e, 0x00, 0x00, 0x60, 0x00, 0xe7, 0x00,
         0x0e, 0x00 };
 #endif // SCXER10_PORT
@@ -4595,7 +4597,7 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT
 
 // XER-10 uses old kernel that does not support EHT cap NL parameters
-#if defined(SCXER10_PORT)
+#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
         iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].eht_supported = true;
         iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].mac_cap = 0x00c2;
         memcpy(iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].phy_cap, eht_phy_cap,
@@ -4718,7 +4720,7 @@ int platform_set_beacon_prot(uint apIndex, bool isEnabled)
     return RETURN_OK;
 }
 
-#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE)
+#if defined(SCXER10_PORT) && defined(CONFIG_IEEE80211BE) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
 static bool platform_radio_state(wifi_radio_index_t index)
 {
     FILE *fp;
@@ -4855,226 +4857,6 @@ int platform_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
     }
     return RETURN_OK;
 }
-
-#if defined(KERNEL_NO_320MHZ_SUPPORT)
-static void platform_get_current_chanspec(char *ifname, char *cur_chanspec, size_t size)
-{
-     FILE *fp = NULL;
-
-    fp = (FILE *)v_secure_popen("r", "wl -i %s chanspec", ifname);
-    if (fp) {
-        fgets(cur_chanspec, size, fp);
-        cur_chanspec[strlen(cur_chanspec)-1] = '\0';
-        v_secure_pclose(fp);
-    } else {
-        cur_chanspec[0] = '\0';
-    }
-}
-
-static bool platform_is_same_chanspec(wifi_radio_index_t index, char *new_chanspec)
-{
-    char cur_chanspec[32] = {'\0'};
-    FILE *fp = NULL;
-
-    fp = (FILE *)v_secure_popen("r", "wl -i wl%d chanspec", index);
-    if (fp) {
-        fgets(cur_chanspec, sizeof(cur_chanspec), fp);
-        cur_chanspec[strlen(cur_chanspec)-1] = '\0';
-        v_secure_pclose(fp);
-    }
-
-    wifi_hal_dbg_print("%s - current wl%d chanspec=%s,  new chanspec=%s\n", __func__, index, cur_chanspec, new_chanspec);
-    return (!strncmp(cur_chanspec, new_chanspec, strlen(new_chanspec))) ? true : false;
-}
-
-static void platform_csa_to_chanspec(struct csa_settings *settings, char *chspec)
-{
-    char *band = "";
-
-    if ((settings->freq_params.freq >= MIN_FREQ_MHZ_6G) && (settings->freq_params.freq <= MAX_FREQ_MHZ_6G)) {
-        band = "6g";
-    }
-
-    if (settings->freq_params.bandwidth == 20) {
-        sprintf(chspec, "%s%d", band, settings->freq_params.channel);
-    } else if ((settings->freq_params.bandwidth == 40) && (settings->freq_params.freq < MIN_FREQ_MHZ_6G)) {
-        sprintf(chspec, "%d%c", settings->freq_params.channel, (settings->freq_params.sec_channel_offset == 1) ? 'l' : 'u');
-    } else {
-        sprintf(chspec, "%s%d/%d", band, settings->freq_params.channel, settings->freq_params.bandwidth);
-    }
-}
-
-static enum nl80211_chan_width bandwidth_str_to_nl80211_width(char *bandwidth)
-{
-    enum nl80211_chan_width width;
-
-    if (!strncmp(bandwidth, "40", 2)) {
-        width = NL80211_CHAN_WIDTH_40;
-    } else if (!strncmp(bandwidth, "80", 2)) {
-        width = NL80211_CHAN_WIDTH_80;
-    } else if (!strncmp(bandwidth, "160", 3)) {
-        width = NL80211_CHAN_WIDTH_160;
-    } else if (!strncmp(bandwidth, "320", 3)) {
-        width = NL80211_CHAN_WIDTH_320;
-    } else if (strchr(bandwidth, 'l') || strchr(bandwidth, 'u')) {
-        width = NL80211_CHAN_WIDTH_40;
-    } else {
-        width = NL80211_CHAN_WIDTH_20;
-    }
-
-    return width;
-}
-
-static enum nl80211_chan_width platform_get_chanspec_bandwidth(char *chanspec)
-{
-    char *bw = NULL;
-    char spec[32];
-    char *str;
-    char *space;
-    enum nl80211_chan_width width;
-
-    str = strncpy(spec, chanspec, sizeof(spec));
-    space = strrchr(str, ' ');
-    if (space) *space = '\0';
-    bw = strchr(str, '/');
-    if (!strncmp(str, "6g", 2)) {
-        if (bw == NULL) {
-            width = NL80211_CHAN_WIDTH_20;
-        } else {
-            width = bandwidth_str_to_nl80211_width(++bw);
-        }
-    } else if (bw) {
-        width = bandwidth_str_to_nl80211_width(++bw);
-    } else {
-        width = bandwidth_str_to_nl80211_width(str);
-    }
-
-    return width;
-}
-
-enum nl80211_chan_width platform_get_bandwidth(wifi_interface_info_t *interface)
-{
-    char chanspec[32];
-    int width;
-
-    platform_get_current_chanspec(interface->name, chanspec, sizeof(chanspec));
-    width = platform_get_chanspec_bandwidth(chanspec);
-    wifi_hal_dbg_print("%s - Interface=%s chanspec=%s width=%d\n", __func__, interface->name, chanspec, width);
-    return width;
-}
-
-void platform_switch_channel(wifi_interface_info_t *interface, struct csa_settings *settings)
-{
-    char chanspec[32] = {'\0'};
-
-    wifi_hal_dbg_print("%s - csa: name=%s block=%d cs_count=%d channel=%d bandwidth=%d\n", \
-                        __func__, interface->name, settings->block_tx, settings->cs_count, settings->freq_params.channel, settings->freq_params.bandwidth);
-    platform_csa_to_chanspec(settings, chanspec);
-    wifi_hal_dbg_print("%s - csa settings: wl -i %s csa %d %d %s\n", __func__, interface->name, settings->block_tx, settings->cs_count, chanspec);
-    v_secure_system("wl -i %s csa %d %d %s", interface->name, settings->block_tx, settings->cs_count, chanspec);
-}
-
-void platform_set_csa(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
-{
-    char chanspec[32] = {'\0'};
-
-    get_chanspec_string(operationParam, chanspec, index);
-    if (platform_is_same_chanspec(index, chanspec) == false) {
-        bool bss_up;
-        wifi_radio_info_t *radio;
-        wifi_interface_info_t *interface;
-
-        radio = get_radio_by_rdk_index(index);
-        interface = get_private_vap_interface(radio);
-        bss_up = platform_is_bss_up(interface->name);
-        if (bss_up == false) {
-            wifi_hal_dbg_print("%s - bring %s bss up\n", __func__, interface->name);
-            platform_bss_enable(interface->name, true);
-        }
-        wifi_hal_dbg_print("%s - name=wl%d block=0 cs_count=5 chanspec=%s\n", __func__, index, chanspec);
-        v_secure_system("wl -i wl%d csa 0 5 %s", index, chanspec);
-    }
-}
-
-void platform_set_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam, bool b_check_radio)
-{
-    char new_chanspec[32] = {'\0'};
-
-    /* construct target chanspec */
-    get_chanspec_string(operationParam, new_chanspec, index);
-
-    /* compare current cchanspec to target chanspec */
-    if (platform_is_same_chanspec(index, new_chanspec) == false) {
-        bool b_radio_up = true;
-
-        if (b_check_radio) {
-            b_radio_up = platform_radio_state(index);
-            if (b_radio_up) {
-                v_secure_system("wl -i wl%d down", index);
-            }
-        }
-
-        wifi_hal_dbg_print("%s: wl%d chanspec %s\n", __func__, index, new_chanspec);
-        v_secure_system("wl -i wl%d chanspec %s", index, new_chanspec);
-        if (b_check_radio && b_radio_up) {
-            v_secure_system("wl -i wl%d up", index);
-        }
-    }
-}
-
-void platform_config_eht_chanspec(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
-{
-    bool enable;
-    bool eht_enabled = false;
-
-    enable = (operationParam->variant & WIFI_80211_VARIANT_BE) ? true : false;
-    eht_enabled = platform_is_eht_enabled(index);
-
-    /* no op if no change in eht state */
-    if (enable == eht_enabled) {
-        wifi_hal_dbg_print("%s - No change EHT=%d\n", __func__, (eht_enabled) ? 1 : 0);
-        platform_set_csa(index, operationParam);
-    } else {
-        bool radio_up = platform_radio_state(index);
-        if (radio_up) {
-            v_secure_system("wl -i wl%d down", index);
-        }
-        v_secure_system("wl -i wl%d eht %d", index, (enable) ? 1 : 0);
-        wifi_hal_dbg_print("%s: wl%d eht changed to %d\n", __func__, index, (enable == true) ? 1 : 0);
-        platform_set_chanspec(index, operationParam, false);
-        if (radio_up) {
-            v_secure_system("wl -i wl%d up", index);
-        }
-    }
-}
-
-bool platform_is_bss_up(char* ifname)
-{
-    FILE *fp;
-    char bss_state[16]={'\0'};
-
-    fp = (FILE *)v_secure_popen("r", "wl -i %s bss", ifname);
-    if (fp) {
-        fgets(bss_state, sizeof(bss_state), fp);
-        v_secure_pclose(fp);
-    }
-    return !strncmp(bss_state, "up", 2) ? true : false;
-}
-
-void platform_bss_enable(char* ifname, bool enable)
-{
-    bool bss_enabled = platform_is_bss_up(ifname);
-
-    if (bss_enabled == enable) {
-        return;
-    }
-    if (enable) {
-        v_secure_system("wl -i %s bss up", ifname);
-    } else {
-        v_secure_system("wl -i %s bss down", ifname);
-    }
-}
-#endif
 #endif
 
 #ifdef CONFIG_IEEE80211BE
