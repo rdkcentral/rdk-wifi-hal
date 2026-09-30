@@ -647,7 +647,7 @@ int platform_bss_up(int vap_index, bool up)
 int platform_mlo_init(void)
 {
     int i;
-#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+#if defined(SCXER10_PORT)
     char *value = nvram_kget("wl_mlo_config");
 #else
     char *value = nvram_get("wl_mlo_config");
@@ -5065,7 +5065,7 @@ static unsigned char platform_get_link_id_for_radio_index(unsigned int radio_ind
     if (radio_index < (sizeof(mlo_config) / sizeof(*mlo_config))) {
         char *wl_mlo_config;
 
-#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+#if defined(SCXER10_PORT)
         wl_mlo_config = nvram_kget("wl_mlo_config");
 #else
         wl_mlo_config = nvram_get("wl_mlo_config");
@@ -5160,7 +5160,7 @@ static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id
     }
 
     /* Format of nvram wl_mlo_config="-1 -1 -1 -1" */
-#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+#if defined(SCXER10_PORT)
     wl_mlo_config = nvram_kget("wl_mlo_config");
 #else
     wl_mlo_config = nvram_get("wl_mlo_config");
@@ -5184,7 +5184,7 @@ static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id
     memset(new_nvram_val, 0, sizeof(new_nvram_val));
     snprintf(new_nvram_val, sizeof(new_nvram_val), "%d %d %d %d", mlo_config[0], mlo_config[1],
         mlo_config[2], mlo_config[3]);
-#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+#if defined(SCXER10_PORT)
     nvram_kset("wl_mlo_config", new_nvram_val);
     *nvram_changed |= KERNEL_NVRAM_CHANGED;
 #else
@@ -5274,7 +5274,7 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
         wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
         nvram_commit();
     }
-#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+#if defined(SCXER10_PORT)
     if (nvram_changed & KERNEL_NVRAM_CHANGED) {
         wifi_hal_info_print("%s:%d kernel nvram was changed => nvram_kcommit()\n", __func__, __LINE__);
         nvram_kcommit();
