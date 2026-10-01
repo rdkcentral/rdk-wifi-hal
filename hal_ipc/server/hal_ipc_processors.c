@@ -173,11 +173,12 @@ int ipc_server_output(struct hal_ipc_processor_desc *desc,
 
             wifi_channelStats_t *input_output_channelStats_array, *chan_stats_tmp;
 
-            if (array_size > HAL_IPC_RADIO_CHANNELS_MAX) {
-                array_size = HAL_IPC_RADIO_CHANNELS_MAX;
+            if (array_size <= 0 || array_size > HAL_IPC_RADIO_CHANNELS_MAX) {
+                wifi_hal_error_print("%s:%d invalid array_size=%d\n", __func__, __LINE__, array_size);
+                goto error_happened;
             }
 
-            input_output_channelStats_array = (wifi_channelStats_t *) malloc(array_size * sizeof(wifi_channelStats_t));
+            input_output_channelStats_array = (wifi_channelStats_t *) malloc((size_t)array_size * sizeof(wifi_channelStats_t));
 
             if (!input_output_channelStats_array) {
                 wifi_hal_error_print("%s:%d FAIL %s allocate memory for %d wifi_channelStats_t array\n", __func__, __LINE__, desc->name, HAL_IPC_RADIO_CHANNELS_MAX);
