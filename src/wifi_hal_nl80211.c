@@ -19074,8 +19074,9 @@ static void wifi_hal_wps_cancel_on_other_radios(wifi_interface_info_t *interface
         if (interface_iter == interface) {
             continue;
         }
-
-        wifi_hal_nl80211_wps_cancel(interface_iter->vap_info.vap_index);
+        if (interface_iter->u.ap.hapd.wps_stats.pbc_status == WPS_PBC_STATUS_ACTIVE) {
+            wifi_hal_nl80211_wps_cancel(interface_iter->vap_info.vap_index);
+        }
     }
 }
 
