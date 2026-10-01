@@ -729,6 +729,15 @@ void wifi_hal_deauth(int vap_index, int status, uint8_t *mac)
     return;
 }
 
+/* Cache no longer matches hardware: no in-flight or later radio set may treat it as applied. */
+void wifi_hal_invalidate_oper_param(wifi_radio_info_t *radio)
+{
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    radio->oper_param_applied = false;
+    radio->oper_param_gen++;
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+}
+
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam)
 {
     wifi_radio_info_t *radio;
@@ -739,6 +748,8 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     wifi_radio_operationParam_t *old_operationParam = NULL;
     platform_set_radio_pre_init_t set_radio_pre_init_fn;
     bool is_channel_changed;
+    bool oper_applied = true;
+    unsigned int oper_gen;
     int ret;
 
 #ifdef CMXB7_PORT
@@ -783,6 +794,20 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         wifi_hal_error_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
         return RETURN_ERR;
     }
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+#ifdef EASY_MESH_NODE
+    if (radio->configured && radio->oper_param_applied &&
+        memcmp(&radio->oper_param, operationParam, sizeof(*operationParam)) == 0) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        wifi_hal_dbg_print("%s:%d: radio index:%d configuration unchanged, skipping apply\n",
+            __func__, __LINE__, index);
+        return RETURN_OK;
+    }
+#endif // EASY_MESH_NODE
+    radio->oper_param_applied = false;
+    oper_gen = radio->oper_param_gen;
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     if ((set_radio_pre_init_fn = get_platform_set_radio_pre_init_fn()) != NULL) {
         if (set_radio_pre_init_fn(index, operationParam) < 0){
@@ -858,6 +883,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                         if (ret != 0) {
                             wifi_hal_error_print("%s:%d: Retry of interface enable failed:%d\n",
                                 __func__, __LINE__, ret);
+                            wifi_hal_invalidate_oper_param(radio);
                         }
                     }
 #if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
@@ -983,8 +1009,9 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     if (radio->oper_param.DfsEnabled != operationParam->DfsEnabled) {
         platform_set_dfs_t platform_set_dfs_fn = get_platform_dfs_set_fn();
 
-        if (platform_set_dfs_fn != NULL) {
-            platform_set_dfs_fn(index, operationParam);
+        if (platform_set_dfs_fn != NULL &&
+            platform_set_dfs_fn(index, operationParam) != RETURN_OK) {
+            wifi_hal_invalidate_oper_param(radio);
         }
     }
 
@@ -997,7 +1024,10 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
         if (old_operationParam->transmitPower != operationParam->transmitPower) {
             wifi_hal_info_print("%s:%d: OldTransmitPower:%d, NewTransmitPower:%d updating\n", __func__, __LINE__, old_operationParam->transmitPower, operationParam->transmitPower);
-            (void)wifi_hal_setRadioTransmitPower(index, operationParam->transmitPower);
+            if (wifi_hal_setRadioTransmitPower(index, operationParam->transmitPower) != RETURN_OK) {
+                oper_applied = false;
+            }
+            oper_gen++; /* our own power call bumps the generation once */
         }
         radio->oper_param.transmitPower = operationParam->transmitPower;
 		radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
@@ -1060,11 +1090,25 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                             __func__, __LINE__);
                         goto try_hostap_config_update;
                     } else {
+                        memcpy((unsigned char *)&radio->oper_param,
+                            (unsigned char *)old_operationParam,
+                            sizeof(wifi_radio_operationParam_t));
+                        /* transmit power was already applied above */
+                        radio->oper_param.transmitPower = operationParam->transmitPower;
                         free(old_operationParam);
                         old_operationParam = NULL;
                         return RETURN_ERR;
                     }
                 }
+            }
+            /* Without a started BSS nothing switched; let an identical retry do the full update. */
+            hash_map_foreach(radio->interface_map, interface) {
+                if (interface->bss_started) {
+                    break;
+                }
+            }
+            if (interface == NULL) {
+                oper_applied = false;
             }
             goto Exit;
         }
@@ -1080,7 +1124,9 @@ try_hostap_config_update:
 
     if (radio->oper_param.countryCode != operationParam->countryCode) {
         wifi_hal_dbg_print("%s:%d:Set country code:%d\n", __func__, __LINE__, operationParam->countryCode);
-        nl80211_set_regulatory_domain(operationParam->countryCode);
+        if (nl80211_set_regulatory_domain(operationParam->countryCode) != 0) {
+            wifi_hal_invalidate_oper_param(radio);
+        }
     }
 
     memcpy((unsigned char *)&radio->oper_param, (unsigned char *)operationParam, sizeof(wifi_radio_operationParam_t));
@@ -1111,6 +1157,11 @@ Exit:
     if (!radio->configured) {
         radio->configured = true;
     }
+    /* Commit only if nothing (event, power set, MLO sync) invalidated the cache meanwhile. */
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    radio->oper_param_applied = oper_applied && radio->oper_param_gen == oper_gen &&
+        memcmp(&radio->oper_param, operationParam, sizeof(*operationParam)) == 0;
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     free(old_operationParam);
     old_operationParam = NULL;
@@ -1155,12 +1206,17 @@ INT wifi_hal_sm_deinit(INT vap_index)
         return RETURN_ERR;
     }
 
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->u.sta.wpa_sm != NULL) {
         eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
         interface->u.sta.wpa_sm->eapol = NULL;
         wpa_sm_deinit(interface->u.sta.wpa_sm);
         interface->u.sta.wpa_sm = NULL;
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+        interface->wpa_s.wpa = NULL;
+#endif
     }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return RETURN_OK;
 }
 
@@ -1403,6 +1459,90 @@ int get_sta_4addr_status(bool *sta_4addr)
     return json_parse_boolean(EM_CFG_FILE, "sta_4addr_mode_enabled", sta_4addr);
 }
 
+#if defined(EASY_MESH_NODE) && defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+static int sync_radio_channel_with_sta_mlo_link(wifi_radio_info_t *target_radio)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface;
+    sta_mlo_params_t links;
+    unsigned int radio_index;
+    unsigned char link_id;
+    int link_freq;
+    uint channel, previous_channel;
+    UINT previous_op_class;
+    int op_class;
+
+    for (radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+        radio = get_radio_by_rdk_index(radio_index);
+        if (radio == NULL) {
+            continue;
+        }
+
+        hash_map_foreach(radio->interface_map, interface) {
+            if (interface->vap_info.vap_mode != wifi_vap_mode_sta ||
+                interface->u.sta.state != WPA_COMPLETED || interface->mlo_params.valid_links == 0) {
+                continue;
+            }
+
+            /* Negotiated links and their current channels, not the pre-association snapshot */
+            if (nl80211_get_sta_mlo_links(interface, &links) != 0) {
+                continue;
+            }
+
+            for_each_link(links.valid_links, link_id)
+            {
+                link_freq = links.mld_links[link_id].freq;
+
+                if (link_freq <= 0 || !is_chan_freq_supported_on_radio(target_radio, link_freq) ||
+                    wifi_freq_to_channel(link_freq, &channel) != RETURN_OK) {
+                    continue;
+                }
+
+                pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+                previous_channel = target_radio->oper_param.channel;
+                previous_op_class = target_radio->oper_param.operatingClass;
+                target_radio->oper_param.channel = channel;
+                /* Recompute even on a matching channel: connect event stores the 20 MHz class */
+                op_class = get_op_class_from_radio_params(&target_radio->oper_param);
+                if (op_class < 0) {
+                    target_radio->oper_param.channel = previous_channel;
+                    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+                    continue;
+                }
+                target_radio->oper_param.operatingClass = op_class;
+                if (channel != previous_channel || (UINT)op_class != previous_op_class) {
+                    wifi_hal_invalidate_oper_param(target_radio);
+                }
+
+                if (update_hostap_config_params(target_radio) != RETURN_OK) {
+                    wifi_hal_error_print("%s:%d: radio:%d failed to update hostap config for "
+                                         "channel:%u\n",
+                        __func__, __LINE__, target_radio->rdk_radio_index, channel);
+                    target_radio->oper_param.channel = previous_channel;
+                    target_radio->oper_param.operatingClass = previous_op_class;
+                    /* iconf was partly written; rebuild it from the restored cache */
+                    if (update_hostap_config_params(target_radio) != RETURN_OK) {
+                        wifi_hal_error_print("%s:%d: radio:%d failed to restore hostap config\n",
+                            __func__, __LINE__, target_radio->rdk_radio_index);
+                    }
+                    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+                    return RETURN_ERR;
+                }
+                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+                wifi_hal_info_print("%s:%d: align radio:%d AP channel:%u to STA MLO link:%u "
+                                    "channel:%u op_class:%d\n",
+                    __func__, __LINE__, target_radio->rdk_radio_index, previous_channel, link_id,
+                    channel, op_class);
+                return RETURN_OK;
+            }
+        }
+    }
+
+    return RETURN_OK;
+}
+#endif /* EASY_MESH_NODE && CONFIG_IEEE80211BE && CONFIG_GENERIC_MLO */
+
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
     wifi_radio_info_t *radio;
@@ -1448,6 +1588,22 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             radio->index);
         pre_set_vap_params_fn(index, map);
     }
+
+#if defined(EASY_MESH_NODE) && defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    /* Validate first so a rejected map can't leave a synced channel behind in oper_param. */
+    for (i = 0; i < map->num_vaps; i++) {
+        vap = &map->vap_array[i];
+        if (vap->vap_mode == wifi_vap_mode_ap &&
+            validate_wifi_interface_vap_info_params(vap, msg, sizeof(msg)) != RETURN_OK) {
+            wifi_hal_error_print("%s:%d: invalid vap_info for vap_index:%d radio index:%d. %s\n",
+                __func__, __LINE__, vap->vap_index, index, msg);
+            return WIFI_HAL_INVALID_ARGUMENTS;
+        }
+    }
+    if (sync_radio_channel_with_sta_mlo_link(radio) != RETURN_OK) {
+        return RETURN_ERR;
+    }
+#endif
 
     // now create vaps on the interfaces
     for (i = 0; i < map->num_vaps; i++) {
@@ -2458,6 +2614,7 @@ INT wifi_hal_setRadioTransmitPower(wifi_radio_index_t radioIndex, uint txpower)
 {
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface;
+    int ret;
 
     radio = get_radio_by_rdk_index(radioIndex);
     if (radio == NULL) {
@@ -2477,7 +2634,10 @@ INT wifi_hal_setRadioTransmitPower(wifi_radio_index_t radioIndex, uint txpower)
         return -1;
     }
 
-    return wifi_drv_set_txpower(interface, txpower) ? RETURN_ERR : RETURN_OK;
+    ret = wifi_drv_set_txpower(interface, txpower);
+    /* After the driver call, so a radio set that overlapped it can't commit as applied */
+    wifi_hal_invalidate_oper_param(radio);
+    return ret ? RETURN_ERR : RETURN_OK;
 }
 
 INT wifi_hal_sendDataFrame( int vap_id, unsigned char *dmac, unsigned char *data_buff, int data_len, BOOL insert_llc, int protocol, int priority)

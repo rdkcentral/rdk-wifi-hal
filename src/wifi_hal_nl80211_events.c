@@ -187,7 +187,10 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        /* wpa_sm is freed under hapd_lock, so this check is race-free */
+        if (interface->u.sta.wpa_sm != NULL) {
+            supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        }
 #endif
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
@@ -708,6 +711,7 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     wifi_vap_security_t *sec;
     wifi_radio_info_t *radio;
     wifi_radio_operationParam_t *radio_param;
+    UINT prev_channel, prev_op_class;
 
     sec = &interface->vap_info.u.sta_info.security;
 
@@ -745,11 +749,20 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
 
     }
 
+    /* hapd_lock orders this cache update against the radio set's applied check/commit */
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    prev_channel = radio_param->channel;
+    prev_op_class = radio_param->operatingClass;
     if (ieee80211_freq_to_channel_ext(backhaul->freq,0,0,(unsigned char*)&radio_param->operatingClass,
         (unsigned char*)&radio_param->channel) == NUM_HOSTAPD_MODES) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         wifi_hal_error_print("%s:%d Failed to get op class for freq : %d\n", __func__, __LINE__, backhaul->freq);
         return;
     }
+    if (radio_param->channel != prev_channel || radio_param->operatingClass != prev_op_class) {
+        wifi_hal_invalidate_oper_param(radio);
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     if (tb[NL80211_ATTR_REQ_IE] == NULL) { 
         wifi_hal_dbg_print("%s:%d: req ie attribute absent\n", __func__, __LINE__);
@@ -853,6 +866,12 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     vap = &interface->vap_info;
     interface->u.sta.state = WPA_DISCONNECTED;
 
+#if defined(CONFIG_GENERIC_MLO) && defined(CONFIG_IEEE80211BE)
+    /* Reset MLO state on disconnect to prevent stale link data on reconnect. */
+    memset(&interface->mlo_params, 0, sizeof(interface->mlo_params));
+    interface->mlo_params.assoc_link_id = -1;
+#endif /* CONFIG_GENERIC_MLO & CONFIG_IEEE80211BE */
+
 #if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
         is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
@@ -898,11 +917,14 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
         callbacks->sta_conn_status_callback(vap->vap_index, &bss, &sta);
     }
 
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
     interface->wpa_s.disconnected = 1;
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-    supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
+    if (interface->u.sta.wpa_sm != NULL) {
+        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
+    }
 #else
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
 #endif // BANANA_PI_PORT
@@ -913,7 +935,11 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
 
         wpa_sm_deinit(interface->u.sta.wpa_sm);
         interface->u.sta.wpa_sm = NULL;
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+        interface->wpa_s.wpa = NULL;
+#endif
     }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     if ((attr = tb[NL80211_ATTR_REASON_CODE]) != NULL) {
         wifi_hal_info_print("%s:%d: reason code:%d\n", __func__, __LINE__, nla_get_u16(attr));
@@ -1195,9 +1221,17 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
             }
         }
 #endif // EASY_MESH_NODE && _PLATFORM_BANANAPI_R4_
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        /* Our own CSA completing reports the cached values; only a real change invalidates. */
+        if (radio_param->channel != (UINT)channel ||
+            radio_param->channelWidth != (wifi_channelBandwidth_t)l_channel_width ||
+            radio_param->operatingClass != (UINT)op_class) {
+            wifi_hal_invalidate_oper_param(radio);
+        }
         radio_param->channel = channel;
         radio_param->channelWidth = l_channel_width;
         radio_param->operatingClass = op_class;
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
         ch_switch_update_hostap_config(radio, channel, op_class, freq, cf1, cf2,
             hostap_channel_width, l_channel_width);

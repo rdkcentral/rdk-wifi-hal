@@ -636,6 +636,9 @@ typedef struct {
     bool radio_presence; //True for ECO mode Active radio, false for ECO mode power down sleeping radio
     bool radar_detected;
     bool configuration_in_progress;
+    bool oper_param_applied; // oper_param was fully applied by the last radio set
+    unsigned int
+        oper_param_gen; // bumped (under hapd_lock) whenever oper_param_applied is invalidated
     unsigned int dfs_evacuation_channel;              /* 0 = default (ch.44/157 by band) */
     wifi_channelBandwidth_t dfs_evacuation_channel_width; /* 0 = default 80 MHz */
 #ifndef FEATURE_SINGLE_PHY
@@ -1123,6 +1126,9 @@ int     update_hostap_iface_flags(wifi_interface_info_t *interface);
 int     update_hostap_config_params(wifi_radio_info_t *radio);
 int     update_hostap_radio_param(wifi_radio_info_t *radio, const wifi_radio_operationParam_t *newParam);
 int     nl80211_get_channel_bw_conn(wifi_interface_info_t *interface);
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+int nl80211_get_sta_mlo_links(wifi_interface_info_t *interface, sta_mlo_params_t *links);
+#endif
 void    update_wpa_sm_params(wifi_interface_info_t *interface);
 void    update_eapol_sm_params(wifi_interface_info_t *interface);
 void    *nl_recv_func(void *arg);
@@ -1517,6 +1523,8 @@ extern u8 g_DialogTokenSender[MAX_AP_INDEX][256];
 
 int wifi_freq_to_channel(int freq, uint *channel);
 int wifi_channel_to_freq(const char* country, UCHAR opclass, uint channel, uint *freq);
+bool is_chan_freq_supported_on_radio(wifi_radio_info_t *radio, int freq);
+void wifi_hal_invalidate_oper_param(wifi_radio_info_t *radio);
 int bw_enum_to_mhz(wifi_channelBandwidth_t chwid);
 uint16_t freq_to_primary(uint16_t freq, wifi_channelBandwidth_t chwid);
 enum nl80211_band wifi_freq_band_to_nl80211_band(wifi_freq_bands_t band);

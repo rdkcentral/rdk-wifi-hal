@@ -3569,6 +3569,16 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         }
     }
 #endif
+    /* MLO: notify with the AP MLD address, not the per-link BSSID, so
+     * wpa_sm_get_auth_addr()'s fallback stays correct for PTK derivation. */
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    if (interface->mlo_params.valid_links > 0 && interface->mlo_params.assoc_link_id >= 0 &&
+        interface->mlo_params.assoc_link_id < MAX_NUM_MLD_LINKS &&
+        !is_zero_ether_addr(interface->mlo_params.mld_addr)) {
+        wpa_sm_notify_assoc(sm, interface->mlo_params.mld_addr);
+        return;
+    }
+#endif
     wpa_sm_notify_assoc(sm, sm->bssid);
 }
 
@@ -3975,6 +3985,10 @@ int start_bss(wifi_interface_info_t *interface)
     if (ret != RETURN_OK) {
         wifi_hal_error_print("%s:%d: vap:%s:%d create is failed:%d csa status:%d\n", __func__,
             __LINE__, vap->vap_name, vap->vap_index, ret, interface->u.ap.hapd.csa_in_progress);
+        /* Callers ignore this result; keep a radio set from committing as applied. */
+        if (radio != NULL) {
+            wifi_hal_invalidate_oper_param(radio);
+        }
     }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
