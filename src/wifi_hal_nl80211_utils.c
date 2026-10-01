@@ -6271,6 +6271,15 @@ int reload_interface(wifi_interface_info_t *interface)
 #endif /* CONFIG_GENERIC_MLO */
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+
+    if (interface->u.ap.hapd.iface == NULL || !interface->bss_started) {
+        /* BSS not started or already torn down — nothing to reload or deinit */
+        wifi_hal_dbg_print("%s:%d: interface:%s hapd iface not initialized, skipping reload\n",
+            __func__, __LINE__, interface_name);
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return 0;
+    }
+
     if (hostapd_reload_config(interface->u.ap.hapd.iface) < 0) {
         wifi_hal_error_print("%s:%d: interface:%s failed to reload VAP configuration\n", __func__,
             __LINE__, interface_name);
@@ -6368,6 +6377,9 @@ static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
         }
 
         hash_map_foreach(radio->interface_map, interface_iter) {
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap) {
+                continue;
+            }
             if (interface_iter->vap_info.u.bss_info.enabled == false) {
                 continue;
             }
@@ -6404,6 +6416,9 @@ static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
         wifi_radio_info_t *radio = get_radio_by_rdk_index(i);
 
         hash_map_foreach(radio->interface_map, interface_iter) {
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap) {
+                continue;
+            }
             if (interface_iter->vap_info.u.bss_info.enabled == false) {
                 continue;
             }

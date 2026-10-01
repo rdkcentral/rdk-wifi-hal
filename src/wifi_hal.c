@@ -772,6 +772,13 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         return RETURN_ERR;
     }
 
+    if (radio->configured &&
+        memcmp(&radio->oper_param, operationParam, sizeof(*operationParam)) == 0) {
+        wifi_hal_dbg_print("%s:%d: radio index:%d configuration unchanged, skipping apply\n",
+            __func__, __LINE__, index);
+        return RETURN_OK;
+    }
+
     if ((set_radio_pre_init_fn = get_platform_set_radio_pre_init_fn()) != NULL) {
         if (set_radio_pre_init_fn(index, operationParam) < 0){
             wifi_hal_error_print("%s:%d: Error in setting radio pre init\n", __func__, __LINE__);
@@ -1382,6 +1389,60 @@ int get_sta_4addr_status(bool *sta_4addr)
     return json_parse_boolean(EM_CFG_FILE, "sta_4addr_mode_enabled", sta_4addr);
 }
 
+#if defined(EASY_MESH_NODE) && defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+static void sync_radio_channel_with_sta_mlo_link(wifi_radio_info_t *target_radio)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface;
+    unsigned int radio_index;
+    unsigned char link_id;
+    int link_freq;
+    uint channel, previous_channel;
+    int op_class;
+
+    for (radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+        radio = get_radio_by_rdk_index(radio_index);
+        if (radio == NULL) {
+            continue;
+        }
+
+        hash_map_foreach(radio->interface_map, interface) {
+            if (interface->vap_info.vap_mode != wifi_vap_mode_sta ||
+                interface->wpa_s.wpa_state != WPA_COMPLETED ||
+                interface->mlo_params.valid_links == 0) {
+                continue;
+            }
+
+            for_each_link(interface->mlo_params.valid_links, link_id)
+            {
+                link_freq = interface->mlo_params.mld_links[link_id].freq;
+
+                if (link_freq <= 0 || !is_chan_freq_supported_on_radio(target_radio, link_freq) ||
+                    wifi_freq_to_channel(link_freq, &channel) != RETURN_OK ||
+                    target_radio->oper_param.channel == channel) {
+                    continue;
+                }
+
+                previous_channel = target_radio->oper_param.channel;
+                target_radio->oper_param.channel = channel;
+                op_class = get_op_class_from_radio_params(&target_radio->oper_param);
+                if (op_class < 0) {
+                    target_radio->oper_param.channel = previous_channel;
+                    continue;
+                }
+                target_radio->oper_param.operatingClass = op_class;
+
+                wifi_hal_info_print("%s:%d: align radio:%d AP channel:%u to STA MLO link:%u "
+                                    "channel:%u op_class:%d\n",
+                    __func__, __LINE__, target_radio->rdk_radio_index, previous_channel, link_id,
+                    channel, op_class);
+                return;
+            }
+        }
+    }
+}
+#endif /* EASY_MESH_NODE && CONFIG_IEEE80211BE && CONFIG_GENERIC_MLO */
+
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
     wifi_radio_info_t *radio;
@@ -1415,6 +1476,9 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             index);
         return RETURN_ERR;
     }
+#if defined(EASY_MESH_NODE) && defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    sync_radio_channel_with_sta_mlo_link(radio);
+#endif
 #ifndef CONFIG_WIFI_EMULATOR
     if (false == radio->radio_presence) {
        wifi_hal_info_print("%s:%d: radio index:%d skip vap create due to ECO mode\n", __func__,
