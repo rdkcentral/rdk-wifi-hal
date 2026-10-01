@@ -1474,6 +1474,7 @@ extern u8_bitmap g_DialogToken[MAX_AP_INDEX];
 
 int wifi_freq_to_channel(int freq, uint *channel);
 int wifi_channel_to_freq(const char* country, UCHAR opclass, uint channel, uint *freq);
+bool is_chan_freq_supported_on_radio(wifi_radio_info_t *radio, int freq);
 int bw_enum_to_mhz(wifi_channelBandwidth_t chwid);
 uint16_t freq_to_primary(uint16_t freq, wifi_channelBandwidth_t chwid);
 enum nl80211_band wifi_freq_band_to_nl80211_band(wifi_freq_bands_t band);
