@@ -10574,6 +10574,12 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     backhaul = &interface->u.sta.backhaul;
     security = &vap->u.sta_info.security;
 
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    /* Reset MLO data before connecting to a new AP. */
+    memset(&interface->mlo_params, 0, sizeof(interface->mlo_params));
+    interface->mlo_params.assoc_link_id = -1;
+#endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
+
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 #if !defined(CONFIG_IEEE80211BE) || !defined(CONFIG_GENERIC_MLO)
     struct wpa_bss *bss;
@@ -21711,6 +21717,71 @@ int wifi_drv_link_add(void *priv, u8 link_id, const u8 *addr, void *bss_ctx)
     return 0;
 }
 
+#if (HOSTAPD_VERSION >= 211) && defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+/* Required so wpa_supplicant's post-association wpa_sm_set_ml_info() (events.c) gets real
+ * MLO data instead of an all-zero struct, which would otherwise reset sm->mlo.valid_links
+ * and break AP-MLD-address based PTK derivation. */
+int wifi_drv_get_sta_mlo_info(void *priv, struct driver_sta_mlo_info *mlo_info)
+{
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
+    unsigned char link_id;
+    unsigned char sta_link_addr[ETH_ALEN];
+    int assoc_link_id;
+    uint16_t assoc_link_mask;
+
+    if (interface == NULL || mlo_info == NULL) {
+        return -1;
+    }
+
+    memset(mlo_info, 0, sizeof(*mlo_info));
+
+    if (interface->mlo_params.valid_links == 0) {
+        /* Not an MLO association - report no links so callers fall back to legacy path. */
+        return 0;
+    }
+
+    assoc_link_id = interface->mlo_params.assoc_link_id;
+    if (assoc_link_id < 0 || assoc_link_id >= MAX_NUM_MLD_LINKS) {
+        wifi_hal_error_print("%s:%d: invalid MLO association link ID:%d\n", __func__, __LINE__,
+            assoc_link_id);
+        return -1;
+    }
+
+    assoc_link_mask = (uint16_t)BIT(assoc_link_id);
+    if (!(interface->mlo_params.valid_links & assoc_link_mask) ||
+        is_zero_ether_addr(interface->mlo_params.mld_addr)) {
+        wifi_hal_error_print("%s:%d: inconsistent MLO state assoc_link_id:%d valid_links:0x%x "
+                             "mld_addr:" MACSTR "\n",
+            __func__, __LINE__, assoc_link_id, interface->mlo_params.valid_links,
+            MAC2STR(interface->mlo_params.mld_addr));
+        return -1;
+    }
+
+    mlo_info->valid_links = interface->mlo_params.valid_links;
+    mlo_info->req_links = interface->mlo_params.valid_links;
+    mlo_info->assoc_link_id = (u8)assoc_link_id;
+    memcpy(mlo_info->ap_mld_addr, interface->mlo_params.mld_addr, ETH_ALEN);
+
+    for_each_link(interface->mlo_params.valid_links, link_id)
+    {
+        memcpy(mlo_info->links[link_id].bssid, interface->mlo_params.mld_links[link_id].bssid,
+            ETH_ALEN);
+        mlo_info->links[link_id].freq = interface->mlo_params.mld_links[link_id].freq;
+
+        /* Per-link STA address: base MAC for the assoc link, offset for the rest -
+         * mirrors the derivation already used when priming mlo_params in
+         * nl80211_connect_sta(). */
+        memcpy(sta_link_addr, interface->vap_info.u.sta_info.mac, ETH_ALEN);
+        if (link_id != interface->mlo_params.assoc_link_id) {
+            sta_link_addr[ETH_ALEN - 2] += link_id + 1;
+        }
+        memcpy(mlo_info->links[link_id].addr, sta_link_addr, ETH_ALEN);
+    }
+
+    return 0;
+}
+#endif /* (HOSTAPD_VERSION >= 211) && CONFIG_IEEE80211BE && CONFIG_GENERIC_MLO */
+
 #if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
 static int del_beacon(wifi_interface_info_t *interface, int link_id)
 {
@@ -21997,6 +22068,9 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .link_add = wifi_drv_link_add,
 #if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
     .link_remove = wifi_drv_link_remove,
+#endif
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    .get_sta_mlo_info = wifi_drv_get_sta_mlo_info,
 #endif
 #endif // HOSTAPD_VERSION >= 211
 };

@@ -191,7 +191,10 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        /* Guard against concurrent nl80211_disconnect_event freeing wpa_sm */
+        if (interface->u.sta.wpa_sm != NULL) {
+            supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        }
 #endif
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
@@ -843,6 +846,12 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
 
     vap = &interface->vap_info;
     interface->u.sta.state = WPA_DISCONNECTED;
+
+#if defined(CONFIG_GENERIC_MLO) && defined(CONFIG_IEEE80211BE)
+    /* Reset MLO state on disconnect to prevent stale link data on reconnect. */
+    memset(&interface->mlo_params, 0, sizeof(interface->mlo_params));
+    interface->mlo_params.assoc_link_id = -1;
+#endif /* CONFIG_GENERIC_MLO & CONFIG_IEEE80211BE */
 
 #if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
