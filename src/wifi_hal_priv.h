@@ -943,6 +943,8 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress);
 INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress);
 #endif
 INT wifi_hal_delApAclDevices(INT apIndex);
+INT wifi_hal_addHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress);
+INT wifi_hal_delHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress);
 INT wifi_hal_steering_eventRegister(wifi_steering_eventCB_t event_cb);
 INT wifi_hal_setRadioTransmitPower(wifi_radio_index_t radioIndex, uint txpower);
 INT wifi_hal_getRadioTransmitPower(INT radioIndex, ULONG *tx_power);
@@ -959,6 +961,7 @@ void wifi_hal_apDisassociatedDevice_callback_register(wifi_device_disassociated_
 void wifi_hal_stamode_callback_register(wifi_stamode_callback func);
 void wifi_hal_handshake_callback_register(wifi_handshake_callback func);
 void wifi_hal_eapol_timeouts_callback_register(wifi_eapol_timeouts_callback func);
+void wifi_hal_eapol_key_callback_register(wifi_eapol_key_callback func);
 void wifi_hal_apStatusCode_callback_register(wifi_apStatusCode_callback func);
 void wifi_hal_radiusEapFailure_callback_register(wifi_radiusEapFailure_callback func);
 void wifi_hal_radiusFallback_failover_callback_register(wifi_radiusFallback_failover_callback func);

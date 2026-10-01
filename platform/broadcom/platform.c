@@ -1047,10 +1047,11 @@ int platform_pre_init()
     return 0;
 }
 
-static int enable_spect_management(int radio_index, int enable)
+
+static int set_dfs_mode(int radio_index, int enable)
 {
-#if defined(TCXB7_PORT) || defined(TCXB8_PORT)
     char radio_dev[IFNAMSIZ];
+    int val;
 
     snprintf(radio_dev, sizeof(radio_dev), "wl%d", radio_index);
 
@@ -1060,10 +1061,47 @@ static int enable_spect_management(int radio_index, int enable)
         return -1;
     }
 
-    if (wl_ioctl(radio_dev, WLC_SET_SPECT_MANAGMENT, &enable, sizeof(enable)) < 0) {
-        wifi_hal_error_print("%s:%d failed to set spect mgt to %d for %s, err: %d (%s)\n",
-            __func__, __LINE__, enable, radio_dev, errno, strerror(errno));
-        return -1;
+    if (enable == 0) {
+        val = 0;
+        if (wl_ioctl(radio_dev, WLC_SET_RADAR, &val, sizeof(val)) < 0) {
+            wifi_hal_error_print("%s:%d failed to set radar to %d for %s, err: %d (%s)\n",
+                __func__, __LINE__, val, radio_dev, errno, strerror(errno));
+            return -1;
+        }
+
+        if (wl_ioctl(radio_dev, WLC_SET_SPECT_MANAGMENT, &val, sizeof(val)) < 0) {
+            wifi_hal_error_print("%s:%d failed to set spect mgt to %d for %s, err: %d (%s)\n",
+                __func__, __LINE__, val, radio_dev, errno, strerror(errno));
+            return -1;
+        }
+
+        val = 1;
+        if (wl_ioctl(radio_dev, WLC_SET_REGULATORY, &val, sizeof(val)) < 0) {
+            wifi_hal_error_print("%s:%d failed to set regulatory to %d for %s, err: %d (%s)\n",
+                __func__, __LINE__, val, radio_dev, errno, strerror(errno));
+            return -1;
+        }
+    } else {
+        val = 1;
+        if (wl_ioctl(radio_dev, WLC_SET_RADAR, &val, sizeof(val)) < 0) {
+            wifi_hal_error_print("%s:%d failed to set radar to %d for %s, err: %d (%s)\n",
+                __func__, __LINE__, val, radio_dev, errno, strerror(errno));
+            return -1;
+        }
+
+        val = 0;
+        if (wl_ioctl(radio_dev, WLC_SET_REGULATORY, &val, sizeof(val)) < 0) {
+            wifi_hal_error_print("%s:%d failed to set regulatory to %d for %s, err: %d (%s)\n",
+                __func__, __LINE__, val, radio_dev, errno, strerror(errno));
+            return -1;
+        }
+
+        val = 1;
+        if (wl_ioctl(radio_dev, WLC_SET_SPECT_MANAGMENT, &val, sizeof(val)) < 0) {
+            wifi_hal_error_print("%s:%d failed to set spect mgt to %d for %s, err: %d (%s)\n",
+                __func__, __LINE__, val, radio_dev, errno, strerror(errno));
+            return -1;
+        }
     }
 
 #if defined(MLO_ENAB)
@@ -1079,7 +1117,6 @@ static int enable_spect_management(int radio_index, int enable)
         return -1;
     }
 #endif /* MLO_ENAB */
-#endif // TCXB7_PORT || TCXB8_PORT
     return 0;
 }
 
@@ -1361,7 +1398,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
     if (radio->oper_param.DfsEnabled != operationParam->DfsEnabled) {
         /* sometimes spectrum management is not enabled by nvram */
-        enable_spect_management(index, operationParam->DfsEnabled);
+        set_dfs_mode(index, operationParam->DfsEnabled);
         /* userspace selects new channel and configures CSA when radar detected */
         disable_dfs_auto_channel_change(index, true);
     }
@@ -2501,6 +2538,9 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
                         __func__, __LINE__, beacon_rate, map->vap_array[index].vap_index);
                     return RETURN_ERR;
                 }
+                prepare_param_name(param_name, interface_name, "_force_bcn_rspec");
+                // BCM nvram expects rate in 500 Kbps units (×2), similar as in nl_set_beacon_rate
+                set_decimal_nvram_param(param_name, beacon_rate*2);
 #endif /* defined(SCXER10_PORT) */
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && defined(MLO_ENAB)
                 need_down = TRUE;
