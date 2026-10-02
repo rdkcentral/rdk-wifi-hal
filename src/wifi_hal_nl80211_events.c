@@ -191,7 +191,10 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        /* Guard against concurrent nl80211_disconnect_event freeing wpa_sm */
+        if (interface->u.sta.wpa_sm != NULL) {
+            supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        }
 #endif
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
