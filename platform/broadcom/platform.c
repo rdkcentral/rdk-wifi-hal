@@ -155,7 +155,8 @@ int platform_set_gpio_config_for_ecomode(const int wl_idx, const bool eco_pwr_do
 #endif // defined (ENABLED_EDPD)
 
 #ifdef CONFIG_IEEE80211BE
-static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id, int *nvram_changed);
+static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id,
+    int *nvram_changed);
 #endif
 
 #ifndef NEWPLATFORM_PORT
@@ -1268,7 +1269,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     int nvram_changed = 0;
     wifi_mld_common_info_t *mld_conf;
     wifi_radio_info_t *radio_info;
-#endif//MLO_ENAB
+#endif // MLO_ENAB
 
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
@@ -1300,18 +1301,19 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
         interface = get_private_vap_interface(radio_info);
         if (interface == NULL) {
-            wifi_hal_error_print("%s:%d: unable to get private vap for radio index : %d\n", __func__, __LINE__, index);
+            wifi_hal_error_print("%s:%d: unable to get private vap for radio index : %d\n",
+                __func__, __LINE__, index);
             return RETURN_ERR;
         }
 
         vap = &interface->vap_info;
 
-		nvram_update_wl_mlo_config(vap->radio_index, -1, &nvram_changed);
+        nvram_update_wl_mlo_config(vap->radio_index, -1, &nvram_changed);
 
-		if (nvram_changed & USER_NVRAM_CHANGED) {
-			wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
-			nvram_commit();
-		}
+        if (nvram_changed & USER_NVRAM_CHANGED) {
+            wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
+            nvram_commit();
+        }
 
 #if defined(SCXF10_PORT) || defined(SCXER10_PORT)
 		if (nvram_changed & KERNEL_NVRAM_CHANGED) {
@@ -1349,8 +1351,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         }
 
 #ifdef MLO_ENAB
-        if (_platform_init_done)
-        {
+        if (_platform_init_done) {
             radio_info = get_radio_by_rdk_index(index);
             if (radio_info == NULL) {
                 wifi_hal_error_print("%s:%d: radio for radio index:%d not found\n", __func__, __LINE__, index);
