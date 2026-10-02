@@ -2538,6 +2538,9 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
                         __func__, __LINE__, beacon_rate, map->vap_array[index].vap_index);
                     return RETURN_ERR;
                 }
+                prepare_param_name(param_name, interface_name, "_force_bcn_rspec");
+                // BCM nvram expects rate in 500 Kbps units (×2), similar as in nl_set_beacon_rate
+                set_decimal_nvram_param(param_name, beacon_rate*2);
 #endif /* defined(SCXER10_PORT) */
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && defined(MLO_ENAB)
                 need_down = TRUE;
