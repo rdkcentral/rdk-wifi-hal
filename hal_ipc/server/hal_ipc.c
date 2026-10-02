@@ -23,6 +23,12 @@
 #include <errno.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#ifdef __linux__
+#include <sys/socket.h>
+#endif
+#include <unistd.h>
 #include "hal_ipc.h"
 
 hal_ipc_node_t  g_ipc_node[hal_ipc_node_type_max];
@@ -976,6 +982,13 @@ static void *rdk_hal_server_func(void *arg)
         return NULL;
     }
 
+    if (chmod(p_ipc_node->node_path, 0600) != 0) {
+        wifi_hal_error_print("%s:%d chmod failed err: %d\n", __func__, __LINE__, errno);
+        close(p_ipc_node->srv_sock);
+        unlink(p_ipc_node->node_path);
+        return NULL;
+    }
+
     if ((setsockopt(p_ipc_node->srv_sock, SOL_SOCKET, SO_RCVBUF, &max_size ,sizeof(int))) < 0) {
         wifi_hal_error_print("%s:%d:server socket size set failed err: %d\n", __func__, __LINE__, errno);
         close(p_ipc_node->srv_sock);
@@ -997,6 +1010,25 @@ static void *rdk_hal_server_func(void *arg)
     wifi_hal_dbg_print("%s:%d: Enter loop.\n", __func__, __LINE__);
 
     while ((cli_sock = accept(p_ipc_node->srv_sock, (struct sockaddr *)&cli_sockaddr, &len)) != -1) {
+
+#ifdef SO_PEERCRED
+        {
+            struct ucred cred;
+            socklen_t clen = sizeof(cred);
+            if (getsockopt(cli_sock, SOL_SOCKET, SO_PEERCRED, &cred, &clen) != 0) {
+                wifi_hal_error_print("%s:%d getsockopt(SO_PEERCRED) failed err: %d\n", __func__, __LINE__, errno);
+                close(cli_sock);
+                continue;
+            }
+
+            if (cred.uid != 0) {
+                wifi_hal_error_print("%s:%d unauthorized ipc client uid=%d\n", __func__, __LINE__, (int)cred.uid);
+                close(cli_sock);
+                continue;
+            }
+        }
+#endif
+
         ///**************************************************************************************///
         ///                 RECEIVE SYNC DATA FROM CLIENT                                        ///
         ///**************************************************************************************///
