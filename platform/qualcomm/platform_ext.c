@@ -18,6 +18,7 @@
  **************************************************************************/
 
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
@@ -67,6 +68,7 @@
 #define STATICCPGCFG_1     "/tmp/.staticCpgCfg_1"
 #define STA_PWD_LEN         STATICCPGCFG_LEN
 #define QCA_MAX_CMD_SZ 128
+#define ISO3166_ALPHA2_LEN 2 /* ISO 3166-1 alpha-2 country codes are always 2 letters */
 
 static int nl_fd = -1;
 static int dfs_nl_listen_start(void);
@@ -743,7 +745,38 @@ int platform_get_country_code_default(char *code)
         return RETURN_ERR;
     }
 #ifdef TARGET_GEMINI7_2
-        strcpy(code, "GR");
+    {
+        FILE *fp;
+        char line[64] = {0};
+        char *cc;
+
+        /* Read the ART-programmed country code directly, since a single TARGET_GEMINI7_2
+         * image is shared by multiple models with different default regulatory domains.
+         * Expected output example: "Country code Wifi 0 CA" */
+        fp = popen("/usr/opensync/tools/pmf -ccode0 -r", "r");
+        if (fp == NULL) {
+            wifi_hal_error_print("%s:%d: popen failed for pmf -ccode0\n", __func__, __LINE__);
+            return RETURN_ERR;
+        }
+
+        if (fgets(line, sizeof(line), fp) == NULL) {
+            line[0] = '\0';
+        }
+        pclose(fp);
+        line[strcspn(line, "\r\n")] = '\0';
+
+        cc = strrchr(line, ' ');
+        if (cc != NULL && strlen(cc + 1) == ISO3166_ALPHA2_LEN &&
+            cc[1] >= 'A' && cc[1] <= 'Z' && cc[2] >= 'A' && cc[2] <= 'Z')
+        {
+            strncpy(code, cc + 1, ISO3166_ALPHA2_LEN);
+            code[ISO3166_ALPHA2_LEN] = '\0';
+        } else {
+            wifi_hal_error_print("%s:%d: unexpected pmf -ccode0 output '%s'\n",
+                __func__, __LINE__, line);
+            return RETURN_ERR;
+        }
+    }
 #endif
     return 0;
 }
