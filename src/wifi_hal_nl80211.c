@@ -7219,7 +7219,15 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
             }
         }
     } else if (associated_dev.cli_MLDInfo.cli_MLDSta == true && has_link_stats == false) {
-        wifi_hal_error_print("%s:%d: Client is MLD STA but no link stats available\n", __func__, __LINE__);
+        /* An MLD STA with zero valid links is a transient, not a real association: this GET_STATION
+         * read landed in the window between handle_auth() (which memsets sta->mld_info, clearing all
+         * links[].valid) and handle_assoc() (which repopulates them). Such reads are triggered when
+         * hostapd re-asserts a retained WPA_STA_AUTHORIZED during a PMF-protected re-auth, before the
+         * new links exist. Skip the notification; the genuine post-4-way authorize will read
+         * back the populated links and notify with the correct link count. */
+        wifi_hal_error_print("%s:%d: Client is MLD STA but no link stats available; skip notify\n",
+            __func__, __LINE__);
+        return NL_SKIP;
     }
 #endif /* HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE */
 
