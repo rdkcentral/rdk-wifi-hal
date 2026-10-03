@@ -3042,9 +3042,16 @@ void recv_data_frame(wifi_interface_info_t *interface)
             int proto;
             char rssi, noise;
 
+            if ((size_t)buflen < sizeof(struct ethhdr) + 4) {
+                return;
+            }
             rtap_len = WPA_GET_BE16(buff + sizeof(struct ethhdr) + 2);
             shift = sizeof(struct ethhdr) + ntohs(rtap_len);
-            len  = buflen - shift;
+            if ((size_t)buflen < shift + 34) {
+                return;
+            }
+
+            len = (size_t)buflen - shift;
 
             memcpy(sta, buff + shift + 10, sizeof(mac_address_t));
             //Check if not from us and to us
