@@ -1549,6 +1549,7 @@ unsigned int get_band_info_from_rdk_radio_index(unsigned int rdk_radio_index);
 int get_backhaul_sta_ifname_from_radio_index(wifi_radio_index_t index, char *ifname_out,
     size_t ifname_out_len);
 int bw_to_nl80211_chan_width(int bw, int cf2);
+wifi_interface_info_t *get_first_radio_interface(wifi_radio_info_t *radio);
 
 #ifdef MXL_WIFI
 static inline int mxl_clamp(int val, int min_val, int max_val)
