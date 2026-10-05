@@ -154,6 +154,11 @@ int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down);
 int platform_set_gpio_config_for_ecomode(const int wl_idx, const bool eco_pwr_down);
 #endif // defined (ENABLED_EDPD)
 
+#ifdef CONFIG_IEEE80211BE
+static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id,
+    int *nvram_changed);
+#endif
+
 #ifndef NEWPLATFORM_PORT
 static char const *bss_nvifname[] = {
     "wl0",      "wl1",
@@ -1258,6 +1263,14 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     wifi_radio_info_t *radio;
     bool is_radio_apply_required = false;
 
+#ifdef MLO_ENAB
+    wifi_interface_info_t *interface;
+    wifi_vap_info_t *vap;
+    int nvram_changed = 0;
+    wifi_mld_common_info_t *mld_conf;
+    wifi_radio_info_t *radio_info;
+#endif // MLO_ENAB
+
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
         wifi_hal_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
@@ -1278,6 +1291,37 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         if (ret != RETURN_OK) {
            wifi_hal_dbg_print("%s:%d: Failed to enable ECO mode for radio index:%d\n", __func__, __LINE__, index);
         }
+
+#ifdef MLO_ENAB
+        radio_info = get_radio_by_rdk_index(index);
+        if (radio_info == NULL) {
+            wifi_hal_error_print("%s:%d: radio for radio index:%d not found\n", __func__, __LINE__, index);
+            return RETURN_ERR;
+        }
+
+        interface = get_private_vap_interface(radio_info);
+        if (interface == NULL) {
+            wifi_hal_error_print("%s:%d: unable to get private vap for radio index : %d\n",
+                __func__, __LINE__, index);
+            return RETURN_ERR;
+        }
+
+        vap = &interface->vap_info;
+
+        nvram_update_wl_mlo_config(vap->radio_index, -1, &nvram_changed);
+
+        if (nvram_changed & USER_NVRAM_CHANGED) {
+            wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
+            nvram_commit();
+        }
+
+#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+		if (nvram_changed & KERNEL_NVRAM_CHANGED) {
+			wifi_hal_info_print("%s:%d kernel nvram was changed => nvram_kcommit()\n", __func__, __LINE__);
+			nvram_kcommit();
+		}
+#endif//(SCXF10_PORT) || defined(SCXER10_PORT)
+#endif//MLO_ENAB
 
 #ifdef _SR213_PRODUCT_REQ_
         //Disconnect the GPIO
@@ -1305,6 +1349,40 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         if (ret != RETURN_OK) {
             wifi_hal_dbg_print("%s:%d: Failed to disable ECO mode for radio index:%d\n", __func__, __LINE__, index);
         }
+
+#ifdef MLO_ENAB
+        if (_platform_init_done) {
+            radio_info = get_radio_by_rdk_index(index);
+            if (radio_info == NULL) {
+                wifi_hal_error_print("%s:%d: radio for radio index:%d not found\n", __func__, __LINE__, index);
+                return RETURN_ERR;
+            }
+
+            interface = get_private_vap_interface(radio_info);
+            if (interface == NULL) {
+                wifi_hal_error_print("%s:%d: unable to get private vap for radio index : %d\n", __func__, __LINE__, index);
+                return RETURN_ERR;
+            }
+
+            vap = &interface->vap_info;
+
+            mld_conf = &vap->u.bss_info.mld_info.common_info;
+
+            nvram_update_wl_mlo_config(vap->radio_index,
+                    mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
+
+			if (nvram_changed & USER_NVRAM_CHANGED) {
+				wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
+				nvram_commit();
+			}
+#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+			if (nvram_changed & KERNEL_NVRAM_CHANGED) {
+				wifi_hal_info_print("%s:%d kernel nvram was changed => nvram_kcommit()\n", __func__, __LINE__);
+				nvram_kcommit();
+			}
+#endif//(SCXF10_PORT) || defined(SCXER10_PORT)
+		}
+#endif //MLO_ENAB
     }
 #endif // defined (ENABLED_EDPD)
 
@@ -5349,8 +5427,13 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     nvram_update_wl_mlo_apply(conf->iface, 1, &nvram_changed);
 
     if (is_vap_private) {
-        nvram_update_wl_mlo_config(vap->radio_index,
-            mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
+         if (!radio->oper_param.EcoPowerDown) {
+             nvram_update_wl_mlo_config(vap->radio_index,
+                     mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
+         } else {
+             wifi_hal_info_print("%s:%d Not updating the mlo_config for radio_index : %d due to ecomode\n",
+                __func__, __LINE__, vap->radio_index);
+         }
     }
 
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
