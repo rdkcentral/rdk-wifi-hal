@@ -1236,7 +1236,7 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
     wifi_bss_info_t *bss;
-    unsigned int num = 0;
+    unsigned int num = 0, write_index = 0;
     wifi_bss_info_t *bss_info;
     u8 chan;
 
@@ -1284,17 +1284,26 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
 
     bss = hash_map_get_first(interface->scan_info_map);
     while (bss != NULL) {
+        bool copy_bss = false;
         if (channel->channel == 0) {
-            memcpy(bss_info, bss, sizeof(wifi_bss_info_t));
+            copy_bss = true;
         } else {
             ieee80211_freq_to_chan(bss->freq, &chan);
             if (chan == channel->channel) {
-                memcpy(bss_info, bss, sizeof(wifi_bss_info_t));
+                copy_bss = true;
             }
         }
+        if (copy_bss) {
+            if (write_index >= num) {
+                wifi_hal_error_print("%s:%d:Scan result count exceeded allocated count\n",__func__, __LINE__);
+                break;
+            }
+            memcpy(&(*bss_array)[write_index],bss,sizeof(wifi_bss_info_t));
+            write_index++;
+        }
         bss = hash_map_get_next(interface->scan_info_map, bss);
-        bss_info++;
     }
+    *num_bss = write_index;
     pthread_mutex_unlock(&interface->scan_info_mutex);
 
     return RETURN_OK;
