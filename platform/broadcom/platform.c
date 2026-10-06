@@ -1263,13 +1263,13 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     wifi_radio_info_t *radio;
     bool is_radio_apply_required = false;
 
-#ifdef MLO_ENAB
+#if defined(ENABLED_EDPD) && defined(MLO_ENAB)
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
     int nvram_changed = 0;
     wifi_mld_common_info_t *mld_conf;
     wifi_radio_info_t *radio_info;
-#endif // MLO_ENAB
+#endif // MLO_ENAB && ENABLED_EDPD
 
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
