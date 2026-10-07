@@ -749,14 +749,27 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         wifi_hal_dbg_print("%s:%d: req ie attribute absent\n", __func__, __LINE__);
     } else {
         interface->u.sta.assoc_req_len = nla_len(tb[NL80211_ATTR_REQ_IE]);
-        memcpy(assoc_req, nla_data(tb[NL80211_ATTR_REQ_IE]), nla_len(tb[NL80211_ATTR_REQ_IE])); 
-    }
+        if (interface->u.sta.assoc_req_len > sizeof(interface->u.sta.assoc_req)) {
+            wifi_hal_error_print("%s:%d: req IE too large (%u > %lu)\n", __func__, __LINE__,
+                interface->u.sta.assoc_req_len, sizeof(interface->u.sta.assoc_req));
 
+            interface->u.sta.assoc_req_len = 0;
+        } else {
+            memcpy(assoc_req, nla_data(tb[NL80211_ATTR_REQ_IE]), nla_len(tb[NL80211_ATTR_REQ_IE]));
+        }
+    }
     if (tb[NL80211_ATTR_RESP_IE] == NULL) {
         wifi_hal_dbg_print("%s:%d: resp ie attribute absent\n", __func__, __LINE__);
     } else {
         interface->u.sta.assoc_rsp_len = nla_len(tb[NL80211_ATTR_RESP_IE]);
-        memcpy(assoc_rsp, nla_data(tb[NL80211_ATTR_RESP_IE]), nla_len(tb[NL80211_ATTR_RESP_IE])); 
+        if (interface->u.sta.assoc_rsp_len > sizeof(interface->u.sta.assoc_rsp)) {
+            wifi_hal_error_print("%s:%d: resp IE too large (%u > %lu)\n", __func__, __LINE__,
+                interface->u.sta.assoc_rsp_len, sizeof(interface->u.sta.assoc_rsp));
+
+            interface->u.sta.assoc_rsp_len = 0;
+        } else {
+            memcpy(assoc_rsp, nla_data(tb[NL80211_ATTR_RESP_IE]), nla_len(tb[NL80211_ATTR_RESP_IE]));
+        }
     }
 
     if (tb[NL80211_ATTR_TIMED_OUT] == NULL) {
