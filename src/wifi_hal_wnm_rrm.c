@@ -793,14 +793,18 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
     if (!buf)
         return -1;
 
-    hapd->beacon_req_token++;
-    if (!hapd->beacon_req_token) /* For wraparounds */
-        hapd->beacon_req_token++;
+    /* Allocate the dialog token from the caller's VAP, not the retargeted link,
+     * so tokens returned for one apIndex stay unique. */
+    struct hostapd_data *orig_hapd = &interface->u.ap.hapd;
+    orig_hapd->beacon_req_token++;
+    if (!orig_hapd->beacon_req_token) /* For wraparounds */
+        orig_hapd->beacon_req_token++;
+    u8 dialog_token = orig_hapd->beacon_req_token;
 
     /* IEEE P802.11-REVmc/D5.0, 9.6.7.2 */
     wpabuf_put_u8(buf, WLAN_ACTION_RADIO_MEASUREMENT);
     wpabuf_put_u8(buf, WLAN_RRM_RADIO_MEASUREMENT_REQUEST);
-    wpabuf_put_u8(buf, hapd->beacon_req_token);
+    wpabuf_put_u8(buf, dialog_token);
     wpabuf_put_le16(buf, num_of_repetitions);
 
     /* Build one Measurement Request element for each request in the list. */
@@ -904,7 +908,7 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
     }
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE && CONFIG_GENERIC_MLO
 
-    u8 token = hapd->beacon_req_token;
+    u8 token = dialog_token;
 
     for (int req_num = 0; req_num < num_reqs; req_num++) {
         u8 *len;
@@ -1011,12 +1015,23 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
     }
 
     /* Track the dialog token against the VAP that actually sent the request,
-     * which may differ from interface's VAP after MLO link retargeting above. */
+     * which may differ from interface's VAP after MLO link retargeting above,
+     * and remember that VAP so cancelling via the caller's VAP clears it. */
     wifi_interface_info_t *sent_interface = (wifi_interface_info_t *)((char *)hapd -
         offsetof(wifi_interface_info_t, u.ap.hapd));
-    set_bit_u8(g_DialogToken[sent_interface->vap_info.vap_index], hapd->beacon_req_token);
+    unsigned int sent_vap_index = sent_interface->vap_info.vap_index;
+    unsigned int orig_vap_index = interface->vap_info.vap_index;
 
-    return hapd->beacon_req_token;
+    if (sent_vap_index < MAX_AP_INDEX && orig_vap_index < MAX_AP_INDEX) {
+        set_bit_u8(g_DialogToken[sent_vap_index], dialog_token);
+        g_DialogTokenSender[orig_vap_index][dialog_token] = (u8)(sent_vap_index + 1);
+    } else {
+        /* Frame is already sent, so still return the token; its report won't be delivered. */
+        wifi_hal_error_print("%s:%d: invalid vap index (orig:%u sent:%u) for dialog token %u\n",
+            __func__, __LINE__, orig_vap_index, sent_vap_index, dialog_token);
+    }
+
+    return dialog_token;
 }
 #endif
 

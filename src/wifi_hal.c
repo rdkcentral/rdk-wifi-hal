@@ -3899,6 +3899,8 @@ exit:
 
 //static uint8_t g_DialogToken[MAX_AP_INDEX][MAX_TOKENS + 1] = {{0}};
 u8_bitmap g_DialogToken[MAX_AP_INDEX] = {{0}};
+/* Sending VAP index + 1 per originating VAP and dialog token (0 = not recorded). */
+u8 g_DialogTokenSender[MAX_AP_INDEX][256] = { { 0 } };
 
 INT wifi_hal_setRMBeaconRequest(UINT apIndex,
                             mac_address_t peer_mac,
@@ -4087,13 +4089,32 @@ INT wifi_hal_setRMBeaconRequest(UINT apIndex,
 
 INT wifi_hal_cancelRMBeaconRequest(UINT apIndex, UCHAR dialogToken)
 {
+    UINT sent_vap_index = apIndex;
+    UINT vap_index;
+
     // - verify input params
     if (_IS_INVALID_ARG(apIndex >= MAX_AP_INDEX)) {
         return WIFI_HAL_INVALID_ARGUMENTS;
     }
 
-    //g_DialogToken[apIndex][dialogToken] = 0;
-    reset_bit_u8(g_DialogToken[apIndex], dialogToken);
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    /* For MLO the request may have been sent on another link's VAP; clear the
+     * bit on the VAP recorded by wifi_rrm_send_beacon_req(). */
+    if (g_DialogTokenSender[apIndex][dialogToken] != 0) {
+        sent_vap_index = g_DialogTokenSender[apIndex][dialogToken] - 1;
+        g_DialogTokenSender[apIndex][dialogToken] = 0;
+    }
+
+    /* Keep the bit if another VAP's request with the same token was sent on it. */
+    for (vap_index = 0; vap_index < MAX_AP_INDEX; vap_index++) {
+        if (g_DialogTokenSender[vap_index][dialogToken] == sent_vap_index + 1) {
+            break;
+        }
+    }
+    if (vap_index == MAX_AP_INDEX) {
+        reset_bit_u8(g_DialogToken[sent_vap_index], dialogToken);
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return WIFI_HAL_SUCCESS;
 }
 
