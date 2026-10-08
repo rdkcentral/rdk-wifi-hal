@@ -1471,6 +1471,7 @@ static inline void clear_bits(u8_bitmap *bits)
 }
 
 extern u8_bitmap g_DialogToken[MAX_AP_INDEX];
+extern u8 g_DialogTokenSender[MAX_AP_INDEX][256];
 
 int wifi_freq_to_channel(int freq, uint *channel);
 int wifi_channel_to_freq(const char* country, UCHAR opclass, uint channel, uint *freq);
