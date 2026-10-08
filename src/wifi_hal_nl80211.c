@@ -678,6 +678,7 @@ void create_connect_steering_event(wifi_interface_info_t *interface, wifi_steeri
     const struct element *elem;
     unsigned short fc, stype;
     unsigned char *l_variable = NULL;
+    size_t ie_len;
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
 
@@ -694,12 +695,22 @@ void create_connect_steering_event(wifi_interface_info_t *interface, wifi_steeri
     stype = WLAN_FC_GET_STYPE(fc);
     wifi_hal_info_print("%s:%d: mgmt frame stype:%d\n", __func__, __LINE__, stype);
     if (stype == WLAN_FC_STYPE_REASSOC_REQ) {
+        if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.reassoc_req)) {
+            wifi_hal_error_print("%s:%d: reassoc frame too short (len=%u)\n", __func__, __LINE__, len);
+            return;
+        }
         l_variable = (unsigned char *)mgmt->u.reassoc_req.variable;
+        ie_len = len - (IEEE80211_HDRLEN + sizeof(mgmt->u.reassoc_req));
     } else {
+        if (len < IEEE80211_HDRLEN + sizeof(mgmt->u.assoc_req)) {
+            wifi_hal_error_print("%s:%d: assoc frame too short (len=%u)\n", __func__, __LINE__, len);
+            return;
+        }
         l_variable = (unsigned char *)mgmt->u.assoc_req.variable;
+        ie_len = len - (IEEE80211_HDRLEN + sizeof(mgmt->u.assoc_req));
     }
 
-    for_each_element(elem, (unsigned char *)(l_variable), len - 4) {
+    for_each_element(elem, (unsigned char *)(l_variable), ie_len) {
         switch (elem->id) {
         case WLAN_EID_EXT_CAPAB:
             parse_btm_supported(steering_event, le32toh(*(uint32_t *)elem->data));
@@ -728,7 +739,7 @@ void create_connect_steering_event(wifi_interface_info_t *interface, wifi_steeri
     }
 
     /* HE */
-    if (get_ie_ext_by_eid(WLAN_EID_EXT_HE_CAPABILITIES, (unsigned char *)(l_variable), len - 4,
+    if (get_ie_ext_by_eid(WLAN_EID_EXT_HE_CAPABILITIES, (unsigned char *)(l_variable), ie_len,
         (unsigned char **)&he_cap_tlv, &he_cap_len) == true) {
         u8 mcs_nss_size;
 
