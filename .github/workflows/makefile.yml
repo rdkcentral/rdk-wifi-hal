@@ -130,11 +130,9 @@ jobs:
         git config --global user.name "${GITHUB_ACTOR}"
         make -f ${{ matrix.platform.makefile_path }} setup
 
-    # TEMPORARY advisory check (LTE-3093): sweep get_op_class_from_radio_params() through this
-    # leg's hostap ieee80211_chan_to_freq() (rpi = hostap 2.10, bpi = 2.11) and diff the broken
-    # cases against the committed baseline. Never fails the job. A PR that changes the mapping
-    # on purpose regenerates .github/scripts/opclass/baseline-<ver>.txt (full snapshot is in
-    # the job summary). Runs before the build so a red build still reports it.
+    # TEMPORARY advisory check (LTE-3093), see .github/scripts/opclass/snapshot.py: compares the
+    # op-class -> frequency mapping against this leg's hostap (rpi = 2.10, bpi = 2.11) with the
+    # committed baseline. Never fails the job; runs before the build so a red build still reports.
     - name: op-class round trip vs baseline for ${{ matrix.platform.name }}
       if: always()
       working-directory: easymesh_project/rdk-wifi-hal
@@ -158,9 +156,10 @@ jobs:
           echo "no change" >> "$SUM"
           exit 0
         fi
-        echo "::warning title=op-class round trip (hostap ${V:0:1}.${V:1})::broken op-class -> frequency cases differ from $D/baseline-$V.txt (see the job summary). If the change was deliberate, update $D/baseline-$V.txt."
+        echo "::warning title=op-class round trip (hostap ${V:0:1}.${V:1})::Op-class -> frequency mapping changed (see the job summary). This may affect downstream behaviour. If intended, update the baseline $D/baseline-$V.txt."
         {
-          python3 "$D/snapshot.py" --compare "$D/baseline-$V.txt" "$CUR" || echo "(compare failed)"
+          python3 "$D/snapshot.py" --compare "$D/baseline-$V.txt" "$CUR" \
+            || echo "**No usable baseline: commit the full snapshot below as \`$D/baseline-$V.txt\`.**"
           echo "<details><summary>full snapshot (commit as $D/baseline-$V.txt if the change is intended)</summary>"
           echo; echo '```'; cat "$CUR"; echo '```'; echo '</details>'
         } >> "$SUM"
