@@ -130,6 +130,41 @@ jobs:
         git config --global user.name "${GITHUB_ACTOR}"
         make -f ${{ matrix.platform.makefile_path }} setup
 
+    # TEMPORARY advisory check (LTE-3093): sweep get_op_class_from_radio_params() through this
+    # leg's hostap ieee80211_chan_to_freq() (rpi = hostap 2.10, bpi = 2.11) and diff the broken
+    # cases against the committed baseline. Never fails the job. A PR that changes the mapping
+    # on purpose regenerates .github/scripts/opclass/baseline-<ver>.txt (full snapshot is in
+    # the job summary). Runs before the build so a red build still reports it.
+    - name: op-class round trip vs baseline for ${{ matrix.platform.name }}
+      if: always()
+      working-directory: easymesh_project/rdk-wifi-hal
+      run: |
+        set -uo pipefail
+        case "${{ matrix.platform.id }}" in
+          rpi) V=210 ;;
+          bpi) V=211 ;;
+          *)   exit 0 ;;
+        esac
+        D=.github/scripts/opclass
+        CUR="$RUNNER_TEMP/opclass-$V.txt"
+        SUM="$GITHUB_STEP_SUMMARY"
+        echo "### 🧭 op-class round trip (hostap ${V:0:1}.${V:1}) vs baseline-$V.txt" >> "$SUM"
+        if ! python3 "$D/snapshot.py" . "../rdk-wifi-libhostap/source/hostap-${V:0:1}.${V:1}" \
+               ../halinterface/include "$V" > "$CUR" 2> "$CUR.err"; then
+          { echo "mechanism error, nothing checked:"; echo '```'; tail -20 "$CUR.err"; echo '```'; } >> "$SUM"
+          exit 0
+        fi
+        if cmp -s "$D/baseline-$V.txt" "$CUR"; then
+          echo "no change" >> "$SUM"
+          exit 0
+        fi
+        echo "::warning title=op-class round trip (hostap ${V:0:1}.${V:1})::broken op-class -> frequency cases differ from $D/baseline-$V.txt, see the job summary"
+        {
+          python3 "$D/snapshot.py" --compare "$D/baseline-$V.txt" "$CUR" || echo "(compare failed)"
+          echo "<details><summary>full snapshot (commit as $D/baseline-$V.txt if the change is intended)</summary>"
+          echo; echo '```'; cat "$CUR"; echo '```'; echo '</details>'
+        } >> "$SUM"
+
     - name: Build OneWiFi for ${{ matrix.platform.name }}
       id: build
       working-directory: easymesh_project/OneWifi
