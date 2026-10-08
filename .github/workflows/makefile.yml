@@ -158,7 +158,7 @@ jobs:
           echo "no change" >> "$SUM"
           exit 0
         fi
-        echo "::warning title=op-class round trip (hostap ${V:0:1}.${V:1})::broken op-class -> frequency cases differ from $D/baseline-$V.txt, see the job summary"
+        echo "::warning title=op-class round trip (hostap ${V:0:1}.${V:1})::broken op-class -> frequency cases differ from $D/baseline-$V.txt (see the job summary). If the change was deliberate, update $D/baseline-$V.txt."
         {
           python3 "$D/snapshot.py" --compare "$D/baseline-$V.txt" "$CUR" || echo "(compare failed)"
           echo "<details><summary>full snapshot (commit as $D/baseline-$V.txt if the change is intended)</summary>"

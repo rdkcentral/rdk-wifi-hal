@@ -1,4 +1,22 @@
 #!/usr/bin/env python3
+#
+# If not stated otherwise in this file or this component's LICENSE file the
+# following copyright and licenses apply:
+#
+# Copyright 2026 RDK Management
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 """Pull the HAL's op-class / regulatory code out of rdk-wifi-hal into one standalone C file.
 
 Definitions are taken by name from the live sources, in source order, so the test always
@@ -46,44 +64,44 @@ int ieee80211_chan_to_freq(const char *country, unsigned char op_class, unsigned
 '''
 
 
-def skip_to_matching_brace(text, i):
-    """text[i] == '{'; return the index just past its matching '}' (skips strings/comments)."""
-    depth, n = 0, len(text)
-    while i < n:
-        c = text[i]
-        if text.startswith('/*', i):
-            i = text.index('*/', i) + 2
+def skip_to_matching_brace(text, pos):
+    """text[pos] == '{'; return the index just past its matching '}' (skips strings/comments)."""
+    depth, length = 0, len(text)
+    while pos < length:
+        char = text[pos]
+        if text.startswith('/*', pos):
+            pos = text.index('*/', pos) + 2
             continue
-        if text.startswith('//', i):
-            i = text.index('\n', i)
+        if text.startswith('//', pos):
+            pos = text.index('\n', pos)
             continue
-        if c in '"\'':
-            j = i + 1
-            while text[j] != c:
-                j += 2 if text[j] == '\\' else 1
-            i = j + 1
+        if char in '"\'':
+            quote_end = pos + 1
+            while text[quote_end] != char:
+                quote_end += 2 if text[quote_end] == '\\' else 1
+            pos = quote_end + 1
             continue
-        if c == '{':
+        if char == '{':
             depth += 1
-        elif c == '}':
+        elif char == '}':
             depth -= 1
             if depth == 0:
-                return i + 1
-        i += 1
+                return pos + 1
+        pos += 1
     raise ValueError('unbalanced braces')
 
 
 def find_definition(text, name):
     """(start, end) of a top-level function or initialized variable called `name`."""
-    func = re.compile(r'^[A-Za-z_][\w \t\*]*?\b' + name + r'\s*\([^;{)]*\)\s*\{', re.M)
-    var = re.compile(r'^[A-Za-z_][\w \t\*]*?\b' + name + r'\s*(\[\s*\])?\s*=\s*\{', re.M)
-    for rx, is_var in ((func, False), (var, True)):
-        m = rx.search(text)
-        if m:
-            end = skip_to_matching_brace(text, m.end() - 1)
+    func = re.compile(r'^[A-Za-z_][\w \t\*]*?\b' + name + r'\s*\([^;{)]*\)\s*\{', re.MULTILINE)
+    var = re.compile(r'^[A-Za-z_][\w \t\*]*?\b' + name + r'\s*(\[\s*\])?\s*=\s*\{', re.MULTILINE)
+    for pattern, is_var in ((func, False), (var, True)):
+        match = pattern.search(text)
+        if match:
+            end = skip_to_matching_brace(text, match.end() - 1)
             if is_var:
                 end = text.index(';', end) + 1
-            return m.start(), end
+            return match.start(), end
     return None
 
 
@@ -93,15 +111,15 @@ def main():
     priv = open(f'{tree}/{PRIV}').read()
 
     parts = [PRELUDE.format(tree=tree)]
-    for t in PRIV_TYPES:
-        m = re.search(r'typedef struct\s*\{[^{}]*\}\s*' + t + r'\s*;', priv)
-        if not m:
-            sys.exit(f'extract: type {t} not found in {PRIV}')
-        parts.append(m.group(0) + '\n')
-    m = re.search(r'struct wifiCountryEnumStrMap\s*\{[^{}]*\}\s*;', priv)
-    if not m:
+    for type_name in PRIV_TYPES:
+        match = re.search(r'typedef struct\s*\{[^{}]*\}\s*' + type_name + r'\s*;', priv)
+        if not match:
+            sys.exit(f'extract: type {type_name} not found in {PRIV}')
+        parts.append(match.group(0) + '\n')
+    match = re.search(r'struct wifiCountryEnumStrMap\s*\{[^{}]*\}\s*;', priv)
+    if not match:
         sys.exit(f'extract: struct wifiCountryEnumStrMap not found in {PRIV}')
-    parts.append(m.group(0) + '\n\n')
+    parts.append(match.group(0) + '\n\n')
 
     spans = []
     for name in REQUIRED + OPTIONAL:
@@ -114,8 +132,8 @@ def main():
     for (start, end), name in sorted(spans):  # source order: helpers precede their users
         parts.append(f'/* --- {name} ({UTILS}) --- */\n{utils[start:end]}\n\n')
 
-    with open(out, 'w') as f:
-        f.write(''.join(parts))
+    with open(out, 'w') as out_file:
+        out_file.write(''.join(parts))
 
 
 if __name__ == '__main__':
