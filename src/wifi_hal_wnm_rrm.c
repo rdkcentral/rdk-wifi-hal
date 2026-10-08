@@ -565,6 +565,10 @@ static int handle_rx_wnm_notification_req(wifi_interface_info_t *interface,
 #define WIFI_RRM_MAX_BEACON_REQS 1
 #endif
 
+/* Beacon request dialog token shared by all VAPs (protected by g_wifi_hal.hapd_lock), so a
+ * token identifies one request even when MLO retargeting sends it from another VAP. */
+static u8 g_beacon_req_token;
+
 /* Search one radio's BSS list for addr, matching either a per-link STA MAC
  * (ap_get_sta) or, for MLO builds, the STA's MLD MAC address. Returns the
  * matching STA and, via *found_hapd, the BSS it was found on. */
@@ -793,13 +797,10 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
     if (!buf)
         return -1;
 
-    /* Allocate the dialog token from the caller's VAP, not the retargeted link,
-     * so tokens returned for one apIndex stay unique. */
-    struct hostapd_data *orig_hapd = &interface->u.ap.hapd;
-    orig_hapd->beacon_req_token++;
-    if (!orig_hapd->beacon_req_token) /* For wraparounds */
-        orig_hapd->beacon_req_token++;
-    u8 dialog_token = orig_hapd->beacon_req_token;
+    g_beacon_req_token++;
+    if (!g_beacon_req_token) /* For wraparounds */
+        g_beacon_req_token++;
+    u8 dialog_token = g_beacon_req_token;
 
     /* IEEE P802.11-REVmc/D5.0, 9.6.7.2 */
     wpabuf_put_u8(buf, WLAN_ACTION_RADIO_MEASUREMENT);
@@ -1016,13 +1017,21 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
 
     /* Track the dialog token against the VAP that actually sent the request,
      * which may differ from interface's VAP after MLO link retargeting above,
-     * and remember that VAP so cancelling via the caller's VAP clears it. */
+     * and remember that VAP so cancel and report dispatch map it back to the caller. */
     wifi_interface_info_t *sent_interface = (wifi_interface_info_t *)((char *)hapd -
         offsetof(wifi_interface_info_t, u.ap.hapd));
     unsigned int sent_vap_index = sent_interface->vap_info.vap_index;
     unsigned int orig_vap_index = interface->vap_info.vap_index;
 
     if (sent_vap_index < MAX_AP_INDEX && orig_vap_index < MAX_AP_INDEX) {
+        /* The token was reused after wraparound: drop the old request's tracking. */
+        for (unsigned int vap_index = 0; vap_index < MAX_AP_INDEX; vap_index++) {
+            if (g_DialogTokenSender[vap_index][dialog_token] != 0) {
+                reset_bit_u8(g_DialogToken[g_DialogTokenSender[vap_index][dialog_token] - 1],
+                    dialog_token);
+                g_DialogTokenSender[vap_index][dialog_token] = 0;
+            }
+        }
         set_bit_u8(g_DialogToken[sent_vap_index], dialog_token);
         g_DialogTokenSender[orig_vap_index][dialog_token] = (u8)(sent_vap_index + 1);
     } else {
@@ -1218,15 +1227,34 @@ static inline void* darray_at(dyn_array* array, size_t index)
 static void call_BeaconReport_callback(uint ap_index, wifi_BeaconReport_t *rep, uint size, UCHAR dialog_token)
 {
     wifi_device_callbacks_t *callbacks = get_hal_device_callbacks();
+    uint orig_ap_index = ap_index;
+    uint vap_index;
+    u8 requested;
 
-    if (NULL == callbacks->bcnrpt_callback[ap_index])
+    if (ap_index >= MAX_AP_INDEX)
         return;
 
-    if (get_bit_u8(g_DialogToken[ap_index], dialog_token)) {
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    requested = get_bit_u8(g_DialogToken[ap_index], dialog_token);
+    /* An MLO request may have been sent on this link for another VAP; report to the
+     * VAP that requested it. */
+    for (vap_index = 0; requested && vap_index < MAX_AP_INDEX; vap_index++) {
+        if (g_DialogTokenSender[vap_index][dialog_token] == ap_index + 1) {
+            orig_ap_index = vap_index;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+    if (NULL == callbacks->bcnrpt_callback[orig_ap_index])
+        return;
+
+    if (requested) {
         /* Call this callback only for client which initiated Beacon Request */
         UCHAR temp_dialog_token = dialog_token;
         uint arr_size = size;
-        callbacks->bcnrpt_callback[ap_index](ap_index, rep, &arr_size, &temp_dialog_token);
+        callbacks->bcnrpt_callback[orig_ap_index](orig_ap_index, rep, &arr_size,
+            &temp_dialog_token);
 
         /* Validate results.
             Although the callback API interface assumes that the function can change the number of entries and
