@@ -22,8 +22,9 @@
 For the base and the head HAL tree: takes the op-class code by name from the tree (nothing
 is hand-copied), links it with driver.c and one build leg's hostap
 src/common/ieee802_11_common.c, and sweeps every country/band/channel/bandwidth through
-get_op_class_from_radio_params() and ieee80211_chan_to_freq(). Reports how the broken cases
-(BADFREQ: no round trip to the channel's frequency; REJECT: refused by the HAL) differ.
+get_op_class_from_radio_params() and ieee80211_chan_to_freq(). Reports every case whose
+result differs: the op class, BADFREQ (no round trip to the channel's frequency) or REJECT
+(refused by the HAL).
 
 usage: check.py BASE_TREE HEAD_TREE HOSTAP_DIR HALIF_INCLUDE HOSTAPD_VERSION
 exit:  0 unchanged, 3 changed, anything else is a mechanism error
@@ -133,10 +134,10 @@ def extract(tree):
 
 
 def sweep(tree, hostap, halif, version):
-    """Broken cases of the HAL tree linked with this hostap:
-    ({(status, band, bw, channel, cc): detail}, all country codes)."""
+    """Every case of the HAL tree linked with this hostap:
+    {(band, bw, channel, cc): 'op115' | 'op121 BADFREQ -1' | 'REJECT'}."""
     with tempfile.TemporaryDirectory() as work:
-        with open(f'{work}/extracted.c', 'w') as out_file:
+        with open(f'{work}/extracted.inc', 'w') as out_file:
             out_file.write(extract(tree))
         subprocess.run([
             os.environ.get('CC', 'gcc'), '-std=gnu11', '-w', f'-DHOSTAPD_VERSION={version}',
@@ -146,14 +147,18 @@ def sweep(tree, hostap, halif, version):
             '-Wl,--unresolved-symbols=ignore-all',
         ], check=True)
         rows = subprocess.run([f'{work}/sweep'], check=True, capture_output=True, text=True).stdout
-    pairs, all_ccs = {}, set()
+    states = {}
     for row in rows.splitlines():
         status, cc, band, channel, bw, *rest = row.split()
-        all_ccs.add(cc)
-        if status != 'OK':
-            detail = f' op{rest[0]} -> {rest[1]}' if status == 'BADFREQ' else ''
-            pairs[(status, BANDS[band], BW[bw], int(channel), cc)] = detail
-    return pairs, all_ccs
+        state = 'REJECT' if status == 'REJECT' else f'op{rest[0]}'
+        if status == 'BADFREQ':
+            state += f' BADFREQ {rest[1]}'
+        states[(BANDS[band], BW[bw], int(channel), cc)] = state
+    return states
+
+
+def broken(state):
+    return state == 'REJECT' or 'BADFREQ' in state
 
 
 def countries(ccs, all_ccs):
@@ -165,18 +170,18 @@ def countries(ccs, all_ccs):
     return ' '.join(sorted(ccs))
 
 
-def render(pairs, all_ccs):
-    """{(status, band, bw, channel, cc): detail} -> lines, one per country set and detail,
-    listing the channels: 'BADFREQ 5G bw20 op121 -> -1 ch144: ALL except CA CN US'."""
+def render(labels, all_ccs):
+    """{(band, bw, channel, cc): label} -> lines, one per label and country set, listing the
+    channels: '5G bw20 ch144: op121 BADFREQ -1 [ALL except CA CN US]'."""
     by_case = defaultdict(set)
-    for (status, band, bw, channel, cc), detail in pairs.items():
-        by_case[(status, band, bw, channel, detail)].add(cc)
+    for (band, bw, channel, cc), label in labels.items():
+        by_case[(band, bw, channel, label)].add(cc)
     by_line = defaultdict(list)
-    for (status, band, bw, channel, detail), ccs in by_case.items():
-        by_line[(status, band, bw, detail, countries(ccs, all_ccs))].append(channel)
-    lines = [((BAND_RANK[band], int(bw.split('+')[0]), status, min(chans), detail),
-              f'{status} {band} bw{bw}{detail} ch{",".join(map(str, sorted(chans)))}: {who}')
-             for (status, band, bw, detail, who), chans in by_line.items()]
+    for (band, bw, channel, label), ccs in by_case.items():
+        by_line[(band, bw, label, countries(ccs, all_ccs))].append(channel)
+    lines = [((BAND_RANK[band], int(bw.split('+')[0]), min(chans), label, who),
+              f'{band} bw{bw} ch{",".join(map(str, sorted(chans)))}: {label} [{who}]')
+             for (band, bw, label, who), chans in by_line.items()]
     return [line for _key, line in sorted(lines)]
 
 
@@ -188,17 +193,20 @@ def details(title, lines, expanded):
 
 def main(base_tree, head_tree, hostap, halif, version):
     """Markdown report on stdout; exit 0 = mapping unchanged, CHANGED = changed."""
-    base, base_ccs = sweep(base_tree, hostap, halif, version)
-    head, all_ccs = sweep(head_tree, hostap, halif, version)
-    all_ccs |= base_ccs
-    changed = {key for key in head.keys() & base.keys() if head[key] != base[key]}
+    base = sweep(base_tree, hostap, halif, version)
+    head = sweep(head_tree, hostap, halif, version)
+    all_ccs = {cc for _band, _bw, _channel, cc in base.keys() | head.keys()}
+    changes = {key: (base.get(key, 'absent'), head.get(key, 'absent'))
+               for key in base.keys() | head.keys() if base.get(key) != head.get(key)}
+
+    def pick(was_broken, is_broken):
+        return render({key: f'{old} => {new}' for key, (old, new) in changes.items()
+                       if (broken(old), broken(new)) == (was_broken, is_broken)}, all_ccs)
     sections = [  # (title, count label, lines, expanded)
-        ('❌ newly broken', 'newly broken',
-         render({key: head[key] for key in head.keys() - base.keys()}, all_ccs), True),
-        ('🔁 still broken, different op class', 'op class changed',
-         render({key: head[key] for key in changed}, all_ccs), True),
-        ('✅ no longer broken', 'fixed',
-         render({key: base[key] for key in base.keys() - head.keys()}, all_ccs), False),
+        ('❌ newly broken', 'newly broken', pick(False, True), True),
+        ('🔁 still broken, differently', 'broken differently', pick(True, True), True),
+        ('🔀 op class changed, still valid', 'op class changed', pick(False, False), True),
+        ('✅ no longer broken', 'fixed', pick(True, False), False),
     ]
     counts = ', '.join(f'{len(lines)} {label}' for _title, label, lines, _open in sections if lines)
     if counts:
@@ -209,7 +217,8 @@ def main(base_tree, head_tree, hostap, halif, version):
         print('no change\n')
     for title, _label, lines, expanded in sections:
         details(title, lines, expanded)
-    details('all broken cases after this change', render(head, all_ccs), False)
+    details('all broken cases after this change',
+            render({key: state for key, state in head.items() if broken(state)}, all_ccs), False)
     return CHANGED if counts else 0
 
 
