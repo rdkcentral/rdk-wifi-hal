@@ -281,11 +281,14 @@ jobs:
         # De-promote just that class for clang, so the analyzer can run. No effect on the gcc gate.
         # Harmless until a clang-analyzer-* check is enabled.
         extra+=( '--extra-arg=-Wno-error=incompatible-pointer-types-discards-qualifiers' )
+        # Paths never scanned, git pathspec syntax ':!<pattern>' (as EXCLUDES in clang-format.yml).
+        # .github/: CI helper sources (e.g. scripts/opclass/driver.c) are not in the compile DB.
+        EXCLUDES=(':!.github/**')
         BASE='${{ github.event.pull_request.base.sha }}'
         CHANGED=''
         if [ -n "$BASE" ]; then
           git -C "$HAL" fetch --no-tags --depth=1 origin "$BASE" >/dev/null 2>&1 || true
-          CHANGED=$(git -C "$HAL" diff --name-only --diff-filter=ACM "$BASE" HEAD -- '*.c' '*.cpp' 2>/dev/null || true)
+          CHANGED=$(git -C "$HAL" diff --name-only --diff-filter=ACM "$BASE" HEAD -- '*.c' '*.cpp' "${EXCLUDES[@]}" 2>/dev/null || true)
         fi
         : > tidy.log
         for f in $CHANGED; do
