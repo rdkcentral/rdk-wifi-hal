@@ -173,6 +173,12 @@ int ipc_server_output(struct hal_ipc_processor_desc *desc,
 
             wifi_channelStats_t *input_output_channelStats_array, *chan_stats_tmp;
 
+            if (array_size <= 0) {
+                wifi_hal_error_print("%s:%d: Invalid radio channel stats array_size=%d\n",
+                    __func__, __LINE__, array_size);
+                goto error_happened;
+            }
+
             if (array_size > HAL_IPC_RADIO_CHANNELS_MAX) {
                 array_size = HAL_IPC_RADIO_CHANNELS_MAX;
             }
