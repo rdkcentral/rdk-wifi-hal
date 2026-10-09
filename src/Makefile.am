@@ -57,6 +57,11 @@ else
 librdk_wifihal_la_SOURCES += wifi_hal_mgmt_rx.c
 endif
 
+if QCOM_ATH12K_PORT
+librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/qualcomm
+librdk_wifihal_la_SOURCES += ../platform/qualcomm/platform_ath12k.c
+endif
+
 if TCXB7_PORT
 librdk_wifihal_la_CPPFLAGS += -I$(top_srcdir)/../platform/broadcom
 librdk_wifihal_la_SOURCES += ../platform/broadcom/platform.c
