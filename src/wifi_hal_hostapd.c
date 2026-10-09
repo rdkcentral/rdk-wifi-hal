@@ -2763,6 +2763,8 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
 #if HOSTAPD_VERSION >= 210
     unsigned short max_rsnx_ie_len = 50;
 #endif
+    const unsigned char *auth_addr;
+
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
     backhaul = &interface->u.sta.backhaul;
@@ -3033,7 +3035,17 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         }
     }
 #endif
-    wpa_sm_notify_assoc(sm, sm->bssid);
+    /* MLO: notify with the AP MLD address, not the per-link BSSID, so
+     * wpa_sm_get_auth_addr()'s fallback stays correct for PTK derivation. */
+    auth_addr = sm->bssid;
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    if (interface->mlo_params.valid_links > 0 && interface->mlo_params.assoc_link_id >= 0 &&
+        interface->mlo_params.assoc_link_id < MAX_NUM_MLD_LINKS &&
+        !is_zero_ether_addr(interface->mlo_params.mld_addr)) {
+        auth_addr = interface->mlo_params.mld_addr;
+    }
+#endif
+    wpa_sm_notify_assoc(sm, auth_addr);
 }
 
 static void wpa_sm_eapol_notify_done(void *ctx)
