@@ -142,6 +142,15 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {2, 1,  "bhaul-sta-50", "", "",           0,  15,  "mesh_sta_5g"},
 #endif
 
+#ifdef XE2_PORT // Plume SuperPod (PP203X): 2.4G + 5GL + 5GH
+    {0, 0,  "home-ap-24",    "", "br-home", 0,   0,  "private_ssid_2g"},
+    {1, 1,  "home-ap-l50",   "", "br-home", 0,   1,  "private_ssid_5gl"},
+    {2, 2,  "home-ap-u50",   "", "",        0,  16,  "private_ssid_5gh"},
+    {0, 0,  "bhaul-sta-24",  "", "",        0,  14,  "mesh_sta_2g"},
+    {1, 1,  "bhaul-sta-l50", "", "",        0,  15,  "mesh_sta_5gl"},
+    {2, 2,  "bhaul-sta-u50", "", "",        0,  23,  "mesh_sta_5gh"},
+#endif
+
 #ifdef CMXB7_PORT // for Intel based platforms
     {1, 0,  "wlan0.0", "",   "brlan0",  100, 0,      "private_ssid_2g"},
     {0, 1,  "wlan2.0", "",   "brlan0",  100, 1,      "private_ssid_5g"},
@@ -416,6 +425,12 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 2, 1, "radio2", "wifi1"},
 #endif
 
+#if defined(XE2_PORT)
+    { 0, 0, "radio1", "wifi0"},
+    { 1, 1, "radio2", "wifi1"},
+    { 2, 2, "radio3", "wifi2"},
+#endif
+
 #if defined(XLE_PORT)
     { 0, 0, "radio1", "wl0"},
     { 1, 1, "radio2", "wl1"},
@@ -650,6 +665,41 @@ const wifi_driver_info_t  driver_info = {
     platform_get_reg_domain,
     platform_set_beacon_prot,
 #endif 
+
+#ifdef XE2_PORT
+    "xe2",
+    "wifi_3_0",
+    {"Wireless Extender","Plume","XE2","PP203X","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+#endif
 
 #ifdef TCXB8_PORT // for Broadcom based platforms
     "tcxb8",
