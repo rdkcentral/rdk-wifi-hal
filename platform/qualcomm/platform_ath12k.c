@@ -172,7 +172,6 @@
 #define VDEV_PARAM_LIST_CHAN 71 /* list_chan */
 #define VDEV_PARAM_LIST_BAND 70 /* list_band */
 
-
 #ifndef NL80211_FREQUENCY_ATTR_6GHZ_REG_POWER_RULE
 #define NL80211_FREQUENCY_ATTR_6GHZ_REG_POWER_RULE 68
 #endif
@@ -224,20 +223,17 @@ typedef enum radio_band {
     radio_6g
 } radio_band_t;
 
-struct wifiChannelWidthMap
-{
+struct wifiChannelWidthMap {
     wifi_channelBandwidth_t halWifiChanWidth;
     char wifiChanWidthName[16];
 };
 
-struct wifiVariantBitMap
-{
+struct wifiVariantBitMap {
     wifi_ieee80211Variant_t halWifiRadioMode;
     char halWifiRadioModename[5];
 };
 
-typedef struct
-{
+typedef struct {
     radio_band_t halWifiBand;
     char wifiBandName[10];
 }wifiBandMap;
@@ -381,26 +377,24 @@ static int read_from_factory_defaults(char *filename, char *key, char *value, in
     {
         fp = fopen(filename, "r");
         if (fp == NULL) {
-            wifi_hal_error_print("%s:%d: Failed to open %s: %s\n", __func__, __LINE__,
-                filename, strerror(errno));
+            wifi_hal_error_print("%s:%d: Failed to open %s: %s\n", __func__, __LINE__, filename,
+                strerror(errno));
             return -1;
         }
-    }
-    else
-    {
+    } else {
         wifi_hal_error_print("%s:%d Factory file not found\n", __func__, __LINE__);
         return -1;
     }
-    while(!feof(fp))
+    while (!feof(fp))
     {
         memset(buf, '\0', sizeof(buf));
         fgets(buf, sizeof(buf), fp);
-        if((ptr = strstr(buf, key)) != NULL)
+        if ((ptr = strstr(buf, key)) != NULL)
         {
             break;
         }
     }
-    if(ptr == NULL)
+    if (ptr == NULL)
     {
         fclose(fp);
         wifi_hal_error_print("%s:%d Key %s not found in factory file\n", __func__, __LINE__, key);

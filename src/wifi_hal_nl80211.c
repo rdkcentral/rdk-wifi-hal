@@ -5265,7 +5265,7 @@ static void phy_info_iftype_copy(struct hostapd_hw_modes *mode,
  * driver.h; CONFIG_IEEE80211BN is a hostapd-2.12 build option, but guard
  * explicitly so a stray -DCONFIG_IEEE80211BN against older hostapd headers
  * doesn't fail to compile. */
-#if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212
+#if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT)
     {
         struct uhr_capabilities *uhr_capab = &mode->uhr_capab[opmode];
 
@@ -5295,7 +5295,7 @@ static void phy_info_iftype_copy(struct hostapd_hw_modes *mode,
             }
         }
     }
-#endif /* CONFIG_IEEE80211BN && HOSTAPD_VERSION >= 212 */
+#endif /* CONFIG_IEEE80211BN && HOSTAPD_VERSION >= 212 && QCOM_ATH12K_PORT */
 }
 
 static int wiphy_info_iface_comb_process(wifi_radio_info_t *radio,
@@ -8191,7 +8191,7 @@ static int map_rdk_radios_and_indexes(void)
     }
     return 0;
 }
-#endif
+#endif /* QCOM_ATH12K_PORT */
 
 int init_nl80211()
 {
@@ -8510,7 +8510,7 @@ void wifi_hal_nl80211_wps_cancel(unsigned int ap_index)
 #if !defined(PLATFORM_LINUX) || defined(QCOM_ATH12K_PORT)
     union wpa_event_data event = { 0 };
     wpa_supplicant_event(&interface->u.ap.hapd, EVENT_WPS_CANCEL, &event);
-#endif
+#endif /* !PLATFORM_LINUX || QCOM_ATH12K_PORT */
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
@@ -10320,14 +10320,6 @@ int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wif
 #else
         nl80211_interface_enable(intf->name, true);
 #endif
-#if defined(QCOM_ATH12K_PORT)
-            /* in ath12k, set MTU after bringin UP the interface */
-            if (is_backhaul_interface(intf)) {
-                //interface_set_mtu(intf, 1600);
-
-            }
-#endif
-
     }
 
     *interface = intf;
@@ -14620,7 +14612,7 @@ int wifi_drv_start_radar_detection(void *priv, struct hostapd_freq_params *freq)
              __func__, freq->freq, freq->ht_enabled, freq->vht_enabled, freq->he_enabled,
                          freq->bandwidth, freq->center_freq1, freq->center_freq2, link_id);
 
-#if defined(CONFIG_GENERIC_MLO)
+#if defined(CONFIG_GENERIC_MLO) && HOSTAPD_VERSION >= 211
     /* For MLO: use MLD interface ifindex + NL80211_ATTR_MLO_LINK_ID */
     if (link_id >= 0) {
         interface = get_primary_interface(radio);
@@ -14634,7 +14626,7 @@ int wifi_drv_start_radar_detection(void *priv, struct hostapd_freq_params *freq)
         return -1;
     }
 
-#if defined(CONFIG_GENERIC_MLO)
+#if defined(CONFIG_GENERIC_MLO) && HOSTAPD_VERSION >= 211
     if (link_id >= 0) {
         nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, (u8)link_id);
     }
@@ -14975,9 +14967,9 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
     u16 fc;
     int use_cookie = 1;
     // Prior Hostapd Versions (<2.10) do not support channel dwelling as a parameter
-#if !defined(HOSTAPD_2_11) && !defined(HOSTAPD_2_10) && !defined(HOSTAPD_2_12)
+#if HOSTAPD_VERSION < 210
     unsigned int wait = 0;
-#endif
+#endif /* HOSTAPD_VERSION < 210 */
     int res, interface_freq;
     mac_addr_str_t src_mac_str, dst_mac_str;
     int offchanok = 1;
@@ -15703,7 +15695,7 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
 {
     struct nl_msg *msg;
     int ret;
-#if defined (BANANA_PI_PORT)
+#ifdef BANANA_PI_PORT
     wifi_driver_data_t *drv;
     drv = &radio->driver_data;
 #endif
@@ -15719,7 +15711,7 @@ static int nl80211_set_sta_vlan(wifi_radio_info_t *radio, wifi_interface_info_t 
         goto fail;
     }
 
-#if defined (BANANA_PI_PORT)
+#ifdef BANANA_PI_PORT
     if (vlan_id && (drv->capa.flags & WPA_DRIVER_FLAGS_VLAN_OFFLOAD)) {
         if (nla_put_u16(msg, NL80211_ATTR_VLAN_ID, vlan_id) < 0) {
             wifi_hal_error_print("%s:%d netlink command vlan id:%d set failed\r\n",
@@ -16314,7 +16306,7 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
     wifi_hal_info_print("%s:%d: %s STA %s\n", __func__, __LINE__, cmd_string,
         to_mac_str(params->addr, mac_str));
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO) && defined(QCOM_ATH12K_PORT)
     if (params->mld_link_addr != NULL) {
         wifi_hal_info_print("%s:%d: sta_add MLO addr mld=" MACSTR " link=" MACSTR "\n",
             __func__, __LINE__, MAC2STR(params->addr), MAC2STR(params->mld_link_addr));
@@ -16322,7 +16314,7 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
         wifi_hal_info_print("%s:%d: sta_add MLO addr mld/link=" MACSTR " link_addr=NULL\n",
             __func__, __LINE__, MAC2STR(params->addr));
     }
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO && QCOM_ATH12K_PORT
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, cmd);
     if (msg == NULL) {
         goto fail;
@@ -17040,7 +17032,7 @@ static int phy_info_get_hw_features_band(struct phy_info_arg *phy_info, struct n
             HOSTAPD_MODE_FLAG_VHT_INFO_KNOWN;
 #if HOSTAPD_VERSION >= 211
         mode->flags |= HOSTAPD_MODE_FLAG_HE_INFO_KNOWN;
-#endif /* QCOM_ATH12K_PORT */
+#endif /* HOSTAPD_VERSION >= 211 */
 
         /*
          * Unsupported VHT MCS stream is defined as value 3, so the VHT
@@ -18865,15 +18857,17 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
 #endif
     int beacon_set;
     u32 suites[20], suite;
-#if defined(QCOM_ATH12K_PORT) && defined(CONFIG_MESH)
-       struct wpa_driver_mesh_bss_params mesh_params;
-#endif /* QCOM_ATH12K_PORT && CONFIG_MESH */
-#if defined(QCOM_ATH12K_PORT) && defined(QCA_UD_HOSTAPD)
+#ifdef QCOM_ATH12K_PORT
+#ifdef CONFIG_MESH
+    struct wpa_driver_mesh_bss_params mesh_params;
+#endif /* CONFIG_MESH */
+#ifdef QCA_UD_HOSTAPD
     struct nlattr *elems;
-#endif /* QCOM_ATH12K_PORT && QCA_UD_HOSTAPD */
-#if defined(QCOM_ATH12K_PORT) && defined(CONFIG_IEEE80211BE) && defined(QCA_UD_HOSTAPD)
+#endif /* QCA_UD_HOSTAPD */
+#if defined(CONFIG_IEEE80211BE) && defined(QCA_UD_HOSTAPD)
     struct wpa_driver_ap_ttlm_params *ttlm_param = &params->ttlm_params;
-#endif /* QCOM_ATH12K_PORT && CONFIG_IEEE80211BE && QCA_UD_HOSTAPD */
+#endif /* CONFIG_IEEE80211BE && QCA_UD_HOSTAPD */
+#endif /* QCOM_ATH12K_PORT */
 
     u32 ver;
     wifi_interface_info_t *interface;
@@ -18936,9 +18930,9 @@ int wifi_drv_set_ap(void *priv, struct wpa_driver_ap_params *params)
 	wpa_printf(MSG_DEBUG, "nl80211: beacon_rate=%u", params->beacon_rate);
 	wpa_printf(MSG_DEBUG, "nl80211: rate_type=%d", params->rate_type);
 	wpa_printf(MSG_DEBUG, "nl80211: dtim_period=%d", params->dtim_period);
-#if defined(QCOM_ATH12K_PORT) && defined(QCA_UD_HOSTAPD)
+#ifdef QCA_UD_HOSTAPD
 	wpa_printf(MSG_DEBUG, "nl80211: beacon_tx_mode=%d", params->beacon_tx_mode);
-#endif /* QCOM_ATH12K_PORT && QCA_UD_HOSTAPD */
+#endif /* QCA_UD_HOSTAPD */
 	wpa_printf(MSG_DEBUG, "nl80211: ssid=%s",
 		   wpa_ssid_txt(params->ssid, params->ssid_len));
 #endif /* QCOM_ATH12K_PORT */
@@ -20162,7 +20156,7 @@ int nl80211_register_spurious_frames(wifi_interface_info_t *interface)
     if (0) { /* dummy block to satisfy the shared goto-error path below */
 #else
         if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, interface->index) < 0) {
-#endif
+#endif /* QCOM_ATH12K_PORT */
             wifi_hal_error_print("%s:%d: failed set interface index in message for %s interface\n",
                 __func__, __LINE__, wifi_hal_get_interface_name(interface));
             nlmsg_free(msg);
@@ -20882,13 +20876,15 @@ int     wifi_drv_send_eapol(void *priv, const u8 *addr, const u8 *data,
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
 static void * wifi_driver_nl80211_init(void *ctx, const char *ifname,
 		                       void *global_priv, enum wpa_p2p_mode p2p_mode)
-#elif HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT) && defined(QCA_UD_HOSTAPD)
+#elif HOSTAPD_VERSION >= 212
+#if defined(QCOM_ATH12K_PORT) && defined(QCA_UD_HOSTAPD)
 static void * wifi_driver_nl80211_init(void *ctx, const char *ifname,
                                        void *global_priv, enum wpa_p2p_mode p2p_mode, int ppe_vp_type)
-#elif HOSTAPD_VERSION >= 212
+#else
 static void * wifi_driver_nl80211_init(void *ctx, const char *ifname,
                                        void *global_priv, enum wpa_p2p_mode p2p_mode)
-#else
+#endif /* QCOM_ATH12K_PORT && QCA_UD_HOSTAPD */
+#else /* HOSTAPD_VERSION < 212 */
 static void * wifi_driver_nl80211_init(void *ctx, const char *ifname,
                                        void *global_priv)
 #endif
@@ -20977,7 +20973,7 @@ fail:
     return -ENOBUFS;
 
 }
-#endif
+#endif /* QCOM_ATH12K_PORT */
 
 int     wifi_drv_set_privacy(void *priv, int enabled)
 {
@@ -21047,7 +21043,7 @@ int wifi_drv_send_radius_fallback_and_failover(void *priv, int radius_switch_rea
     }
     return 0;
 }
-#endif
+#endif /* !QCOM_ATH12K_PORT */
 
 #if HOSTAPD_VERSION >= 210 //2.10
 int wifi_drv_set_key(void *priv, struct wpa_driver_set_key_params *params)
@@ -21078,7 +21074,7 @@ int wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     wifi_hal_dbg_print("%s:%d: ifname:%s vap_index:%d\n", __func__, __LINE__,
                        interface->name, vap->vap_index);
 
-#if HOSTAPD_VERSION >= 210 //2.10
+#if defined(QCOM_ATH12K_PORT) && HOSTAPD_VERSION >= 210
     {
         int skip_set_key = 1;
         enum wpa_alg alg          = params->alg;
@@ -21550,7 +21546,7 @@ qca_fail_msg:
 #endif /* QCOM_ATH12K_PORT */
     } /* HOSTAPD_VERSION >= 210 block */
 
-#else /* HOSTAPD_VERSION < 210 */
+#else /* !QCOM_ATH12K_PORT || HOSTAPD_VERSION < 210 */
     if (alg == WPA_ALG_NONE) {
         return -1;
     }
@@ -21701,7 +21697,7 @@ qca_fail_msg:
                         __func__, __LINE__, interface->name, vap->vap_index);
     return 0;
 
-#endif /* HOSTAPD_VERSION >= 210 */
+#endif /* QCOM_ATH12K_PORT && HOSTAPD_VERSION >= 210 */
 }
 
 int wifi_drv_set_authmode(void *priv, int auth_algs)
