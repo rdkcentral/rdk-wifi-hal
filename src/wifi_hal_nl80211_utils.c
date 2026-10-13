@@ -6260,6 +6260,70 @@ uint16_t freq_to_primary(uint16_t freq, wifi_channelBandwidth_t chwid)
     return freq;
 }
 
+int get_band_index(enum nl80211_band band)
+{
+    switch (band) {
+    case NL80211_BAND_2GHZ:
+        return 0;
+    case NL80211_BAND_5GHZ:
+        return 1;
+    case NL80211_BAND_6GHZ:
+#ifdef LINUX_VM_PORT
+        return -1;
+#else
+        return 2;
+#endif
+    default:
+        return -1;
+    }
+}
+
+void print_channel_list(wifi_radio_info_t *radio)
+{
+    wifi_radio_capabilities_t *cap = NULL;
+    wifi_channels_list_t *channels = NULL;
+    wifi_freq_bands_t band = {0};
+
+    char channel_str[512] = {0};
+    char *end_ptr = channel_str;
+    const size_t channel_str_size = sizeof(channel_str);
+
+    if (radio == NULL) {
+        return;
+    }
+    cap = &radio->capab;
+
+    for (int i = 0; i < MAX_NUM_FREQ_BAND; i++)
+    {
+        memset(channel_str, 0, channel_str_size);
+        end_ptr = channel_str;
+
+        if (cap->band[i] == 0) {
+            continue;
+        }
+
+        band = cap->band[i];
+        channels = &cap->channel_list[i];
+
+        int chan_num = 0;
+        int written = 0;
+        int remaining_size = channel_str_size;
+        while ((chan_num < channels->num_channels) &&
+                (end_ptr < channel_str + channel_str_size - 1)) {
+            remaining_size = channel_str_size - (end_ptr - channel_str);
+            written = snprintf(end_ptr, remaining_size, "%u ", channels->channels_list[chan_num]);
+            if (written < 0 || written >= remaining_size) {
+                break;
+            }
+            end_ptr += written;
+            chan_num++;
+        }
+        wifi_hal_dbg_print("%s:%d: Freq Band: %s for radio: %d num channels: %d channels:\n%s\n",
+            __func__, __LINE__, wifi_freq_bands_to_string(band), radio->index,
+            channels->num_channels, channel_str);
+    }
+}
+
 int reload_interface(wifi_interface_info_t *interface)
 {
     char *interface_name = wifi_hal_get_interface_name(interface);
