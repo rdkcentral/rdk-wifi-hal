@@ -601,6 +601,7 @@ typedef struct {
     wifi_driver_data_t  driver_data;
     struct hostapd_hw_modes hw_modes[NUM_NL80211_BANDS];  // This can be one of enum nl80211_band  
     struct hostapd_channel_data channel_data[NUM_NL80211_BANDS][MAX_CHANNELS];
+    bool channel_max_tx_power_valid[NUM_NL80211_BANDS][MAX_CHANNELS];
     int     rates[NUM_NL80211_BANDS][MAX_RATES];
     int     basic_rates[NUM_NL80211_BANDS][MAX_RATES]; // supported rates per band in 100 kbps units
     struct hostapd_rate_data    rate_data[NUM_NL80211_BANDS][MAX_RATES];
@@ -1257,7 +1258,9 @@ int nvram_get_current_password(char *l_password, int vap_index);
 int nvram_get_current_ssid(char *l_ssid, int vap_index);
 int nvram_get_default_xhs_ssid(char *l_ssid, int vap_index);
 int nvram_get_mgmt_frame_power_control(int vap_index, int* output_dbm);
-int nl80211_set_regulatory_domain(wifi_countrycode_type_t country_code);
+int nl80211_set_regulatory_domain(wifi_radio_index_t radio_index,
+    wifi_countrycode_type_t country_code, bool *request_accepted, bool *domain_applied,
+    bool *previous_domain_restored);
 int platform_get_channel_bandwidth(wifi_radio_index_t index, wifi_channelBandwidth_t *channelWidth);
 int wifi_drv_getApAclDeviceNum(int vap_index, uint *acl_count);
 int wifi_drv_get_chspc_configs(unsigned int radioIndex, wifi_channelBandwidth_t bandwidth, const wifi_channels_list_t *channels, char* buff);
