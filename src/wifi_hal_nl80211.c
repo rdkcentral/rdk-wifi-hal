@@ -90,6 +90,8 @@ void wifi_drv_eapol_timeouts(wifi_interface_info_t *interface, mac_address_t sta
 #define KEY_MGMT_SAE_EXT 67108864
 #define MAX_MBSSID_INTERFACES 8
 
+static pthread_mutex_t channel_tx_power_cache_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 #if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
 #define CSA_TAG_ID 37
 #define CSA_IE_MIN_LENGTH 3
@@ -4760,7 +4762,7 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
     struct hostapd_channel_data *chan;
     enum nl80211_dfs_state dfs_state;
     enum nl80211_band band;
-    int found = 0;
+    int found = 0, channel_index;
     char channel_str[8], channels_str[512] = {};
     int index = -1;
 #ifdef CONFIG_WMM
@@ -4827,7 +4829,10 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
         chan->flag = 0;
         chan->allowed_bw = ~0;
         chan->dfs_cac_ms = 0;
-
+        channel_index = (int)(chan - radio->channel_data[band]);
+        if (channel_index >= 0 && channel_index < MAX_CHANNELS) {
+            radio->channel_max_tx_power_valid[band][channel_index] = false;
+        }
 
         if (ieee80211_freq_to_chan(chan->freq, (u8 *)&chan->chan) == NUM_HOSTAPD_MODES) {
             wifi_hal_error_print("%s:%d: Unable to convert frequency %d to channel number on phy index %d.\n", __func__, __LINE__,
@@ -4836,6 +4841,18 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
 
         if (chan->chan == 0) {
             goto skip;
+        }
+
+        if (tb_freq[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]) {
+            u32 max_tx_power_mbm = nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]);
+            int max_tx_power_dbm = max_tx_power_mbm / 100;
+
+            chan->max_tx_power = max_tx_power_dbm;
+            if (channel_index >= 0 && channel_index < MAX_CHANNELS) {
+                radio->channel_max_tx_power_valid[band][channel_index] = true;
+            }
+            wifi_hal_info_print("Channel=%d Freq=%d RegulatoryMaxTxPower=%d dBm (from %u mBm)\n",
+                chan->chan, chan->freq, max_tx_power_dbm, max_tx_power_mbm);
         }
 
         if (tb_freq[NL80211_FREQUENCY_ATTR_NO_IR]) {
@@ -4969,6 +4986,66 @@ skip:   found = 0;
         mode->num_channels, channels_str);
 
     return mode;
+}
+
+INT wifi_getRadioChannelMaxTxPower(INT radioIndex, wifi_freq_bands_t freq_band, INT channel,
+    INT *output_dBm)
+{
+    wifi_radio_info_t *radio;
+    enum nl80211_band band;
+    unsigned int num_channels;
+
+    if (channel <= 0 || output_dBm == NULL) {
+        wifi_hal_error_print("%s:%d: Invalid channel/output pointer\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    switch (freq_band) {
+    case WIFI_FREQUENCY_2_4_BAND:
+        band = NL80211_BAND_2GHZ;
+        break;
+    case WIFI_FREQUENCY_5_BAND:
+    case WIFI_FREQUENCY_5L_BAND:
+    case WIFI_FREQUENCY_5H_BAND:
+        band = NL80211_BAND_5GHZ;
+        break;
+    case WIFI_FREQUENCY_6_BAND:
+        band = NL80211_BAND_6GHZ;
+        break;
+    default:
+        wifi_hal_error_print("%s:%d: Unsupported frequency band %d\n", __func__, __LINE__,
+            freq_band);
+        return RETURN_ERR;
+    }
+
+    radio = get_radio_by_rdk_index(radioIndex);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: Radio %d not found\n", __func__, __LINE__, radioIndex);
+        return RETURN_ERR;
+    }
+    if (band < 0 || band >= NUM_NL80211_BANDS) {
+        wifi_hal_error_print("%s:%d: Invalid nl80211 band %d\n", __func__, __LINE__, band);
+        return RETURN_ERR;
+    }
+
+    pthread_mutex_lock(&channel_tx_power_cache_mutex);
+    num_channels = radio->hw_modes[band].num_channels;
+    if (num_channels > MAX_CHANNELS) {
+        num_channels = MAX_CHANNELS;
+    }
+    for (unsigned int i = 0; i < num_channels; i++) {
+        if (radio->channel_data[band][i].chan == channel &&
+            radio->channel_max_tx_power_valid[band][i]) {
+            *output_dBm = radio->channel_data[band][i].max_tx_power;
+            pthread_mutex_unlock(&channel_tx_power_cache_mutex);
+            return RETURN_OK;
+        }
+    }
+    pthread_mutex_unlock(&channel_tx_power_cache_mutex);
+
+    wifi_hal_dbg_print("%s:%d: No regulatory max TX power for radio %d channel %d\n", __func__,
+        __LINE__, radioIndex, channel);
+    return RETURN_ERR;
 }
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
@@ -7271,16 +7348,28 @@ int update_channel_flags()
 {
     struct nl_msg *msg;
 
+    pthread_mutex_lock(&channel_tx_power_cache_mutex);
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        wifi_radio_info_t *radio = get_radio_by_rdk_index(i);
+
+        if (radio != NULL) {
+            memset(radio->channel_max_tx_power_valid, 0, sizeof(radio->channel_max_tx_power_valid));
+        }
+    }
+
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
     if (msg == NULL) {
+        pthread_mutex_unlock(&channel_tx_power_cache_mutex);
         return -1;
     }
     nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
 
     if (nl80211_send_and_recv(msg, phy_info_handler, &g_wifi_hal, NULL, NULL)) {
+        pthread_mutex_unlock(&channel_tx_power_cache_mutex);
         return -1;
     }
 
+    pthread_mutex_unlock(&channel_tx_power_cache_mutex);
     return 0;
 }
 
@@ -7960,6 +8049,7 @@ int nl80211_init_radio_info()
     wifi_radio_info_t *radio;
     struct nl_msg *msg;
 
+    pthread_mutex_lock(&channel_tx_power_cache_mutex);
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = &g_wifi_hal.radio_info[i];
 
@@ -7976,31 +8066,38 @@ int nl80211_init_radio_info()
         memset(radio->capab.channel_list, 0, sizeof(radio->capab.channel_list));
         memset((unsigned char *)radio->hw_modes, 0, NUM_NL80211_BANDS*sizeof(struct hostapd_hw_modes));
 
+        memset(radio->channel_max_tx_power_valid, 0, sizeof(radio->channel_max_tx_power_valid));
+
         // get information about phy
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
         if (msg == NULL) {
             wifi_hal_dbg_print("%s:%d: Error creating nl80211 message\n", __func__, __LINE__);
+            pthread_mutex_unlock(&channel_tx_power_cache_mutex);
             return -1;
         }
 
         if (nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index) < 0) {
             wifi_hal_dbg_print("%s:%d: Error adding nl80211 message data\n", __func__, __LINE__);
             nlmsg_free(msg);
+            pthread_mutex_unlock(&channel_tx_power_cache_mutex);
             return -1;
         }
 
         if (nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP) < 0) {
             wifi_hal_dbg_print("%s:%d: Error adding SPLIT_WIPHY_DUMP flag\n", __func__, __LINE__);
             nlmsg_free(msg);
+            pthread_mutex_unlock(&channel_tx_power_cache_mutex);
             return -1;
         }
 
         if (nl80211_send_and_recv(msg, wiphy_get_info_handler,
             radio, NULL, NULL)) {
+            pthread_mutex_unlock(&channel_tx_power_cache_mutex);
             return -1;
         }
     }
 
+    pthread_mutex_unlock(&channel_tx_power_cache_mutex);
     return 0;
 }
 
@@ -15504,6 +15601,10 @@ static void phy_info_freq(struct hostapd_hw_modes *mode,
     chan->flag = 0;
     chan->allowed_bw = ~0;
     chan->dfs_cac_ms = 0;
+
+    if (tb_freq[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]) {
+        chan->max_tx_power = nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]) / 100;
+    }
 
     if (ieee80211_freq_to_chan(chan->freq, &channel) != NUM_HOSTAPD_MODES) {
         chan->chan = channel;
