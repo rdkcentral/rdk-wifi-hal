@@ -1997,6 +1997,13 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
         event_type = nla_get_u32(tb[NL80211_ATTR_RADAR_EVENT]);
     }
 
+    if (gnlh->cmd == NL80211_CMD_REG_CHANGE || gnlh->cmd == NL80211_CMD_WIPHY_REG_CHANGE) {
+        if (update_channel_flags() != 0) {
+            wifi_hal_error_print("%s:%d: failed to refresh channel data after regulatory change\n",
+                __func__, __LINE__);
+        }
+    }
+
     interface = get_interface_by_if_index(ifidx, link_id);
     switch (gnlh->cmd) {
     case NL80211_CMD_RADAR_DETECT:
