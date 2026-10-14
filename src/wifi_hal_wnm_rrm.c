@@ -701,7 +701,8 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
     }
 #endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
 
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE)
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO) && \
+    defined(BANANA_PI_PORT)
     /* We may have matched a per-link STA object rather than the assoc-link one:
      * hostapd only keeps WLAN_STA_AUTHORIZED, rrm_enabled_capa and other connection
      * state on the assoc STA. mld_assoc_sta points there from any link STA. */
@@ -712,7 +713,7 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
             sta->mld_assoc_sta->flags);
         sta = sta->mld_assoc_sta;
     }
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE && CONFIG_GENERIC_MLO && BANANA_PI_PORT
 
     if (!sta || !(sta->flags & WLAN_STA_AUTHORIZED)) {
         wifi_hal_error_print("%s:%d: Request beacon: no authorized STA matched for " MACSTR "\n",
