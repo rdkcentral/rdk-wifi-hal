@@ -966,23 +966,6 @@ static struct hostapd_mld *find_mld(struct wifi_interface_info_t *interface)
     return NULL;
 }
 
-static bool wifi_hal_is_mld_link_exists(struct hostapd_data *hapd)
-{
-    struct hostapd_data *link_bss;
-
-    if (hapd->mld == NULL) {
-        return false;
-    }
-
-    dl_list_for_each(link_bss, &hapd->mld->links, struct hostapd_data, link) {
-        if (link_bss == hapd) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 static int alloc_mld(wifi_interface_info_t *interface)
 {
     struct hostapd_mld *mld;
