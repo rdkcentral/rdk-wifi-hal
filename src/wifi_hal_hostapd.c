@@ -1990,6 +1990,9 @@ static void print_hw_variants_by_bitmask(uint32_t mask)
 #ifdef CONFIG_IEEE80211BE
         "WIFI_80211_VARIANT_BE",
 #endif /* CONFIG_IEEE80211BE */
+#ifdef CONFIG_IEEE80211BN
+         "WIFI_80211_VARIANT_BN",
+#endif
     };
 
     for (i = 0; i < ARRAY_SIZE(wifi_mode_strings); i++) {
