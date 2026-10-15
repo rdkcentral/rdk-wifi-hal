@@ -57,6 +57,10 @@ int sync_hostapd_freq_param(unsigned int apIndex)
     }
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d radio is NULL for apIndex=%u\n", __func__, __LINE__, apIndex);
+        return RETURN_ERR;
+    }
     radio_param = &radio->oper_param;
 
     get_coutry_str_from_code(radio_param->countryCode, country);
