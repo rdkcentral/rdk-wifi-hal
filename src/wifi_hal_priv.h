@@ -431,7 +431,7 @@ typedef struct ie_info {
 
 struct txpwr_context {
     ULONG *tx_power;
-    int radio_index;
+    int link_id;
 };
 
 typedef struct wifi_interface_info_t {

@@ -11530,12 +11530,18 @@ static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
     /* By default, set to UNSPECIFIED */
     *eml_capa = drv->iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa;
     *mld_capa_and_ops = drv->iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops;
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+    *ext_mld_capa_and_ops = drv->iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].ext_mld_capa_and_ops;
+#endif // BANANA_PI_PORT && KERNEL_6_12
 
     /* Replace the default value if a per-interface type value exists */
     for (i = 0; i < drv->num_iface_ext_capa; i++) {
         if (nlmode == drv->iface_ext_capa[i].iftype) {
             *eml_capa = drv->iface_ext_capa[i].eml_capa;
             *mld_capa_and_ops = drv->iface_ext_capa[i].mld_capa_and_ops;
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+            *ext_mld_capa_and_ops = drv->iface_ext_capa[i].ext_mld_capa_and_ops;
+#endif // BANANA_PI_PORT && KERNEL_6_12
             break;
         }
     }
@@ -19537,10 +19543,9 @@ static int get_radio_txpwr_handler(struct nl_msg *msg, void *arg)
     }
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-    if (!have_txpwr && tb[NL80211_ATTR_MLO_LINKS]) {
+    if (!have_txpwr && ctx->link_id != NL80211_DRV_LINK_ID_NA && tb[NL80211_ATTR_MLO_LINKS]) {
         struct nlattr *link;
         int rem;
-        int requested_index = ctx->radio_index;
 
         nla_for_each_nested(link, tb[NL80211_ATTR_MLO_LINKS], rem) {
             struct nlattr *ltb[NL80211_ATTR_MAX + 1];
@@ -19550,7 +19555,7 @@ static int get_radio_txpwr_handler(struct nl_msg *msg, void *arg)
             if (ltb[NL80211_ATTR_WIPHY_TX_POWER_LEVEL]) {
                 int link_txp_mbm = nla_get_s32(ltb[NL80211_ATTR_WIPHY_TX_POWER_LEVEL]);
                 int link_id = ltb[NL80211_ATTR_MLO_LINK_ID] ? nla_get_u8(ltb[NL80211_ATTR_MLO_LINK_ID]) : -1;
-                if (link_id == requested_index) {
+                if (link_id == ctx->link_id) {
                     long txp_dbm = link_txp_mbm / 100;
 
                     if (txp_dbm < 0) {
@@ -19584,7 +19589,7 @@ static int get_radio_tx_power(wifi_interface_info_t *interface, ULONG *tx_power)
     int ret = RETURN_ERR;
     struct txpwr_context ctx;
     ctx.tx_power = tx_power;
-    ctx.radio_index = interface->rdk_radio_index;  // IMPORTANT
+    ctx.link_id = wifi_hal_get_mld_link_id(interface);
 
     wifi_hal_dbg_print("%s:%d Entering\n", __func__, __LINE__);
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_GET_INTERFACE);
