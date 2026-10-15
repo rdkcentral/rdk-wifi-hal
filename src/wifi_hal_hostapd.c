@@ -859,8 +859,14 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 #endif //CONFIG_IPV6
 #endif //WIFI_HAL_VERSION_3_PHASE2
 
-        strcpy(conf->radius->auth_servers[0].shared_secret, radius_cfg->key);
-        conf->radius->auth_servers[0].shared_secret_len = strlen(conf->radius->auth_servers[0].shared_secret);
+        size_t key_len = strnlen(radius_cfg->key, 64);
+        if (key_len == 64) {
+            wifi_hal_error_print("%s:%d: RADIUS primary key too long\n", __func__, __LINE__);
+            return RETURN_ERR;
+        }
+        memcpy(conf->radius->auth_servers[0].shared_secret, radius_cfg->key, key_len);
+        conf->radius->auth_servers[0].shared_secret[key_len] = '\0';
+        conf->radius->auth_servers[0].shared_secret_len = key_len;
         conf->radius->auth_servers[0].port = radius_cfg->port;
         
 #ifdef WIFI_HAL_VERSION_3_PHASE2
@@ -887,8 +893,14 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 #endif //CONFIG_IPV6
 #endif //WIFI_HAL_VERSION_3_PHASE2
 
-        strcpy(conf->radius->auth_servers[1].shared_secret, radius_cfg->s_key);
-        conf->radius->auth_servers[1].shared_secret_len = strlen(conf->radius->auth_servers[1].shared_secret);
+        size_t skey_len = strnlen(radius_cfg->s_key, 64);
+        if (skey_len == 64) {
+            wifi_hal_error_print("%s:%d: RADIUS secondary key too long\n", __func__, __LINE__);
+            return RETURN_ERR;
+        }
+        memcpy(conf->radius->auth_servers[1].shared_secret, radius_cfg->s_key, skey_len);
+        conf->radius->auth_servers[1].shared_secret[skey_len] = '\0';
+        conf->radius->auth_servers[1].shared_secret_len = skey_len;
         conf->radius->auth_servers[1].port = radius_cfg->s_port;
 
         if (is_open_sec_radius_auth(sec)) {
@@ -1313,6 +1325,13 @@ int update_hostap_bss(wifi_interface_info_t *interface)
         rc_cnt = (rc_cnt > 3) ? 3 : rc_cnt;
         wifi_hal_dbg_print("%s:%d, rc_cnt consortium,%d\n", __func__, __LINE__, rc_cnt);
         for(unsigned char j = 0; j < rc_cnt; ++j) {
+            if (rc_p->wifiRoamingConsortiumLen[j] > sizeof(((struct hostapd_roaming_consortium *)0)->oi)) {
+                wifi_hal_error_print("%s:%d: roaming consortium OI too large (%u > %zu), indx: %d\n",
+                    __func__, __LINE__, (unsigned int)rc_p->wifiRoamingConsortiumLen[j],
+                    sizeof(((struct hostapd_roaming_consortium *)0)->oi), j);
+                return RETURN_ERR;
+            }
+
             struct hostapd_roaming_consortium *rc = os_realloc_array(conf->roaming_consortium, conf->roaming_consortium_count + 1, sizeof(struct hostapd_roaming_consortium));
 
             if(rc == NULL) {
