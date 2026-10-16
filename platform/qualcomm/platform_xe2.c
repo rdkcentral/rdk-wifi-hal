@@ -102,3 +102,44 @@ INT wifi_enableCSIEngine(INT apIndex, mac_address_t sta, BOOL enable)
                        __func__, __LINE__, apIndex, enable);
     return RETURN_OK;
 }
+
+int nvram_get_radio_enable_status(bool *radio_enable, int radio_index)
+{
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    return 0;
+}
+
+int nvram_get_vap_enable_status(bool *vap_enable, int vap_index)
+{
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    return 0;
+}
+
+int nvram_get_current_security_mode(wifi_security_modes_t *security_mode,int vap_index)
+{
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    return 0;
+}
+
+int nvram_get_current_password(char *l_password, int vap_index)
+{
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    return 0;
+}
+
+int nvram_get_current_ssid(char *l_ssid, int vap_index)
+{
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    return 0;
+}
+
+int nvram_get_mgmt_frame_power_control(int vap_index, int* output_dbm)
+{
+    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
+    return 0;
+}
+
+int platform_get_channel_bandwidth(wifi_radio_index_t index,  wifi_channelBandwidth_t *channelWidth)
+{
+    return 0;
+}
