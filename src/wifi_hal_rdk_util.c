@@ -51,8 +51,8 @@
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
 #include <aes_siv.h>
-#include <wifi_hal_rdk_framework.h>
 #include "wifi_hal_priv.h"
+#include <wifi_hal_rdk_framework.h>
 #include <cjson/cJSON.h>
 #include <sys/types.h>
 #include <ifaddrs.h>
