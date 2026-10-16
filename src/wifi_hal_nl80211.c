@@ -2009,6 +2009,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     wifi_frame_t mgmt_frame;
     bool forward_frame = true;
     bool is_greylist_reject = false;
+    bool sta_associated;
 #ifdef WIFI_EMULATOR_CHANGE
     static int fd_c = -1;
     unsigned int msg_type = wlan_emu_msg_type_frm80211;
@@ -2213,6 +2214,20 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         wifi_hal_dbg_print("%s:%d: interface:%s received action frame from:%s to:%s, category:%d\n",
             __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, sta_mac_str),
             to_mac_str(mgmt->da, frame_da_str), cat);
+
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        station = ap_get_sta(&interface->u.ap.hapd, sta);
+        sta_associated = (station != NULL) && (station->flags & WLAN_STA_ASSOC);
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        station = NULL;
+
+        if (!sta_associated) {
+            wifi_hal_info_print("%s:%d: interface:%s ignoring action frame "
+                                "category:%d from unassociated sta:%s\n",
+                __func__, __LINE__, interface->name, cat, to_mac_str(sta, sta_mac_str));
+            forward_frame = false;
+            break;
+        }
 
         switch (cat) {
         case wifi_action_frame_wnm:
