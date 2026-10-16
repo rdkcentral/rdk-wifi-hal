@@ -1132,6 +1132,9 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     wifi_vap_info_t *vap;
     wifi_radio_info_t *radio;
     wifi_radio_operationParam_t *op_param;
+#if defined(EASY_MESH_NODE) && defined(CONFIG_VENDOR_MXL)
+    int ret;
+#endif
     // re-initialize the default parameters
     init_hostap_bss(interface);
 
@@ -1196,6 +1199,19 @@ int update_hostap_bss(wifi_interface_info_t *interface)
         conf->wds_sta = 1;
         strncpy(conf->wds_bridge, interface->bridge, sizeof(conf->wds_bridge));
 
+#ifdef CONFIG_VENDOR_MXL
+        /* For WDS STA creation (wds_sta=1), send multi_ap mode to Wave driver before creating interface.
+         * The Wave driver needs multi_ap_mode set in its PDB before it can create WDS interfaces.
+         * This fixes the "Wrong multi_ap_mode: 0" error when backhaul STA connects.
+         */
+        ret = wifi_drv_vendor_cmd(interface, OUI_LTQ, LTQ_NL80211_VENDOR_SUBCMD_SET_MESH_MODE,
+                                 (u8 *)&conf->multi_ap, sizeof(conf->multi_ap),
+                                 NESTED_ATTR_NOT_USED, NULL);
+        if (ret < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set multi_ap to Wave driver %s: %d\n",
+                __func__, __LINE__, interface->name, ret);
+        }
+#endif
         wifi_hal_info_print("%s:%d: Enabled multi_ap:%d for interface:%s, wds_bridge:%s\n",
             __func__, __LINE__, conf->multi_ap, interface->name, conf->wds_bridge);
     }
