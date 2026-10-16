@@ -7222,7 +7222,46 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
     } else if (associated_dev.cli_MLDInfo.cli_MLDSta == true && has_link_stats == false) {
         wifi_hal_error_print("%s:%d: Client is MLD STA but no link stats available\n", __func__, __LINE__);
     }
+
+    if (associated_dev.cli_MLDInfo.cli_MLDSta) {
+        char links[128] = {0};
+        size_t links_len = 0;
+        int num_links = 0;
+        int assoc_link_id = -1;
+
+        for (int i = 0; i < MAX_NUM_RADIOS; i++) {
+            wifi_mld_sta_link_info_t *link = &associated_dev.cli_MLDInfo.cli_LinkInfo[i];
+            int written;
+
+            if (!link->cli_Valid) {
+                continue;
+            }
+
+            if (link->cli_IsAssocLink) {
+                assoc_link_id = link->cli_LinkID;
+            }
+
+            written = snprintf(links + links_len, sizeof(links) - links_len,
+                "%s[link_id %u " MACSTR "]", num_links == 0 ? "" : ", ",
+                link->cli_LinkID, MAC2STR(link->cli_LinkAddress));
+            if (written < 0 || (size_t)written >= sizeof(links) - links_len) {
+                links_len = sizeof(links) - 1;
+                wifi_hal_error_print("%s:%d: buffer too short / encoding error: %d\n", __func__, __LINE__, written);
+                break;
+            }
+            links_len += (size_t)written;
+            num_links++;
+        }
+
+        wifi_hal_info_print("Connected STA %s MLO" MACSTR " MLD info: num links %d, assoc link %d Links: %s\n",
+            interface->name, MAC2STR(associated_dev.cli_MACAddress), num_links, assoc_link_id,
+            links);
+    } else
 #endif /* HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE */
+    {
+        wifi_hal_info_print("Connected STA %s non-MLO" MACSTR "\n", interface->name,
+            MAC2STR(associated_dev->cli_MACAddress));
+    }
 
     notify_sta_listeners(interface, &associated_dev);
 
