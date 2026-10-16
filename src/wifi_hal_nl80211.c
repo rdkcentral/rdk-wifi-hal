@@ -2813,6 +2813,13 @@ static void push_eapol_to_char_dev(char *buff, int buflen, struct ieee8023_hdr *
         unsigned char *eapol_tmp_buff = NULL;
 
         eapol_tmp_buff = buff + 14;
+        size_t copiedbytes = (size_t)(t_buff - c_buff);
+        if (copiedbytes > sizeof(c_buff) || len > sizeof(c_buff) - copiedbytes) {
+            wifi_hal_error_print("%s:%d: buffer overflow detected\n", __func__, __LINE__);
+            close(fd_c);
+            fd_c = -1;
+            return;
+        }
 
         memcpy(t_buff, eapol_tmp_buff, len);
 
@@ -14958,6 +14965,12 @@ int wifi_drv_hapd_send_eapol(
         return 0;
     }
 
+    if (data_len > sizeof(buff) - sizeof(struct ieee8023_hdr)) {
+        wifi_hal_error_print("%s:%d: eapol payload too large for tx buffer, len=%lu\n",
+            __func__, __LINE__, data_len);
+        return -1;
+    }
+
     eth_hdr = (struct ieee8023_hdr *)buff;
     memcpy(eth_hdr->src, own_addr, sizeof(mac_address_t));
     memcpy(eth_hdr->dest, addr, sizeof(mac_address_t));
@@ -15000,6 +15013,14 @@ int wifi_drv_hapd_send_eapol(
 
             memcpy(t_buff, llc_info, sizeof(llc_info));
             t_buff += sizeof(llc_info);
+            size_t copiedbytes = (size_t)(t_buff - c_buff);
+            if (copiedbytes + data_len > sizeof(c_buff)) {
+                wifi_hal_info_print("%s:%d: emulator buffer overflow: copiedbytes=%lu, data_len=%lu, max=%lu\n",
+                    __func__, __LINE__, copiedbytes, data_len, sizeof(c_buff));
+                close(fd_c);
+                fd_c = -1;
+                return -1;
+            }
 
             memcpy(t_buff, data, len);
 
@@ -17024,11 +17045,19 @@ int set_bss_param(void *priv, struct wpa_driver_ap_params *params)
 static void nl80211_control_port_frame (wifi_interface_info_t* interface, struct nlattr **tb)
 {
     u8 *src_addr;
+    size_t src_addr_len;
     u16 ethertype;
 
     if (!tb[NL80211_ATTR_MAC] ||
             !tb[NL80211_ATTR_FRAME] ||
             !tb[NL80211_ATTR_CONTROL_PORT_ETHERTYPE]) {
+        return;
+    }
+
+    src_addr_len = nla_len(tb[NL80211_ATTR_MAC]);
+    if (src_addr_len < sizeof(mac_address_t)) {
+        wifi_hal_error_print("%s:%d: invalid control-port source MAC len=%lu\n",
+            __func__, __LINE__, src_addr_len);
         return;
     }
 
@@ -17065,11 +17094,16 @@ static void nl80211_control_port_frame (wifi_interface_info_t* interface, struct
                     }
 #endif
                 } else {
+                    size_t eapol_len = nla_len(tb[NL80211_ATTR_FRAME]);
+                    if (eapol_len == 0 || eapol_len > sizeof(interface->u.sta.rx_eapol_buff)) {
+                        wifi_hal_error_print("%s:%d invalid control-port EAPOL len=%lu\n", __func__, __LINE__, eapol_len);
+                        return;
+                    }
+
                     interface->u.sta.pending_rx_eapol = true;
-                    memcpy(interface->u.sta.rx_eapol_buff, nla_data(tb[NL80211_ATTR_FRAME]),
-                        nla_len(tb[NL80211_ATTR_FRAME]));
-                    interface->u.sta.buff_len = nla_len(tb[NL80211_ATTR_FRAME]);
-                    memcpy(interface->u.sta.src_addr, src_addr, strlen((char *)src_addr) + 1);
+                    memcpy(interface->u.sta.rx_eapol_buff, nla_data(tb[NL80211_ATTR_FRAME]), eapol_len);
+                    interface->u.sta.buff_len = (int)eapol_len;
+                    memcpy(interface->u.sta.src_addr, src_addr, sizeof(mac_address_t));
                 }
             }
             break;
