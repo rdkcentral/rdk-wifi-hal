@@ -1205,8 +1205,7 @@ int update_hostap_bss(wifi_interface_info_t *interface)
          * This fixes the "Wrong multi_ap_mode: 0" error when backhaul STA connects.
          */
         ret = wifi_drv_vendor_cmd(interface, OUI_LTQ, LTQ_NL80211_VENDOR_SUBCMD_SET_MESH_MODE,
-                                 (u8 *)&conf->multi_ap, sizeof(conf->multi_ap),
-                                 NESTED_ATTR_NOT_USED, NULL);
+            (u8 *)&conf->multi_ap, sizeof(conf->multi_ap), NESTED_ATTR_NOT_USED, NULL);
         if (ret < 0) {
             wifi_hal_error_print("%s:%d: Failed to set multi_ap to Wave driver %s: %d\n",
                 __func__, __LINE__, interface->name, ret);
