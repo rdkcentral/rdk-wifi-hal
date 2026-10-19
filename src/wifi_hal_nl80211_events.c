@@ -43,10 +43,6 @@
 #include "config_supplicant.h"
 #endif
 
-#if defined(CONFIG_GENERIC_MLO)
-#define MLD_INTERFACE_NAME "mld0"
-#endif
-
 int no_seq_check(struct nl_msg *msg, void *arg)
 {
     return NL_OK;
@@ -1958,16 +1954,17 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
          * CAC finished/aborted and STA scans must not be gated on AP scan state. */
         if (gnlh->cmd != NL80211_CMD_RADAR_DETECT && link_id == NL80211_DRV_LINK_ID_NA &&
             interface != NULL && interface->vap_info.vap_mode == wifi_vap_mode_ap &&
-            interface->mld_name[0] != '\0' &&
-            strcmp(interface->mld_name, MLD_INTERFACE_NAME) == 0) {
+            interface->mld_name[0] != '\0') {
+            const wifi_interface_info_t *event_interface = interface;
+
             wifi_hal_dbg_print("%s:%d: Using MLO fallback path\n",__func__, __LINE__);
             for (unsigned int i = 0; i < priv->num_radios; i++) {
                 radio = &priv->radio_info[i];
 
                 interface = hash_map_get_first(radio->interface_map);
                 while (interface != NULL) {
-                    /* Process only MLO interfaces */
-                    if (!interface->mld_name[0] || strcmp(interface->mld_name, MLD_INTERFACE_NAME) != 0) {
+                    /* Process only links of the MLD the event was reported on */
+                    if (strcmp(interface->mld_name, event_interface->mld_name) != 0) {
                         interface = hash_map_get_next(radio->interface_map, interface);
                         continue;
                     }
