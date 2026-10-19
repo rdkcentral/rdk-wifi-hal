@@ -187,7 +187,9 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        if (interface->u.sta.wpa_sm != NULL && interface->wpa_s.wpa != NULL) {
+            supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        }
 #endif
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
@@ -835,11 +837,10 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
 #endif
 }
 
-static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nlattr **tb)
+static void nl80211_handle_sta_disconnect(wifi_interface_info_t *interface, const u8 *peer,
+    int reason, bool by_ap)
 {
-    mac_address_t mac;
     mac_addr_str_t mac_str;
-    struct nlattr *attr;
 
     wifi_device_callbacks_t *callbacks;
     wifi_vap_info_t *vap;
@@ -898,14 +899,18 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
         callbacks->sta_conn_status_callback(vap->vap_index, &bss, &sta);
     }
 
+    /* deinit_wpa_supplicant() clears wpa_s/wpa_sm under hapd_lock during VAP teardown */
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
-    wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
-    interface->wpa_s.disconnected = 1;
+    if (interface->u.sta.wpa_sm != NULL && interface->wpa_s.wpa != NULL) {
+        wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
+        interface->wpa_s.disconnected = 1;
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-    supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
+        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
 #else
-    wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
+        wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
 #endif // BANANA_PI_PORT
+    }
 #endif
     if (interface->u.sta.wpa_sm != NULL) {
         eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
@@ -913,28 +918,72 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
 
         wpa_sm_deinit(interface->u.sta.wpa_sm);
         interface->u.sta.wpa_sm = NULL;
+        #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+        interface->wpa_s.wpa = NULL;
+        #endif
     }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-    if ((attr = tb[NL80211_ATTR_REASON_CODE]) != NULL) {
-        wifi_hal_info_print("%s:%d: reason code:%d\n", __func__, __LINE__, nla_get_u16(attr));
+    if (reason >= 0) {
+        wifi_hal_info_print("%s:%d: reason code:%d\n", __func__, __LINE__, reason);
     } else {
         wifi_hal_dbg_print("%s:%d: reason code attribute absent\n", __func__, __LINE__);
     }
 
-    if (tb[NL80211_ATTR_MAC] == NULL) {
+    if (peer == NULL) {
         wifi_hal_error_print("%s:%d: mac attribute absent\n", __func__, __LINE__);
         return;
-    } else {
-        memcpy(mac, nla_data(tb[NL80211_ATTR_MAC]), nla_len(tb[NL80211_ATTR_MAC]));
-        wifi_hal_dbg_print("%s:%d: Disconnect indication for %s\n", __func__, __LINE__,
-            to_mac_str(mac, mac_str));
-
     }
-
-    if (tb[NL80211_ATTR_DISCONNECTED_BY_AP] == NULL) {
-        wifi_hal_dbg_print("%s:%d: disconnected by ap attribute absent\n", __func__, __LINE__);
-    }
+    wifi_hal_dbg_print("%s:%d: Disconnect indication for %s%s\n", __func__, __LINE__,
+        to_mac_str((unsigned char *)peer, mac_str), by_ap ? " (by ap)" : "");
 }
+
+static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nlattr **tb)
+{
+    int reason = -1;
+    const u8 *peer = NULL;
+
+    if (tb[NL80211_ATTR_REASON_CODE] != NULL) {
+        reason = nla_get_u16(tb[NL80211_ATTR_REASON_CODE]);
+    }
+    if (tb[NL80211_ATTR_MAC] != NULL && nla_len(tb[NL80211_ATTR_MAC]) >= ETH_ALEN) {
+        peer = nla_data(tb[NL80211_ATTR_MAC]);
+    }
+    nl80211_handle_sta_disconnect(interface, peer, reason,
+        tb[NL80211_ATTR_DISCONNECTED_BY_AP] != NULL);
+}
+
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+/* Userspace-SME STA: deauth/disassoc (local or from the AP) arrives as an MLME frame event
+ * instead of NL80211_CMD_DISCONNECT, so run the same cleanup from the frame contents. */
+static void nl80211_deauth_disassoc_event(wifi_interface_info_t *interface, struct nlattr **tb,
+    bool deauth)
+{
+    const struct ieee80211_mgmt *mgmt;
+    int reason;
+    bool by_ap;
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_sta) {
+        return;
+    }
+    if (tb[NL80211_ATTR_FRAME] == NULL ||
+        nla_len(tb[NL80211_ATTR_FRAME]) < 24 + sizeof(mgmt->u.deauth.reason_code)) {
+        wifi_hal_error_print("%s:%d: %s event without valid frame\n", __func__, __LINE__,
+            deauth ? "deauth" : "disassoc");
+        return;
+    }
+    mgmt = nla_data(tb[NL80211_ATTR_FRAME]);
+    /* Frame sent by us has our address as SA; received frames come from the AP */
+    by_ap = memcmp(mgmt->sa, interface->mac, ETH_ALEN) != 0;
+    if (!is_zero_ether_addr(interface->u.sta.backhaul.bssid) &&
+        memcmp(mgmt->bssid, interface->u.sta.backhaul.bssid, ETH_ALEN) != 0) {
+        wifi_hal_dbg_print("%s:%d: ignore event for other BSS\n", __func__, __LINE__);
+        return;
+    }
+    reason = le_to_host16(deauth ? mgmt->u.deauth.reason_code : mgmt->u.disassoc.reason_code);
+    nl80211_handle_sta_disconnect(interface, mgmt->bssid, reason, by_ap);
+}
+#endif
 
 bool is_channel_supported_on_radio(wifi_freq_bands_t l_band, int freq)
 {
@@ -1875,6 +1924,12 @@ static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, stru
         break;
     case NL80211_CMD_ASSOCIATE:
         nl80211_associate_event(interface, tb);
+        break;
+    case NL80211_CMD_DEAUTHENTICATE:
+        nl80211_deauth_disassoc_event(interface, tb, true);
+        break;
+    case NL80211_CMD_DISASSOCIATE:
+        nl80211_deauth_disassoc_event(interface, tb, false);
         break;
 #endif
     case NL80211_CMD_DISCONNECT:
