@@ -26,6 +26,7 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <netinet/ether.h>
 #include <net/if.h>
 #include <linux/rtnetlink.h>
 #include <netpacket/packet.h>
@@ -1211,7 +1212,7 @@ INT wifi_hal_disconnect(INT ap_index)
 {
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
-
+    wifi_hal_info_print("%s:%d: Inside wifi_hal_disconnect function call \n", __func__, __LINE__);
     if ((interface = get_interface_by_vap_index(ap_index)) == NULL) {
         wifi_hal_error_print("%s:%d:interface for ap index:%d not found\n", __func__, __LINE__, ap_index);
         return RETURN_ERR;
@@ -1223,6 +1224,7 @@ INT wifi_hal_disconnect(INT ap_index)
         return WIFI_HAL_INVALID_ARGUMENTS;     // RDKB-45722 - Returns -4 when the ap index is not suitable for station mode
     }
 
+    wifi_hal_info_print("%s:%d: Calling nl80211_disconnect_sta for vap_index:%d\n", __func__, __LINE__, vap->vap_index);
     if (nl80211_disconnect_sta(interface) != 0) {
         return RETURN_ERR;
     }
@@ -1318,6 +1320,16 @@ struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface)
 int deinit_wpa_supplicant(wifi_interface_info_t *interface)
 {
     wifi_hal_info_print("%s:%d: deinit wpa supplicant params\n", __func__, __LINE__);
+
+    /* Cancel any pending eloop timeouts registered by the supplicant
+     * (SME auth/assoc timers, scan timers, auth timeout).  These fire
+     * in nl_recv_func via eloop_timeout_run() and will dereference
+     * wpa_s fields (e.g. drv_priv) that we are about to zero.
+     */
+    sme_deinit(&interface->wpa_s);
+    wpa_supplicant_cancel_scan(&interface->wpa_s);
+    wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
+
     if (interface->wpa_s.p2pdev != NULL) {
         free(interface->wpa_s.p2pdev);
         interface->wpa_s.p2pdev = NULL;
@@ -1333,6 +1345,7 @@ int deinit_wpa_supplicant(wifi_interface_info_t *interface)
         interface->wpa_s.current_bss = NULL;
     }
 
+    interface->wpa_s.wpa = NULL;
     memset(&interface->wpa_s, 0, sizeof(struct wpa_supplicant));
     return RETURN_OK;
 }
@@ -1505,6 +1518,13 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         // VAP down removes MLO links, so restrict down of interface to sta mode only
         if (vap->vap_mode == wifi_vap_mode_sta) {
 #endif
+            if(vap->vap_mode == wifi_vap_mode_sta)
+            {
+                wifi_hal_info_print("%s:%d: interface:%s disconnect if connected\n", __func__, __LINE__, interface_name);
+                wifi_hal_disconnect(vap->vap_index);
+                wifi_hal_info_print("%s:%d: interface:%s disconnected and now set down\n", __func__, __LINE__,
+                interface_name);
+            }
             wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface->name);
             nl80211_interface_enable(interface->name, false);
 #ifdef CONFIG_GENERIC_MLO
@@ -1713,7 +1733,9 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         if (vap->vap_mode == wifi_vap_mode_ap) {
 #if defined(EASY_MESH_NODE)
             if (is_wifi_hal_vap_mesh_backhaul(vap->vap_index)) {
-                interface->vap_info.u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
+                interface->vap_info.u.bss_info.mac_filter_mode = wifi_mac_filter_mode_white_list;
+                wifi_hal_info_print("%s:%d: vap index:%d set mac filter mode:%d\n", __func__, __LINE__,
+                    vap->vap_index, interface->vap_info.u.bss_info.mac_filter_mode);
             }
 #endif // EASY_MESH_NODE
 #ifdef NL80211_ACL
@@ -1790,6 +1812,8 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
         wifi_hal_error_print("%s:%d: NULL Interface pointer \n", __func__, __LINE__);
         return RETURN_ERR;
     }
+    wifi_hal_info_print("%s:%d: disassociation requested vap=%d sta=%02x:%02x:%02x:%02x:%02x:%02x\n",
+        __func__, __LINE__, ap_index, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     u8 own_addr[ETH_ALEN];
     mac_address_t bcastmac= {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
@@ -1819,13 +1843,25 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
 #else
             wifi_drv_sta_disassoc(interface, own_addr, tmp->addr, WLAN_REASON_UNSPECIFIED);
 #endif // BANANA_PI_PORT && KERNEL_6_6
+            wifi_hal_info_print("%s:%d: disassociation driver API invoked vap=%d sta=%02x:%02x:%02x:%02x:%02x:%02x; API provides no completion status\n",
+                __func__, __LINE__, ap_index, tmp->addr[0], tmp->addr[1], tmp->addr[2],
+                tmp->addr[3], tmp->addr[4], tmp->addr[5]);
             tmp=tmp->next;
         }
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     }
     else {
-        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         wifi_hal_info_print("%s:%d:mac is not a broadcast mac address\n", __func__, __LINE__);
+        tmp = ap_get_sta(hapd, mac);
+        if (tmp != NULL) {
+            /* Goes through hostapd so its sta state and WDS VLAN are cleaned up too */
+            ap_sta_disassociate(hapd, tmp, WLAN_REASON_UNSPECIFIED);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+            wifi_hal_info_print("%s:%d: hostapd disassociation invoked vap=%d sta=%02x:%02x:%02x:%02x:%02x:%02x\n",
+                __func__, __LINE__, ap_index, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            return RETURN_OK;
+        }
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
         int link_id = wifi_hal_get_mld_link_id(interface);
@@ -1836,9 +1872,37 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
 #else
         wifi_drv_sta_disassoc(interface, own_addr, mac, WLAN_REASON_UNSPECIFIED);
 #endif // BANANA_PI_PORT && KERNEL_6_6
+    wifi_hal_info_print("%s:%d: disassociation driver API invoked vap=%d sta=%02x:%02x:%02x:%02x:%02x:%02x; API provides no completion status\n",
+        __func__, __LINE__, ap_index, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     }
     return RETURN_OK;
 }
+
+#ifdef WIFI_HAL_VERSION_3_PHASE2
+INT wifi_kickApAssociatedDevice(INT apIndex, mac_address_t client_mac)
+{
+    return wifi_hal_kickAssociatedDevice(apIndex, client_mac);
+}
+#else
+INT wifi_kickApAssociatedDevice(INT apIndex, CHAR *client_mac)
+{
+    mac_address_t sta_mac = {0};
+    struct ether_addr sta_ea;
+
+    if (client_mac == NULL) {
+        wifi_hal_error_print("%s:%d: cannot disassociate STA: MAC address is NULL\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    if (ether_aton_r(client_mac, &sta_ea) == NULL) {
+        wifi_hal_error_print("%s:%d: cannot disassociate STA: invalid MAC address '%s'\n",
+            __func__, __LINE__, client_mac);
+        return RETURN_ERR;
+    }
+    memcpy(sta_mac, sta_ea.ether_addr_octet, sizeof(sta_mac));
+
+    return wifi_hal_kickAssociatedDevice(apIndex, sta_mac);
+}
+#endif
 
 INT wifi_hal_getRadioVapInfoMap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
@@ -2252,6 +2316,15 @@ INT wifi_hal_delApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
         free(acl_map);
     }
 
+    /* Kick before ACL update so the STA is still in the kernel station table */
+    if ((vap->u.bss_info.mac_filter_enable == true) &&
+        (vap->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_white_list)) {
+        if (nl80211_kick_device(interface, DeviceMacAddress) != 0) {
+            wifi_hal_info_print("%s:%d: STA %s not associated on ap_index %d, skip kick\n", __func__,
+                __LINE__, key, apIndex);
+        }
+    }
+
     if (nl80211_set_acl(interface) != 0) {
         acl_map = (acl_map_t *)malloc(sizeof(acl_map_t));
         wifi_hal_error_print("%s:%d MAC %s nl80211_set_acl failure for interface:%s\n", __func__, __LINE__, key, interface->name);
@@ -2301,6 +2374,17 @@ INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
     hash_map_remove(interface->acl_map, DeviceMacAddress);
     if (acl_map != NULL) {
         free(acl_map);
+    }
+
+    /* Kick before ACL update so the STA is still in the kernel station table */
+    if ((vap->u.bss_info.mac_filter_enable == true) &&
+        (vap->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_white_list)) {
+        mac_address_t sta_mac;
+        to_mac_bytes(DeviceMacAddress, sta_mac);
+        if (nl80211_kick_device(interface, sta_mac) != 0) {
+            wifi_hal_info_print("%s:%d: STA %s not associated on ap_index %d, skip kick\n", __func__,
+                __LINE__, DeviceMacAddress, apIndex);
+        }
     }
 
     if (nl80211_set_acl(interface) != 0) {
