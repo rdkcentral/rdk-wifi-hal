@@ -1905,7 +1905,7 @@ static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, stru
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
 /* Radar events carry no link id and all MLD links share one ifindex, so the ifindex lookup
  * returns the first link. Use the link operating on the event's channel, or else a link whose
- * radio covers that band (e.g. NOP finished for a channel not in use). */
+ * radio has that channel (e.g. NOP finished for a channel not in use). */
 static wifi_interface_info_t *get_mld_radar_interface(wifi_interface_info_t *interface, int freq)
 {
     wifi_interface_info_t *link;
@@ -1917,14 +1917,13 @@ static wifi_interface_info_t *get_mld_radar_interface(wifi_interface_info_t *int
 
     link = wifi_hal_get_mld_interface_by_freq(interface, freq);
     radio = get_radio_by_rdk_index(link->vap_info.radio_index);
-    if (link != interface ||
-        (radio != NULL && is_channel_supported_on_radio(radio->oper_param.band, freq))) {
+    if (link != interface || (radio != NULL && is_chan_freq_supported_on_radio(radio, freq))) {
         return link;
     }
 
     for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = get_radio_by_rdk_index(i);
-        if (radio == NULL || !is_channel_supported_on_radio(radio->oper_param.band, freq)) {
+        if (radio == NULL || !is_chan_freq_supported_on_radio(radio, freq)) {
             continue;
         }
         hash_map_foreach(radio->interface_map, link) {
