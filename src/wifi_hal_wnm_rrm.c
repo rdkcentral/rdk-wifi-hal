@@ -855,8 +855,9 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
             if (!link_bss || !link_bss->iface || !link_bss->iconf)
                 continue;
 
-            if (ieee80211_freq_to_channel_ext(link_bss->iface->freq,
-                    link_bss->iconf->secondary_channel, hostapd_get_oper_chwidth(link_bss->iconf),
+            /* Use the 20 MHz operating class: it always identifies the primary channel, while
+             * 80 MHz+ classes don't, so a Beacon request would need channel 0 or 255 with them. */
+            if (ieee80211_freq_to_channel_ext(link_bss->iface->freq, 0, CONF_OPER_CHWIDTH_USE_HT,
                     &link_op_class, &link_channel) == NUM_HOSTAPD_MODES)
                 continue;
 
