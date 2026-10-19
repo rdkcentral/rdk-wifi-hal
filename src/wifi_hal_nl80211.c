@@ -5893,6 +5893,11 @@ static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
         }
     }
 
+    /* Split wiphy dumps send band capabilities and frequencies in separate messages */
+    radio->capab.mode[index] |= supported;
+    wifi_hal_dbg_print("%s:%d: band=%d supported=0x%x\n", __func__, __LINE__, band_type,
+        radio->capab.mode[index]);
+
     nla_parse(tb, NL80211_BAND_ATTR_MAX, nla_data(nl_band), nla_len(nl_band), NULL);
     if (tb[NL80211_BAND_ATTR_FREQS] == NULL) {
         wifi_hal_dbg_print("%s:%d: Frequency attributes not present\n", __func__, __LINE__);
@@ -5905,10 +5910,6 @@ static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
             __LINE__);
         return NL_OK;
     }
-
-    radio->capab.mode[index] |= supported;
-    wifi_hal_dbg_print("%s:%d: band=%d supported=0x%x\n", __func__, __LINE__, band_type,
-        radio->capab.mode[index]);
 
     mode->mode = NUM_HOSTAPD_MODES;
     mode->flags = HOSTAPD_MODE_FLAG_HT_INFO_KNOWN | HOSTAPD_MODE_FLAG_VHT_INFO_KNOWN;
@@ -8855,7 +8856,11 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
 
     for (int i = 0; i < iface->num_hw_features; i++) {
         struct hostapd_hw_modes *test_hw_mode = &iface->hw_features[i];
-        if (mode == test_hw_mode->mode) {
+        /* 5 GHz and 6 GHz both use HOSTAPD_MODE_IEEE80211A, so tell them apart by frequency */
+        if (mode == test_hw_mode->mode &&
+            (test_hw_mode->num_channels == 0 ||
+                (test_hw_mode->channels[0].freq >= MIN_FREQ_MHZ_6G) ==
+                    (nl_band == NL80211_BAND_6GHZ))) {
             hw_mode_idx = i;
             break;
         }
