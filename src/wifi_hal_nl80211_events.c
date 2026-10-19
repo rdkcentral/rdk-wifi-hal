@@ -1902,6 +1902,44 @@ static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, stru
     }
 }
 
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+/* Radar events carry no link id and all MLD links share one ifindex, so the ifindex lookup
+ * returns the first link. Use the link operating on the event's channel, or else a link whose
+ * radio covers that band (e.g. NOP finished for a channel not in use). */
+static wifi_interface_info_t *get_mld_radar_interface(wifi_interface_info_t *interface, int freq)
+{
+    wifi_interface_info_t *link;
+    wifi_radio_info_t *radio;
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return interface;
+    }
+
+    link = wifi_hal_get_mld_interface_by_freq(interface, freq);
+    radio = get_radio_by_rdk_index(link->vap_info.radio_index);
+    if (link != interface ||
+        (radio != NULL && is_channel_supported_on_radio(radio->oper_param.band, freq))) {
+        return link;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL || !is_channel_supported_on_radio(radio->oper_param.band, freq)) {
+            continue;
+        }
+        hash_map_foreach(radio->interface_map, link) {
+            if (wifi_hal_is_mld_enabled(link) &&
+                link->vap_info.u.bss_info.mld_info.common_info.mld_id ==
+                    interface->vap_info.u.bss_info.mld_info.common_info.mld_id) {
+                return link;
+            }
+        }
+    }
+
+    return interface;
+}
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+
 int process_global_nl80211_event(struct nl_msg *msg, void *arg)
 {
     wifi_hal_priv_t *priv = (wifi_hal_priv_t *)arg;
@@ -1938,6 +1976,14 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
     interface = get_interface_by_if_index(ifidx, link_id);
     switch (gnlh->cmd) {
     case NL80211_CMD_RADAR_DETECT:
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+        if (link_id == NL80211_DRV_LINK_ID_NA && interface != NULL &&
+            interface->vap_info.vap_mode == wifi_vap_mode_ap && tb[NL80211_ATTR_WIPHY_FREQ]) {
+            interface = get_mld_radar_interface(interface,
+                nla_get_u32(tb[NL80211_ATTR_WIPHY_FREQ]));
+        }
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+
         // To handle CAC Finish and CAC Abort for DFS. These event involve only the primary
         // interface of the radio.
         if (!(event_type == NL80211_RADAR_CAC_FINISHED || event_type == NL80211_RADAR_CAC_ABORTED))
