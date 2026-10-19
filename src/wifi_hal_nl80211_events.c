@@ -1921,9 +1921,10 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
         /* Special case for SCAN events - don't drop these event even if the interface is not fully
          * configured */
 #if defined(CONFIG_GENERIC_MLO)
-        /* Only for MLD interface when driver does not send LINK_ID, fallback safely */
-        if (link_id == NL80211_DRV_LINK_ID_NA && interface != NULL &&
-             interface->mld_name[0] != '\0') {
+        /* Only for MLD interface when driver does not send LINK_ID, fallback safely.
+         * CAC finished/aborted must not be gated on scan state. */
+        if (gnlh->cmd != NL80211_CMD_RADAR_DETECT && link_id == NL80211_DRV_LINK_ID_NA &&
+            interface != NULL && interface->mld_name[0] != '\0') {
             const wifi_interface_info_t *event_interface = interface;
 
             wifi_hal_dbg_print("%s:%d: Using MLO fallback path\n",__func__, __LINE__);

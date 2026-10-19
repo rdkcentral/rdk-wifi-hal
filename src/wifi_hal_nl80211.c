@@ -5042,6 +5042,11 @@ static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
         }
     }
 
+    /* Split wiphy dumps send band capabilities and frequencies in separate messages */
+    radio->capab.mode[index] |= supported;
+    wifi_hal_dbg_print("%s:%d: band=%d supported=0x%x\n", __func__, __LINE__, band_type,
+        radio->capab.mode[index]);
+
     nla_parse(tb, NL80211_BAND_ATTR_MAX, nla_data(nl_band), nla_len(nl_band), NULL);
     if (tb[NL80211_BAND_ATTR_FREQS] == NULL) {
         wifi_hal_dbg_print("%s:%d: Frequency attributes not present\n", __func__, __LINE__);
@@ -5054,10 +5059,6 @@ static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
             __LINE__);
         return NL_OK;
     }
-
-    radio->capab.mode[index] |= supported;
-    wifi_hal_dbg_print("%s:%d: band=%d supported=0x%x\n", __func__, __LINE__, band_type,
-        radio->capab.mode[index]);
 
     mode->mode = NUM_HOSTAPD_MODES;
     mode->flags = HOSTAPD_MODE_FLAG_HT_INFO_KNOWN | HOSTAPD_MODE_FLAG_VHT_INFO_KNOWN;
@@ -7102,17 +7103,18 @@ int nl80211_init_radio_info()
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = &g_wifi_hal.radio_info[i];
 
+        if (radio->radio_presence == false) {
+            wifi_hal_error_print("%s:%d: Skip the Radio %d .This is sleeping in ECO mode \n",
+                __func__, __LINE__, radio->index);
+            continue;
+        }
+
         radio->capab.numSupportedFreqBand = 0;
         radio->capab.cipherSupported = 0;
         memset(radio->capab.mode, 0, sizeof(radio->capab.mode));
         memset(radio->capab.band, 0, sizeof(radio->capab.band));
         memset(radio->capab.channel_list, 0, sizeof(radio->capab.channel_list));
         memset((unsigned char *)radio->hw_modes, 0, NUM_NL80211_BANDS*sizeof(struct hostapd_hw_modes));
-
-        if (radio->radio_presence == false) {
-           wifi_hal_error_print("%s:%d: Skip the Radio %d .This is sleeping in ECO mode \n", __func__, __LINE__, radio->index);
-           continue;
-        }
 
         // get information about phy
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
@@ -7990,7 +7992,11 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
 
     for (int i = 0; i < iface->num_hw_features; i++) {
         struct hostapd_hw_modes *test_hw_mode = &iface->hw_features[i];
-        if (mode == test_hw_mode->mode) {
+        /* 5 GHz and 6 GHz both use HOSTAPD_MODE_IEEE80211A, so tell them apart by frequency */
+        if (mode == test_hw_mode->mode &&
+            (test_hw_mode->num_channels == 0 ||
+                (test_hw_mode->channels[0].freq >= MIN_FREQ_MHZ_6G) ==
+                    (nl_band == NL80211_BAND_6GHZ))) {
             hw_mode_idx = i;
             break;
         }
