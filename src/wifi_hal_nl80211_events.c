@@ -1939,8 +1939,7 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
         event_type = nla_get_u32(tb[NL80211_ATTR_RADAR_EVENT]);
     }
 
-    if (gnlh->cmd == NL80211_CMD_REG_CHANGE ||
-        gnlh->cmd == NL80211_CMD_WIPHY_REG_CHANGE) {
+    if (gnlh->cmd == NL80211_CMD_REG_CHANGE || gnlh->cmd == NL80211_CMD_WIPHY_REG_CHANGE) {
         wifi_hal_info_print("%s:%d: Regulatory change observed; refreshing channel limits\n",
             __func__, __LINE__);
         if (update_channel_flags() != 0) {

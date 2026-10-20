@@ -6118,8 +6118,7 @@ static int nl80211_get_regulatory_domain(wifi_radio_info_t *radio,
         return -1;
     }
 
-    if (self_managed_regulatory &&
-        nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index) < 0) {
+    if (self_managed_regulatory && nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index) < 0) {
         wifi_hal_error_print("%s:%d: Failed to add WIPHY to self-managed regulatory query\n",
             __func__, __LINE__);
         nlmsg_free(msg);
