@@ -538,9 +538,9 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             break;
         case wifi_security_mode_wpa3_personal:
             conf->wpa_key_mgmt = WPA_KEY_MGMT_SAE;
-#ifdef CONFIG_IEEE80211BE
+#if defined(CONFIG_IEEE80211BE) && !defined(TARGET_GEMINI7_2)
             conf->wpa_key_mgmt |= (conf->disable_11be ? 0 : WPA_KEY_MGMT_SAE_EXT_KEY);
-#endif /* CONFIG_IEEE80211BE */
+#endif /* CONFIG_IEEE80211BE !TARGET_GEMINI7_2 */
 
             conf->auth_algs = WPA_AUTH_ALG_SAE;
 #if HOSTAPD_VERSION >= 210 //2.10
@@ -570,9 +570,9 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             break;
         case wifi_security_mode_wpa3_transition:
             conf->wpa_key_mgmt = WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE;
-#ifdef CONFIG_IEEE80211BE
+#if defined(CONFIG_IEEE80211BE) && !defined(TARGET_GEMINI7_2)
             conf->wpa_key_mgmt |= (conf->disable_11be ? 0 : WPA_KEY_MGMT_SAE_EXT_KEY);
-#endif /* CONFIG_IEEE80211BE */
+#endif /* CONFIG_IEEE80211BE !TARGET_GEMINI7_2 */
             conf->auth_algs = WPA_AUTH_ALG_SAE | WPA_AUTH_ALG_SHARED | WPA_AUTH_ALG_OPEN;
 #if HOSTAPD_VERSION >= 210 //2.10
 #ifdef CONFIG_IEEE80211BE
@@ -1544,11 +1544,19 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         interface->name, vap->u.bss_info.preassoc.basic_data_transmit_rates, vap->u.bss_info.preassoc.supported_data_transmit_rates);
     if ((strlen (vap->u.bss_info.preassoc.basic_data_transmit_rates) > 0) && strcmp(vap->u.bss_info.preassoc.basic_data_transmit_rates, "disabled")) {
         snprintf(basic_buf, sizeof(basic_buf), "%s", vap->u.bss_info.preassoc.basic_data_transmit_rates);
-        convert_string_to_int(&preassoc_basic_rates,basic_buf);
+     if (convert_string_to_int(&preassoc_basic_rates, basic_buf) < 0) {
+         wifi_hal_info_print("%s:%d: Failed to convert basic rates, using defaults\n",
+             __func__, __LINE__);
+         preassoc_basic_rates = NULL;
+     }
     }
     if ((strlen (vap->u.bss_info.preassoc.supported_data_transmit_rates) > 0) && strcmp(vap->u.bss_info.preassoc.supported_data_transmit_rates, "disabled")) {
       snprintf(supp_buf, sizeof(supp_buf), "%s", vap->u.bss_info.preassoc.supported_data_transmit_rates);
-      convert_string_to_int(&preassoc_supp_rates,supp_buf);
+       if (convert_string_to_int(&preassoc_supp_rates, supp_buf) < 0) {
+           wifi_hal_info_print("%s:%d: Failed to convert supported rates, using defaults\n",
+               __func__, __LINE__);
+           preassoc_supp_rates = NULL;
+       }
     }
     
     switch (radio->oper_param.band) {
@@ -1631,6 +1639,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 #else
         if(iface->current_cac_rates) {
             os_free(iface->current_cac_rates);
+            iface->current_cac_rates = NULL;
         }
         iface->current_cac_rates = os_calloc(mode->num_rates, sizeof(struct hostapd_rate_data));
         if (!iface->current_cac_rates) {
@@ -1645,12 +1654,19 @@ int update_hostap_iface(wifi_interface_info_t *interface)
             }
             return RETURN_ERR;
         }
+       /* current_rates must always be valid -- if convert failed and
+        * preassoc_supp_rates is NULL, the rate loop falls back to current_rates */
+       iface->current_rates = iface->current_cac_rates;
 #endif // BANANA_PI_PORT && KERNEL_6_12
     }
     else {
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
         hdata->current_rates = radio->rate_data[band];
 #else
+        if (iface->current_cac_rates) {
+            os_free(iface->current_cac_rates);
+            iface->current_cac_rates = NULL;
+        }
         iface->current_rates = radio->rate_data[band];
 #endif // BANANA_PI_PORT && KERNEL_6_12
     }
