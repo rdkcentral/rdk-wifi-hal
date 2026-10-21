@@ -21057,8 +21057,24 @@ int wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     struct nl_msg *msg = NULL;
     struct nl_msg *key_msg = NULL;
     int ret = -ENOBUFS;
-#if HOSTAPD_VERSION >= 210 && !defined(QCOM_ATH12K_PORT)
-    int key_type;
+#if HOSTAPD_VERSION >= 210
+    int skip_set_key = 1;
+    enum wpa_alg alg = params->alg;
+    const u8 *addr = params->addr;
+    int key_idx = params->key_idx;
+    int set_tx = params->set_tx;
+    const u8 *seq = params->seq;
+    size_t seq_len = params->seq_len;
+    const u8 *key = params->key;
+    size_t key_len = params->key_len;
+    enum key_flag key_flag = params->key_flag;
+    int link_id = -1;
+#if HOSTAPD_VERSION >= 211
+    link_id = params->link_id;
+#endif
+#if defined(QCOM_ATH12K_PORT)
+    int vlan_id = params->vlan_id;
+#endif
 #endif
     wifi_vap_info_t *vap;
     unsigned int suite;
@@ -21076,24 +21092,6 @@ int wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
 
 #if defined(QCOM_ATH12K_PORT) && HOSTAPD_VERSION >= 210
     {
-        int skip_set_key = 1;
-        enum wpa_alg alg          = params->alg;
-        const u8 *addr            = params->addr;
-        int key_idx               = params->key_idx;
-        int set_tx                = params->set_tx;
-        const u8 *seq             = params->seq;
-        size_t seq_len            = params->seq_len;
-        const u8 *key             = params->key;
-        size_t key_len            = params->key_len;
-#if defined(QCOM_ATH12K_PORT)
-        int vlan_id               = params->vlan_id;
-#endif
-        enum key_flag key_flag    = params->key_flag;
-        int link_id               = -1;
-#if HOSTAPD_VERSION >= 211
-        link_id                   = params->link_id;
-#endif
-
         wifi_hal_dbg_print("%s:%d: alg=%d addr=%p key_idx=%d set_tx=%d "
                            "seq_len=%lu key_len=%lu key_flag=0x%x link_id=%d\n",
                            __func__, __LINE__, alg, addr, key_idx, set_tx,
@@ -21484,14 +21482,20 @@ qca_fail_msg:
 
         nla_put_u8(key_msg, NL80211_KEY_IDX, key_idx);
 
-        if (interface->u.ap.iface.drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION &&
-            (key_idx == 6 || key_idx == 7)) {
-            key_type = NL80211_KEY_DEFAULT_BEACON;
-        } else {
-            key_type = wpa_alg_bip(alg) ? NL80211_KEY_DEFAULT_MGMT :
-                                          NL80211_KEY_DEFAULT;
+        if (nla_put_flag(key_msg,
+                         interface->u.ap.iface.drv_flags &
+                         WPA_DRIVER_FLAGS_BEACON_PROTECTION &&
+                         (key_idx == 6 || key_idx == 7) ?
+                         NL80211_KEY_DEFAULT_BEACON :
+                         wpa_alg_bip(alg) ?
+                         NL80211_KEY_DEFAULT_MGMT :
+                         NL80211_KEY_DEFAULT)) {
+            nl80211_nlmsg_clear(msg);
+            nlmsg_free(msg);
+            nl80211_nlmsg_clear(key_msg);
+            nlmsg_free(key_msg);
+            return -1;
         }
-        nla_put_flag(key_msg, key_type);
 
         if (addr && is_broadcast_ether_addr(addr)) {
             struct nlattr *types;
@@ -21641,12 +21645,25 @@ qca_fail_msg:
     }
 
     nla_put_u8(key_msg, NL80211_KEY_IDX, key_idx);
-    nla_put_flag(key_msg, (alg == WPA_ALG_IGTK ||
-                alg == WPA_ALG_BIP_GMAC_128 ||
-                alg == WPA_ALG_BIP_GMAC_256 ||
-                alg == WPA_ALG_BIP_CMAC_256) ?
-            NL80211_KEY_DEFAULT_MGMT :
-            NL80211_KEY_DEFAULT);
+#if HOSTAPD_VERSION >= 210
+    if (nla_put_flag(key_msg, wpa_alg_bip(alg) ?
+                     NL80211_KEY_DEFAULT_MGMT :
+                     NL80211_KEY_DEFAULT))
+#else
+    if (nla_put_flag(key_msg, (alg == WPA_ALG_IGTK ||
+                               alg == WPA_ALG_BIP_GMAC_128 ||
+                               alg == WPA_ALG_BIP_GMAC_256 ||
+                               alg == WPA_ALG_BIP_CMAC_256) ?
+                     NL80211_KEY_DEFAULT_MGMT :
+                     NL80211_KEY_DEFAULT))
+#endif
+    {
+        nl80211_nlmsg_clear(msg);
+        nlmsg_free(msg);
+        nl80211_nlmsg_clear(key_msg);
+        nlmsg_free(key_msg);
+        return -1;
+    }
 
     if (addr && is_broadcast_ether_addr(addr)) {
         struct nlattr *types;
