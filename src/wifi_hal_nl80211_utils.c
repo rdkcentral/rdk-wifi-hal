@@ -145,7 +145,7 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #ifdef XE2_PORT // Plume SuperPod (PP203X): 2.4G + 5GL + 5GH
     {0, 0,  "home-ap-24",    "", "br-home", 0,   0,  "private_ssid_2g"},
     {1, 1,  "home-ap-l50",   "", "br-home", 0,   1,  "private_ssid_5gl"},
-    {2, 2,  "home-ap-u50",   "", "",        0,  16,  "private_ssid_5gh"},
+    {2, 2,  "home-ap-u50",   "", "br-home", 0,  16,  "private_ssid_5gh"},
     {0, 0,  "bhaul-sta-24",  "", "",        0,  14,  "mesh_sta_2g"},
     {1, 1,  "bhaul-sta-l50", "", "",        0,  15,  "mesh_sta_5gl"},
     {2, 2,  "bhaul-sta-u50", "", "",        0,  23,  "mesh_sta_5gh"},
