@@ -760,8 +760,8 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     } else {
         interface->u.sta.assoc_req_len = nla_len(tb[NL80211_ATTR_REQ_IE]);
         if (interface->u.sta.assoc_req_len > sizeof(interface->u.sta.assoc_req)) {
-            wifi_hal_error_print("%s:%d: req IE too large (%u > %lu)\n", __func__, __LINE__,
-                interface->u.sta.assoc_req_len, sizeof(interface->u.sta.assoc_req));
+            wifi_hal_error_print("%s:%d: req IE too large (%u > %u)\n", __func__, __LINE__,
+                interface->u.sta.assoc_req_len, (unsigned int)sizeof(interface->u.sta.assoc_req));
 
             interface->u.sta.assoc_req_len = 0;
         } else {
@@ -773,8 +773,8 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
     } else {
         interface->u.sta.assoc_rsp_len = nla_len(tb[NL80211_ATTR_RESP_IE]);
         if (interface->u.sta.assoc_rsp_len > sizeof(interface->u.sta.assoc_rsp)) {
-            wifi_hal_error_print("%s:%d: resp IE too large (%u > %lu)\n", __func__, __LINE__,
-                interface->u.sta.assoc_rsp_len, sizeof(interface->u.sta.assoc_rsp));
+            wifi_hal_error_print("%s:%d: resp IE too large (%u > %u)\n", __func__, __LINE__,
+                interface->u.sta.assoc_rsp_len, (unsigned int)sizeof(interface->u.sta.assoc_rsp));
 
             interface->u.sta.assoc_rsp_len = 0;
         } else {
