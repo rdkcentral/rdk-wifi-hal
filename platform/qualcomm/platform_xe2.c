@@ -143,3 +143,12 @@ int platform_get_channel_bandwidth(wifi_radio_index_t index,  wifi_channelBandwi
 {
     return 0;
 }
+
+INT wifi_setApMacAddressControlMode(INT apIndex, INT filterMode)
+{
+    /* XE2 stub: MAC ACL not implemented yet (disable_nl80211_acl set for XE2).
+     * TODO: implement via QCA cfg80211tool maccmd before MAC filtering is needed. */
+    wifi_hal_dbg_print("%s:%d apIndex=%d filterMode=%d (XE2 stub)\n",
+        __func__, __LINE__, apIndex, filterMode);
+    return RETURN_OK;
+}
