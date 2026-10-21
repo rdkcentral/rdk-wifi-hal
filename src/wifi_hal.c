@@ -36,6 +36,7 @@
 #include "hostapd/eap_register.h"
 #include "ap/rrm.h"
 #include "ap/neighbor_db.h"
+#include "ap/ctrl_iface_ap.h"
 
 #ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
@@ -1235,7 +1236,7 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
     wifi_bss_info_t *bss;
-    unsigned int num = 0;
+    unsigned int num = 0, write_index = 0;
     wifi_bss_info_t *bss_info;
     u8 chan;
 
@@ -1283,17 +1284,26 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
 
     bss = hash_map_get_first(interface->scan_info_map);
     while (bss != NULL) {
+        bool copy_bss = false;
         if (channel->channel == 0) {
-            memcpy(bss_info, bss, sizeof(wifi_bss_info_t));
+            copy_bss = true;
         } else {
             ieee80211_freq_to_chan(bss->freq, &chan);
             if (chan == channel->channel) {
-                memcpy(bss_info, bss, sizeof(wifi_bss_info_t));
+                copy_bss = true;
             }
         }
+        if (copy_bss) {
+            if (write_index >= num) {
+                wifi_hal_error_print("%s:%d:Scan result count exceeded allocated count\n",__func__, __LINE__);
+                break;
+            }
+            memcpy(&(*bss_array)[write_index],bss,sizeof(wifi_bss_info_t));
+            write_index++;
+        }
         bss = hash_map_get_next(interface->scan_info_map, bss);
-        bss_info++;
     }
+    *num_bss = write_index;
     pthread_mutex_unlock(&interface->scan_info_mutex);
 
     return RETURN_OK;
@@ -2003,6 +2013,75 @@ INT wifi_hal_getScanResults(wifi_radio_index_t index, wifi_channel_t *channel, w
         scan_info = hash_map_get_next(interface->scan_info_map, scan_info);
     }
     pthread_mutex_unlock(&interface->scan_info_mutex);
+
+    return RETURN_OK;
+}
+
+/*
+* EasyMesh CACR enforcement uses hostapd's dynamic deny ACL mechanism.
+* STA MAC addresses are added/removed through the upstream hostapd ACL
+* helper APIs, which update hapd->conf->deny_mac and refresh the ACL
+* configuration via hostapd_set_acl().
+*/
+INT wifi_hal_addHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress)
+{
+    wifi_hal_dbg_print("%s:%d:Enter\n", __func__, __LINE__);
+    wifi_interface_info_t *interface;
+    struct hostapd_data *hapd;
+
+    interface = get_interface_by_vap_index(apIndex);
+
+    if ((!interface) || (interface->vap_info.vap_mode != wifi_vap_mode_ap)  || (DeviceMacAddress == NULL))
+        return RETURN_ERR;
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    hapd = &interface->u.ap.hapd;
+
+    if (!hapd->conf) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d: CACR: Adding STAs to hostapd ACL list\n", __func__, __LINE__);
+    if (hostapd_ctrl_iface_acl_add_mac(&hapd->conf->deny_mac, &hapd->conf->num_deny_mac, DeviceMacAddress)) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
+    }
+
+    hostapd_set_acl(hapd);
+    hostapd_disassoc_deny_mac(hapd);
+
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+    return RETURN_OK;
+}
+
+INT wifi_hal_delHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress)
+{
+    wifi_hal_dbg_print("%s:%d:Enter\n", __func__, __LINE__);
+    wifi_interface_info_t *interface;
+    struct hostapd_data *hapd;
+
+    interface = get_interface_by_vap_index(apIndex);
+
+    if ((!interface) || (interface->vap_info.vap_mode != wifi_vap_mode_ap)  || (DeviceMacAddress == NULL))
+        return RETURN_ERR;
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    hapd = &interface->u.ap.hapd;
+
+    if (!hapd->conf) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d: CACR: Removing STAs from hostapd ACL list\n", __func__, __LINE__);
+    if (hostapd_ctrl_iface_acl_del_mac(&hapd->conf->deny_mac, &hapd->conf->num_deny_mac, DeviceMacAddress)) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
+    }
+
+    hostapd_set_acl(hapd);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     return RETURN_OK;
 }
@@ -3820,6 +3899,8 @@ exit:
 
 //static uint8_t g_DialogToken[MAX_AP_INDEX][MAX_TOKENS + 1] = {{0}};
 u8_bitmap g_DialogToken[MAX_AP_INDEX] = {{0}};
+/* Sending VAP index + 1 per originating VAP and dialog token (0 = not recorded). */
+u8 g_DialogTokenSender[MAX_AP_INDEX][256] = { { 0 } };
 
 INT wifi_hal_setRMBeaconRequest(UINT apIndex,
                             mac_address_t peer_mac,
@@ -4000,21 +4081,40 @@ INT wifi_hal_setRMBeaconRequest(UINT apIndex,
     }
 
     *out_DialogToken = ret_dialog_token;
-    //g_DialogToken[apIndex][*out_DialogToken] = 1;
-    set_bit_u8(g_DialogToken[apIndex], *out_DialogToken);
+    /* g_DialogToken bit is set inside wifi_rrm_send_beacon_req() against the VAP
+     * that actually transmitted the request (may differ from apIndex for MLO). */
 
     return WIFI_HAL_SUCCESS;
 }
 
 INT wifi_hal_cancelRMBeaconRequest(UINT apIndex, UCHAR dialogToken)
 {
+    UINT sent_vap_index = apIndex;
+    UINT vap_index;
+
     // - verify input params
     if (_IS_INVALID_ARG(apIndex >= MAX_AP_INDEX)) {
         return WIFI_HAL_INVALID_ARGUMENTS;
     }
 
-    //g_DialogToken[apIndex][dialogToken] = 0;
-    reset_bit_u8(g_DialogToken[apIndex], dialogToken);
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    /* For MLO the request may have been sent on another link's VAP; clear the
+     * bit on the VAP recorded by wifi_rrm_send_beacon_req(). */
+    if (g_DialogTokenSender[apIndex][dialogToken] != 0) {
+        sent_vap_index = g_DialogTokenSender[apIndex][dialogToken] - 1;
+        g_DialogTokenSender[apIndex][dialogToken] = 0;
+    }
+
+    /* Keep the bit if another VAP's request with the same token was sent on it. */
+    for (vap_index = 0; vap_index < MAX_AP_INDEX; vap_index++) {
+        if (g_DialogTokenSender[vap_index][dialogToken] == sent_vap_index + 1) {
+            break;
+        }
+    }
+    if (vap_index == MAX_AP_INDEX) {
+        reset_bit_u8(g_DialogToken[sent_vap_index], dialogToken);
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return WIFI_HAL_SUCCESS;
 }
 
@@ -4426,6 +4526,20 @@ void wifi_hal_eapol_timeouts_callback_register(wifi_eapol_timeouts_callback func
     
     callbacks->eapol_timeouts_cb[callbacks->num_eapol_timeouts_cbs] = func;
     callbacks->num_eapol_timeouts_cbs++;
+}
+
+void wifi_hal_eapol_key_callback_register(wifi_eapol_key_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+
+    if (callbacks == NULL || callbacks->num_eapol_key_cbs >= MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+
+    callbacks->eapol_key_cb[callbacks->num_eapol_key_cbs] = func;
+    callbacks->num_eapol_key_cbs++;
 }
 
 void wifi_hal_handshake_callback_register(wifi_handshake_callback func)
