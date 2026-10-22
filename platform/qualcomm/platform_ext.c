@@ -744,13 +744,13 @@ int platform_get_country_code_default(char *code)
         wifi_hal_error_print("%s:%d: code is NULL\n", __func__, __LINE__);
         return RETURN_ERR;
     }
-#ifdef TARGET_GEMINI7_2
+#ifdef _MERCURY_PRODUCT_REQ_
     {
         FILE *fp;
         char line[64] = {0};
         char *cc;
 
-        /* Read the ART-programmed country code directly, since a single TARGET_GEMINI7_2
+        /* Read the ART-programmed country code directly, since a single _MERCURY_PRODUCT_REQ_
          * image is shared by multiple models with different default regulatory domains.
          * Expected output example: "Country code Wifi 0 CA" */
         fp = popen("/usr/opensync/tools/pmf -ccode0 -r", "r");

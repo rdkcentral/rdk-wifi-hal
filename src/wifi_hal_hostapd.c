@@ -300,7 +300,7 @@ void init_hostap_bss(wifi_interface_info_t *interface)
     conf->max_auth_rounds_short = 50;
 #endif
 
-#ifdef TARGET_GEMINI7_2
+#ifdef _MERCURY_PRODUCT_REQ_
     conf->send_probe_response = 0;
 #else
     conf->send_probe_response = 1;
@@ -506,11 +506,11 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
     conf->wpa_key_mgmt_rsno = 0;
 #endif /* HOSTAPD_VERSION >= 210 */
 
-#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && \
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(_MERCURY_PRODUCT_REQ_) && \
     !defined(BANANA_PI_PORT)
     conf->wpa_key_mgmt_rsno_2 = 0;
     conf->rsn_pairwise_rsno_2 = 0;
-#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 && !BANANA_PI_PORT */
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !_MERCURY_PRODUCT_REQ_ && !BANANA_PI_PORT */
 
     conf->wpa = 0;
     memset(&test_ip, 0, sizeof(test_ip));
@@ -538,9 +538,9 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             break;
         case wifi_security_mode_wpa3_personal:
             conf->wpa_key_mgmt = WPA_KEY_MGMT_SAE;
-#if defined(CONFIG_IEEE80211BE) && !defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_IEEE80211BE) && !defined(_MERCURY_PRODUCT_REQ_)
             conf->wpa_key_mgmt |= (conf->disable_11be ? 0 : WPA_KEY_MGMT_SAE_EXT_KEY);
-#endif /* CONFIG_IEEE80211BE !TARGET_GEMINI7_2 */
+#endif /* CONFIG_IEEE80211BE !_MERCURY_PRODUCT_REQ_ */
 
             conf->auth_algs = WPA_AUTH_ALG_SAE;
 #if HOSTAPD_VERSION >= 210 //2.10
@@ -570,9 +570,9 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             break;
         case wifi_security_mode_wpa3_transition:
             conf->wpa_key_mgmt = WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_SAE;
-#if defined(CONFIG_IEEE80211BE) && !defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_IEEE80211BE) && !defined(_MERCURY_PRODUCT_REQ_)
             conf->wpa_key_mgmt |= (conf->disable_11be ? 0 : WPA_KEY_MGMT_SAE_EXT_KEY);
-#endif /* CONFIG_IEEE80211BE !TARGET_GEMINI7_2 */
+#endif /* CONFIG_IEEE80211BE !_MERCURY_PRODUCT_REQ_ */
             conf->auth_algs = WPA_AUTH_ALG_SAE | WPA_AUTH_ALG_SHARED | WPA_AUTH_ALG_OPEN;
 #if HOSTAPD_VERSION >= 210 //2.10
 #ifdef CONFIG_IEEE80211BE
@@ -586,7 +586,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             conf->wpa_key_mgmt = WPA_KEY_MGMT_PSK;
 #if HOSTAPD_VERSION >= 210
             conf->wpa_key_mgmt_rsno = WPA_KEY_MGMT_SAE;
-#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2) && \
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(_MERCURY_PRODUCT_REQ_) && \
     !defined(BANANA_PI_PORT)
             if(is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
                 conf->wpa_key_mgmt = WPA_KEY_MGMT_SAE;
@@ -598,7 +598,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             }
             wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d wpa_key_mgmt:%d wpa_key_mgmt_rsno_2:%d \n",
                 __FUNCTION__, __LINE__, conf->iface, conf->disable_11be, conf->wpa_key_mgmt, conf->wpa_key_mgmt_rsno_2);
-#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 && !BANANA_PI_PORT */
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !_MERCURY_PRODUCT_REQ_ && !BANANA_PI_PORT */
             conf->sae_pwe = 2;
 #endif /* HOSTAPD_VERSION >= 210 */
             conf->auth_algs = WPA_AUTH_ALG_SAE | WPA_AUTH_ALG_SHARED | WPA_AUTH_ALG_OPEN;
@@ -667,7 +667,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
         conf->ieee80211w_rsno = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
 #endif /* HOSTAPD_VERSION >= 210 */
         conf->sae_require_mfp = 1;
-#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(_MERCURY_PRODUCT_REQ_)
         if(is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
             conf->ieee80211w = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
         if(!conf->disable_11be) {
@@ -676,7 +676,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d ieee80211w:%d ieee80211w_rsno:%d \n",
                            __func__, __LINE__, conf->iface, conf->disable_11be, conf->ieee80211w, conf->ieee80211w_rsno);
     }
-#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !_MERCURY_PRODUCT_REQ_ */
     }
 #endif
 
@@ -1821,7 +1821,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         interface->u.ap.iface_initialized = true;
     }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
     iface->drv_flags = radio->driver_data.capa.flags;
 #if HOSTAPD_VERSION >= 210
     iface->drv_flags2 = radio->driver_data.capa.flags2;
@@ -1841,7 +1841,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     hostapd_get_mld_capa(iface);
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || _MERCURY_PRODUCT_REQ_
 
 #if HOSTAPD_VERSION >= 210
     iface->mbssid_max_interfaces = radio->driver_data.capa.mbssid_max_interfaces;
@@ -3347,7 +3347,7 @@ static int hostapd_setup_bss_internal(struct hostapd_data *hapd)
         hapd->conf->iface, hapd->started, hostapd_mld_is_first_bss(hapd));
 #endif /* defined(CONFIG_IEEE80211BE) && !defined(CONFIG_GENERIC_MLO) */
     ret = hostapd_setup_bss(hapd, 1, true);
-#elif (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
+#elif (defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)) && (HOSTAPD_VERSION == 210) //2.10
     ret = hostapd_setup_bss(hapd, 1, true);
 #else
     ret = hostapd_setup_bss(hapd, 1);
