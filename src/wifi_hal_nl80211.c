@@ -7719,6 +7719,77 @@ static int ap_enable_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 }
 
+#if defined(UWM_EXT_WPS_SUPPORT) && defined(BANANA_PI_PORT)
+#define WPS_REONBOARD_GUARD_TIMEOUT_SEC 180
+
+static void clear_sta_wps_reonboard_guard(void *eloop_ctx, void *timeout_ctx)
+{
+    wifi_interface_info_t *interface = eloop_ctx;
+
+    (void)timeout_ctx;
+    if (interface != NULL) {
+        interface->wps_sta_reonboard_in_progress = false;
+    }
+}
+
+static void abort_sta_wps_reonboard(wifi_interface_info_t *interface, unsigned int event)
+{
+    wifi_wps_sta_event_callback_t callback;
+
+    if (!interface->wps_sta_reonboard_in_progress) {
+        return;
+    }
+
+    if (platform_wps_restore_backhaul_credentials() != 0) {
+        wifi_hal_error_print("%s:%d: Failed to restore previous backhaul credentials\n",
+            __func__, __LINE__);
+    }
+
+    interface->vap_info.u.sta_info.valid_bh_credentials = TRUE;
+    wifi_hal_sm_deinit(interface->vap_info.vap_index);
+    if (wifi_hal_sm_reinit(interface->vap_info.vap_index) != RETURN_OK) {
+        wifi_hal_error_print("%s:%d: Failed to restore normal supplicant mode\n",
+            __func__, __LINE__);
+        return;
+    }
+
+    callback = wifi_hal_get_wps_sta_event_callback();
+    if (callback != NULL) {
+        callback(interface->vap_info.vap_index, event);
+    }
+}
+
+static void disconnect_other_sta_links_for_wps(wifi_interface_info_t *wps_interface)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface;
+    unsigned int radio_index;
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    for (radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
+        radio = get_radio_by_rdk_index(radio_index);
+        if (radio == NULL || radio->interface_map == NULL) {
+            continue;
+        }
+
+        interface = hash_map_get_first(radio->interface_map);
+        while (interface != NULL) {
+            if (interface != wps_interface &&
+                interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+                if (wifi_hal_disconnect(interface->vap_info.vap_index) != RETURN_OK) {
+                    wifi_hal_info_print("%s:%d: Force-disconnecting STA %s for 5GHz WPS\n",
+                        __func__, __LINE__, interface->name);
+                    (void)nl80211_interface_enable(interface->name, false);
+                    (void)nl80211_interface_enable(interface->name, true);
+                }
+            }
+            interface = hash_map_get_next(radio->interface_map, interface);
+        }
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+}
+#endif
+
 void wifi_hal_nl80211_wps_pbc(unsigned int ap_index)
 {
     union wpa_event_data event;
@@ -7730,14 +7801,76 @@ void wifi_hal_nl80211_wps_pbc(unsigned int ap_index)
         return;
     }
 
-#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
-    if ((interface->vap_info.vap_mode == wifi_vap_mode_sta) &&
-        (interface->vap_info.u.sta_info.valid_bh_credentials == FALSE)) {
+#if defined(UWM_EXT_WPS_SUPPORT) && defined(BANANA_PI_PORT)
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
         extern int wpas_wps_start_pbc(struct wpa_supplicant *wpa_s, const u8 *bssid,
                                       int p2p_group, int multi_ap_backhaul_sta);
+        wifi_wps_sta_event_callback_t callback;
+        bool reonboard_started = false;
+
+        if (is_sta_wps_onboarding_band(interface) == false) {
+            wifi_hal_error_print("%s:%d: Mesh STA WPS onboarding is only supported on a 5GHz "
+                "radio, ignoring request for interface %s\n", __func__, __LINE__, interface->name);
+            return;
+        }
+
+        if (interface->u.sta.state == WPA_COMPLETED ||
+            interface->vap_info.u.sta_info.valid_bh_credentials == TRUE ||
+            platform_wps_has_backhaul_credentials() == true) {
+            wifi_hal_info_print("%s:%d: Re-onboarding station interface %s with WPS\n",
+                __func__, __LINE__, interface->name);
+
+            if (platform_wps_backup_backhaul_credentials() != 0) {
+                wifi_hal_error_print("%s:%d: Refusing WPS re-onboarding because saved credentials "
+                    "could not be backed up\n", __func__, __LINE__);
+                platform_wps_discard_backhaul_credentials_backup();
+                return;
+            }
+            if (platform_wps_clear_backhaul_credentials() != 0) {
+                wifi_hal_error_print("%s:%d: Refusing WPS re-onboarding because saved credentials "
+                    "could not be cleared\n", __func__, __LINE__);
+                (void)platform_wps_restore_backhaul_credentials();
+                return;
+            }
+
+            disconnect_other_sta_links_for_wps(interface);
+            interface->wps_sta_reonboard_in_progress = true;
+            eloop_cancel_timeout(clear_sta_wps_reonboard_guard, interface, NULL);
+            eloop_register_timeout(WPS_REONBOARD_GUARD_TIMEOUT_SEC, 0,
+                clear_sta_wps_reonboard_guard, interface, NULL);
+            reonboard_started = true;
+
+            if (wifi_hal_disconnect(ap_index) != RETURN_OK) {
+                wifi_hal_info_print("%s:%d: Disconnect of interface %s failed, continuing with "
+                    "WPS re-onboarding\n", __func__, __LINE__, interface->name);
+            }
+
+            memset(interface->vap_info.u.sta_info.ssid, 0,
+                sizeof(interface->vap_info.u.sta_info.ssid));
+            memset(interface->vap_info.u.sta_info.security.u.key.key, 0,
+                sizeof(interface->vap_info.u.sta_info.security.u.key.key));
+            interface->vap_info.u.sta_info.valid_bh_credentials = FALSE;
+
+            wifi_hal_sm_deinit(ap_index);
+            if (wifi_hal_sm_reinit(ap_index) != RETURN_OK) {
+                wifi_hal_error_print("%s:%d: Failed to initialize station WPS mode\n",
+                    __func__, __LINE__);
+                abort_sta_wps_reonboard(interface, WPS_EV_FAIL);
+                return;
+            }
+
+            callback = wifi_hal_get_wps_sta_event_callback();
+            if (callback != NULL) {
+                callback(ap_index, WIFI_WPS_STA_REONBOARD_START);
+            }
+        }
+
         wifi_hal_info_print("%s:%d: WPS PBC for station interface %s with multi_ap=2\n",
             __func__, __LINE__, interface->name);
         if (wpas_wps_start_pbc(&interface->wpa_s, NULL, 0, 2) < 0) {
+            if (reonboard_started) {
+                abort_sta_wps_reonboard(interface, WPS_EV_FAIL);
+            }
             wifi_hal_error_print("%s:%d: Failed to start WPS PBC for station\n", __func__, __LINE__);
         }
         return;
@@ -7760,6 +7893,18 @@ void wifi_hal_nl80211_wps_cancel(unsigned int ap_index)
     const wifi_interface_info_t *interface = get_interface_by_vap_index(ap_index);
 
     wifi_hal_dbg_print("%s:%d: WPS cancel for ap=%d\n", __func__, __LINE__, ap_index);
+
+#if defined(UWM_EXT_WPS_SUPPORT) && defined(BANANA_PI_PORT)
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
+        is_sta_wps_onboarding_band((wifi_interface_info_t *)interface)) {
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        (void)wpas_wps_cancel(&((wifi_interface_info_t *)interface)->wpa_s);
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        abort_sta_wps_reonboard((wifi_interface_info_t *)interface,
+            WPS_EV_PBC_DISABLE);
+        return;
+    }
+#endif
 
     if (interface->u.ap.conf.wps_state == 0) {
         wifi_hal_error_print("%s:%d: WPS is not enabled for interface %s\n", __func__, __LINE__, interface->name);

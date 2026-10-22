@@ -157,9 +157,12 @@ static void nl80211_new_station_event(wifi_interface_info_t *interface, struct n
     wifi_hal_dbg_print("%s:%d: New station ies_len:%ld, ies:%p\n", __func__, __LINE__, ies_len, ies);
     notify_assoc_data(interface, tb, event);
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-        supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
+        if (is_sta_wps_onboarding_band(interface) &&
+            interface->wpa_s.wpa != NULL && interface->wpa_s.conf != NULL) {
+            supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
+        }
 #endif
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_ASSOC, &event);
@@ -189,9 +192,10 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     os_memset(&event, 0, sizeof(event));
     event.disassoc_info.addr = mac;
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-        if (interface->wpa_s.wpa != NULL) {
+        if (is_sta_wps_onboarding_band(interface) &&
+            interface->wpa_s.wpa != NULL && interface->wpa_s.conf != NULL) {
             supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
         }
 #endif
@@ -252,7 +256,12 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
             }
             event.assoc_reject.status_code = status;
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-            supplicant_event(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            if (is_sta_wps_onboarding_band(interface) &&
+                interface->wpa_s.wpa != NULL && interface->wpa_s.conf != NULL) {
+                supplicant_event(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
+            }
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #else
             wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
 #endif // BANANA_PI_PORT
@@ -291,7 +300,12 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
     }
 
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-    supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    if (is_sta_wps_onboarding_band(interface) &&
+        interface->wpa_s.wpa != NULL && interface->wpa_s.conf != NULL) {
+        supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #else
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC, &event);
 #endif // BANANA_PI_PORT
@@ -321,7 +335,12 @@ static void nl80211_authenticate_event(wifi_interface_info_t *interface, struct 
     }
 
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-    supplicant_event(&interface->wpa_s, EVENT_AUTH, &event);
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    if (is_sta_wps_onboarding_band(interface) &&
+        interface->wpa_s.wpa != NULL && interface->wpa_s.conf != NULL) {
+        supplicant_event(&interface->wpa_s, EVENT_AUTH, &event);
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #else
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_AUTH, &event);
 #endif // BANANA_PI_PORT
@@ -638,9 +657,12 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         }
     }
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-        supplicant_event(&interface->wpa_s, EVENT_TX_STATUS, &event);
+        if (is_sta_wps_onboarding_band(interface) &&
+            interface->wpa_s.wpa != NULL && interface->wpa_s.conf != NULL) {
+            supplicant_event(&interface->wpa_s, EVENT_TX_STATUS, &event);
+        }
 #endif
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_TX_STATUS, &event);
@@ -667,8 +689,11 @@ static void nl80211_new_scan_results_event(wifi_interface_info_t *interface, str
     nl80211_get_scan_results(interface);
 
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
-        interface->vap_info.u.sta_info.valid_bh_credentials == FALSE) {
+        interface->vap_info.u.sta_info.valid_bh_credentials == FALSE &&
+        is_sta_wps_onboarding_band(interface) &&
+        interface->wpa_s.wpa != NULL && interface->wpa_s.conf != NULL) {
         union wpa_event_data event;
         struct scan_info *info;
 
@@ -694,6 +719,7 @@ static void nl80211_new_scan_results_event(wifi_interface_info_t *interface, str
         supplicant_event(&interface->wpa_s, EVENT_SCAN_RESULTS, &event);
         wifi_hal_stats_dbg_print("%s:%d: [SCAN] Notified wpa_supplicant of scan results\n", __func__, __LINE__);
     }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #endif
 }
 
@@ -702,12 +728,16 @@ static void nl80211_new_trigger_scan_event(wifi_interface_info_t *interface, str
     wifi_hal_stats_dbg_print("%s:%d: [SCAN] scan started for interface '%s'\n", __func__, __LINE__, interface->name);
 
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
-    // For station interfaces in WPS path (valid_bh_credentials not set), notify wpa_supplicant that scan has started
+    // Notify only the 5 GHz station whose WPS state machine was initialized.
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
-        interface->vap_info.u.sta_info.valid_bh_credentials == FALSE) {
+        interface->vap_info.u.sta_info.valid_bh_credentials == FALSE &&
+        is_sta_wps_onboarding_band(interface) &&
+        interface->wpa_s.wpa != NULL && interface->wpa_s.conf != NULL) {
         supplicant_event(&interface->wpa_s, EVENT_SCAN_STARTED, NULL);
         wifi_hal_stats_dbg_print("%s:%d: [SCAN] Notified wpa_supplicant of scan start\n", __func__, __LINE__);
     }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #endif
 }
 
@@ -780,6 +810,11 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         send_sta_connection_status_to_cb(backhaul->bssid, interface->vap_info.vap_index, wifi_connection_status_ap_not_found);
         return;    
     }
+
+#ifdef UWM_EXT_WPS_SUPPORT
+    /* The station is associated again, so the re-onboarding teardown window is over. */
+    interface->wps_sta_reonboard_in_progress = false;
+#endif
 
     if (tb[NL80211_ATTR_MAC] == NULL) {
         wifi_hal_error_print("%s:%d: mac attribute absent\n", __func__, __LINE__);
@@ -945,14 +980,29 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
         callbacks->sta_conn_status_callback(vap->vap_index, &bss, &sta);
     }
 
+#ifdef UWM_EXT_WPS_SUPPORT
+    if (interface->wps_sta_reonboard_in_progress) {
+        /* This is the teardown of the previous link. The supplicant and the state machines
+         * already belong to the WPS session started for re-onboarding, so tearing them down
+         * here would leave the session running on freed memory. */
+        wifi_hal_info_print("%s:%d: WPS re-onboarding in progress on %s, keeping supplicant "
+            "state\n", __func__, __LINE__, interface->name);
+        return;
+    }
+#endif
+
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
-    wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
-    interface->wpa_s.disconnected = 1;
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    if (interface->wpa_s.wpa != NULL && interface->wpa_s.conf != NULL) {
+        wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
+        interface->wpa_s.disconnected = 1;
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-    supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
+        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
 #else
-    wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
+        wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
 #endif // BANANA_PI_PORT
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #endif
     if (interface->u.sta.wpa_sm != NULL) {
         eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);

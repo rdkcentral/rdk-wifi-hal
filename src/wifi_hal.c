@@ -707,6 +707,35 @@ INT wifi_hal_wps_event(wifi_wps_event_t data)
 
     wifi_hal_dbg_print("%s:%d: WPS event:%d for vap_index:%d\n", __func__, __LINE__, data.event, data.vap_index);
 
+    if (data.event == WPS_EV_FAIL || data.event == WPS_EV_PWD_AUTH_FAIL ||
+        data.event == WPS_EV_PBC_TIMEOUT || data.event == WPS_EV_PBC_DISABLE) {
+        interface = get_interface_by_vap_index(data.vap_index);
+        if (interface == NULL) {
+            wifi_hal_error_print("%s:%d: Interface not found for vap_index %d\n",
+                __func__, __LINE__, data.vap_index);
+            return RETURN_ERR;
+        }
+
+        vap = &interface->vap_info;
+        if (vap->vap_mode == wifi_vap_mode_sta &&
+            interface->wps_sta_reonboard_in_progress) {
+            if (platform_wps_restore_backhaul_credentials() != 0) {
+                return RETURN_ERR;
+            }
+
+            vap->u.sta_info.valid_bh_credentials = TRUE;
+            wifi_hal_sm_deinit(data.vap_index);
+            if (wifi_hal_sm_reinit(data.vap_index) != RETURN_OK) {
+                return RETURN_ERR;
+            }
+            callback = wifi_hal_get_wps_sta_event_callback();
+            if (callback != NULL) {
+                callback(data.vap_index, data.event);
+            }
+            return RETURN_OK;
+        }
+    }
+
     // Move event type checking data->event with WPS_EV_SUCCESS to wifi_hal_wps_event
     if (data.event == WPS_EV_SUCCESS) {
         interface = get_interface_by_vap_index(data.vap_index);
@@ -763,7 +792,13 @@ INT wifi_hal_wps_event(wifi_wps_event_t data)
             platform_wps_event_t platform_wps_event_fn;
             if ((platform_wps_event_fn = get_platform_wps_event_fn()) != NULL) {
                 wifi_hal_dbg_print("%s:%d: platform wps event callback triggered\n", __func__, __LINE__);
-                platform_wps_event_fn(data);
+                int platform_ret = platform_wps_event_fn(data);
+                if (platform_ret == RETURN_OK) {
+                    /* The latest credentials are durable, so delayed disconnects are
+                     * owned by normal connection handling again. */
+                    interface->wps_sta_reonboard_in_progress = false;
+                    platform_wps_discard_backhaul_credentials_backup();
+                }
             }
 
             // Call the registered callback from wps event
@@ -1251,6 +1286,8 @@ INT wifi_hal_sm_deinit(INT vap_index)
         return RETURN_ERR;
     }
 
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+
     // Deinitialize WPA state machine and EAPOL
     // Note: interface->u.sta.wpa_sm points to interface->wpa_s.wpa (set in init_wpa_supplicant)
     if (interface->u.sta.wpa_sm != NULL) {
@@ -1266,6 +1303,7 @@ INT wifi_hal_sm_deinit(INT vap_index)
     // Also clear interface->wpa_s.wpa and interface->wpa_s.eapol to ensure consistency
     interface->wpa_s.wpa = NULL;
     interface->wpa_s.eapol = NULL;
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return RETURN_OK;
 }
 
@@ -1282,6 +1320,7 @@ INT wifi_hal_sm_deinit(INT vap_index)
  */
 INT wifi_hal_sm_reinit(INT vap_index)
 {
+    int ret = RETURN_ERR;
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
     if (interface == NULL) {
         wifi_hal_error_print("%s:%d: interface for vap index:%d not found\n", __func__, __LINE__,
@@ -1295,11 +1334,16 @@ INT wifi_hal_sm_reinit(INT vap_index)
         return RETURN_ERR;
     }
 
+    /* Netlink events call into the embedded supplicant on another thread. Keep teardown and
+     * reinitialization atomic with respect to those callbacks. hapd_lock is recursive because
+     * supplicant initialization and event handling also use it internally. */
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+
     wifi_hal_info_print("%s:%d: Deinitializing wpa_supplicant for vap_index %d\n", __func__, __LINE__, vap_index);
     // Deinitialize wpa_supplicant
     if (deinit_wpa_supplicant(interface) != RETURN_OK) {
         wifi_hal_error_print("%s:%d: Failed to deinitialize wpa_supplicant\n", __func__, __LINE__);
-        return RETURN_ERR;
+        goto out;
     }
 
     wifi_hal_info_print("%s:%d: Reinitializing wpa_supplicant for vap_index %d\n", __func__, __LINE__, vap_index);
@@ -1307,12 +1351,15 @@ INT wifi_hal_sm_reinit(INT vap_index)
     // Reinitialize wpa_supplicant
     if (init_wpa_supplicant(interface) != RETURN_OK) {
         wifi_hal_error_print("%s:%d: Failed to reinitialize wpa_supplicant\n", __func__, __LINE__);
-        return RETURN_ERR;
+        goto out;
     }
 
     wifi_hal_info_print("%s:%d: Successfully reinitialized wpa_supplicant for vap_index %d\n", __func__, __LINE__, vap_index);
+    ret = RETURN_OK;
 
-    return RETURN_OK;
+out:
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+    return ret;
 }
 #endif
 
@@ -1764,6 +1811,28 @@ int deinit_wpa_supplicant(wifi_interface_info_t *interface)
     return RETURN_OK;
 }
 
+bool is_sta_wps_onboarding_band(wifi_interface_info_t *interface)
+{
+#ifdef UWM_EXT_WPS_SUPPORT
+    wifi_radio_info_t *radio;
+
+    if (interface->vap_info.vap_mode != wifi_vap_mode_sta) {
+        return false;
+    }
+
+    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    if (radio == NULL) {
+        return false;
+    }
+
+    return radio->oper_param.band == WIFI_FREQUENCY_5_BAND ||
+        radio->oper_param.band == WIFI_FREQUENCY_5L_BAND ||
+        radio->oper_param.band == WIFI_FREQUENCY_5H_BAND;
+#else
+    return false;
+#endif
+}
+
 int init_wpa_supplicant(wifi_interface_info_t *interface)
 {
 #ifdef UWM_EXT_WPS_SUPPORT
@@ -1772,7 +1841,10 @@ int init_wpa_supplicant(wifi_interface_info_t *interface)
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta)
     {
         wifi_vap_info_t *vap = &interface->vap_info;
-        if (vap->u.sta_info.valid_bh_credentials == FALSE) {
+        if (is_sta_wps_onboarding_band(interface) == false) {
+            wifi_hal_info_print("%s:%d: STA vap_index %d is not on a 5GHz radio, skipping WPS initialization\n",
+                __func__, __LINE__, vap->vap_index);
+        } else if (vap->u.sta_info.valid_bh_credentials == FALSE) {
             need_wps_init = true;
             wifi_hal_info_print("%s:%d: valid_bh_credentials not set for STA vap_index %d, WPS onboarding required\n",
                 __func__, __LINE__, vap->vap_index);
@@ -2232,10 +2304,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         //Init wpa-supplicant params.
         if (vap->vap_mode == wifi_vap_mode_sta) {
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             deinit_wpa_supplicant(interface);
             if (init_wpa_supplicant(interface) != RETURN_OK) {
                 wifi_hal_info_print("%s:%d: Error initializing supplicant params\n", __func__, __LINE__);
             }
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         }
 #endif
     }

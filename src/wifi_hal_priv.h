@@ -583,6 +583,10 @@ typedef struct wifi_interface_info_t {
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
     struct sta_mlo_params mlo_params;
 #endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
+#ifdef UWM_EXT_WPS_SUPPORT
+    /* Set while a mesh STA is deliberately dropping its link to run WPS again. */
+    bool wps_sta_reonboard_in_progress;
+#endif
 } wifi_interface_info_t;
 
 #define MAX_RATES   16
@@ -923,6 +927,7 @@ INT wifi_hal_getInterfaceMap(wifi_interface_name_idex_map_t *if_map, unsigned in
     unsigned int *if_map_size);
 INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal);
 INT wifi_hal_sm_deinit(INT vap_index);
+bool is_sta_wps_onboarding_band(wifi_interface_info_t *interface);
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss);
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map);
@@ -1442,6 +1447,22 @@ INT wifi_hal_get_default_wps_pin(char *pin);
 #ifdef UWM_EXT_WPS_SUPPORT
 INT wifi_wpsStaEvent_callback_register(wifi_wps_sta_event_callback_t callback);
 wifi_wps_sta_event_callback_t wifi_hal_get_wps_sta_event_callback(void);
+/* Backhaul credentials are persisted by the platform layer and only the Banana Pi port
+ * implements it. On every other platform the calls compile to no-ops reporting "no stored
+ * credentials", so the WPS re-onboarding code stays portable. */
+#if defined(BANANA_PI_PORT)
+int platform_wps_clear_backhaul_credentials(void);
+bool platform_wps_has_backhaul_credentials(void);
+int platform_wps_backup_backhaul_credentials(void);
+int platform_wps_restore_backhaul_credentials(void);
+void platform_wps_discard_backhaul_credentials_backup(void);
+#else
+#define platform_wps_clear_backhaul_credentials() (0)
+#define platform_wps_has_backhaul_credentials() (false)
+#define platform_wps_backup_backhaul_credentials() (0)
+#define platform_wps_restore_backhaul_credentials() (0)
+#define platform_wps_discard_backhaul_credentials_backup() do { } while (0)
+#endif
 #endif
 
 typedef unsigned long bitmap_type;

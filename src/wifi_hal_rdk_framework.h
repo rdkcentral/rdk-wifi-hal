@@ -121,6 +121,9 @@ typedef struct {
 } __attribute__((__packed__)) wifi_wps_event_t;
 
 #ifdef UWM_EXT_WPS_SUPPORT
+/* Internal callback event emitted before an intentional STA re-onboarding. */
+#define WIFI_WPS_STA_REONBOARD_START 0x100
+
 /* WPS STA event callback type - called when WPS credentials are received for station interface */
 typedef void (*wifi_wps_sta_event_callback_t)(unsigned int vap_index, unsigned int event);
 #endif
