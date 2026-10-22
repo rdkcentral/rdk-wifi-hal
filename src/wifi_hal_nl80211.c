@@ -21058,7 +21058,6 @@ int wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     struct nl_msg *key_msg = NULL;
     int ret = -ENOBUFS;
 #if HOSTAPD_VERSION >= 210
-    int skip_set_key = 1;
     enum wpa_alg alg = params->alg;
     const u8 *addr = params->addr;
     int key_idx = params->key_idx;
@@ -21067,15 +21066,16 @@ int wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     size_t seq_len = params->seq_len;
     const u8 *key = params->key;
     size_t key_len = params->key_len;
+#ifdef QCOM_ATH12K_PORT
+    int skip_set_key = 1;
     enum key_flag key_flag = params->key_flag;
     int link_id = -1;
 #if HOSTAPD_VERSION >= 211
     link_id = params->link_id;
-#endif
-#if defined(QCOM_ATH12K_PORT)
+#endif /* HOSTAPD_VERSION >= 211 */
     int vlan_id = params->vlan_id;
-#endif
-#endif
+#endif /* QCOM_ATH12K_PORT */
+#endif /* HOSTAPD_VERSION >= 210 */
     wifi_vap_info_t *vap;
     unsigned int suite;
 

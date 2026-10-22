@@ -2852,11 +2852,11 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
      * it must be done here so hostapd has the correct flags when
      * starting the BSS. */
     update_hostap_iface_flags(interface);
-#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO) && \
-    defined(QCOM_ATH12K_PORT) && defined(CONFIG_GENERIC_MLO)
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
     if (update_hostap_mlo(interface) != RETURN_OK) {
         goto exit;
     }
+#if defined(QCOM_ATH12K_PORT) && defined(CONFIG_GENERIC_MLO)
     /*
      * Cross-link MLD-affiliated ifaces so that iface->interfaces->count > 1.
      * This is required for ieee802_11_set_beacon() to call
@@ -2870,7 +2870,8 @@ int update_hostap_interface_params(wifi_interface_info_t *interface)
             __func__, __LINE__);
         /* Non-fatal: continue without cross-linking */
     }
-#endif /* CONFIG_IEEE80211BE && CONFIG_MLO && QCOM_ATH12K_PORT && CONFIG_GENERIC_MLO */
+#endif /* QCOM_ATH12K_PORT && CONFIG_GENERIC_MLO */
+#endif /* CONFIG_IEEE80211BE && CONFIG_MLO */
 
     ret = RETURN_OK;
 exit:
