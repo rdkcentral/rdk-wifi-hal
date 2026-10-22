@@ -19277,6 +19277,7 @@ int wifi_supplicant_drv_authenticate(void *priv, struct wpa_driver_auth_params *
             ret, strerror(-ret));
     return -1;
 }
+#endif /* CONFIG_WIFI_EMULATOR || BANANA_PI_PORT */
 
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
 int wifi_supplicant_drv_get_bssid(void *priv, u8 *bssid)
@@ -19321,6 +19322,7 @@ int wifi_supplicant_drv_get_bssid(void *priv, u8 *bssid)
                        __func__, __LINE__, MAC2STR(bssid));
     return 0;
 }
+#endif /* CONFIG_WIFI_EMULATOR || BANANA_PI_PORT */
 
 int     wifi_drv_send_eapol(void *priv, const u8 *addr, const u8 *data,
                     size_t data_len, int encrypt,
