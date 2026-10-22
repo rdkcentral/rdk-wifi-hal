@@ -1169,6 +1169,9 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param);
 void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len);
 int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int status_code, int rssi);
 int nl80211_disconnect_sta(wifi_interface_info_t *interface);
+#ifdef UWM_EXT_WPS_SUPPORT
+int nl80211_deauthenticate_sta(wifi_interface_info_t *interface);
+#endif /* UWM_EXT_WPS_SUPPORT */
 int wifi_hal_purgeScanResult(unsigned int vap_index, unsigned char *sta_mac);
 void get_wifi_interface_info_map(wifi_interface_name_idex_map_t *interface_map);
 void get_radio_interface_info_map(radio_interface_mapping_t *radio_interface_map);

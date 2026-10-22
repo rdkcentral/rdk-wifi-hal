@@ -114,6 +114,10 @@ static unsigned char g_vapSmac[MAX_VAP][MAC_ADDRESS_LEN] = {'\0'};
 #define DEFAULT_BSS_MAX_COUNT 200
 #define DEFAULT_BSS_EXPIRATION_AGE 180
 #define DEFAULT_BSS_EXPIRATION_SCAN_COUNT 2
+#ifdef UWM_EXT_WPS_SUPPORT
+/* Must stay above the number of BSSes a dense deployment can beacon. */
+#define WIFI_HAL_BSS_MAX_COUNT 512
+#endif /* UWM_EXT_WPS_SUPPORT */
 
 static wifi_wps_sta_event_callback_t g_wps_sta_event_callback = NULL;
 
@@ -1434,7 +1438,11 @@ INT wifi_hal_disconnect(INT ap_index)
         return WIFI_HAL_INVALID_ARGUMENTS;     // RDKB-45722 - Returns -4 when the ap index is not suitable for station mode
     }
 
+#ifdef UWM_EXT_WPS_SUPPORT
+    if (nl80211_deauthenticate_sta(interface) != 0) {
+#else
     if (nl80211_disconnect_sta(interface) != 0) {
+#endif /* UWM_EXT_WPS_SUPPORT */
         return RETURN_ERR;
     }
 
@@ -1643,8 +1651,19 @@ static int init_wps_wpa_supplicant(wifi_interface_info_t *interface)
     interface->wpa_s.conf->ap_scan = DEFAULT_AP_SCAN;  // DEFAULT_AP_SCAN = 1 (normal scan mode)
 
 
+#ifdef UWM_EXT_WPS_SUPPORT
+    /*
+     * DEFAULT_BSS_MAX_COUNT is 200, which a dense deployment exceeds. Once the
+     * cache is full wpa_bss_remove_oldest_unknown() drops entries that match no
+     * configured network, and a WPS target is unknown until enrollment returns
+     * credentials. The onboarding BSS is then evicted while its connect radio
+     * work is still pending and the association is never sent.
+     */
+    interface->wpa_s.conf->bss_max_count = WIFI_HAL_BSS_MAX_COUNT;
+#else
     // Set bss_max_count to prevent premature BSS entry removal during scan processing
     interface->wpa_s.conf->bss_max_count = DEFAULT_BSS_MAX_COUNT;
+#endif /* UWM_EXT_WPS_SUPPORT */
     interface->wpa_s.conf->bss_expiration_age = DEFAULT_BSS_EXPIRATION_AGE;
     interface->wpa_s.conf->bss_expiration_scan_count = DEFAULT_BSS_EXPIRATION_SCAN_COUNT;
 

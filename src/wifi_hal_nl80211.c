@@ -9865,6 +9865,77 @@ int nl80211_disconnect_sta(wifi_interface_info_t *interface)
     wifi_hal_error_print("%s:%d: disconnect command failed: ret=%d (%s)\n", __func__, __LINE__,
                       ret, strerror(-ret));
 
+#ifdef UWM_EXT_WPS_SUPPORT
+    return -1;
+}
+
+static int nl80211_send_on_nl_event_thread(struct nl_msg *msg)
+{
+    char thread_id[24];
+    wifi_netlink_thread_info_t *nl_info;
+
+    snprintf(thread_id, sizeof(thread_id), "%lu", (unsigned long)g_wifi_hal.nl_tid);
+    pthread_mutex_lock(&g_wifi_hal.nl_create_socket_lock);
+    nl_info = hash_map_get(g_wifi_hal.netlink_socket_map, thread_id);
+    pthread_mutex_unlock(&g_wifi_hal.nl_create_socket_lock);
+
+    if (nl_info == NULL) {
+        return nl80211_send_and_recv(msg, NULL, &g_wifi_hal, NULL, NULL);
+    }
+
+    return execute_send_and_recv(nl_info->nl_cb, nl_info->nl, msg, NULL, &g_wifi_hal, NULL,
+        NULL);
+}
+
+int nl80211_deauthenticate_sta(wifi_interface_info_t *interface)
+{
+    struct nl_msg *msg;
+    int ret;
+    mac_addr_str_t bssid_str;
+    static const u8 zero_bssid[ETH_ALEN] = { 0 };
+
+    if (interface == NULL) {
+        return -1;
+    }
+
+    /*
+     * Association is sent with NL80211_ATTR_IFACE_SOCKET_OWNER from the
+     * nl80211 event thread. This kernel rejects both DISCONNECT and
+     * DEAUTHENTICATE with EPERM unless the command comes from that socket.
+     * wifi_hal_disconnect() runs on the caller thread, so send the deauth on
+     * the event thread's socket.
+     */
+    if (memcmp(interface->u.sta.backhaul.bssid, zero_bssid, ETH_ALEN) == 0) {
+        wifi_hal_error_print("%s:%d: no associated BSSID to deauthenticate on %s\n",
+            __func__, __LINE__, interface->name);
+        return -1;
+    }
+
+    if ((msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0,
+            NL80211_CMD_DEAUTHENTICATE)) == NULL) {
+        return -1;
+    }
+
+    /* Reason 3: deauthenticated because the sending STA is leaving. */
+    if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, interface->u.sta.backhaul.bssid) ||
+        nla_put_u16(msg, NL80211_ATTR_REASON_CODE, 3)) {
+        wifi_hal_error_print("%s:%d: failed to set deauthenticate attributes on %s\n",
+            __func__, __LINE__, interface->name);
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    ret = nl80211_send_on_nl_event_thread(msg);
+    if (ret == 0) {
+        wifi_hal_info_print("%s:%d: deauthenticated %s from %s\n",
+            __func__, __LINE__, interface->name,
+            to_mac_str(interface->u.sta.backhaul.bssid, bssid_str));
+        return 0;
+    }
+
+    wifi_hal_error_print("%s:%d: deauthenticate command failed: ret=%d (%s)\n",
+        __func__, __LINE__, ret, strerror(-ret));
+#endif /* UWM_EXT_WPS_SUPPORT */
     return -1;
 }
 

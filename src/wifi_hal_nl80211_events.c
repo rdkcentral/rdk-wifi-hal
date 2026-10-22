@@ -196,6 +196,24 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
         if (is_sta_wps_onboarding_band(interface) &&
             interface->wpa_s.wpa != NULL && interface->wpa_s.conf != NULL) {
+#ifdef UWM_EXT_WPS_SUPPORT
+            /*
+             * WPS re-onboarding drops the previous backhaul link and then starts PBC
+             * against the onboarding BSS. The kernel deletes the old AP peer only after
+             * the new SME exchange is under way, and wpa_supplicant does not compare
+             * the address of a disassociation against its connection target while it
+             * is authenticating, so the stale event would abort the WPS attempt and
+             * blacklist the onboarding BSS. Drop events for anything other than the
+             * BSS the supplicant is currently working on.
+             */
+            if (interface->wps_sta_reonboard_in_progress &&
+                os_memcmp(mac, interface->wpa_s.bssid, ETH_ALEN) != 0 &&
+                os_memcmp(mac, interface->wpa_s.pending_bssid, ETH_ALEN) != 0) {
+                wifi_hal_info_print("%s:%d: %s: ignoring stale peer removal of %s during "
+                    "WPS re-onboarding\n", __func__, __LINE__, interface->name,
+                    to_mac_str(mac, mac_str));
+            } else
+#endif /* UWM_EXT_WPS_SUPPORT */
             supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
         }
 #endif
@@ -966,6 +984,20 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
 
     callbacks = get_hal_device_callbacks();
 
+#ifdef UWM_EXT_WPS_SUPPORT
+    if (interface->wps_sta_reonboard_in_progress) {
+        /* This is the teardown of the previous link. The supplicant and the state machines
+         * already belong to the WPS session started for re-onboarding, so tearing them down
+         * here would leave the session running on freed memory. The controller was already
+         * told about the WPS session through WIFI_WPS_STA_REONBOARD_START; reporting the
+         * old link as disconnected now would make it leave WPS mode and resume the regular
+         * connection algorithm against the WPS supplicant. */
+        wifi_hal_info_print("%s:%d: WPS re-onboarding in progress on %s, keeping supplicant "
+            "state\n", __func__, __LINE__, interface->name);
+        return;
+    }
+#endif /* UWM_EXT_WPS_SUPPORT */
+
     if (callbacks->sta_conn_status_callback) {
         memcpy(bss.bssid, interface->u.sta.backhaul.bssid, sizeof(bssid_t));
 
@@ -979,17 +1011,6 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
 
         callbacks->sta_conn_status_callback(vap->vap_index, &bss, &sta);
     }
-
-#ifdef UWM_EXT_WPS_SUPPORT
-    if (interface->wps_sta_reonboard_in_progress) {
-        /* This is the teardown of the previous link. The supplicant and the state machines
-         * already belong to the WPS session started for re-onboarding, so tearing them down
-         * here would leave the session running on freed memory. */
-        wifi_hal_info_print("%s:%d: WPS re-onboarding in progress on %s, keeping supplicant "
-            "state\n", __func__, __LINE__, interface->name);
-        return;
-    }
-#endif
 
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
