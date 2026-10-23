@@ -2214,18 +2214,21 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, sta_mac_str),
             to_mac_str(mgmt->da, frame_da_str), cat);
 
-        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-        station = ap_get_sta(&interface->u.ap.hapd, sta);
-        sta_associated = (station != NULL) && (station->flags & WLAN_STA_ASSOC);
-        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-        station = NULL;
+        if (interface->vap_info.vap_mode == wifi_vap_mode_ap &&
+            !is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            station = ap_get_sta(&interface->u.ap.hapd, sta);
+            sta_associated = (station != NULL) && (station->flags & WLAN_STA_ASSOC);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+            station = NULL;
 
-        if (!sta_associated) {
-            wifi_hal_info_print("%s:%d: interface:%s ignoring action frame "
-                                "category:%d from unassociated sta:%s\n",
-                __func__, __LINE__, interface->name, cat, to_mac_str(sta, sta_mac_str));
-            forward_frame = false;
-            break;
+            if (!sta_associated) {
+                wifi_hal_info_print("%s:%d: interface:%s ignoring action frame "
+                                    "category:%d from unassociated sta:%s\n",
+                    __func__, __LINE__, interface->name, cat, to_mac_str(sta, sta_mac_str));
+                forward_frame = false;
+                break;
+            }
         }
 
         switch (cat) {
