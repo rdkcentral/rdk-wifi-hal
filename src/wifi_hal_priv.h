@@ -78,6 +78,7 @@
 #include "wpa_supplicant_i.h"
 #include "bss.h"
 #include "sme.h"
+#include "scan.h"
 #endif
 
 /*

@@ -187,7 +187,9 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        if (interface->u.sta.wpa_sm != NULL && interface->wpa_s.wpa != NULL) {
+            supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        }
 #endif
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
@@ -899,13 +901,15 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     }
 
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
-    wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
-    interface->wpa_s.disconnected = 1;
+    if (interface->u.sta.wpa_sm != NULL && interface->wpa_s.wpa != NULL) {
+        wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
+        interface->wpa_s.disconnected = 1;
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-    supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
+        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
 #else
-    wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
+        wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
 #endif // BANANA_PI_PORT
+    }
 #endif
     if (interface->u.sta.wpa_sm != NULL) {
         eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
@@ -913,6 +917,7 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
 
         wpa_sm_deinit(interface->u.sta.wpa_sm);
         interface->u.sta.wpa_sm = NULL;
+        interface->wpa_s.wpa = NULL;
     }
 
     if ((attr = tb[NL80211_ATTR_REASON_CODE]) != NULL) {
