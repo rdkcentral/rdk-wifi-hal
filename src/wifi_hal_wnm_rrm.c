@@ -197,6 +197,7 @@ static int wifi_ieee802_11_send_bss_trans_mgmt_request(struct hostapd_data *hapd
 static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
     const mac_address_t addr, struct bss_tm_query *frm, size_t len)
 {
+    wifi_hal_error_print(" SHARMAN-3047 -- handle_rx_bss_trans_mgmt_query enter\n");
     const u8 *pos, *end;
     int enabled;
     struct hostapd_neighbor_entry *nr;
@@ -265,6 +266,7 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
             wifi_hal_error_print("%s:%d: WNM: BSS Transition Management Query from " MACSTR ". "
                 "Reason is set to Preferred candidate list included but no candidate list found\n", __func__, __LINE__, MAC2STR(addr));
         } else {
+	    wifi_hal_error_print(" SHARMAN-3047 -- handle_rx_bss_trans_mgmt_query line number %d\n",__LINE__);
             int nei_element_len;
 
             while (pos < end) {
@@ -318,8 +320,9 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
             query->numCandidates = num_of_candidates;
         }
     }
-
+    wifi_hal_error_print(" SHARMAN-3047 --  handle_rx_bss_trans_mgmt_query wnm_bss_trans_query_auto_resp = %d line number %d\n",wnm_bss_trans_query_auto_resp, __LINE__);
     if (!wnm_bss_trans_query_auto_resp) {
+	 wifi_hal_error_print(" SHARMAN-3047 --  handle_rx_bss_trans_mgmt_query in !wnm_bss_trans_query_auto_resp if condition\n");
         /* Unlock hostapd mutex to avoid possible deadlocks/mutual locks in callback handlers */
         mutex_locked = false;
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
@@ -327,7 +330,9 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
         callbacks = get_hal_device_callbacks();
         if (callbacks->btm_callback[ap_index].query_callback != NULL)
         {
+	    wifi_hal_error_print(" SHARMAN-3047 --  handle_rx_bss_trans_mgmt_query callbacks NOT NULL\n");
             #ifndef WIFI_HAL_VERSION_3_PHASE2
+	    wifi_hal_error_print(" SHARMAN-3047 --  handle_rx_bss_trans_mgmt_query callbacks NOT NULL WIFI_HAL_VERSION_3_PHASE2\n");
             mac_addr_str_t sta_mac_str = "";
             to_mac_str(addr, sta_mac_str);
             if (RETURN_OK != callbacks->btm_callback[ap_index].query_callback(ap_index,
@@ -336,6 +341,7 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
                 goto exit;
             }
             #else
+	    wifi_hal_error_print(" SHARMAN-3047 --  handle_rx_bss_trans_mgmt_query callbacks NOT NULL ELSE\n");
             if (RETURN_OK != callbacks->btm_callback[ap_index].query_callback(ap_index,
                     addr, query, sizeof(*request), request)) {
                 wifi_hal_error_print("%s:%d: BTMQueryRequestCallback failed\n", __func__, __LINE__);
@@ -344,6 +350,7 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
             #endif
 
             /* Send the btm request with data received by callback call */
+	    wifi_hal_error_print(" SHARMAN-3047 --  handle_rx_bss_trans_mgmt_query calling wifi_hal_setBTMRequest\n");
             if (RETURN_OK != wifi_hal_setBTMRequest(ap_index, addr, request)) {
                 wifi_hal_error_print("%s:%d: wifi_setBTMRequest() failed\n", __func__, __LINE__);
                 goto exit;
@@ -354,6 +361,7 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
     }
 
     /* Add candidate list to BSS TM Request */
+    wifi_hal_error_print(" SHARMAN-3047 --  handle_rx_bss_trans_mgmt_query candidate list to BSS TM Request\n");
     dl_list_for_each(nr, &hapd->nr_db, struct hostapd_neighbor_entry, list) {
         size_t nr_len = wpabuf_len(nr->nr);
 
@@ -368,7 +376,7 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
     }
 
     btm_req_nr_list_len = nei_rep_tmp - nei_rep;
-
+    wifi_hal_error_print(" SHARMAN-3047 --  handle_rx_bss_trans_mgmt_query calling wifi_ieee802_11_send_bss_trans_mgmt_request\n");
     wifi_ieee802_11_send_bss_trans_mgmt_request(hapd, addr, query->token,
             btm_req_nr_list_len > 0 ? nei_rep : NULL, btm_req_nr_list_len,
             //mbo_len ? mbo_attributes : NULL, mbo_len);
