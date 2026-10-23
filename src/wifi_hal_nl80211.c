@@ -90,6 +90,8 @@ void wifi_drv_eapol_timeouts(wifi_interface_info_t *interface, mac_address_t sta
 #define KEY_MGMT_SAE_EXT 67108864
 #define MAX_MBSSID_INTERFACES 8
 
+static pthread_mutex_t channel_tx_power_cache_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 #if defined(EASY_MESH_NODE) && defined(_PLATFORM_BANANAPI_R4_)
 #define CSA_TAG_ID 37
 #define CSA_IE_MIN_LENGTH 3
@@ -4760,7 +4762,7 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
     struct hostapd_channel_data *chan;
     enum nl80211_dfs_state dfs_state;
     enum nl80211_band band;
-    int found = 0;
+    int found = 0, channel_index;
     char channel_str[8], channels_str[512] = {};
     int index = -1;
 #ifdef CONFIG_WMM
@@ -4827,7 +4829,10 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
         chan->flag = 0;
         chan->allowed_bw = ~0;
         chan->dfs_cac_ms = 0;
-
+        channel_index = (int)(chan - radio->channel_data[band]);
+        if (channel_index >= 0 && channel_index < MAX_CHANNELS) {
+            radio->channel_max_tx_power_valid[band][channel_index] = false;
+        }
 
         if (ieee80211_freq_to_chan(chan->freq, (u8 *)&chan->chan) == NUM_HOSTAPD_MODES) {
             wifi_hal_error_print("%s:%d: Unable to convert frequency %d to channel number on phy index %d.\n", __func__, __LINE__,
@@ -4836,6 +4841,18 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
 
         if (chan->chan == 0) {
             goto skip;
+        }
+
+        if (tb_freq[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]) {
+            u32 max_tx_power_mbm = nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]);
+            int max_tx_power_dbm = (int32_t)max_tx_power_mbm / 100;
+
+            chan->max_tx_power = max_tx_power_dbm;
+            if (channel_index >= 0 && channel_index < MAX_CHANNELS) {
+                radio->channel_max_tx_power_valid[band][channel_index] = true;
+            }
+            wifi_hal_info_print("Channel=%d Freq=%d RegulatoryMaxTxPower=%d dBm (from %u mBm)\n",
+                chan->chan, chan->freq, max_tx_power_dbm, max_tx_power_mbm);
         }
 
         if (tb_freq[NL80211_FREQUENCY_ATTR_NO_IR]) {
@@ -4969,6 +4986,68 @@ skip:   found = 0;
         mode->num_channels, channels_str);
 
     return mode;
+}
+
+INT wifi_getRadioChannelMaxTxPower(INT radioIndex, wifi_freq_bands_t freq_band, INT channel,
+    INT *output_dBm)
+{
+    wifi_radio_info_t *radio;
+    enum nl80211_band band;
+    unsigned int num_channels;
+
+    if (channel <= 0 || output_dBm == NULL) {
+        wifi_hal_error_print("%s:%d: Invalid channel/output pointer\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    switch (freq_band) {
+    case WIFI_FREQUENCY_2_4_BAND:
+        band = NL80211_BAND_2GHZ;
+        break;
+    case WIFI_FREQUENCY_5_BAND:
+    case WIFI_FREQUENCY_5L_BAND:
+    case WIFI_FREQUENCY_5H_BAND:
+        band = NL80211_BAND_5GHZ;
+        break;
+#if HOSTAPD_VERSION >= 210
+    case WIFI_FREQUENCY_6_BAND:
+        band = NL80211_BAND_6GHZ;
+        break;
+#endif
+    default:
+        wifi_hal_error_print("%s:%d: Unsupported frequency band %d\n", __func__, __LINE__,
+            freq_band);
+        return RETURN_ERR;
+    }
+
+    radio = get_radio_by_rdk_index(radioIndex);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: Radio %d not found\n", __func__, __LINE__, radioIndex);
+        return RETURN_ERR;
+    }
+    if (band < 0 || band >= NUM_NL80211_BANDS) {
+        wifi_hal_error_print("%s:%d: Invalid nl80211 band %d\n", __func__, __LINE__, band);
+        return RETURN_ERR;
+    }
+
+    pthread_mutex_lock(&channel_tx_power_cache_mutex);
+    num_channels = radio->hw_modes[band].num_channels;
+    if (num_channels > MAX_CHANNELS) {
+        num_channels = MAX_CHANNELS;
+    }
+    for (unsigned int i = 0; i < num_channels; i++) {
+        if (radio->channel_data[band][i].chan == channel &&
+            radio->channel_max_tx_power_valid[band][i]) {
+            *output_dBm = radio->channel_data[band][i].max_tx_power;
+            pthread_mutex_unlock(&channel_tx_power_cache_mutex);
+            return RETURN_OK;
+        }
+    }
+    pthread_mutex_unlock(&channel_tx_power_cache_mutex);
+
+    wifi_hal_dbg_print("%s:%d: No regulatory max TX power for radio %d channel %d\n", __func__,
+        __LINE__, radioIndex, channel);
+    return RETURN_ERR;
 }
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
@@ -5996,6 +6075,136 @@ static int wiphy_set_info_handler(struct nl_msg *msg, void *arg)
 static int regulatory_domain_set_info_handler(struct nl_msg *msg, void *arg)
 {
     return 0;
+}
+
+#define REGULATORY_DOMAIN_APPLY_RETRIES 20
+#define REGULATORY_DOMAIN_RETRY_DELAY_USEC 100000
+
+static pthread_mutex_t regulatory_domain_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+struct regulatory_domain_info {
+    char alpha2[3];
+    bool valid;
+};
+
+static int regulatory_domain_info_handler(struct nl_msg *msg, void *arg)
+{
+    struct regulatory_domain_info *info = arg;
+    struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+    struct nlattr *tb[NL80211_ATTR_MAX + 1];
+
+    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
+    if (!tb[NL80211_ATTR_REG_ALPHA2] || nla_len(tb[NL80211_ATTR_REG_ALPHA2]) < 2) {
+        return NL_SKIP;
+    }
+
+    memcpy(info->alpha2, nla_data(tb[NL80211_ATTR_REG_ALPHA2]), 2);
+    info->alpha2[2] = '\0';
+    info->valid = true;
+    return NL_SKIP;
+}
+
+static int nl80211_get_regulatory_domain(wifi_radio_info_t *radio,
+    struct regulatory_domain_info *info)
+{
+    struct nl_msg *msg;
+    bool self_managed_regulatory =
+        (radio->driver_data.capa.flags & WPA_DRIVER_FLAGS_SELF_MANAGED_REGULATORY) != 0;
+
+    memset(info, 0, sizeof(*info));
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_GET_REG);
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate regulatory query message\n", __func__,
+            __LINE__);
+        return -1;
+    }
+
+    if (self_managed_regulatory && nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to add WIPHY to self-managed regulatory query\n",
+            __func__, __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
+
+    if (nl80211_send_and_recv(msg, regulatory_domain_info_handler, info, NULL, NULL) != 0 ||
+        !info->valid) {
+        return -1;
+    }
+    return 0;
+}
+
+static int refresh_channel_flags_for_regulatory_domain(wifi_radio_info_t *radio,
+    const char *alpha2, bool *domain_applied)
+{
+    struct regulatory_domain_info info;
+
+    for (int retry = 0; retry < REGULATORY_DOMAIN_APPLY_RETRIES; retry++) {
+        if (nl80211_get_regulatory_domain(radio, &info) == 0 &&
+            memcmp(info.alpha2, alpha2, 2) == 0) {
+            *domain_applied = true;
+            if (update_channel_flags() == 0) {
+                return 0;
+            }
+            wifi_hal_error_print("%s:%d: Failed to refresh channel limits for regulatory domain %s "
+                "(attempt %d/%d)\n", __func__, __LINE__, alpha2, retry + 1,
+                REGULATORY_DOMAIN_APPLY_RETRIES);
+        }
+        usleep(REGULATORY_DOMAIN_RETRY_DELAY_USEC);
+    }
+
+    if (*domain_applied) {
+        wifi_hal_error_print("%s:%d: Channel limits for regulatory domain %s could not be "
+            "refreshed within %d ms\n", __func__, __LINE__, alpha2,
+            REGULATORY_DOMAIN_APPLY_RETRIES * REGULATORY_DOMAIN_RETRY_DELAY_USEC / 1000);
+    } else {
+        wifi_hal_error_print("%s:%d: Regulatory domain %s was not applied within %d ms\n",
+            __func__, __LINE__, alpha2,
+            REGULATORY_DOMAIN_APPLY_RETRIES * REGULATORY_DOMAIN_RETRY_DELAY_USEC / 1000);
+    }
+    return -1;
+}
+
+static int nl80211_request_regulatory_domain(const char *alpha2)
+{
+    struct nl_msg *msg;
+
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_REQ_SET_REG);
+    if (msg == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to allocate regulatory request message\n", __func__,
+            __LINE__);
+        return -1;
+    }
+    if (nla_put_string(msg, NL80211_ATTR_REG_ALPHA2, alpha2) < 0) {
+        wifi_hal_error_print("%s:%d: Failed to add regulatory alpha2 attribute\n", __func__,
+            __LINE__);
+        nlmsg_free(msg);
+        return -1;
+    }
+    return nl80211_send_and_recv(msg, regulatory_domain_set_info_handler, &g_wifi_hal, NULL, NULL);
+}
+
+static int restore_regulatory_domain(wifi_radio_info_t *radio, const char *alpha2,
+    bool *domain_restored)
+{
+    bool domain_applied = false;
+
+    *domain_restored = false;
+    if (nl80211_request_regulatory_domain(alpha2) != 0) {
+        wifi_hal_error_print("%s:%d: Failed to request restoration of regulatory domain %s\n",
+            __func__, __LINE__, alpha2);
+        return -1;
+    }
+
+    if (refresh_channel_flags_for_regulatory_domain(radio, alpha2, &domain_applied) == 0) {
+        *domain_restored = true;
+        return 0;
+    }
+    if (domain_applied) {
+        *domain_restored = true;
+        wifi_hal_error_print("%s:%d: Restored regulatory domain %s, but channel-limit refresh "
+            "failed\n", __func__, __LINE__, alpha2);
+    }
+    return -1;
 }
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
@@ -7268,20 +7477,49 @@ int nl80211_read_sta_data(wifi_interface_info_t *interface, const u8 *addr)
     return 0;
 }
 
+static void invalidate_channel_max_tx_power_cache(void)
+{
+    pthread_mutex_lock(&channel_tx_power_cache_mutex);
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        wifi_radio_info_t *radio = get_radio_by_rdk_index(i);
+
+        if (radio != NULL) {
+            memset(radio->channel_max_tx_power_valid, 0, sizeof(radio->channel_max_tx_power_valid));
+        }
+    }
+    pthread_mutex_unlock(&channel_tx_power_cache_mutex);
+}
+
 int update_channel_flags()
 {
     struct nl_msg *msg;
 
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    pthread_mutex_lock(&channel_tx_power_cache_mutex);
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        wifi_radio_info_t *radio = get_radio_by_rdk_index(i);
+
+        if (radio != NULL) {
+            memset(radio->channel_max_tx_power_valid, 0, sizeof(radio->channel_max_tx_power_valid));
+        }
+    }
+
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
     if (msg == NULL) {
+        pthread_mutex_unlock(&channel_tx_power_cache_mutex);
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         return -1;
     }
     nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
 
     if (nl80211_send_and_recv(msg, phy_info_handler, &g_wifi_hal, NULL, NULL)) {
+        pthread_mutex_unlock(&channel_tx_power_cache_mutex);
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         return -1;
     }
 
+    pthread_mutex_unlock(&channel_tx_power_cache_mutex);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return 0;
 }
 
@@ -7961,6 +8199,7 @@ int nl80211_init_radio_info()
     wifi_radio_info_t *radio;
     struct nl_msg *msg;
 
+    pthread_mutex_lock(&channel_tx_power_cache_mutex);
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         radio = &g_wifi_hal.radio_info[i];
 
@@ -7977,31 +8216,38 @@ int nl80211_init_radio_info()
         memset(radio->capab.channel_list, 0, sizeof(radio->capab.channel_list));
         memset((unsigned char *)radio->hw_modes, 0, NUM_NL80211_BANDS*sizeof(struct hostapd_hw_modes));
 
+        memset(radio->channel_max_tx_power_valid, 0, sizeof(radio->channel_max_tx_power_valid));
+
         // get information about phy
         msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
         if (msg == NULL) {
             wifi_hal_dbg_print("%s:%d: Error creating nl80211 message\n", __func__, __LINE__);
+            pthread_mutex_unlock(&channel_tx_power_cache_mutex);
             return -1;
         }
 
         if (nla_put_u32(msg, NL80211_ATTR_WIPHY, radio->index) < 0) {
             wifi_hal_dbg_print("%s:%d: Error adding nl80211 message data\n", __func__, __LINE__);
             nlmsg_free(msg);
+            pthread_mutex_unlock(&channel_tx_power_cache_mutex);
             return -1;
         }
 
         if (nla_put_flag(msg, NL80211_ATTR_SPLIT_WIPHY_DUMP) < 0) {
             wifi_hal_dbg_print("%s:%d: Error adding SPLIT_WIPHY_DUMP flag\n", __func__, __LINE__);
             nlmsg_free(msg);
+            pthread_mutex_unlock(&channel_tx_power_cache_mutex);
             return -1;
         }
 
         if (nl80211_send_and_recv(msg, wiphy_get_info_handler,
             radio, NULL, NULL)) {
+            pthread_mutex_unlock(&channel_tx_power_cache_mutex);
             return -1;
         }
     }
 
+    pthread_mutex_unlock(&channel_tx_power_cache_mutex);
     return 0;
 }
 
@@ -8985,11 +9231,28 @@ int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid)
 }
 #endif
 
-int nl80211_set_regulatory_domain(wifi_countrycode_type_t country_code)
+int nl80211_set_regulatory_domain(wifi_radio_index_t radio_index,
+    wifi_countrycode_type_t country_code, bool *request_accepted, bool *domain_applied,
+    bool *previous_domain_restored)
 {
-    struct nl_msg *msg;
+    struct regulatory_domain_info previous_domain;
+    wifi_radio_info_t *radio;
     int ret;
     char alpha2[3];
+
+    if (request_accepted == NULL || domain_applied == NULL ||
+        previous_domain_restored == NULL) {
+        wifi_hal_error_print("%s:%d: Regulatory domain status pointer is NULL\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    *request_accepted = false;
+    *domain_applied = false;
+    *previous_domain_restored = false;
+    radio = get_radio_by_rdk_index(radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: Radio %d not found\n", __func__, __LINE__, radio_index);
+        return RETURN_ERR;
+    }
     memset(alpha2, 0, sizeof(alpha2));
 
     get_coutry_str_from_code(country_code, alpha2);
@@ -9000,18 +9263,40 @@ int nl80211_set_regulatory_domain(wifi_countrycode_type_t country_code)
     }
 #endif
 
-    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, 0, NL80211_CMD_REQ_SET_REG);
-    if (msg == NULL) {
-        wifi_hal_dbg_print("%s:%d: Failed to allocate nl msg\n", __func__, __LINE__);
+    pthread_mutex_lock(&regulatory_domain_mutex);
+    if (nl80211_get_regulatory_domain(radio, &previous_domain) != 0) {
+        wifi_hal_error_print("%s:%d: Failed to read the currently applied regulatory domain\n",
+            __func__, __LINE__);
+        pthread_mutex_unlock(&regulatory_domain_mutex);
         return RETURN_ERR;
     }
-    nla_put_string(msg, NL80211_ATTR_REG_ALPHA2, alpha2);
-    if ((ret = nl80211_send_and_recv(msg, regulatory_domain_set_info_handler, &g_wifi_hal, NULL, NULL))) {
-        wifi_hal_dbg_print("%s:%d: Error updating regulatory_domain error: %d (%s)\n",
-            __func__, __LINE__, ret, strerror(-ret));
+
+    invalidate_channel_max_tx_power_cache();
+    if (nl80211_request_regulatory_domain(alpha2) != 0) {
+        wifi_hal_error_print("%s:%d: Failed to request regulatory domain %s\n", __func__, __LINE__,
+            alpha2);
+        if (update_channel_flags() != 0) {
+            wifi_hal_error_print("%s:%d: Failed to refresh channel limits after regulatory request "
+                "failure\n", __func__, __LINE__);
+        }
+        pthread_mutex_unlock(&regulatory_domain_mutex);
         return RETURN_ERR;
     }
-    return RETURN_OK;
+    *request_accepted = true;
+
+    ret = refresh_channel_flags_for_regulatory_domain(radio, alpha2, domain_applied);
+    if (ret != 0 && !*domain_applied) {
+        wifi_hal_error_print("%s:%d: Requested regulatory domain %s was not confirmed; restoring "
+            "previously applied domain %s\n", __func__, __LINE__, alpha2, previous_domain.alpha2);
+        if (restore_regulatory_domain(radio, previous_domain.alpha2,
+                previous_domain_restored) != 0 && !*previous_domain_restored) {
+            wifi_hal_error_print("%s:%d: Could not confirm restoration of previously applied "
+                "regulatory domain %s\n", __func__, __LINE__, previous_domain.alpha2);
+        }
+    }
+
+    pthread_mutex_unlock(&regulatory_domain_mutex);
+    return ret == 0 ? RETURN_OK : RETURN_ERR;
 }
 
 int nl80211_register_mgmt_frames(wifi_interface_info_t *interface)
@@ -15495,6 +15780,10 @@ static void phy_info_freq(struct hostapd_hw_modes *mode,
     chan->flag = 0;
     chan->allowed_bw = ~0;
     chan->dfs_cac_ms = 0;
+
+    if (tb_freq[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]) {
+        chan->max_tx_power = (int32_t)nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]) / 100;
+    }
 
     if (ieee80211_freq_to_chan(chan->freq, &channel) != NUM_HOSTAPD_MODES) {
         chan->chan = channel;

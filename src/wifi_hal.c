@@ -727,6 +727,9 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     wifi_radio_operationParam_t *old_operationParam = NULL;
     platform_set_radio_pre_init_t set_radio_pre_init_fn;
     bool is_channel_changed;
+    bool regulatory_domain_request_accepted;
+    bool regulatory_domain_applied;
+    bool previous_regulatory_domain_restored;
     int ret;
 
 #ifdef CMXB7_PORT
@@ -1068,7 +1071,27 @@ try_hostap_config_update:
 
     if (radio->oper_param.countryCode != operationParam->countryCode) {
         wifi_hal_dbg_print("%s:%d:Set country code:%d\n", __func__, __LINE__, operationParam->countryCode);
-        nl80211_set_regulatory_domain(operationParam->countryCode);
+        regulatory_domain_request_accepted = false;
+        regulatory_domain_applied = false;
+        previous_regulatory_domain_restored = false;
+        ret = nl80211_set_regulatory_domain(index, operationParam->countryCode,
+            &regulatory_domain_request_accepted, &regulatory_domain_applied,
+            &previous_regulatory_domain_restored);
+        if (ret != RETURN_OK && !regulatory_domain_request_accepted) {
+            wifi_hal_error_print("%s:%d:Failed to set regulatory domain\n", __func__, __LINE__);
+            goto reload_config;
+        }
+        if (ret != RETURN_OK && regulatory_domain_applied) {
+            wifi_hal_error_print("%s:%d:Regulatory domain applied, but channel limit refresh failed\n",
+                __func__, __LINE__);
+        } else if (ret != RETURN_OK && previous_regulatory_domain_restored) {
+            wifi_hal_info_print("%s:%d:Previous regulatory domain restored; rolling back radio "
+                "configuration\n", __func__, __LINE__);
+            goto reload_config;
+        } else if (ret != RETURN_OK) {
+            wifi_hal_error_print("%s:%d:Could not confirm restoration of the previous regulatory "
+                "domain; continuing with requested country configuration\n", __func__, __LINE__);
+        }
     }
 
     memcpy((unsigned char *)&radio->oper_param, (unsigned char *)operationParam, sizeof(wifi_radio_operationParam_t));
