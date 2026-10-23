@@ -1181,7 +1181,10 @@ int update_hostap_bss(wifi_interface_info_t *interface)
 #if defined(QCOM_ATH12K_PORT)
     struct hostapd_data *hapd = NULL;
     struct hostapd_data *link = NULL;
-#endif
+#endif // QCOM_ATH12K_PORT
+#if defined(EASY_MESH_NODE) && defined(CONFIG_VENDOR_MXL)
+    int ret;
+#endif // EASY_MESH_NODE && CONFIG_VENDOR_MXL
     // re-initialize the default parameters
     init_hostap_bss(interface);
 
@@ -1286,6 +1289,18 @@ int update_hostap_bss(wifi_interface_info_t *interface)
         conf->wds_sta = 1;
         strncpy(conf->wds_bridge, interface->bridge, sizeof(conf->wds_bridge));
 
+#ifdef CONFIG_VENDOR_MXL
+        /* For WDS STA creation (wds_sta=1), send multi_ap mode to Wave driver before creating interface.
+         * The Wave driver needs multi_ap_mode set in its PDB before it can create WDS interfaces.
+         * This fixes the "Wrong multi_ap_mode: 0" error when backhaul STA connects.
+         */
+        ret = wifi_drv_vendor_cmd(interface, OUI_LTQ, LTQ_NL80211_VENDOR_SUBCMD_SET_MESH_MODE,
+            (u8 *)&conf->multi_ap, sizeof(conf->multi_ap), NESTED_ATTR_NOT_USED, NULL);
+        if (ret < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set multi_ap to Wave driver %s: %d\n",
+                __func__, __LINE__, interface->name, ret);
+        }
+#endif
         wifi_hal_info_print("%s:%d: Enabled multi_ap:%d for interface:%s, wds_bridge:%s\n",
             __func__, __LINE__, conf->multi_ap, interface->name, conf->wds_bridge);
     }
@@ -1662,11 +1677,19 @@ int update_hostap_iface(wifi_interface_info_t *interface)
         interface->name, vap->u.bss_info.preassoc.basic_data_transmit_rates, vap->u.bss_info.preassoc.supported_data_transmit_rates);
     if ((strlen (vap->u.bss_info.preassoc.basic_data_transmit_rates) > 0) && strcmp(vap->u.bss_info.preassoc.basic_data_transmit_rates, "disabled")) {
         snprintf(basic_buf, sizeof(basic_buf), "%s", vap->u.bss_info.preassoc.basic_data_transmit_rates);
-        convert_string_to_int(&preassoc_basic_rates,basic_buf);
+     if (convert_string_to_int(&preassoc_basic_rates, basic_buf) < 0) {
+         wifi_hal_info_print("%s:%d: Failed to convert basic rates, using defaults\n",
+             __func__, __LINE__);
+         preassoc_basic_rates = NULL;
+     }
     }
     if ((strlen (vap->u.bss_info.preassoc.supported_data_transmit_rates) > 0) && strcmp(vap->u.bss_info.preassoc.supported_data_transmit_rates, "disabled")) {
       snprintf(supp_buf, sizeof(supp_buf), "%s", vap->u.bss_info.preassoc.supported_data_transmit_rates);
-      convert_string_to_int(&preassoc_supp_rates,supp_buf);
+       if (convert_string_to_int(&preassoc_supp_rates, supp_buf) < 0) {
+           wifi_hal_info_print("%s:%d: Failed to convert supported rates, using defaults\n",
+               __func__, __LINE__);
+           preassoc_supp_rates = NULL;
+       }
     }
     
     switch (radio->oper_param.band) {
@@ -1770,6 +1793,7 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 #else
         if(iface->current_cac_rates) {
             os_free(iface->current_cac_rates);
+            iface->current_cac_rates = NULL;
         }
         iface->current_cac_rates = os_calloc(mode->num_rates, sizeof(struct hostapd_rate_data));
         if (!iface->current_cac_rates) {
@@ -1784,6 +1808,9 @@ int update_hostap_iface(wifi_interface_info_t *interface)
             }
             return RETURN_ERR;
         }
+       /* current_rates must always be valid -- if convert failed and
+        * preassoc_supp_rates is NULL, the rate loop falls back to current_rates */
+       iface->current_rates = iface->current_cac_rates;
 #endif // BANANA_PI_PORT && KERNEL_6_12
 #endif
     }
@@ -1793,6 +1820,10 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 #elif defined(QCOM_ATH12K_PORT)
         iface->bss[0]->current_rates = radio->rate_data[band];
 #else
+        if (iface->current_cac_rates) {
+            os_free(iface->current_cac_rates);
+            iface->current_cac_rates = NULL;
+        }
         iface->current_rates = radio->rate_data[band];
 #endif // BANANA_PI_PORT && KERNEL_6_12
     }

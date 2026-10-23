@@ -43,10 +43,6 @@
 #include "config_supplicant.h"
 #endif
 
-#if defined(CONFIG_GENERIC_MLO)
-#define MLD_INTERFACE_NAME "mld0"
-#endif
-
 int no_seq_check(struct nl_msg *msg, void *arg)
 {
     return NL_OK;
@@ -759,14 +755,27 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         wifi_hal_dbg_print("%s:%d: req ie attribute absent\n", __func__, __LINE__);
     } else {
         interface->u.sta.assoc_req_len = nla_len(tb[NL80211_ATTR_REQ_IE]);
-        memcpy(assoc_req, nla_data(tb[NL80211_ATTR_REQ_IE]), nla_len(tb[NL80211_ATTR_REQ_IE])); 
-    }
+        if (interface->u.sta.assoc_req_len > sizeof(interface->u.sta.assoc_req)) {
+            wifi_hal_error_print("%s:%d: req IE too large (%u > %u)\n", __func__, __LINE__,
+                interface->u.sta.assoc_req_len, (unsigned int)sizeof(interface->u.sta.assoc_req));
 
+            interface->u.sta.assoc_req_len = 0;
+        } else {
+            memcpy(assoc_req, nla_data(tb[NL80211_ATTR_REQ_IE]), nla_len(tb[NL80211_ATTR_REQ_IE]));
+        }
+    }
     if (tb[NL80211_ATTR_RESP_IE] == NULL) {
         wifi_hal_dbg_print("%s:%d: resp ie attribute absent\n", __func__, __LINE__);
     } else {
         interface->u.sta.assoc_rsp_len = nla_len(tb[NL80211_ATTR_RESP_IE]);
-        memcpy(assoc_rsp, nla_data(tb[NL80211_ATTR_RESP_IE]), nla_len(tb[NL80211_ATTR_RESP_IE])); 
+        if (interface->u.sta.assoc_rsp_len > sizeof(interface->u.sta.assoc_rsp)) {
+            wifi_hal_error_print("%s:%d: resp IE too large (%u > %u)\n", __func__, __LINE__,
+                interface->u.sta.assoc_rsp_len, (unsigned int)sizeof(interface->u.sta.assoc_rsp));
+
+            interface->u.sta.assoc_rsp_len = 0;
+        } else {
+            memcpy(assoc_rsp, nla_data(tb[NL80211_ATTR_RESP_IE]), nla_len(tb[NL80211_ATTR_RESP_IE]));
+        }
     }
 
     if (tb[NL80211_ATTR_TIMED_OUT] == NULL) {
@@ -1909,6 +1918,43 @@ static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, stru
     }
 }
 
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+/* Radar events carry no link id and all MLD links share one ifindex, so the ifindex lookup
+ * returns the first link. Use the link operating on the event's channel, or else a link whose
+ * radio has that channel (e.g. NOP finished for a channel not in use). */
+static wifi_interface_info_t *get_mld_radar_interface(wifi_interface_info_t *interface, int freq)
+{
+    wifi_interface_info_t *link;
+    wifi_radio_info_t *radio;
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return interface;
+    }
+
+    link = wifi_hal_get_mld_interface_by_freq(interface, freq);
+    radio = get_radio_by_rdk_index(link->vap_info.radio_index);
+    if (link != interface || (radio != NULL && is_chan_freq_supported_on_radio(radio, freq))) {
+        return link;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL || !is_chan_freq_supported_on_radio(radio, freq)) {
+            continue;
+        }
+        hash_map_foreach(radio->interface_map, link) {
+            if (wifi_hal_is_mld_enabled(link) &&
+                link->vap_info.u.bss_info.mld_info.common_info.mld_id ==
+                    interface->vap_info.u.bss_info.mld_info.common_info.mld_id) {
+                return link;
+            }
+        }
+    }
+
+    return interface;
+}
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+
 int process_global_nl80211_event(struct nl_msg *msg, void *arg)
 {
     wifi_hal_priv_t *priv = (wifi_hal_priv_t *)arg;
@@ -1945,6 +1991,14 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
     interface = get_interface_by_if_index(ifidx, link_id);
     switch (gnlh->cmd) {
     case NL80211_CMD_RADAR_DETECT:
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+        if (link_id == NL80211_DRV_LINK_ID_NA && interface != NULL &&
+            interface->vap_info.vap_mode == wifi_vap_mode_ap && tb[NL80211_ATTR_WIPHY_FREQ]) {
+            interface = get_mld_radar_interface(interface,
+                nla_get_u32(tb[NL80211_ATTR_WIPHY_FREQ]));
+        }
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+
         // To handle CAC Finish and CAC Abort for DFS. These event involve only the primary
         // interface of the radio.
         if (!(event_type == NL80211_RADAR_CAC_FINISHED || event_type == NL80211_RADAR_CAC_ABORTED))
@@ -1957,17 +2011,21 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
         /* Special case for SCAN events - don't drop these event even if the interface is not fully
          * configured */
 #if defined(CONFIG_GENERIC_MLO)
-        /* Only for MLD interface when driver does not send LINK_ID, fallback safely */
-        if (link_id == NL80211_DRV_LINK_ID_NA && interface != NULL &&
-             interface->mld_name[0] != '\0' && strcmp(interface->mld_name, MLD_INTERFACE_NAME) == 0) {
+        /* Only for AP MLD interface when driver does not send LINK_ID, fallback safely.
+         * CAC finished/aborted and STA scans must not be gated on AP scan state. */
+        if (gnlh->cmd != NL80211_CMD_RADAR_DETECT && link_id == NL80211_DRV_LINK_ID_NA &&
+            interface != NULL && interface->vap_info.vap_mode == wifi_vap_mode_ap &&
+            interface->mld_name[0] != '\0') {
+            const wifi_interface_info_t *event_interface = interface;
+
             wifi_hal_dbg_print("%s:%d: Using MLO fallback path\n",__func__, __LINE__);
             for (unsigned int i = 0; i < priv->num_radios; i++) {
                 radio = &priv->radio_info[i];
 
                 interface = hash_map_get_first(radio->interface_map);
                 while (interface != NULL) {
-                    /* Process only MLO interfaces */
-                    if (!interface->mld_name[0] || strcmp(interface->mld_name, MLD_INTERFACE_NAME) != 0) {
+                    /* Process only links of the MLD the event was reported on */
+                    if (strcmp(interface->mld_name, event_interface->mld_name) != 0) {
                         interface = hash_map_get_next(radio->interface_map, interface);
                         continue;
                     }
