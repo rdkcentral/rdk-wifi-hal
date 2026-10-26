@@ -2214,7 +2214,8 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, sta_mac_str),
             to_mac_str(mgmt->da, frame_da_str), cat);
 
-        if (interface->vap_info.vap_mode == wifi_vap_mode_ap &&
+        if (cat != wifi_action_frame_type_public &&
+            interface->vap_info.vap_mode == wifi_vap_mode_ap &&
             !is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             station = ap_get_sta(&interface->u.ap.hapd, sta);
