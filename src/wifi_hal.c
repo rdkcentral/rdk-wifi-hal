@@ -553,7 +553,7 @@ INT wifi_hal_init()
         return RETURN_ERR;
     }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         wifi_interface_info_t *first_ap_interface = NULL;
         wifi_interface_info_t *interface;
@@ -588,7 +588,7 @@ INT wifi_hal_init()
             wifi_hal_dbg_print("%s:%d: No AP interface found for radio %u\n", __func__, __LINE__, i);
         }
     }
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || _MERCURY_PRODUCT_REQ_
 
     if ((get_radio_caps_fn = get_platform_get_radio_caps_fn()) != NULL) {
         wifi_hal_dbg_print("%s:%d: get platform radio capabilities\n", __func__, __LINE__);
@@ -1967,7 +1967,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     int filtermode;
 #endif
     //bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 #ifdef CONFIG_MLO
     char mld_ifname[32];
 #endif 
@@ -2029,7 +2029,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
 #endif
 
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 #ifdef CONFIG_MLO
         if (platform_set_intf_mld_bonding(radio, interface) != RETURN_OK) {
             wifi_hal_error_print("%s:%d: vap index:%d failed to create bonding\n", __func__, __LINE__,
@@ -2115,7 +2115,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             if (vap->bridge_name[0] != '\0' && vap->u.bss_info.enabled) {
                 wifi_hal_info_print("%s:%d: interface:%s create bridge:%s\n", __func__, __LINE__,
                     interface_name, vap->bridge_name);
-#if (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && defined(CONFIG_MLO)
+#if (defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)) && defined(CONFIG_MLO)
                 if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d",  vap->vap_index);
                     if (nl80211_create_bridge(mld_ifname, vap->bridge_name) != 0) {
@@ -2188,7 +2188,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 wifi_hal_info_print("%s:%d: interface:%s set %s\n", __func__, __LINE__,
                     interface_name, vap->u.bss_info.enabled ? "up" : "down");
                 nl80211_interface_enable(interface_name, vap->u.bss_info.enabled);
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 #ifdef CONFIG_MLO
                 if(radio->oper_param.variant & WIFI_80211_VARIANT_BE)
                 {
@@ -5402,9 +5402,15 @@ void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac)
     u8 own_addr[ETH_ALEN];
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
     struct hostapd_data *hapd = &interface->u.ap.hapd;
+    struct sta_info *sta;
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
+
+    sta = ap_get_sta(hapd, mac);
+    if (sta != NULL) {
+        sta->flags &= ~WLAN_STA_ASSOC;
+    }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)

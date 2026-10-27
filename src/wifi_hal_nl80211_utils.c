@@ -133,7 +133,7 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {2, 1,  "ath15",   "",   "brlan1",    0,    15,    "mesh_sta_5g"},
 #endif
 
-#ifdef TARGET_GEMINI7_2 // for Qualcomm based platforms
+#ifdef _MERCURY_PRODUCT_REQ_ // for Qualcomm based platforms
     {1, 0,  "home-ap-24",   "", "br-home",  100,   0,  "private_ssid_2g"},
     {2, 1,  "home-ap-50",   "", "br-home",  100,   1,  "private_ssid_5g"},
     {1, 0,  "bhaul-ap-24",  "", "",           0,  12,  "mesh_backhaul_2g"},
@@ -411,7 +411,7 @@ static const radio_interface_mapping_t static_radio_interface_map[] = {
     { 1, 1, "radio2", "wl1"},
 #endif
 
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) 
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
     { 1, 0, "radio1", "wifi0"},
     { 2, 1, "radio2", "wifi1"},
 #endif
@@ -616,10 +616,10 @@ const wifi_driver_info_t  driver_info = {
     platform_set_beacon_prot,
 #endif
 
-#ifdef TARGET_GEMINI7_2
-    "dt_gemini7_2",
+#ifdef _MERCURY_PRODUCT_REQ_
+    "mercury",
     "wifi_3_0",
-    {"Wireless Extender","DT","GEMINI7_2","GR-EXT02A-CTS","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
+    {"Wireless Extender","Comcast","MERCURY","MERCURY","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
     platform_pre_init,
     platform_post_init,
     platform_set_radio,
