@@ -217,9 +217,20 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
     bool wnm_bss_trans_query_auto_resp = interface->wnm_bss_trans_query_auto_resp;
 #endif
     u8 *nei_rep_tmp = nei_rep;
+    struct sta_info *sta;
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     mutex_locked = true;
+
+    /* Revalidate association under hapd_lock so the check and response transmission
+     * are serialized with disassociation state changes. */
+    sta = ap_get_sta(hapd, addr);
+    if (sta == NULL || !(sta->flags & WLAN_STA_ASSOC)) {
+        wifi_hal_dbg_print("%s:%d: Ignore BSS Transition Management Query from " MACSTR
+            " since station is not associated\n", __func__, __LINE__, MAC2STR(addr));
+        ret = WIFI_HAL_SUCCESS;
+        goto exit;
+    }
 
     enabled = hapd->conf->bss_transition;
 #ifdef CONFIG_MBO
@@ -855,8 +866,9 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
             if (!link_bss || !link_bss->iface || !link_bss->iconf)
                 continue;
 
-            if (ieee80211_freq_to_channel_ext(link_bss->iface->freq,
-                    link_bss->iconf->secondary_channel, hostapd_get_oper_chwidth(link_bss->iconf),
+            /* Use the 20 MHz operating class: it always identifies the primary channel, while
+             * 80 MHz+ classes don't, so a Beacon request would need channel 0 or 255 with them. */
+            if (ieee80211_freq_to_channel_ext(link_bss->iface->freq, 0, CONF_OPER_CHWIDTH_USE_HT,
                     &link_op_class, &link_channel) == NUM_HOSTAPD_MODES)
                 continue;
 
@@ -1056,7 +1068,7 @@ static void wifi_set_disassoc_timer(struct hostapd_data *hapd, struct sta_info *
     * decide to reject the connection),
     */
 
-#if (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && (HOSTAPD_VERSION == 210) //2.10
+#if (defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)) && (HOSTAPD_VERSION == 210) //2.10
     wpa_auth_pmksa_remove(hapd->wpa_auth, sta->addr, false);
 #else
     wpa_auth_pmksa_remove(hapd->wpa_auth, sta->addr);

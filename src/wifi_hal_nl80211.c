@@ -137,7 +137,7 @@ int nl80211_send_and_recv(struct nl_msg *msg,
              int (*valid_finish_handler)(struct nl_msg *, void *),
              void *valid_finish_data);
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 struct phy_info_arg {
     u16 *num_modes;
     struct hostapd_hw_modes *modes;
@@ -2009,6 +2009,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
     wifi_frame_t mgmt_frame;
     bool forward_frame = true;
     bool is_greylist_reject = false;
+    bool sta_associated;
 #ifdef WIFI_EMULATOR_CHANGE
     static int fd_c = -1;
     unsigned int msg_type = wlan_emu_msg_type_frm80211;
@@ -2213,6 +2214,24 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
         wifi_hal_dbg_print("%s:%d: interface:%s received action frame from:%s to:%s, category:%d\n",
             __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, sta_mac_str),
             to_mac_str(mgmt->da, frame_da_str), cat);
+
+        if (cat != wifi_action_frame_type_public &&
+            interface->vap_info.vap_mode == wifi_vap_mode_ap &&
+            !is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+            station = ap_get_sta(&interface->u.ap.hapd, sta);
+            sta_associated = (station != NULL) && (station->flags & WLAN_STA_ASSOC);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+            station = NULL;
+
+            if (!sta_associated) {
+                wifi_hal_info_print("%s:%d: interface:%s ignoring action frame "
+                                    "category:%d from unassociated sta:%s\n",
+                    __func__, __LINE__, interface->name, cat, to_mac_str(sta, sta_mac_str));
+                forward_frame = false;
+                break;
+            }
+        }
 
         switch (cat) {
         case wifi_action_frame_wnm:
@@ -2460,7 +2479,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
 #else
 #if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || \
     defined(XB10_PORT) || defined(TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || \
-    defined(TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT))
+    defined(_MERCURY_PRODUCT_REQ_) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT))
         callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)mgmt, len, mgmt_type, dir, sig_dbm, phy_rate, recv_freq);
 #else
         callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)mgmt, len, mgmt_type, dir, recv_freq);
@@ -2672,7 +2691,7 @@ int process_mgmt_frame(struct nl_msg *msg, void *arg)
         sig_dbm = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
     }
 #if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(TCHCBRV2_PORT) || \
-    defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || \
+    defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_) || \
     defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT)
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
 	unsigned short fc, stype;
@@ -4389,7 +4408,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
     bool is_hotspot_interface = false, is_lnf_psk_interface = false;
     bool is_mdu_enabled = false;
     wifi_vap_info_t *vap_cfg = NULL;
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
     int ap_index;
 #endif
 #if defined (RDKB_ONE_WIFI_PROD)
@@ -4402,7 +4421,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
         is_lnf_psk_interface = is_wifi_hal_vap_lnf_psk(vap_cfg->vap_index);
         is_mdu_enabled = vap_cfg->u.bss_info.mdu_enabled;
     }
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
     if (strncmp(if_name, "mld", 3) == 0) {
         sscanf(if_name + 3, "%d", &ap_index);
         wifi_hal_info_print("%s:%d: ap_index is %d for interface:%s\n", __func__, __LINE__, ap_index, if_name);
@@ -4978,7 +4997,7 @@ skip:   found = 0;
     return mode;
 }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 static void phy_info_iftype_copy(struct hostapd_hw_modes *mode,
                  enum ieee80211_op_mode opmode,
                  struct nlattr **tb, struct nlattr **tb_flags)
@@ -5806,7 +5825,7 @@ static int phy_info_iftype(struct hostapd_hw_modes *mode,
 
     return NL_OK;
 }
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || _MERCURY_PRODUCT_REQ_
 
 static bool is_supported_nl_iftype(struct nlattr *tbIfType)
 {
@@ -5900,6 +5919,11 @@ static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
         }
     }
 
+    /* Split wiphy dumps send band capabilities and frequencies in separate messages */
+    radio->capab.mode[index] |= supported;
+    wifi_hal_dbg_print("%s:%d: band=%d supported=0x%x\n", __func__, __LINE__, band_type,
+        radio->capab.mode[index]);
+
     nla_parse(tb, NL80211_BAND_ATTR_MAX, nla_data(nl_band), nla_len(nl_band), NULL);
     if (tb[NL80211_BAND_ATTR_FREQS] == NULL) {
         wifi_hal_dbg_print("%s:%d: Frequency attributes not present\n", __func__, __LINE__);
@@ -5912,10 +5936,6 @@ static int phy_info_band(wifi_radio_info_t *radio, struct nlattr *nl_band)
             __LINE__);
         return NL_OK;
     }
-
-    radio->capab.mode[index] |= supported;
-    wifi_hal_dbg_print("%s:%d: band=%d supported=0x%x\n", __func__, __LINE__, band_type,
-        radio->capab.mode[index]);
 
     mode->mode = NUM_HOSTAPD_MODES;
     mode->flags = HOSTAPD_MODE_FLAG_HT_INFO_KNOWN | HOSTAPD_MODE_FLAG_VHT_INFO_KNOWN;
@@ -6004,7 +6024,7 @@ static int regulatory_domain_set_info_handler(struct nl_msg *msg, void *arg)
     return 0;
 }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 static void wiphy_info_mbssid(struct wpa_driver_capa *cap, struct nlattr *attr)
 {
     struct nlattr *config[NL80211_MBSSID_CONFIG_ATTR_MAX + 1];
@@ -6027,14 +6047,14 @@ static void wiphy_info_mbssid(struct wpa_driver_capa *cap, struct nlattr *attr)
     wifi_hal_dbg_print("%s:%d mbssid: max interfaces %u, max profile periodicity %u", __func__,
         __LINE__, cap->mbssid_max_interfaces, cap->ema_max_periodicity);
 }
-#endif /* defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || TARGET_GEMINI7_2 */
+#endif /* defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || _MERCURY_PRODUCT_REQ_ */
 
 static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 {
     wifi_radio_info_t *radio;
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
     struct wpa_driver_capa *capa;
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || _MERCURY_PRODUCT_REQ_
     struct nlattr *tb[NL80211_ATTR_MAX + 1];
     struct genlmsghdr *gnlh;
     const u32 nl_split_wiphy = (*(u32 *)arg & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP);
@@ -6124,7 +6144,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
         snprintf(radio->name, sizeof(radio->name), "%s", nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]));
     }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
     capa = &radio->driver_data.capa;
 
     if (tb[NL80211_ATTR_MAX_NUM_SCAN_SSIDS]) {
@@ -6408,7 +6428,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     }
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || _MERCURY_PRODUCT_REQ_
 
     if (tb[NL80211_ATTR_FEATURE_FLAGS]) {
         u32 flags = nla_get_u32(tb[NL80211_ATTR_FEATURE_FLAGS]);
@@ -6417,7 +6437,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
         }
     }
 
-#if !defined(CONFIG_HW_CAPABILITIES) && !defined(VNTXER5_PORT) && !defined(TARGET_GEMINI7_2)
+#if !defined(CONFIG_HW_CAPABILITIES) && !defined(VNTXER5_PORT) && !defined(_MERCURY_PRODUCT_REQ_)
     if (tb[NL80211_ATTR_SUPPORTED_COMMANDS]) {
         struct nlattr *nl_cmd;
         int i;
@@ -6429,7 +6449,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
             }
         }
     }
-#endif /* !CONFIG_HW_CAPABILITIES && !VNTXER5_PORT && !TARGET_GEMINI7_2 */
+#endif /* !CONFIG_HW_CAPABILITIES && !VNTXER5_PORT && !_MERCURY_PRODUCT_REQ_ */
 
     if (tb[NL80211_ATTR_WDEV]) {
         radio->dev_id = nla_get_u64(tb[NL80211_ATTR_WDEV]);
@@ -6782,7 +6802,7 @@ int interface_info_handler(struct nl_msg *msg, void *arg)
     return NL_SKIP;
 }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 static int phy_info_rates_get_hw_features(struct hostapd_hw_modes *mode, struct nlattr *tb)
 {
     static struct nla_policy rate_policy[NL80211_BITRATE_ATTR_MAX + 1] = {
@@ -6826,7 +6846,7 @@ static int phy_info_rates_get_hw_features(struct hostapd_hw_modes *mode, struct 
 
     return NL_OK;
 }
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || _MERCURY_PRODUCT_REQ_
 
 static int phy_info_handler(struct nl_msg *msg, void *arg)
 {
@@ -7291,7 +7311,7 @@ int update_channel_flags()
     return 0;
 }
 
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2) || defined(TCXB7_PORT) ||                  \
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_) || defined(TCXB7_PORT) ||                  \
     defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(SCXF10_PORT) || \
     defined(_PLATFORM_BANANAPI_R4_)
 // wiphy split dump support is not "selectable" -
@@ -7341,7 +7361,7 @@ static int fetch_nl80211_protocol_features(int nl_id, u32 *feat)
     (void)feat;
     return 0;
 }
-#endif // VNTXER5_PORT || TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TARGET_GEMINI7_2 || SCXF10_PORT
+#endif // VNTXER5_PORT || TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || _MERCURY_PRODUCT_REQ_ || SCXF10_PORT
 
 #ifdef FEATURE_SINGLE_PHY
 static int copy_radio_struct(wifi_radio_info_t *src, wifi_radio_info_t *dst)
@@ -8862,7 +8882,11 @@ int copy_hw_features_to_radio_hw_modes(wifi_radio_info_t *radio, struct hostapd_
 
     for (int i = 0; i < iface->num_hw_features; i++) {
         struct hostapd_hw_modes *test_hw_mode = &iface->hw_features[i];
-        if (mode == test_hw_mode->mode) {
+        /* 5 GHz and 6 GHz both use HOSTAPD_MODE_IEEE80211A, so tell them apart by frequency */
+        if (mode == test_hw_mode->mode &&
+            (test_hw_mode->num_channels == 0 ||
+                (test_hw_mode->channels[0].freq >= MIN_FREQ_MHZ_6G) ==
+                    (nl_band == NL80211_BAND_6GHZ))) {
             hw_mode_idx = i;
             break;
         }
@@ -9267,7 +9291,7 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
     if (vap->vap_mode == wifi_vap_mode_ap) {
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
     } else {
-#ifndef TARGET_GEMINI7_2
+#ifndef _MERCURY_PRODUCT_REQ_
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_DRIVER_BRCM) && !defined (CONFIG_WIFI_EMULATOR)
         /* In case of BRCM MLO enabled platforms do not reconfigure STA interface to AP */
         nlmsg_free(msg);
@@ -9368,7 +9392,7 @@ int nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wif
         return -1;
     }
 
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 #ifdef CONFIG_MLO
     if (platform_create_interface_attributes(&msg, radio, vap) != RETURN_OK) {
         nlmsg_free(msg);
@@ -13025,7 +13049,7 @@ int wifi_drv_update_connection_params(
     return 0;
 }
 
-#ifdef TARGET_GEMINI7_2
+#ifdef _MERCURY_PRODUCT_REQ_
 int wifi_drv_add_sta_node(void *priv, const u8 *addr, u16 auth_alg, bool is_ml)
 #else
 int wifi_drv_add_sta_node(void *priv, const u8 *addr, u16 auth_alg)
@@ -13035,7 +13059,7 @@ int wifi_drv_add_sta_node(void *priv, const u8 *addr, u16 auth_alg)
     return 0;
 }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(CMXB7_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(CMXB7_PORT) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 int wifi_drv_get_ext_capab(void *priv, enum wpa_driver_if_type type,
                  const u8 **ext_capa, const u8 **ext_capa_mask,
                  unsigned int *ext_capa_len)
@@ -13112,12 +13136,18 @@ static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
     /* By default, set to UNSPECIFIED */
     *eml_capa = drv->iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].eml_capa;
     *mld_capa_and_ops = drv->iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].mld_capa_and_ops;
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+    *ext_mld_capa_and_ops = drv->iface_ext_capa[NL80211_IFTYPE_UNSPECIFIED].ext_mld_capa_and_ops;
+#endif // BANANA_PI_PORT && KERNEL_6_12
 
     /* Replace the default value if a per-interface type value exists */
     for (i = 0; i < drv->num_iface_ext_capa; i++) {
         if (nlmode == drv->iface_ext_capa[i].iftype) {
             *eml_capa = drv->iface_ext_capa[i].eml_capa;
             *mld_capa_and_ops = drv->iface_ext_capa[i].mld_capa_and_ops;
+#if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
+            *ext_mld_capa_and_ops = drv->iface_ext_capa[i].ext_mld_capa_and_ops;
+#endif // BANANA_PI_PORT && KERNEL_6_12
             break;
         }
     }
@@ -13129,7 +13159,7 @@ static int wifi_drv_get_mld_capab(void *priv, enum wpa_driver_if_type type,
 }
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
-#endif /* CONFIG_HW_CAPABILITIES || CMXB7_PORT || VNTXER5_PORT || TARGET_GEMINI7_2 */
+#endif /* CONFIG_HW_CAPABILITIES || CMXB7_PORT || VNTXER5_PORT || _MERCURY_PRODUCT_REQ_ */
 
 int wifi_drv_configure_data_frame_filters(void *priv, u32 filter_flags)
 {
@@ -14743,26 +14773,6 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
         os_strlcpy(ifname_wds, name, IFNAMSIZ + 1);
     }
 
-#ifdef CONFIG_VENDOR_MXL
-    /* For WDS STA creation (val=1), send multi_ap mode to Wave driver BEFORE creating interface.
-     * The Wave driver needs multi_ap_mode set in its PDB before it can create WDS interfaces.
-     * This fixes the "Wrong multi_ap_mode: 0" error when backhaul STA connects.
-     */
-    if (val && interface->u.ap.conf.multi_ap) {
-        wifi_hal_info_print("%s:%d: Sending multi_ap=%d to driver before WDS STA creation for %s\r\n",
-            __func__, __LINE__, interface->u.ap.conf.multi_ap, interface->name);
-
-        ret = wifi_drv_vendor_cmd(interface, OUI_LTQ, LTQ_NL80211_VENDOR_SUBCMD_SET_MESH_MODE,
-                                 (u8 *)&interface->u.ap.conf.multi_ap,
-                                 sizeof(interface->u.ap.conf.multi_ap),
-                                 NESTED_ATTR_NOT_USED, NULL);
-        if (ret < 0) {
-            wifi_hal_error_print("%s:%d: Failed to set multi_ap mode before WDS STA creation: %d\r\n",
-                __func__, __LINE__, ret);
-        }
-    }
-#endif /* CONFIG_VENDOR_MXL */
-
     wifi_hal_info_print("%s:%d:nl80211: Set WDS STA addr=" MACSTR " aid=%d val=%d name=%s ifindex:%d\r\n",
         __func__, __LINE__, MAC2STR(addr), aid, val, name, if_nametoindex(name));
     if (val) {
@@ -15498,7 +15508,7 @@ fail:
     return ret;
 }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 static int cw2ecw(unsigned int cw)
 {
     int bit;
@@ -16366,12 +16376,12 @@ static int nl80211_set_regulatory_flags(struct phy_info_arg *results)
 
     return nl80211_send_and_recv(msg, nl80211_get_reg, results, NULL, NULL);
 }
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || _MERCURY_PRODUCT_REQ_
 
 struct hostapd_hw_modes *
 wifi_drv_get_hw_feature_data(void *priv, u16 *num_modes, u16 *flags, u8 *dfs_domain)
 {
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
     struct nl_msg *msg; 
     struct phy_info_arg result = {
         .num_modes = num_modes,
@@ -16384,7 +16394,7 @@ wifi_drv_get_hw_feature_data(void *priv, u16 *num_modes, u16 *flags, u8 *dfs_dom
     *num_modes = 0;
     *flags = 0; 
     *dfs_domain = 0;
-#if !(defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2))
+#if !(defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_))
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
     if (msg == NULL) {
         wifi_hal_error_print("%s:%d: Failed to create message\n", __func__, __LINE__);
@@ -16436,7 +16446,7 @@ wifi_drv_get_hw_feature_data(void *priv, u16 *num_modes, u16 *flags, u8 *dfs_dom
         nl80211_dump_chan_list(modes, *num_modes);
         return modes;
     }
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || _MERCURY_PRODUCT_REQ_
     return NULL;
 }
 
@@ -17685,7 +17695,7 @@ int wifi_drv_set_supp_port(void *priv, int authorized)
     interface = (wifi_interface_info_t *)priv;
     backhaul = &interface->u.sta.backhaul;
 
-#if defined(CONFIG_VENDOR_COMMANDS) || (TARGET_GEMINI7_2)
+#if defined(CONFIG_VENDOR_COMMANDS) || (_MERCURY_PRODUCT_REQ_)
     if (interface->u.sta.state <= WPA_ASSOCIATED && !authorized) {
         wifi_hal_error_print("nl80211: Skip set_supp_port(unauthorized) while not associated\n");
         return 0;
@@ -19178,7 +19188,7 @@ int wifi_drv_wps_event_notify_cb(void *ctx, unsigned int event, void *data)
         }
     }
 
-#if !defined(TARGET_GEMINI7_2)
+#if !defined(_MERCURY_PRODUCT_REQ_)
     if (event == WPS_EV_SUCCESS) {
         wifi_hal_wps_cancel_on_other_radios(interface);
     }
@@ -21506,10 +21516,9 @@ static int get_radio_txpwr_handler(struct nl_msg *msg, void *arg)
     }
 
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-    if (!have_txpwr && tb[NL80211_ATTR_MLO_LINKS]) {
+    if (!have_txpwr && ctx->link_id != NL80211_DRV_LINK_ID_NA && tb[NL80211_ATTR_MLO_LINKS]) {
         struct nlattr *link;
         int rem;
-        int requested_index = ctx->radio_index;
 
         nla_for_each_nested(link, tb[NL80211_ATTR_MLO_LINKS], rem) {
             struct nlattr *ltb[NL80211_ATTR_MAX + 1];
@@ -21519,7 +21528,7 @@ static int get_radio_txpwr_handler(struct nl_msg *msg, void *arg)
             if (ltb[NL80211_ATTR_WIPHY_TX_POWER_LEVEL]) {
                 int link_txp_mbm = nla_get_s32(ltb[NL80211_ATTR_WIPHY_TX_POWER_LEVEL]);
                 int link_id = ltb[NL80211_ATTR_MLO_LINK_ID] ? nla_get_u8(ltb[NL80211_ATTR_MLO_LINK_ID]) : -1;
-                if (link_id == requested_index) {
+                if (link_id == ctx->link_id) {
                     long txp_dbm = link_txp_mbm / 100;
 
                     if (txp_dbm < 0) {
@@ -21532,7 +21541,7 @@ static int get_radio_txpwr_handler(struct nl_msg *msg, void *arg)
                     wifi_hal_info_print("%s:%d MATCHED MLO link %d, txpower %ld dBm\n",__func__, __LINE__, link_id, txp_dbm);
 	                break;
                 }
-	        } else {
+            } else {
                 wifi_hal_error_print("%s:%d MLO link missing tx power attribute\n", __func__, __LINE__);
             }
         }
@@ -21553,7 +21562,7 @@ static int get_radio_tx_power(wifi_interface_info_t *interface, ULONG *tx_power)
     int ret = RETURN_ERR;
     struct txpwr_context ctx;
     ctx.tx_power = tx_power;
-    ctx.radio_index = interface->rdk_radio_index;  // IMPORTANT
+    ctx.link_id = wifi_hal_get_mld_link_id(interface);
 
     wifi_hal_dbg_print("%s:%d Entering\n", __func__, __LINE__);
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, NL80211_CMD_GET_INTERFACE);
@@ -21982,14 +21991,14 @@ const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
     .set_bssid_blacklist = wifi_drv_set_bssid_blacklist,
 #endif /* CONFIG_DRIVER_NL80211_QCA */
     .configure_data_frame_filters = wifi_drv_configure_data_frame_filters,
-#if defined(CONFIG_HW_CAPABILITIES) || defined(CMXB7_PORT) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(CONFIG_HW_CAPABILITIES) || defined(CMXB7_PORT) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
     .get_ext_capab = wifi_drv_get_ext_capab,
 #if HOSTAPD_VERSION >= 211
 #ifdef CONFIG_IEEE80211BE
     .get_mld_capab = wifi_drv_get_mld_capab,
 #endif /* CONFIG_IEEE80211BE */
 #endif /* HOSTAPD_VERSION >= 211 */
-#endif /* CONFIG_HW_CAPABILITIES || CMXB7_PORT || VNTXER5_PORT || TARGET_GEMINI7_2 */
+#endif /* CONFIG_HW_CAPABILITIES || CMXB7_PORT || VNTXER5_PORT || _MERCURY_PRODUCT_REQ_ */
     .update_connect_params = wifi_drv_update_connection_params,
     .send_external_auth_status = wifi_drv_send_external_auth_status,
     .set_4addr_mode = wifi_drv_set_4addr_mode,
@@ -22170,7 +22179,7 @@ const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops = {
 #endif /* CONFIG_DRIVER_NL80211_QCA */
     .configure_data_frame_filters = wifi_drv_configure_data_frame_filters,
 #if defined(CONFIG_HW_CAPABILITIES) || defined(CMXB7_PORT) || defined(VNTXER5_PORT) || \
-    defined(TARGET_GEMINI7_2)
+    defined(_MERCURY_PRODUCT_REQ_)
     .get_ext_capab = wifi_drv_get_ext_capab,
 #endif /* CONFIG_HW_CAPABILITIES || CMXB7_PORT || VNTXER5_PORT */
     .update_connect_params = wifi_drv_update_connection_params,

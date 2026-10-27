@@ -724,7 +724,7 @@ static int get_sta_list(wifi_interface_info_t *interface, sta_list_t *sta_list)
 
 static void set_wifi_standard_from_rate(struct nlattr **rate, char *cli_OperatingStandard)
 {
-#if defined(NL80211_RATE_INFO_EHT_MCS) && defined(CONFIG_IEEE80211BE)
+#if defined(CONFIG_IEEE80211BE)
     if (rate[NL80211_RATE_INFO_EHT_MCS]) {
         snprintf(cli_OperatingStandard, BPI_LEN_64, "be");
     } else
