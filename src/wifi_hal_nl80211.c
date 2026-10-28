@@ -7022,6 +7022,50 @@ static int notify_sta_listeners(wifi_interface_info_t *interface, wifi_associate
     return 0;
 }
 
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE)
+static void log_connected_mld_sta(wifi_interface_info_t *interface, wifi_associated_dev_t *dev)
+{
+    char links[256] = {0};
+    size_t links_len = 0;
+    int num_links = 0;
+    int assoc_link_id = -1;
+
+    for (int i = 0; i < MAX_NUM_RADIOS && links_len < sizeof(links); i++) {
+        wifi_mld_sta_link_info_t *link = &dev->cli_MLDInfo.cli_LinkInfo[i];
+        wifi_interface_info_t *link_iface;
+
+        if (!link->cli_Valid) {
+            continue;
+        }
+
+        if (link->cli_IsAssocLink) {
+            assoc_link_id = link->cli_LinkID;
+        }
+
+        link_iface = get_interface_by_vap_index(link->cli_VapIndex);
+        links_len += snprintf(links + links_len, sizeof(links) - links_len,
+            "%s[link=%u %s " MACSTR "]", links_len ? " " : "", link->cli_LinkID,
+            link_iface != NULL ? link_iface->name : "?", MAC2STR(link->cli_LinkAddress));
+        num_links++;
+    }
+
+    wifi_hal_info_print("Connected MLD STA " MACSTR " on %s: assoc_link=%d nlinks=%d %s\n",
+        MAC2STR(dev->cli_MACAddress), interface->name, assoc_link_id, num_links, links);
+}
+#endif /* HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE */
+
+static void log_connected_sta(wifi_interface_info_t *interface, wifi_associated_dev_t *dev)
+{
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE)
+    if (dev->cli_MLDInfo.cli_MLDSta) {
+        log_connected_mld_sta(interface, dev);
+        return;
+    }
+#endif /* HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE */
+    wifi_hal_info_print("Connected STA " MACSTR " on %s\n", MAC2STR(dev->cli_MACAddress),
+        interface->name);
+}
+
 static int get_sta_handler(struct nl_msg *msg, void *arg)
 {
     wifi_interface_info_t *interface;
@@ -7242,8 +7286,10 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
     } else if (associated_dev.cli_MLDInfo.cli_MLDSta == true && has_link_stats == false) {
         wifi_hal_error_print("%s:%d: Client is MLD STA but no link stats available\n", __func__, __LINE__);
     }
+
 #endif /* HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE */
 
+    log_connected_sta(interface, &associated_dev);
     notify_sta_listeners(interface, &associated_dev);
 
     return NL_SKIP;
