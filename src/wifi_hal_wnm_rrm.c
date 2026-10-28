@@ -1784,7 +1784,7 @@ int wifi_hal_parse_rm_beacon_request(unsigned int apIndex, char *buff, size_t le
     return 0;
 }
 
-#if !defined(PLATFORM_LINUX) || defined(_PLATFORM_BANANAPI_R4_) || defined (_PLATFORM_RASPBERRYPI_)
+#if !defined(PLATFORM_LINUX) || defined(_PLATFORM_BANANAPI_R4_) || defined(_PLATFORM_RASPBERRYPI_)
 int handle_rrm_action_frame(wifi_interface_info_t *interface, const mac_address_t sta,
                     const struct ieee80211_mgmt *mgmt, size_t len, int ssi_signal)
 {

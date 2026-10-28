@@ -169,7 +169,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 #if !defined(_PLATFORM_RASPBERRYPI_)
     /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
-#if defined (_PLATFORM_BANANAPI_R4_)
+#if defined(_PLATFORM_BANANAPI_R4_)
     _syscmd("cat /etc/machine-id", output, sizeof(output));
     if (strlen(output) == 0) {
         strncpy(output, "bpi-123", sizeof(output));
@@ -184,7 +184,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     strcpy(hal->wifi_prop.serialNo,output);
 
     memset(output, '\0', sizeof(output));
-#if defined (_PLATFORM_BANANAPI_R4_)
+#if defined(_PLATFORM_BANANAPI_R4_)
     _syscmd("cat /proc/device-tree/model | tr -d ' '", output, sizeof(output));
     if (strlen(output) == 0) {
         strncpy(output, "Banana Pi - R4", sizeof(output));
@@ -214,7 +214,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
     // CM mac
     memset(output, '\0', sizeof(output));
-#if defined (_PLATFORM_BANANAPI_R4_)
+#if defined(_PLATFORM_BANANAPI_R4_)
     if (get_mac_address("erouter0", hal->wifi_prop.cm_mac) != RETURN_OK) {
        if (get_mac_address("eth0", hal->wifi_prop.cm_mac) != RETURN_OK) {
             wifi_hal_error_print("%s:%d: Unable to get CM mac address\n", __func__, __LINE__);
@@ -232,7 +232,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
 
     memset(output, '\0', sizeof(output));
-#if defined (_PLATFORM_BANANAPI_R4_)
+#if defined(_PLATFORM_BANANAPI_R4_)
     if (get_mac_address("erouter0", hal->wifi_prop.al_1905_mac) != RETURN_OK) {
        if (get_mac_address("eth0", hal->wifi_prop.al_1905_mac) != RETURN_OK) {
             wifi_hal_error_print("%s:%d: Unable to get AL mac address\n", __func__, __LINE__);
@@ -246,7 +246,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     }
 #endif
 
-#elif (defined (_PLATFORM_RASPBERRYPI_))
+#elif (defined(_PLATFORM_RASPBERRYPI_))
    /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
     _syscmd("grep -a 'Serial' /proc/cpuinfo | cut -d ':' -f2", output, sizeof(output));
