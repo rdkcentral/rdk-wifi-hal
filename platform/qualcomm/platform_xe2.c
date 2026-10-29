@@ -24,6 +24,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -99,7 +100,7 @@ INT wifi_enableCSIEngine(INT apIndex, mac_address_t sta, BOOL enable)
     (void)sta;
     /* TODO(XE2): wire CSI engine to QCA driver; accept for bring-up. */
     wifi_hal_dbg_print("%s:%d apIndex=%d enable=%d (XE2 stub)\n",
-                       __func__, __LINE__, apIndex, enable);
+                      __func__, __LINE__, apIndex, enable);
     return RETURN_OK;
 }
 
@@ -151,4 +152,42 @@ INT wifi_setApMacAddressControlMode(INT apIndex, INT filterMode)
     wifi_hal_dbg_print("%s:%d apIndex=%d filterMode=%d (XE2 stub)\n",
         __func__, __LINE__, apIndex, filterMode);
     return RETURN_OK;
+}
+
+/* Radio-wide ENHIND; without it the driver rejects START_AP during scans or with an unassociated STA vdev */
+static void xe2_set_radio_enhind(wifi_radio_index_t index)
+{
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *interface;
+    char cmd[64];
+
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        return;
+    }
+
+    interface = hash_map_get_first(radio->interface_map);
+    if (interface == NULL) {
+        return;
+    }
+
+    /* Not cfg80211tool: qcacommands_vap.xml has no athnewind entry */
+    snprintf(cmd, sizeof(cmd), "iwpriv %s athnewind 1", interface->name);
+    wifi_hal_dbg_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
+    if (system(cmd) != 0) {
+        wifi_hal_error_print("%s:%d: %s failed\n", __func__, __LINE__, cmd);
+    }
+}
+
+int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
+{
+    xe2_set_radio_enhind(index);
+    return 0;
+}
+
+int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
+{
+    /* Covers the first VAP on a radio: pre-create had no netdev to send it through */
+    xe2_set_radio_enhind(index);
+    return 0;
 }
