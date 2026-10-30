@@ -729,7 +729,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     bool is_channel_changed;
     int ret;
 
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
     int dfs_start_chan = 52, dfs_end_chan = 144;
 #endif
 
@@ -949,7 +949,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         goto Exit;
     }
 
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
     if( primary_interface->u.ap.iface.cac_started && ((operationParam->channel >= dfs_start_chan) && (operationParam->channel <= dfs_end_chan)) && (radio->oper_param.channel == operationParam->channel) &&
       ( radio->oper_param.channelWidth == operationParam->channelWidth ) ) {
         wifi_hal_info_print("%s:%d: Setting  primary interface with channel:%u \n", __func__, __LINE__, radio->oper_param.channel);
@@ -960,6 +960,12 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
             old_operationParam = NULL;
             return RETURN_ERR;
         }
+
+#ifdef BANANA_PI_PORT
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        primary_interface->u.ap.iface.cac_started = 0;
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+#endif
 
         if( set_freq_and_interface_enable(primary_interface, radio) ) {
             goto reload_config;
@@ -995,7 +1001,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         memcpy(radio->oper_param.channel_map, operationParam->channel_map,
             sizeof(radio->oper_param.channel_map));
 
-#ifdef CMXB7_PORT
+#if defined(CMXB7_PORT) || defined(BANANA_PI_PORT)
         if( ((radio->oper_param.band == WIFI_FREQUENCY_5_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5H_BAND))) {
             if( !primary_interface->u.ap.iface.cac_started && ((operationParam->channel >= dfs_start_chan && operationParam->channel <= dfs_end_chan) || (operationParam->channelWidth == WIFI_CHANNELBANDWIDTH_160MHZ)) ) {
                 wifi_hal_info_print("%s:%d: Starting CAC for DFS Channel:%u \n", __func__, __LINE__, operationParam->channel );
@@ -1012,6 +1018,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                 primary_interface->u.ap.iface.cac_started = cac_start;
                 pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
+                // This will effectively abort CAC
                 if(primary_interface->u.ap.iface.dfs_cac_ms)
                     reenable_prim_interface(radio);
 
