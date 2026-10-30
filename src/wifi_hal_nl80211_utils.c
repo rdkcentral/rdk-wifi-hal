@@ -5186,12 +5186,17 @@ wifi_steering_apConfig_t* steering_find_ap_cfg(int vap_index, uint32_t *g_idx)
     return NULL;
 }
 
-int wifi_steering_add_mac_list(uint32_t vap_index, bm_sta_list_t *sta_info)
+int wifi_steering_add_mac_list(uint32_t vap_index, bm_sta_list_t *sta_info, bool *kick_required)
 {
     mac_addr_str_t sta_mac_str;
     char *key;
     int ret;
 
+    if (kick_required == NULL || sta_info == NULL) {
+        wifi_hal_error_print("%s:%d: Invalid steering ACL arguments\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+    *kick_required = false;
     sta_info->is_acl_set = true;
     /* re-configure macmode etc. in case the run-time setting is cleared by ApplySetting */
     /* Macfilter deny mode set */
@@ -5202,7 +5207,11 @@ int wifi_steering_add_mac_list(uint32_t vap_index, bm_sta_list_t *sta_info)
     }
 
     key = to_mac_str(sta_info->mac_addr, sta_mac_str);
-    ret = wifi_hal_addApAclDevice(vap_index, key);
+#ifdef WIFI_HAL_VERSION_3_PHASE2
+    ret = wifi_hal_addApAclDeviceInternal(vap_index, sta_info->mac_addr, true, kick_required);
+#else
+    ret = wifi_hal_addApAclDeviceInternal(vap_index, key, true, kick_required);
+#endif
 
     wifi_hal_info_print("status:%d: add sta:%s to maclist on vap_index:%d\n", ret, key, vap_index);
     return ret;
@@ -5220,7 +5229,12 @@ int wifi_steering_del_mac_list(uint32_t vap_index, bm_sta_list_t *sta_info)
         return RETURN_ERR;
     }
 
-    ret = wifi_hal_delApAclDevice(vap_index, key);
+    /* Callers hold steering_data_lock; removing a deny entry must not kick (hapd_lock) */
+#ifdef WIFI_HAL_VERSION_3_PHASE2
+    ret = wifi_hal_delApAclDeviceInternal(vap_index, sta_info->mac_addr, false);
+#else
+    ret = wifi_hal_delApAclDeviceInternal(vap_index, key, false);
+#endif
 
     sta_info->is_acl_set = false;
     wifi_hal_info_print("status:%d del sta:%s from maclist on vap_index:%d\n", ret, key, vap_index);
@@ -5231,8 +5245,18 @@ void re_configure_steering_mac_list(wifi_interface_info_t *interface)
 {
     wifi_vap_info_t *vap;
     bm_sta_list_t *ptr = NULL;
+    mac_address_t *acl_macs = NULL;
+    mac_address_t *kick_macs;
     mac_addr_str_t sta_mac_str;
+#ifndef WIFI_HAL_VERSION_3_PHASE2
     char *key;
+#endif
+    size_t sta_count = 0;
+    size_t acl_count = 0;
+    size_t kick_count = 0;
+    size_t i;
+    bool kick_required;
+    int ret;
 
     vap = &interface->vap_info;
     if (vap->vap_mode != wifi_vap_mode_ap) {
@@ -5245,22 +5269,60 @@ void re_configure_steering_mac_list(wifi_interface_info_t *interface)
     }
 
     pthread_mutex_lock(&g_wifi_hal.steering_data_lock);
-    ptr = hash_map_get_first(interface->bm_sta_map);
+    sta_count = interface->bm_sta_map ? hash_map_count(interface->bm_sta_map) : 0;
+    kick_macs = sta_count ? malloc(sta_count * sizeof(*kick_macs)) : NULL;
+    if (sta_count && kick_macs == NULL) {
+        pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
+        wifi_hal_error_print("%s:%d: Failed to allocate steering ACL snapshot for vap:%d\n",
+            __func__, __LINE__, vap->vap_index);
+        return;
+    }
+    acl_macs = sta_count ? malloc(sta_count * sizeof(*acl_macs)) : NULL;
+    if (sta_count && acl_macs == NULL) {
+        pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
+        free(kick_macs);
+        wifi_hal_error_print("%s:%d: Failed to allocate steering MAC snapshot for vap:%d\n",
+            __func__, __LINE__, vap->vap_index);
+        return;
+    }
+
+    ptr = interface->bm_sta_map ? hash_map_get_first(interface->bm_sta_map) : NULL;
     while (ptr != NULL) {
         if ((ptr->is_acl_set == true) && (ptr->vap_index == vap->vap_index)) {
-            if (vap->u.bss_info.mac_filter_enable == false) {
-                /* Inside this function, If mac filter is not enabled.
-                 *  So, Forcefully we will enable mac filter and macmode */
-                steering_set_acl_mode(vap->vap_index, wifi_mac_filter_mode_black_list);
-            }
-            key = to_mac_str(ptr->mac_addr, sta_mac_str);
-            if (wifi_hal_addApAclDevice(ptr->vap_index, key) != RETURN_OK) {
-                wifi_hal_info_print("%s:%d: wifi_hal_addApAclDevice id failed vap_index:%d\n", __func__, __LINE__, ptr->vap_index);
-            }
+            memcpy(acl_macs[acl_count++], ptr->mac_addr, sizeof(mac_address_t));
         }
         ptr = hash_map_get_next(interface->bm_sta_map, ptr);
     }
+
+    if ((acl_count > 0) && (vap->u.bss_info.mac_filter_enable == false)) {
+        /* Reapply steering entries using the legacy blacklist policy. */
+        steering_set_acl_mode(vap->vap_index, wifi_mac_filter_mode_black_list);
+    }
+
+    for (i = 0; i < acl_count; i++) {
+#ifdef WIFI_HAL_VERSION_3_PHASE2
+        ret = wifi_hal_addApAclDeviceInternal(vap->vap_index, acl_macs[i], true, &kick_required);
+#else
+        key = to_mac_str(acl_macs[i], sta_mac_str);
+        ret = wifi_hal_addApAclDeviceInternal(vap->vap_index, key, true, &kick_required);
+#endif
+        if (ret != RETURN_OK) {
+            wifi_hal_info_print("%s:%d: wifi_hal_addApAclDevice failed vap_index:%d\n",
+                __func__, __LINE__, vap->vap_index);
+        } else if (kick_required) {
+            memcpy(kick_macs[kick_count++], acl_macs[i], sizeof(mac_address_t));
+        }
+    }
     pthread_mutex_unlock(&g_wifi_hal.steering_data_lock);
+
+    for (i = 0; i < kick_count; i++) {
+        if (nl80211_kick_device(interface, kick_macs[i]) != 0) {
+            wifi_hal_error_print("%s:%d: Unable to kick MAC %s on ap_index %d\n",
+                __func__, __LINE__, to_mac_str(kick_macs[i], sta_mac_str), vap->vap_index);
+        }
+    }
+    free(acl_macs);
+    free(kick_macs);
 }
 
 #ifdef CONFIG_WIFI_EMULATOR
