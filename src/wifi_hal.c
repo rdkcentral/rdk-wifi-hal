@@ -133,7 +133,8 @@ extern void wpa_sm_set_eapol(struct wpa_sm *sm, struct eapol_sm *eapol);
 extern void wpa_bss_flush_by_age(struct wpa_supplicant *wpa_s, int age);
 extern void hostapd_wpa_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
 extern void supplicant_event(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
-extern void (*wpa_supplicant_event)(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
+extern void (
+    *wpa_supplicant_event)(void *ctx, enum wpa_event_type event, union wpa_event_data *data);
 #endif
 #ifdef CONFIG_WIFI_EMULATOR
 extern const struct wpa_driver_ops g_wpa_supplicant_driver_nl80211_ops;
@@ -709,20 +710,21 @@ INT wifi_hal_wps_event(wifi_wps_event_t data)
     wifi_vap_info_t *vap;
     wifi_wps_sta_event_callback_t callback;
 
-    wifi_hal_dbg_print("%s:%d: WPS event:%d for vap_index:%d\n", __func__, __LINE__, data.event, data.vap_index);
+    wifi_hal_dbg_print("%s:%d: WPS event:%d for vap_index:%d\n", __func__, __LINE__, data.event,
+        data.vap_index);
 
     if (data.event == WPS_EV_FAIL || data.event == WPS_EV_PWD_AUTH_FAIL ||
-        data.event == WPS_EV_PBC_TIMEOUT || data.event == WPS_EV_PBC_DISABLE) {
+        data.event == WPS_EV_PBC_OVERLAP || data.event == WPS_EV_PBC_TIMEOUT ||
+        data.event == WPS_EV_PBC_DISABLE) {
         interface = get_interface_by_vap_index(data.vap_index);
         if (interface == NULL) {
-            wifi_hal_error_print("%s:%d: Interface not found for vap_index %d\n",
-                __func__, __LINE__, data.vap_index);
+            wifi_hal_error_print("%s:%d: Interface not found for vap_index %d\n", __func__,
+                __LINE__, data.vap_index);
             return RETURN_ERR;
         }
 
         vap = &interface->vap_info;
-        if (vap->vap_mode == wifi_vap_mode_sta &&
-            interface->wps_sta_reonboard_in_progress) {
+        if (vap->vap_mode == wifi_vap_mode_sta && interface->wps_sta_reonboard_in_progress) {
             if (platform_wps_restore_backhaul_credentials() != 0) {
                 return RETURN_ERR;
             }
@@ -744,7 +746,8 @@ INT wifi_hal_wps_event(wifi_wps_event_t data)
     if (data.event == WPS_EV_SUCCESS) {
         interface = get_interface_by_vap_index(data.vap_index);
         if (interface == NULL) {
-            wifi_hal_error_print("%s:%d: Interface not found for vap_index %d\n", __func__, __LINE__, data.vap_index);
+            wifi_hal_error_print("%s:%d: Interface not found for vap_index %d\n", __func__,
+                __LINE__, data.vap_index);
             return RETURN_ERR;
         }
 
@@ -759,16 +762,19 @@ INT wifi_hal_wps_event(wifi_wps_event_t data)
                 if (ssid->ssid && ssid->ssid_len > 0) {
                     memset(vap->u.sta_info.ssid, 0, sizeof(vap->u.sta_info.ssid));
                     memcpy(vap->u.sta_info.ssid, ssid->ssid, ssid->ssid_len);
-                    wifi_hal_info_print("%s:%d: Saved SSID to vap_info: %s\n", __func__, __LINE__, vap->u.sta_info.ssid);
+                    wifi_hal_info_print("%s:%d: Saved SSID to vap_info: %s\n", __func__, __LINE__,
+                        vap->u.sta_info.ssid);
                 }
 
                 // Extract passphrase or PSK
                 if (ssid->passphrase) {
                     size_t len = strlen(ssid->passphrase);
                     if (len > 0) {
-                        memset(vap->u.sta_info.security.u.key.key, 0, sizeof(vap->u.sta_info.security.u.key.key));
+                        memset(vap->u.sta_info.security.u.key.key, 0,
+                            sizeof(vap->u.sta_info.security.u.key.key));
                         strncpy((char *)vap->u.sta_info.security.u.key.key, ssid->passphrase, len);
-                        wifi_hal_info_print("%s:%d: Saved passphrase to vap_info (length: %zu)\n", __func__, __LINE__, len);
+                        wifi_hal_info_print("%s:%d: Saved passphrase to vap_info (length: %zu)\n",
+                            __func__, __LINE__, len);
                     }
                 } else if (ssid->psk_set) {
                     // Convert PSK to hex string
@@ -1305,8 +1311,10 @@ INT wifi_hal_sm_deinit(INT vap_index)
         interface->u.sta.wpa_sm = NULL;
     }
     // Also clear interface->wpa_s.wpa and interface->wpa_s.eapol to ensure consistency
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     interface->wpa_s.wpa = NULL;
     interface->wpa_s.eapol = NULL;
+#endif
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return RETURN_OK;
 }

@@ -7886,7 +7886,11 @@ void wifi_hal_nl80211_wps_pbc(unsigned int ap_index)
 
         wifi_hal_info_print("%s:%d: WPS PBC for station interface %s with multi_ap=2\n",
             __func__, __LINE__, interface->name);
-        if (wpas_wps_start_pbc(&interface->wpa_s, NULL, 0, 2) < 0) {
+        int pbc_ret;
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        pbc_ret = wpas_wps_start_pbc(&interface->wpa_s, NULL, 0, 2);
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        if (pbc_ret < 0) {
             if (reonboard_started) {
                 abort_sta_wps_reonboard(interface, WPS_EV_FAIL);
             }
@@ -19050,12 +19054,14 @@ int wifi_supplicant_drv_associate(void *priv, struct wpa_driver_associate_params
     }
 #endif /* CONFIG_IEEE80211BE && CONFIG_GENERIC_MLO */
 
+#ifdef UWM_EXT_WPS_SUPPORT
     /* Association is owned by this socket. Later disconnect/deauth must use it too. */
     if (nla_put_flag(msg, NL80211_ATTR_IFACE_SOCKET_OWNER)) {
         wifi_hal_error_print("%s:%d: Failed to set IFACE_SOCKET_OWNER\n", __func__, __LINE__);
         nlmsg_free(msg);
         return -1;
     }
+#endif
 
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
     if (params->bssid && !params->mld_params.mld_addr) {

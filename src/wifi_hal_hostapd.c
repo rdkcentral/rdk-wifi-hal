@@ -1231,10 +1231,12 @@ int update_hostap_bss(wifi_interface_info_t *interface)
 
         // Populate multi_ap_backhaul_ssid structure
         memset(&conf->multi_ap_backhaul_ssid, 0, sizeof(conf->multi_ap_backhaul_ssid));
-        strncpy((char *)conf->multi_ap_backhaul_ssid.ssid,
-                (char *)vap->u.bss_info.multi_ap_backhaul_ssid,
-                sizeof(conf->multi_ap_backhaul_ssid.ssid) - 1);
-        conf->multi_ap_backhaul_ssid.ssid_len = strlen((char *)conf->multi_ap_backhaul_ssid.ssid);
+        conf->multi_ap_backhaul_ssid.ssid_len = strnlen(
+            (char *)vap->u.bss_info.multi_ap_backhaul_ssid,
+            sizeof(conf->multi_ap_backhaul_ssid.ssid));
+        memcpy(conf->multi_ap_backhaul_ssid.ssid,
+            vap->u.bss_info.multi_ap_backhaul_ssid,
+            conf->multi_ap_backhaul_ssid.ssid_len);
         conf->multi_ap_backhaul_ssid.ssid_set = (conf->multi_ap_backhaul_ssid.ssid_len > 0) ? 1 : 0;
 
         // Set wpa_passphrase (hostapd will handle PSK conversion if needed)
@@ -1253,8 +1255,9 @@ int update_hostap_bss(wifi_interface_info_t *interface)
                        key_len);
                 conf->multi_ap_backhaul_ssid.wpa_passphrase[key_len] = '\0';
                 conf->multi_ap_backhaul_ssid.wpa_passphrase_set = 1;
-                wifi_hal_info_print("%s:%d: Populated multi_ap_backhaul_ssid with SSID:%s and passphrase (len:%zu)\n",
-                    __func__, __LINE__, conf->multi_ap_backhaul_ssid.ssid, key_len);
+                wifi_hal_info_print("%s:%d: Populated multi_ap_backhaul_ssid with SSID:%.*s and passphrase (len:%zu)\n",
+                    __func__, __LINE__, (int)conf->multi_ap_backhaul_ssid.ssid_len,
+                    conf->multi_ap_backhaul_ssid.ssid, key_len);
             } else {
                 wifi_hal_error_print("%s:%d: Failed to allocate memory for multi_ap_backhaul_ssid passphrase\n",
                     __func__, __LINE__);
