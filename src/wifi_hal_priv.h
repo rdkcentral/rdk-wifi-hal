@@ -583,6 +583,10 @@ typedef struct wifi_interface_info_t {
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
     struct sta_mlo_params mlo_params;
 #endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
+#ifdef UWM_EXT_WPS_SUPPORT
+    /* Set while a mesh STA is deliberately dropping its link to run WPS again. */
+    bool wps_sta_reonboard_in_progress;
+#endif
 } wifi_interface_info_t;
 
 #define MAX_RATES   16
@@ -923,6 +927,7 @@ INT wifi_hal_getInterfaceMap(wifi_interface_name_idex_map_t *if_map, unsigned in
     unsigned int *if_map_size);
 INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal);
 INT wifi_hal_sm_deinit(INT vap_index);
+bool is_sta_wps_onboarding_band(wifi_interface_info_t *interface);
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss);
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map);
@@ -1164,6 +1169,9 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param);
 void wifi_send_wpa_supplicant_event(int ap_index, uint8_t *frame, int len);
 int wifi_send_response_failure(int ap_index, const u8 *mac, int frame_type, int status_code, int rssi);
 int nl80211_disconnect_sta(wifi_interface_info_t *interface);
+#ifdef UWM_EXT_WPS_SUPPORT
+int nl80211_deauthenticate_sta(wifi_interface_info_t *interface);
+#endif /* UWM_EXT_WPS_SUPPORT */
 int wifi_hal_purgeScanResult(unsigned int vap_index, unsigned char *sta_mac);
 void get_wifi_interface_info_map(wifi_interface_name_idex_map_t *interface_map);
 void get_radio_interface_info_map(radio_interface_mapping_t *radio_interface_map);
@@ -1439,7 +1447,26 @@ platform_set_beacon_prot_t get_platform_set_beacon_prot_fn();
 
 INT wifi_hal_wps_event(wifi_wps_event_t data);
 INT wifi_hal_get_default_wps_pin(char *pin);
-
+#ifdef UWM_EXT_WPS_SUPPORT
+INT wifi_wpsStaEvent_callback_register(wifi_wps_sta_event_callback_t callback);
+wifi_wps_sta_event_callback_t wifi_hal_get_wps_sta_event_callback(void);
+/* Backhaul credentials are persisted by the platform layer and only the Banana Pi port
+ * implements it. On every other platform the calls compile to no-ops reporting "no stored
+ * credentials", so the WPS re-onboarding code stays portable. */
+#if defined(BANANA_PI_PORT)
+int platform_wps_clear_backhaul_credentials(void);
+bool platform_wps_has_backhaul_credentials(void);
+int platform_wps_backup_backhaul_credentials(void);
+int platform_wps_restore_backhaul_credentials(void);
+void platform_wps_discard_backhaul_credentials_backup(void);
+#else
+#define platform_wps_clear_backhaul_credentials() (0)
+#define platform_wps_has_backhaul_credentials() (false)
+#define platform_wps_backup_backhaul_credentials() (0)
+#define platform_wps_restore_backhaul_credentials() (0)
+#define platform_wps_discard_backhaul_credentials_backup() do { } while (0)
+#endif
+#endif
 
 typedef unsigned long bitmap_type;
 #define BITS_PER_ULONG (sizeof(bitmap_type) * 8)
