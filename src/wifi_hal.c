@@ -1352,7 +1352,10 @@ INT wifi_hal_sm_reinit(INT vap_index)
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
 
     wifi_hal_info_print("%s:%d: Deinitializing wpa_supplicant for vap_index %d\n", __func__, __LINE__, vap_index);
-    // Deinitialize wpa_supplicant
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+    /* deinit/init exist only with the embedded supplicant. Other platforms still
+     * compile this function when UWM_EXT_WPS_SUPPORT is set, so keep the calls
+     * behind the same condition as the definitions. */
     if (deinit_wpa_supplicant(interface) != RETURN_OK) {
         wifi_hal_error_print("%s:%d: Failed to deinitialize wpa_supplicant\n", __func__, __LINE__);
         goto out;
@@ -1360,7 +1363,6 @@ INT wifi_hal_sm_reinit(INT vap_index)
 
     wifi_hal_info_print("%s:%d: Reinitializing wpa_supplicant for vap_index %d\n", __func__, __LINE__, vap_index);
 
-    // Reinitialize wpa_supplicant
     if (init_wpa_supplicant(interface) != RETURN_OK) {
         wifi_hal_error_print("%s:%d: Failed to reinitialize wpa_supplicant\n", __func__, __LINE__);
         goto out;
@@ -1368,6 +1370,10 @@ INT wifi_hal_sm_reinit(INT vap_index)
 
     wifi_hal_info_print("%s:%d: Successfully reinitialized wpa_supplicant for vap_index %d\n", __func__, __LINE__, vap_index);
     ret = RETURN_OK;
+#else
+    wifi_hal_error_print("%s:%d: embedded wpa_supplicant is not available on this platform\n",
+        __func__, __LINE__);
+#endif
 
 out:
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);

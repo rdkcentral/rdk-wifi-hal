@@ -18776,7 +18776,10 @@ int wifi_drv_sched_scan(void *priv, struct wpa_driver_scan_params *params)
     return 0;
 }
 
-/* Same logic as get_valid_freqs_list_from_radio in wifi_hal.c - get eligible channels from radio band */
+/* Same logic as get_valid_freqs_list_from_radio in wifi_hal.c - get eligible channels from radio band.
+ * Only wifi_drv_scan2() under BANANA_PI_PORT calls this; leave it out of other builds so
+ * -Werror=unused-function does not fire. */
+#if defined(BANANA_PI_PORT)
 static int get_valid_freqs_from_radio_for_scan(wifi_radio_info_t *radio, uint_array_t *freqs)
 {
     enum nl80211_band band = wifi_freq_band_to_nl80211_band(radio->oper_param.band);
@@ -18808,6 +18811,7 @@ static int get_valid_freqs_from_radio_for_scan(wifi_radio_info_t *radio, uint_ar
     }
     return 0;
 }
+#endif /* BANANA_PI_PORT */
 
 int wifi_drv_scan2(void *priv,
                 struct wpa_driver_scan_params *params)
