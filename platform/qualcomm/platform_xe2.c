@@ -166,17 +166,15 @@ static void xe2_set_radio_enhind(wifi_radio_index_t index)
         return;
     }
 
-    interface = hash_map_get_first(radio->interface_map);
-    if (interface == NULL) {
+    hash_map_foreach(radio->interface_map, interface) {
+    snprintf(cmd, sizeof(cmd), "iwpriv %s athnewind 1 >/dev/null 2>&1", interface->name);
+    if(system(cmd) == 0) {
+        wifi_hal_info_print("%s:%d: radio %d: athnewind set via %s\n", __func__, __LINE__, index, interface->name);
         return;
+        }
     }
+    wifi_hal_error_print("%s:%d: radio %d: failed to set athnewind on any interface\n", __func__, __LINE__, index);
 
-    /* Not cfg80211tool: qcacommands_vap.xml has no athnewind entry */
-    snprintf(cmd, sizeof(cmd), "iwpriv %s athnewind 1", interface->name);
-    wifi_hal_dbg_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
-    if (system(cmd) != 0) {
-        wifi_hal_error_print("%s:%d: %s failed\n", __func__, __LINE__, cmd);
-    }
 }
 
 int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
