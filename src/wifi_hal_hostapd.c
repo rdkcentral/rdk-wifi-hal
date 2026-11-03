@@ -3021,7 +3021,7 @@ static int wpa_sm_sta_set_key(void *ctx, enum wpa_alg alg,
     params_conversion.key = key;
     params_conversion.key_len = key_len;
     params_conversion.key_flag = key_flag;
-    params_conversion.link_id = NL80211_DRV_LINK_ID_NA;
+    params_conversion.link_id = link_id;
     return g_wpa_driver_nl80211_ops.set_key(interface, &params_conversion);
 #elif HOSTAPD_VERSION == 211
     struct wpa_driver_set_key_params params_conversion = {
