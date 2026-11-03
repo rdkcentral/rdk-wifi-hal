@@ -254,46 +254,45 @@ struct wifiChannelWidthMap wifiChannelBandWidthMap[] =
     {WIFI_CHANNELBANDWIDTH_80_80MHZ,  "80+80MHz"},
 };
 
-struct wifiVariantBitMap wifiRadioModeBitMap[] = 
-{
-    {WIFI_80211_VARIANT_A,     "a"}, 
-    {WIFI_80211_VARIANT_B,     "b"},
-    {WIFI_80211_VARIANT_G,     "g"},
-    {WIFI_80211_VARIANT_N,     "n"},
-    {WIFI_80211_VARIANT_H,     "h"},
-    {WIFI_80211_VARIANT_AC,   "ac"},
-    {WIFI_80211_VARIANT_AD,   "ad"},
-    {WIFI_80211_VARIANT_AX,   "ax"},
-    {WIFI_80211_VARIANT_BE,   "be"},
+struct wifiVariantBitMap wifiRadioModeBitMap[] = {
+    { WIFI_80211_VARIANT_A,  "a"  },
+    { WIFI_80211_VARIANT_B,  "b"  },
+    { WIFI_80211_VARIANT_G,  "g"  },
+    { WIFI_80211_VARIANT_N,  "n"  },
+    { WIFI_80211_VARIANT_H,  "h"  },
+    { WIFI_80211_VARIANT_AC, "ac" },
+    { WIFI_80211_VARIANT_AD, "ad" },
+    { WIFI_80211_VARIANT_AX, "ax" },
+    { WIFI_80211_VARIANT_BE, "be" },
 };
 
 /* write event explanations */
 static const uint8_t *WPS_enum_to_str[] = {
-    [WPS_EV_M2D]                       = (uint8_t*) "WPS_EV_M2D",
-    [WPS_EV_FAIL]                      = (uint8_t*) "WPS_EV_FAIL",
-    [WPS_EV_SUCCESS]                   = (uint8_t*) "WPS_EV_SUCCESS",
-    [WPS_EV_PWD_AUTH_FAIL]             = (uint8_t*) "WPS_EV_PWD_AUTH_FAIL",
-    [WPS_EV_PBC_OVERLAP]               = (uint8_t*) "WPS_EV_PBC_OVERLAP",
-    [WPS_EV_PBC_TIMEOUT]               = (uint8_t*) "WPS_EV_PBC_TIMEOUT",
-    [WPS_EV_PBC_ACTIVE]                = (uint8_t*) "WPS_EV_PBC_ACTIVE",
-    [WPS_EV_PBC_DISABLE]               = (uint8_t*) "WPS_EV_PBC_DISABLE",
-    [WPS_EV_PIN_TIMEOUT]               = (uint8_t*) "WPS_EV_PIN_TIMEOUT",
-    [WPS_EV_PIN_DISABLE]               = (uint8_t*) "WPS_EV_PIN_DISABLE",
-    [WPS_EV_PIN_ACTIVE]                = (uint8_t*) "WPS_EV_PIN_ACTIVE",
-    [WPS_EV_ER_AP_ADD]                 = (uint8_t*) "WPS_EV_ER_AP_ADD",
-    [WPS_EV_ER_AP_REMOVE]              = (uint8_t*) "WPS_EV_ER_AP_REMOVE",
-    [WPS_EV_ER_ENROLLEE_ADD]           = (uint8_t*) "WPS_EV_ER_ENROLLEE_ADD",
-    [WPS_EV_ER_ENROLLEE_REMOVE]        = (uint8_t*) "WPS_EV_ER_ENROLLEE_REMOVE",
-    [WPS_EV_ER_AP_SETTINGS]            = (uint8_t*) "WPS_EV_ER_AP_SETTINGS",
-    [WPS_EV_ER_SET_SELECTED_REGISTRAR] = (uint8_t*) "WPS_EV_ER_SET_SELECTED_REGISTRAR",
-    [WPS_EV_AP_PIN_SUCCESS]            = (uint8_t*) "WPS_EV_AP_PIN_SUCCESS",
+    [WPS_EV_M2D] = (uint8_t *)"WPS_EV_M2D",
+    [WPS_EV_FAIL] = (uint8_t *)"WPS_EV_FAIL",
+    [WPS_EV_SUCCESS] = (uint8_t *)"WPS_EV_SUCCESS",
+    [WPS_EV_PWD_AUTH_FAIL] = (uint8_t *)"WPS_EV_PWD_AUTH_FAIL",
+    [WPS_EV_PBC_OVERLAP] = (uint8_t *)"WPS_EV_PBC_OVERLAP",
+    [WPS_EV_PBC_TIMEOUT] = (uint8_t *)"WPS_EV_PBC_TIMEOUT",
+    [WPS_EV_PBC_ACTIVE] = (uint8_t *)"WPS_EV_PBC_ACTIVE",
+    [WPS_EV_PBC_DISABLE] = (uint8_t *)"WPS_EV_PBC_DISABLE",
+    [WPS_EV_PIN_TIMEOUT] = (uint8_t *)"WPS_EV_PIN_TIMEOUT",
+    [WPS_EV_PIN_DISABLE] = (uint8_t *)"WPS_EV_PIN_DISABLE",
+    [WPS_EV_PIN_ACTIVE] = (uint8_t *)"WPS_EV_PIN_ACTIVE",
+    [WPS_EV_ER_AP_ADD] = (uint8_t *)"WPS_EV_ER_AP_ADD",
+    [WPS_EV_ER_AP_REMOVE] = (uint8_t *)"WPS_EV_ER_AP_REMOVE",
+    [WPS_EV_ER_ENROLLEE_ADD] = (uint8_t *)"WPS_EV_ER_ENROLLEE_ADD",
+    [WPS_EV_ER_ENROLLEE_REMOVE] = (uint8_t *)"WPS_EV_ER_ENROLLEE_REMOVE",
+    [WPS_EV_ER_AP_SETTINGS] = (uint8_t *)"WPS_EV_ER_AP_SETTINGS",
+    [WPS_EV_ER_SET_SELECTED_REGISTRAR] = (uint8_t *)"WPS_EV_ER_SET_SELECTED_REGISTRAR",
+    [WPS_EV_AP_PIN_SUCCESS] = (uint8_t *)"WPS_EV_AP_PIN_SUCCESS",
 };
 #ifdef QCA_UD_HOSTAPD
 static const uint8_t *WPS_ei_to_str[] = {
-    [WPS_EI_NO_ERROR]                      = (uint8_t*) "No Error",
-    [WPS_EI_SECURITY_TKIP_ONLY_PROHIBITED] = (uint8_t*) "TKIP Only Prohibited",
-    [WPS_EI_SECURITY_WEP_PROHIBITED]       = (uint8_t*) "WEP Prohibited",
-    [WPS_EI_AUTH_FAILURE]                  = (uint8_t*) "Authentication Failure",
+    [WPS_EI_NO_ERROR] = (uint8_t *)"No Error",
+    [WPS_EI_SECURITY_TKIP_ONLY_PROHIBITED] = (uint8_t *)"TKIP Only Prohibited",
+    [WPS_EI_SECURITY_WEP_PROHIBITED] = (uint8_t *)"WEP Prohibited",
+    [WPS_EI_AUTH_FAILURE] = (uint8_t *)"Authentication Failure",
 };
 static const uint8_t *pbc_status_str[] = {
     [WPS_PBC_STATUS_DISABLE]         = (uint8_t*) "Disabled",
@@ -313,7 +312,7 @@ enum vap_enum_type {
     vap_mesh_sta,
     vap_invalid
 };
-typedef BOOL (*vap_type) (unsigned int ap_index);
+typedef BOOL (*vap_type)(unsigned int ap_index);
 
 vap_type vap_type_arr[10] = {
 
@@ -345,36 +344,35 @@ struct sta_data_ctx {
 };
 
 enum qca_vendor_vdev_param {
-    QCA_WLAN_VENDOR_VDEV_PARAM_DIS_LPI_ANT_OPTIMIZE   = 62,
-    QCA_WLAN_VENDOR_VDEV_PARAM_GET_MINTXPOWER         = 63,
-    QCA_WLAN_VENDOR_VDEV_PARAM_GET_MAXTXPOWER         = 64,
-    QCA_WLAN_VENDOR_VDEV_PARAM_REGTXPOWER             = 65,
+    QCA_WLAN_VENDOR_VDEV_PARAM_DIS_LPI_ANT_OPTIMIZE = 62,
+    QCA_WLAN_VENDOR_VDEV_PARAM_GET_MINTXPOWER = 63,
+    QCA_WLAN_VENDOR_VDEV_PARAM_GET_MAXTXPOWER = 64,
+    QCA_WLAN_VENDOR_VDEV_PARAM_REGTXPOWER = 65,
     QCA_WLAN_VENDOR_VDEV_PARAM_GET_TXPOWER_RESOLUTION = 66,
-    QCA_WLAN_VENDOR_VDEV_PARAM_GET_MAXRATE            = 72,
+    QCA_WLAN_VENDOR_VDEV_PARAM_GET_MAXRATE = 72,
 };
 enum qca_vendor_radio_param {
-    QCA_WLAN_VENDOR_RADIO_PARAM_TXPOWER_LIMIT2G            = 38,
-    QCA_WLAN_VENDOR_RADIO_PARAM_TXPOWER_LIMIT5G            = 39,
-    QCA_WLAN_VENDOR_RADIO_PARAM_ANTENNA_GAIN_2G            = 40,
-    QCA_WLAN_VENDOR_RADIO_PARAM_ANTENNA_GAIN_5G            = 41,
-    QCA_WLAN_VENDOR_RADIO_PARAM_TXPOWER_SCALE              = 43,
+    QCA_WLAN_VENDOR_RADIO_PARAM_TXPOWER_LIMIT2G = 38,
+    QCA_WLAN_VENDOR_RADIO_PARAM_TXPOWER_LIMIT5G = 39,
+    QCA_WLAN_VENDOR_RADIO_PARAM_ANTENNA_GAIN_2G = 40,
+    QCA_WLAN_VENDOR_RADIO_PARAM_ANTENNA_GAIN_5G = 41,
+    QCA_WLAN_VENDOR_RADIO_PARAM_TXPOWER_SCALE = 43,
     QCA_WLAN_VENDOR_RADIO_PARAM_DFS_NOL_SUBCHANNEL_MARKING = 74,
-    QCA_WLAN_VENDOR_RADIO_PARAM_RADAR_DETECT_COUNT         = 75,
-    QCA_WLAN_VENDOR_RADIO_PARAM_CTLPWRSCALE                = 76,
-    QCA_WLAN_VENDOR_RADIO_PARAM_EN_CHAN_144                 = 77,
-    QCA_WLAN_VENDOR_RADIO_PARAM_NOL_CHAN_LIST               = 79,
+    QCA_WLAN_VENDOR_RADIO_PARAM_RADAR_DETECT_COUNT = 75,
+    QCA_WLAN_VENDOR_RADIO_PARAM_CTLPWRSCALE = 76,
+    QCA_WLAN_VENDOR_RADIO_PARAM_EN_CHAN_144 = 77,
+    QCA_WLAN_VENDOR_RADIO_PARAM_NOL_CHAN_LIST = 79,
 };
 
 static int read_from_factory_defaults(char *filename, char *key, char *value, int val_len)
 {
     FILE *fp = NULL;
-    char buf[1024] = {0};
+    char buf[1024] = { 0 };
     char *ptr = NULL;
     int len;
 
     memset(value, '\0', val_len);
-    if(access(filename, F_OK) == 0)
-    {
+    if (access(filename, F_OK) == 0) {
         fp = fopen(filename, "r");
         if (fp == NULL) {
             wifi_hal_error_print("%s:%d: Failed to open %s: %s\n", __func__, __LINE__, filename,
@@ -385,17 +383,14 @@ static int read_from_factory_defaults(char *filename, char *key, char *value, in
         wifi_hal_error_print("%s:%d Factory file not found\n", __func__, __LINE__);
         return -1;
     }
-    while (!feof(fp))
-    {
+    while (!feof(fp)) {
         memset(buf, '\0', sizeof(buf));
         fgets(buf, sizeof(buf), fp);
-        if ((ptr = strstr(buf, key)) != NULL)
-        {
+        if ((ptr = strstr(buf, key)) != NULL) {
             break;
         }
     }
-    if (ptr == NULL)
-    {
+    if (ptr == NULL) {
         fclose(fp);
         wifi_hal_error_print("%s:%d Key %s not found in factory file\n", __func__, __LINE__, key);
         return -1;
@@ -406,9 +401,8 @@ static int read_from_factory_defaults(char *filename, char *key, char *value, in
         ++ptr;
     }
     strncpy(value, ptr, val_len);
-    len = strlen(value)-1;
-    if(value[len] == '\n')
-    {
+    len = strlen(value) - 1;
+    if (value[len] == '\n') {
         value[len] = '\0';
     }
     fclose(fp);
@@ -416,7 +410,10 @@ static int read_from_factory_defaults(char *filename, char *key, char *value, in
     return 0;
 }
 
-struct qca_vendor_param_result { int32_t value; bool found; };
+struct qca_vendor_param_result {
+    int32_t value;
+    bool found;
+};
 
 /*
  * qca_vendor_param_get_handler: parse vendor response.
@@ -433,17 +430,15 @@ static int qca_vendor_param_get_handler(struct nl_msg *msg, void *arg)
     struct nlattr *vd[4]; /* ATTR_MAX=2 per XML, use 4 for safety */
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
 
-    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
-              genlmsg_attrlen(gnlh, 0), NULL);
+    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
     if (!tb[NL80211_ATTR_VENDOR_DATA]) {
-        wifi_hal_error_print("%s:%d UFR10: no NL80211_ATTR_VENDOR_DATA in response\n",
-                             __func__, __LINE__);
+        wifi_hal_error_print("%s:%d UFR10: no NL80211_ATTR_VENDOR_DATA in response\n", __func__,
+            __LINE__);
         return NL_SKIP;
     }
     if (nla_parse_nested(vd, 3, tb[NL80211_ATTR_VENDOR_DATA], NULL) < 0) {
-        wifi_hal_error_print("%s:%d UFR10: nla_parse_nested failed\n",
-                             __func__, __LINE__);
+        wifi_hal_error_print("%s:%d UFR10: nla_parse_nested failed\n", __func__, __LINE__);
         return NL_SKIP;
     }
     /* Driver returns value at attribute ID=1 (not GENERIC_DATA=19) */
