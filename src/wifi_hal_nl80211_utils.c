@@ -6260,6 +6260,21 @@ uint16_t freq_to_primary(uint16_t freq, wifi_channelBandwidth_t chwid)
     return freq;
 }
 
+wifi_interface_info_t *get_first_radio_interface(wifi_radio_info_t *radio)
+{
+    wifi_interface_info_t *interface = NULL;
+    if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_UPDATE_WIPHY_ON_PRIMARY) {
+        interface = get_primary_interface(radio);
+    } else {
+        interface = get_private_vap_interface(radio);
+        if (interface == NULL) {
+            interface = get_primary_interface(radio);
+        }
+    }
+
+    return interface;
+}
+
 int reload_interface(wifi_interface_info_t *interface)
 {
     char *interface_name = wifi_hal_get_interface_name(interface);
