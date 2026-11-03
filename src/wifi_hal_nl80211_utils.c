@@ -136,6 +136,8 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #ifdef _MERCURY_PRODUCT_REQ_ // for Qualcomm based platforms
     {1, 0,  "home-ap-24",   "", "br-home",  100,   0,  "private_ssid_2g"},
     {2, 1,  "home-ap-50",   "", "br-home",  100,   1,  "private_ssid_5g"},
+    {1, 0,  "svc-e-ap-24",  "", "br-home",  101,   2,  "iot_ssid_2g"},
+    {2, 1,  "svc-e-ap-50",  "", "br-home",  101,   3,  "iot_ssid_5g"},
     {1, 0,  "bhaul-ap-24",  "", "",           0,  12,  "mesh_backhaul_2g"},
     {2, 1,  "bhaul-ap-50",  "", "",           0,  13,  "mesh_backhaul_5g"},
     {1, 0,  "bhaul-sta-24", "", "",           0,  14,  "mesh_sta_2g"},
