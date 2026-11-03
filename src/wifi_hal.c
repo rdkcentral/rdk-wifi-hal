@@ -1544,8 +1544,14 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         // VAP down removes MLO links, so restrict down of interface to sta mode and NON-MLD AP
         if (vap->vap_mode == wifi_vap_mode_sta) {
 #endif
+
+#ifndef KERNEL_6_18
+            /* Interface down is causing wdev to get cleared and causing stop_ap to fail in
+             * kernel 6.18.26 */
             wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface->name);
             nl80211_interface_enable(interface->name, false);
+#endif /* KERNEL_6_18 */
+
 #ifdef CONFIG_GENERIC_MLO
         }
 #endif
