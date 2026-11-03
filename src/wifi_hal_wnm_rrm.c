@@ -143,7 +143,7 @@ typedef struct wnm_notif_req {
 #if !defined(QCOM_ATH12K_PORT)
 /* Implementation is based on ieee802_11_send_bss_trans_mgmt_request() from wnm_ap.c */
 static int wifi_ieee802_11_send_bss_trans_mgmt_request(struct hostapd_data *hapd,
-                        const u8 *addr,
+    const u8 *addr,
                         u8 dialog_token,
                         const u8 *nei_rep, size_t nei_rep_len,
                         const u8 *mbo_attrs, size_t mbo_len)
@@ -567,8 +567,8 @@ static int handle_rx_wnm_notification_req(wifi_interface_info_t *interface,
         default:
             wifi_hal_dbg_print("%s:%d: WNM: Received WNM Notification Request type=%u is not supported by HAL code\n", __func__, __LINE__, frm->type);
             break;
-    }
-    return WIFI_HAL_UNSUPPORTED;
+        }
+        return WIFI_HAL_UNSUPPORTED;
 }
 #endif /* !defined(QCOM_ATH12K_PORT) */
 
@@ -642,8 +642,8 @@ int handle_wnm_action_frame(wifi_interface_info_t *interface, const mac_address_
         default:
             wifi_hal_dbg_print("%s:%d: Received WNM action=%u is not supported by HAL code\n", __func__, __LINE__, action);
             break;
-    }
-    return WIFI_HAL_UNSUPPORTED;
+        }
+        return WIFI_HAL_UNSUPPORTED;
 }
 #endif /* !defined(PLATFORM_LINUX) && !defined(QCOM_ATH12K_PORT) || ... */
 
@@ -1063,7 +1063,7 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
 }
 #if !defined(QCOM_ATH12K_PORT)
 static void wifi_set_disassoc_timer(struct hostapd_data *hapd, struct sta_info *sta,
-                int disassoc_timer)
+    int disassoc_timer)
 {
     int timeout, beacon_int;
 
@@ -1090,8 +1090,8 @@ static void wifi_set_disassoc_timer(struct hostapd_data *hapd, struct sta_info *
     sta->timeout_next = STA_DISASSOC_FROM_CLI;
     eloop_cancel_timeout(ap_handle_timer, hapd, sta);
     eloop_register_timeout(timeout / 1000,
-                timeout % 1000 * 1000,
-                ap_handle_timer, hapd, sta);
+        timeout % 1000 * 1000,
+        ap_handle_timer, hapd, sta);
 }
 #endif /*!defined(QCOM_ATH12K_PORT) */
 
@@ -1099,7 +1099,7 @@ static void wifi_set_disassoc_timer(struct hostapd_data *hapd, struct sta_info *
     defined(_PLATFORM_BANANAPI_R4_) || defined(_PLATFORM_RASPBERRYPI_)
 /* Implementation is based on wnm_send_bss_tm_req() from wnm_ap.c */
 int wifi_wnm_send_bss_tm_req(wifi_interface_info_t *interface, struct sta_info *sta,
-            u8 dialog_token, u8 req_mode, int disassoc_timer, u8 valid_int,
+    u8 dialog_token, u8 req_mode, int disassoc_timer, u8 valid_int,
             const u8 *bss_term_dur, const char *url,
             const u8 *nei_rep, size_t nei_rep_len,
             const u8 *mbo_attrs, size_t mbo_len)

@@ -202,11 +202,11 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     if (len != 0 && output[len - 1] == '\n') {
         output[len - 1] = '\0';
     }
-    strcpy(hal->wifi_prop.manufacturerModel,output);
+    strcpy(hal->wifi_prop.manufacturerModel, output);
 #if defined(QCOM_ATH12K_PORT)
     _syscmd("grep -ia 'Manufacturer' /etc/factory_nvram.data | head -1 | cut -d ':' -f2 | cut -c2- | tr -d '\\n'", hal->wifi_prop.manufacturer, sizeof(hal->wifi_prop.manufacturer));
 #else
-    strcpy(hal->wifi_prop.manufacturer,output);
+    strcpy(hal->wifi_prop.manufacturer, output);
 #endif
 
     memset(output, '\0', sizeof(output));
@@ -530,7 +530,7 @@ INT wifi_hal_init()
         return RETURN_ERR;
     }
 
-        wifi_hal_dbg_print("%s:%d: get platform radio capabilities\n", __func__, __LINE__);
+    wifi_hal_dbg_print("%s:%d: get platform radio capabilities\n", __func__, __LINE__);
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_) || \
     defined(QCOM_ATH12K_PORT)
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
@@ -1513,30 +1513,30 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         memcpy((unsigned char *)&interface->vap_info, (unsigned char *)vap, sizeof(wifi_vap_info_t));
 
 #if defined(QCOM_ATH12K_PORT)
-            char *mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
-            if (mld_name != NULL) {
-                wifi_hal_dbg_print("%s:%d: MLD name for %s: %s\n", __func__, __LINE__,
-                    interface->name, mld_name);
-                mac_address_t mld_mac = {0};
+        char *mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
+        if (mld_name != NULL) {
+            wifi_hal_dbg_print("%s:%d: MLD name for %s: %s\n", __func__, __LINE__,
+                interface->name, mld_name);
+            mac_address_t mld_mac = { 0 };
 
-                if ((interface->index = if_nametoindex(mld_name)) == 0) {
-                    wifi_hal_error_print("%s:%d: Failed to get ifindex for MLD interface %s: %s\n",
-                        __func__, __LINE__, mld_name, strerror(errno));
-                    return RETURN_ERR;
-                }
-                if (wifi_hal_get_mac_address(mld_name, mld_mac) < 0) {
-                    wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n",
-                        __func__, __LINE__, mld_name);
-                    return RETURN_ERR;
-                }
-                strncpy(interface->mld_name, mld_name, sizeof(interface->mld_name) - 1);
-                interface->mld_name[sizeof(interface->mld_name) - 1] = '\0';
-
-                // TODO: get MLD configuration from DB
-                wifi_hal_set_mld_enabled(interface, true);
-                wifi_hal_set_mld_mac_address(interface, mld_mac);
-                wifi_hal_set_mld_link_id(interface, radio->rdk_radio_index);
+            if ((interface->index = if_nametoindex(mld_name)) == 0) {
+                wifi_hal_error_print("%s:%d: Failed to get ifindex for MLD interface %s: %s\n",
+                    __func__, __LINE__, mld_name, strerror(errno));
+                return RETURN_ERR;
             }
+            if (wifi_hal_get_mac_address(mld_name, mld_mac) < 0) {
+                wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n",
+                    __func__, __LINE__, mld_name);
+                return RETURN_ERR;
+            }
+            strncpy(interface->mld_name, mld_name, sizeof(interface->mld_name) - 1);
+            interface->mld_name[sizeof(interface->mld_name) - 1] = '\0';
+
+            // TODO: get MLD configuration from DB
+            wifi_hal_set_mld_enabled(interface, true);
+            wifi_hal_set_mld_mac_address(interface, mld_mac);
+            wifi_hal_set_mld_link_id(interface, radio->rdk_radio_index);
+        }
 #endif /* QCOM_ATH12K_PORT */
         interface_name = wifi_hal_get_interface_name(interface);
 
@@ -1645,13 +1645,13 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 intf_offload_type = QCA_WLAN_INTF_OFFLOAD_TYPE_PPE_DS;
             }
             wifi_hal_dbg_print("%s:%d: Setting PPE VP type %u for vap %s\n",
-                    __func__, __LINE__, intf_offload_type, interface->name);
+                __func__, __LINE__, intf_offload_type, interface->name);
             if (wifi_hal_set_intf_offload_type(interface, OUI_QCA,
                     QCA_NL80211_VENDOR_SUBCMD_SET_WIFI_CONFIGURATION,
                     NULL, 0, 0, NULL, interface->name,
                     intf_offload_type, true) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to set Offload type: %u\n",
-                     __func__, __LINE__, interface_name, intf_offload_type);
+                    __func__, __LINE__, interface_name, intf_offload_type);
             }
 #endif /* QCOM_ATH12K_PORT */
             wifi_hal_info_print("%s:%d: interface:%s vap_initialized:%d\n", __func__, __LINE__,
@@ -1706,7 +1706,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     nl80211_interface_enable(interface_name, vap->u.bss_info.enabled);
                 } else {
                     wifi_hal_info_print("%s:%d: MLO disable: skipping shared MLD "
-                        "interface %s down (per-link interface %s brought down below)\n",
+                                        "interface %s down (per-link interface %s brought down below)\n",
                         __func__, __LINE__, interface_name, interface->name);
                 }
 #else
@@ -1714,7 +1714,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif /* QCOM_ATH12K_PORT */
 #if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 #ifdef CONFIG_MLO
-                if(radio->oper_param.variant & WIFI_80211_VARIANT_BE)
+                if (radio->oper_param.variant & WIFI_80211_VARIANT_BE)
                 {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d", vap->vap_index);
                     nl80211_interface_enable(mld_ifname, vap->u.bss_info.enabled);
@@ -1891,7 +1891,7 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
     if (memcmp(mac, bcastmac, sizeof(mac_address_t)) == 0) {
         tmp = hapd->sta_list;
-        while(tmp) {
+        while (tmp) {
 #if (defined(BANANA_PI_PORT) && defined(KERNEL_6_6)) || defined(QCOM_ATH12K_PORT)
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
             int link_id = wifi_hal_get_mld_link_id(interface);
@@ -4890,7 +4890,7 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     
 #if HOSTAPD_VERSION >= 211
     // Action frames will get rejected by kernel if we pass a valid link_id for non-MLO case.
-    if(!wifi_hal_is_mld_enabled(interface)) {
+    if (!wifi_hal_is_mld_enabled(interface)) {
         link_id = -1;
     }
     res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait, link_id);

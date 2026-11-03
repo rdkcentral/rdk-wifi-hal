@@ -399,21 +399,21 @@ typedef struct {
     unsigned int scan_vendor_cmd_avail:1;
     unsigned int connect_reassoc:1;
     unsigned int set_wifi_conf_vendor_cmd_avail:1;
-    unsigned int fetch_bss_trans_status:1;
-    unsigned int roam_vendor_cmd_avail:1;
-    unsigned int get_supported_akm_suites_avail:1;
+    unsigned int fetch_bss_trans_status : 1;
+    unsigned int roam_vendor_cmd_avail : 1;
+    unsigned int get_supported_akm_suites_avail : 1;
 #if HOSTAPD_VERSION >= 212
-    unsigned int puncturing:1;         /* NL80211_EXT_FEATURE_PUNCT: EHT preamble puncturing */
-    unsigned int qca_do_acs:1;                      /* QCA_NL80211_VENDOR_SUBCMD_DO_ACS available */
-    unsigned int add_sta_node_vendor_cmd_avail:1;   /* QCA_NL80211_VENDOR_SUBCMD_ADD_STA_NODE */
-    unsigned int get_sta_info_vendor_cmd_avail:1;   /* QCA_NL80211_VENDOR_SUBCMD_GET_STA_INFO */
-    unsigned int secure_ranging_ctx_vendor_cmd_avail:1; /* QCA_NL80211_VENDOR_SUBCMD_SECURE_RANGING_CONTEXT */
-    unsigned int connect_ext_vendor_cmd_avail:1;    /* QCA_NL80211_VENDOR_SUBCMD_CONNECT_EXT */
-    unsigned int support_ap_scan:1;
+    unsigned int puncturing : 1;         /* NL80211_EXT_FEATURE_PUNCT: EHT preamble puncturing */
+    unsigned int qca_do_acs : 1;                      /* QCA_NL80211_VENDOR_SUBCMD_DO_ACS available */
+    unsigned int add_sta_node_vendor_cmd_avail : 1;   /* QCA_NL80211_VENDOR_SUBCMD_ADD_STA_NODE */
+    unsigned int get_sta_info_vendor_cmd_avail : 1;   /* QCA_NL80211_VENDOR_SUBCMD_GET_STA_INFO */
+    unsigned int secure_ranging_ctx_vendor_cmd_avail : 1; /* QCA_NL80211_VENDOR_SUBCMD_SECURE_RANGING_CONTEXT */
+    unsigned int connect_ext_vendor_cmd_avail : 1;    /* QCA_NL80211_VENDOR_SUBCMD_CONNECT_EXT */
+    unsigned int support_ap_scan : 1;
 #ifdef QCOM_ATH12K_PORT
-    unsigned int afc_support:1;
-    unsigned int afc_retail_support:1;
-    unsigned int device_bw:1;
+    unsigned int afc_support : 1;
+    unsigned int afc_retail_support : 1;
+    unsigned int device_bw : 1;
 #endif /* QCOM_ATH12K_PORT */
 #endif /* HOSTAPD_VERSION >= 212 */
 } wifi_driver_data_t;
@@ -1058,18 +1058,18 @@ int     nl80211_update_interface(wifi_interface_info_t *interface);
 int     nl80211_interface_enable(const char *ifname, bool enable);
 int     nl80211_retry_interface_enable(wifi_interface_info_t *interface, bool enable);
 void    nl80211_steering_event(UINT steeringgroupIndex, wifi_steering_event_t *event);
-int     nl80211_connect_sta(wifi_interface_info_t *interface);
-int     init_wpa_supplicant(wifi_interface_info_t *interface);
+int nl80211_connect_sta(wifi_interface_info_t *interface);
+int init_wpa_supplicant(wifi_interface_info_t *interface);
 
 #ifdef QCOM_ATH12K_PORT
 int wifi_hal_set_intf_offload_type(void *priv, unsigned int vendor_id,
-                              unsigned int subcmd, const u8 *data,
-                              size_t data_len, int flags, void *buf,
-                              const char *ifname, u8 intf_offload_type,
-                              bool is_bss);
+    unsigned int subcmd, const u8 *data,
+    size_t data_len, int flags, void *buf,
+    const char *ifname, u8 intf_offload_type,
+    bool is_bss);
 #endif
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
-int     nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
+int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
 #endif
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 
@@ -1236,7 +1236,7 @@ int get_bw160_center_freq(wifi_radio_operationParam_t *param, const char *countr
 int get_bw320_center_freq(wifi_radio_operationParam_t *param, const char *country);
 #endif /* CONFIG_IEEE80211BE */
 int pick_akm_suite(int sel);
-int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const u8 *data,size_t data_len,unsigned int freq, unsigned int wait);
+int wifi_hal_send_mgmt_frame(int apIndex, mac_address_t sta, const u8 *data, size_t data_len, unsigned int freq, unsigned int wait);
 #if (defined(BANANA_PI_PORT) && defined(KERNEL_6_6)) || defined(QCOM_ATH12K_PORT)
 int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason, int link_id);
 #else
@@ -1249,9 +1249,9 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
 int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reason);
 #endif
 #if HOSTAPD_VERSION >= 211 //2.11
- int wifi_drv_send_mlme(void *priv, const u8 *data,
-                      size_t data_len,int noack,
-                      unsigned int freq, const u16 *csa_offs,
+int wifi_drv_send_mlme(void *priv, const u8 *data,
+    size_t data_len, int noack,
+    unsigned int freq, const u16 *csa_offs,
                       size_t csa_offs_len, int no_encrypt,
                       unsigned int wait, int link_id);
 #elif HOSTAPD_2_10 //2.10
@@ -1615,25 +1615,25 @@ int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_con
 #endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
 #if defined(QCOM_ATH12K_PORT)
 u16 send_assoc_resp(struct hostapd_data *hapd, struct sta_info *sta,
-                           const u8 *addr, u16 status_code, int reassoc,
-                           const u8 *ies, size_t ies_len, int rssi,
-                           int omit_rsnxe);
+    const u8 *addr, u16 status_code, int reassoc,
+    const u8 *ies, size_t ies_len, int rssi,
+    int omit_rsnxe);
 void hostapd_wpa_event(void *ctx, enum wpa_event_type event,
-               union wpa_event_data *data);
+    union wpa_event_data *data);
 void hostapd_wpa_event_global(void *ctx, enum wpa_event_type event,
-               union wpa_event_data *data);
+    union wpa_event_data *data);
 
 enum dfs_channel_type {
-        DFS_ANY_CHANNEL,
-        DFS_AVAILABLE, /* non-radar or radar-available */
-        DFS_NO_CAC_YET, /* radar-not-yet-available */
+    DFS_ANY_CHANNEL,
+    DFS_AVAILABLE, /* non-radar or radar-available */
+    DFS_NO_CAC_YET, /* radar-not-yet-available */
 };
 
 struct hostapd_channel_data *dfs_get_valid_channel(struct hostapd_iface *iface,
-                     int *secondary_channel,
-                     u8 *oper_centr_freq_seg0_idx,
-                     u8 *oper_centr_freq_seg1_idx,
-                     enum dfs_channel_type type);
+    int *secondary_channel,
+    u8 *oper_centr_freq_seg0_idx,
+    u8 *oper_centr_freq_seg1_idx,
+    enum dfs_channel_type type);
 #endif
 
 #endif // WIFI_HAL_PRIV_H

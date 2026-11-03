@@ -564,7 +564,7 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
 #if !defined(PLATFORM_LINUX) && defined(FEATURE_SUPPORT_RADIUSGREYLIST)
                 if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
                     reason = station->disconnect_reason_code;
-                    wifi_hal_info_print("reason from disconnect reason code is %d\n",reason);
+                    wifi_hal_info_print("reason from disconnect reason code is %d\n", reason);
                 }
 #endif /* !PLATFORM_LINUX && FEATURE_SUPPORT_RADIUSGREYLIST */
 #if !defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210)
@@ -1049,13 +1049,13 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
                 interface = link_iface;
             }
             wifi_hal_info_print("%s:%d: [MLO-LINK] ifidx=%d link_id=%d link_iface=%s\n",
-            __func__, __LINE__, ifidx, link_id,
-            link_iface ? link_iface->name : "NULL");
+                __func__, __LINE__, ifidx, link_id,
+                link_iface ? link_iface->name : "NULL");
         }
     }
 #endif
 
-    if(tb[NL80211_ATTR_WIPHY_FREQ] == NULL) {
+    if (tb[NL80211_ATTR_WIPHY_FREQ] == NULL) {
         wifi_hal_dbg_print("%s:%d: channel attribute not present\n", __func__, __LINE__);
         return;
     } else {
