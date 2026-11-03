@@ -284,7 +284,7 @@ void init_hostap_bss(wifi_interface_info_t *interface)
     dl_list_init(&conf->fils_realms);
 #endif
     conf->fils_hlp_wait_time = 30;
-#if !defined (QCOM_ATH12K_PORT)
+#if !defined(QCOM_ATH12K_PORT)
     conf->dhcp_server_port = DHCP_SERVER_PORT;
     conf->dhcp_relay_port = DHCP_SERVER_PORT;
 #endif
@@ -524,7 +524,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 #endif
 
 #if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(_MERCURY_PRODUCT_REQ_) && \
-    !defined(TARGET_GEMINI7_2) && !defined(BANANA_PI_PORT) && !defined(QCOM_ATH12K_PORT)
+    !defined(BANANA_PI_PORT) && !defined(QCOM_ATH12K_PORT)
     conf->wpa_key_mgmt_rsno_2 = 0;
     conf->rsn_pairwise_rsno_2 = 0;
 #endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !_MERCURY_PRODUCT_REQ_ && !BANANA_PI_PORT */
@@ -608,7 +608,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 #endif
 #if HOSTAPD_VERSION >= 210
 #if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(_MERCURY_PRODUCT_REQ_) && \
-    !defined(TARGET_GEMINI7_2) && !defined(BANANA_PI_PORT) && !defined(QCOM_ATH12K_PORT)
+    !defined(BANANA_PI_PORT) && !defined(QCOM_ATH12K_PORT)
             if(is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
                 conf->wpa_key_mgmt = WPA_KEY_MGMT_SAE;
                 conf->wpa_key_mgmt_rsno = 0;
@@ -625,7 +625,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             }
             wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d wpa_key_mgmt:%d\n",
                 __FUNCTION__, __LINE__, conf->iface, conf->disable_11be, conf->wpa_key_mgmt);
-#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !_MERCURY_PRODUCT_REQ_ && !TARGET_GEMINI7_2 && !BANANA_PI_PORT && !QCOM_ATH12K_PORT */
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !_MERCURY_PRODUCT_REQ_ && !BANANA_PI_PORT && !QCOM_ATH12K_PORT */
             conf->sae_pwe = 2;
 #endif /* HOSTAPD_VERSION >= 210 */
             conf->auth_algs = WPA_AUTH_ALG_SAE | WPA_AUTH_ALG_SHARED | WPA_AUTH_ALG_OPEN;
@@ -697,7 +697,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
 #endif /* HOSTAPD_VERSION >= 210 */
         conf->sae_require_mfp = 1;
 #if defined(CONFIG_IEEE80211BE) && !defined(VNTXER5_PORT) && !defined(_MERCURY_PRODUCT_REQ_) && \
-    !defined(TARGET_GEMINI7_2) && !defined(QCOM_ATH12K_PORT)
+    !defined(QCOM_ATH12K_PORT)
         if(is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
             conf->ieee80211w = (enum mfp_options) MGMT_FRAME_PROTECTION_REQUIRED;
         if(!conf->disable_11be) {
@@ -712,7 +712,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
            wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d ieee80211w:%d\n",
                            __func__, __LINE__, conf->iface, conf->disable_11be, conf->ieee80211w);
        }
-#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !_MERCURY_PRODUCT_REQ_ && !TARGET_GEMINI7_2 && !QCOM_ATH12K_PORT */
+#endif /* CONFIG_IEEE80211BE && !VNTXER5_PORT && !_MERCURY_PRODUCT_REQ_ && !QCOM_ATH12K_PORT */
     }
 #endif
 

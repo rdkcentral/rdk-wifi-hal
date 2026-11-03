@@ -37,7 +37,7 @@
 #include "ap/rrm.h"
 #include "ap/neighbor_db.h"
 #include "ap/ctrl_iface_ap.h"
-#if defined (QCOM_ATH12K_PORT)
+#if defined(QCOM_ATH12K_PORT)
 #include "common/qca-vendor.h"
 #endif
 #ifdef CONFIG_WIFI_EMULATOR
@@ -176,7 +176,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     if (strlen(output) == 0) {
         strncpy(output, "bpi-123", sizeof(output));
     }
-#elif defined (QCOM_ATH12K_PORT)
+#elif defined(QCOM_ATH12K_PORT)
     strncpy(output, get_device_info_details().serial_number, sizeof(output) - 1);
 #else
     _syscmd("grep -a 'Serial' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
@@ -193,7 +193,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     if (strlen(output) == 0) {
         strncpy(output, "Banana Pi - R4", sizeof(output));
     }
-#elif defined (QCOM_ATH12K_PORT)
+#elif defined(QCOM_ATH12K_PORT)
     _syscmd("grep -ia 'Model Name' /etc/factory_nvram.data | head -1 | cut -d ':' -f2 | cut -c2-", output, sizeof(output));
 #else
     _syscmd("grep -a 'MODEL' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
@@ -203,7 +203,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
         output[len - 1] = '\0';
     }
     strcpy(hal->wifi_prop.manufacturerModel,output);
-#if defined (QCOM_ATH12K_PORT)
+#if defined(QCOM_ATH12K_PORT)
     _syscmd("grep -ia 'Manufacturer' /etc/factory_nvram.data | head -1 | cut -d ':' -f2 | cut -c2- | tr -d '\\n'", hal->wifi_prop.manufacturer, sizeof(hal->wifi_prop.manufacturer));
 #else
     strcpy(hal->wifi_prop.manufacturer,output);
@@ -532,7 +532,7 @@ INT wifi_hal_init()
 
         wifi_hal_dbg_print("%s:%d: get platform radio capabilities\n", __func__, __LINE__);
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_) || \
-    defined(QCOM_ATH12K_PORT) || defined(TARGET_GEMINI7_2)
+    defined(QCOM_ATH12K_PORT)
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         wifi_interface_info_t *first_ap_interface = NULL;
         wifi_interface_info_t *interface;
@@ -1712,7 +1712,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #else
                 nl80211_interface_enable(interface_name, vap->u.bss_info.enabled);
 #endif /* QCOM_ATH12K_PORT */
-#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_) || defined(TARGET_GEMINI7_2)
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 #ifdef CONFIG_MLO
                 if(radio->oper_param.variant & WIFI_80211_VARIANT_BE)
                 {

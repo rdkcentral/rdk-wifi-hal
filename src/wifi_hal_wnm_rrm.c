@@ -140,7 +140,7 @@ typedef struct wnm_notif_req {
 } STRUCT_PACKED wnm_notif_req_t;
 
 
-#if !defined (QCOM_ATH12K_PORT)
+#if !defined(QCOM_ATH12K_PORT)
 /* Implementation is based on ieee802_11_send_bss_trans_mgmt_request() from wnm_ap.c */
 static int wifi_ieee802_11_send_bss_trans_mgmt_request(struct hostapd_data *hapd,
                         const u8 *addr,
@@ -396,7 +396,7 @@ exit:
     free(request);
     return ret;
 }
-#endif /* !defined (QCOM_ATH12K_PORT) */
+#endif /* !defined(QCOM_ATH12K_PORT) */
 
 #if 0
 /* Implemented in wnm_ap.c */
@@ -413,7 +413,7 @@ void ap_sta_reset_steer_flag_timer(void *eloop_ctx, void *timeout_ctx)
 }
 #endif
 
-#if !defined (QCOM_ATH12K_PORT)
+#if !defined(QCOM_ATH12K_PORT)
 /* Implementation is based on ieee802_11_rx_bss_trans_mgmt_resp() */
 static int handle_rx_bss_trans_mgmt_resp(wifi_interface_info_t *interface,
     const mac_address_t addr, const struct bss_tm_resp *frm, size_t len)
@@ -570,7 +570,7 @@ static int handle_rx_wnm_notification_req(wifi_interface_info_t *interface,
     }
     return WIFI_HAL_UNSUPPORTED;
 }
-#endif /* !defined (QCOM_ATH12K_PORT) */
+#endif /* !defined(QCOM_ATH12K_PORT) */
 
 /* Only MLO builds can ever request a beacon report per MLD link; other builds send a single
  * request. */
@@ -1061,7 +1061,7 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
 
     return dialog_token;
 }
-#if !defined (QCOM_ATH12K_PORT)
+#if !defined(QCOM_ATH12K_PORT)
 static void wifi_set_disassoc_timer(struct hostapd_data *hapd, struct sta_info *sta,
                 int disassoc_timer)
 {
@@ -1093,7 +1093,7 @@ static void wifi_set_disassoc_timer(struct hostapd_data *hapd, struct sta_info *
                 timeout % 1000 * 1000,
                 ap_handle_timer, hapd, sta);
 }
-#endif /*!defined (QCOM_ATH12K_PORT) */
+#endif /*!defined(QCOM_ATH12K_PORT) */
 
 #if (!defined(PLATFORM_LINUX) && !defined(QCOM_ATH12K_PORT)) || \
     defined(_PLATFORM_BANANAPI_R4_) || defined(_PLATFORM_RASPBERRYPI_)

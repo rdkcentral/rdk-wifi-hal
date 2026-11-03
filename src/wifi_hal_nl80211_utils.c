@@ -133,7 +133,7 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {2, 1,  "ath15",   "",   "brlan1",    0,    15,    "mesh_sta_5g"},
 #endif
 
-#if defined (QCOM_ATH12K_PORT) // for Qualcomm ath12k based platforms
+#if defined(QCOM_ATH12K_PORT) // for Qualcomm ath12k based platforms
     {0, 0,  "mld0",   "phy00-mld0",    "brlan0",  0,    0,      "private_ssid_2g"},
     {0, 1,  "mld1",   "phy00-mld0",    "brlan0",  0,    1,      "private_ssid_5g"},
     {0, 0,  "mld2",   "phy00-mld1",    "brlan0",  0,    12,     "mesh_backhaul_2g"},
@@ -145,7 +145,7 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {0, 2,  "mld8",   "",    "brlan0",  0,    23,     "mesh_sta_6g"},
 #endif
 
-#if defined(_MERCURY_PRODUCT_REQ_) || defined(TARGET_GEMINI7_2) // for Qualcomm based platforms
+#if defined(_MERCURY_PRODUCT_REQ_) // for Qualcomm based platforms
     {1, 0,  "home-ap-24",   "", "br-home",  100,   0,  "private_ssid_2g"},
     {2, 1,  "home-ap-50",   "", "br-home",  100,   1,  "private_ssid_5g"},
     {1, 0,  "bhaul-ap-24",  "", "",           0,  12,  "mesh_backhaul_2g"},
@@ -599,7 +599,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_beacon_prot,
 #endif
 
-#if defined (QCOM_ATH12K_PORT) // for Qualcomm based platforms
+#if defined(QCOM_ATH12K_PORT) // for Qualcomm based platforms
     "qcom-ath12k",
     "cfg80211",
     {"Xfinity Wireless Gateway","Qualcomm","ath12k","ath12k","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
@@ -634,7 +634,7 @@ const wifi_driver_info_t  driver_info = {
     platform_set_beacon_prot,
 #endif
 
-#if defined (VNTXER5_PORT)
+#if defined(VNTXER5_PORT)
     "vntxer5",
     "wifi_3_0",
     {"Xfinity Wireless Gateway","Vantiva","XER5","XER5","Model Description","Model URL","267","WPS Access Point","Manufacturer URL"},
