@@ -5882,9 +5882,11 @@ static void wiphy_info_ext_feature_flags(wifi_radio_info_t *radio,
                   NL80211_EXT_FEATURE_SCAN_MIN_PREQ_CONTENT))
         capa->flags2 |= WPA_DRIVER_FLAGS2_SCAN_MIN_PREQ;
 
+#if defined(QCOM_ATH12K_PORT)
     if (ext_feature_isset(ext_features, len,
                   NL80211_EXT_FEATURE_4WAY_HANDSHAKE_AP_PSK))
         capa->flags2 |= WPA_DRIVER_FLAGS2_4WAY_HANDSHAKE_AP_PSK;
+#endif /* QCOM_ATH12K_PORT */
 
     if (ext_feature_isset(ext_features, len,
                   NL80211_EXT_FEATURE_OWE_OFFLOAD))
@@ -5894,9 +5896,11 @@ static void wiphy_info_ext_feature_flags(wifi_radio_info_t *radio,
                   NL80211_EXT_FEATURE_OWE_OFFLOAD_AP))
         capa->flags2 |= WPA_DRIVER_FLAGS2_OWE_OFFLOAD_AP;
 
+#if defined(QCOM_ATH12K_PORT)
     if (ext_feature_isset(ext_features, len,
                   NL80211_EXT_FEATURE_SAE_OFFLOAD_AP))
         capa->flags2 |= WPA_DRIVER_FLAGS2_SAE_OFFLOAD_AP;
+#endif /* QCOM_ATH12K_PORT */
 
 #if HOSTAPD_VERSION >= 212
     if (ext_feature_isset(ext_features, len,
