@@ -6388,6 +6388,15 @@ static void wiphy_info_mbssid(struct wpa_driver_capa *cap, struct nlattr *attr)
 }
 #endif /* defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(QCOM_ATH12K_PORT) || TARGET_GEMINI7_2 */
 
+/*
+ * ath12k creates every radio slot of a single phy in wiphy_dump_handler(). Other
+ * single-phy platforms create one slot there and clone it afterwards in
+ * map_rdk_radios_and_indexes(), which must not run on top of already created slots.
+ */
+#if defined(FEATURE_SINGLE_PHY) && defined(QCOM_ATH12K_PORT)
+#define WIPHY_DUMP_CREATES_ALL_RADIOS
+#endif
+
 extern void print_attributes(char *cmd, struct nlattr *tb[]);
 static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 {
@@ -6404,7 +6413,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     unsigned int max_radio_count;
     unsigned int phy_index;
 
-#ifdef FEATURE_SINGLE_PHY
+#ifdef WIPHY_DUMP_CREATES_ALL_RADIOS
     int rdk_radio_indices[MAX_NUM_RADIOS];
     int num_radios_mapped = MAX_NUM_RADIOS;
     int ret = 0;
@@ -6426,13 +6435,13 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     gnlh = nlmsg_data(nlmsg_hdr(msg));
     nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
-#ifndef FEATURE_SINGLE_PHY
+#ifndef WIPHY_DUMP_CREATES_ALL_RADIOS
     if (g_wifi_hal.num_radios > max_radio_count) {
         wifi_hal_dbg_print("%s:%d: Returning num radios:%d exceeds MAX:%d\n", __func__, __LINE__,
             g_wifi_hal.num_radios, max_radio_count);
         return NL_SKIP;
     }
-#else //FEATURE_SINGLE_PHY
+#else // WIPHY_DUMP_CREATES_ALL_RADIOS
     if (g_wifi_hal.num_radios >= MAX_NUM_RADIOS) {
         /* All radio slots are filled.  Allow processing only if this phy is
          * already registered (subsequent dump fragments for the same phy). */
@@ -6455,7 +6464,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
             " registered - processing attributes\n",
             __func__, __LINE__, g_wifi_hal.num_radios, tmp_phy);
     }
-#endif //FEATURE_SINGLE_PHY
+#endif // WIPHY_DUMP_CREATES_ALL_RADIOS
 
 #if !defined(QCOM_ATH12K_PORT)
     if (!nl_split_wiphy) {
@@ -6486,7 +6495,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 
     print_attributes(__func__, tb);
 
-#ifdef FEATURE_SINGLE_PHY
+#ifdef WIPHY_DUMP_CREATES_ALL_RADIOS
     // Get the array of rdk_radio_indexes associated with this phy
     memset(rdk_radio_indices, 0, sizeof(rdk_radio_indices));
     ret = get_rdk_radio_indices(phy_index, rdk_radio_indices, &num_radios_mapped);
@@ -6508,7 +6517,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 
     bool existing_radio_found = 0;
     for (int i = 0; i < g_wifi_hal.num_radios; i++) {
-#ifdef FEATURE_SINGLE_PHY
+#ifdef WIPHY_DUMP_CREATES_ALL_RADIOS
         /* On single-PHY platforms every logical radio has the same phy_index;
          * use rdk_radio_index to distinguish them. */
         if (g_wifi_hal.radio_info[i].rdk_radio_index == (unsigned int)rdk_radio_indices[j]) {
@@ -6517,7 +6526,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
 #endif
             radio = &g_wifi_hal.radio_info[i];
             existing_radio_found = 1;
-#ifdef FEATURE_SINGLE_PHY
+#ifdef WIPHY_DUMP_CREATES_ALL_RADIOS
             wifi_hal_dbg_print("%s:%d existing radio found at slot:%d rdk_radio_idx:%d\n",
                 __func__, __LINE__, i, rdk_radio_indices[j]);
 #else
@@ -6550,23 +6559,19 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
         radio->capab.scan_impact = WIFI_SCAN_IMPACT_TIME_SLICING;    // default: time slicing
         radio->capab.min_scan_interval = 20; // default: 20 seconds
         g_wifi_hal.num_radios++;
-     if (tb[NL80211_ATTR_WIPHY_NAME])
-        wifi_hal_dbg_print("%s:%d qca dbg phyname:%s rdk_radio_idx:%d\n",
-            __func__, __LINE__, nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]),
-#ifdef FEATURE_SINGLE_PHY
-            rdk_radio_indices[j]
-#else
-            get_rdk_radio_index(phy_index)
+#ifdef WIPHY_DUMP_CREATES_ALL_RADIOS
+        if (tb[NL80211_ATTR_WIPHY_NAME])
+            wifi_hal_dbg_print("%s:%d qca dbg phyname:%s rdk_radio_idx:%d\n", __func__, __LINE__,
+                nla_get_string(tb[NL80211_ATTR_WIPHY_NAME]), rdk_radio_indices[j]);
 #endif
-        );
     }
 
     if (tb[NL80211_ATTR_WIPHY]) {
         radio->index = phy_index;
-#ifndef FEATURE_SINGLE_PHY
-        radio->rdk_radio_index = get_rdk_radio_index(phy_index);
-#else
+#if defined(WIPHY_DUMP_CREATES_ALL_RADIOS)
         radio->rdk_radio_index = rdk_radio_indices[j];
+#elif !defined(FEATURE_SINGLE_PHY)
+        radio->rdk_radio_index = get_rdk_radio_index(phy_index);
 #endif
         radio->capab.index = radio->index;
     }
@@ -7013,7 +7018,7 @@ static int wiphy_dump_handler(struct nl_msg *msg, void *arg)
     if (tb[NL80211_ATTR_WDEV]) {
         radio->dev_id = nla_get_u64(tb[NL80211_ATTR_WDEV]);
     }
-#ifdef FEATURE_SINGLE_PHY
+#ifdef WIPHY_DUMP_CREATES_ALL_RADIOS
     } // Close the for loop for multiple radios
 #endif
 
@@ -21140,13 +21145,13 @@ int wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     size_t seq_len = params->seq_len;
     const u8 *key = params->key;
     size_t key_len = params->key_len;
-#ifdef QCOM_ATH12K_PORT
     int skip_set_key = 1;
     enum key_flag key_flag = params->key_flag;
     int link_id = -1;
 #if HOSTAPD_VERSION >= 211
     link_id = params->link_id;
 #endif /* HOSTAPD_VERSION >= 211 */
+#ifdef QCOM_ATH12K_PORT
     int vlan_id = params->vlan_id;
 #endif /* QCOM_ATH12K_PORT */
 #endif /* HOSTAPD_VERSION >= 210 */
@@ -21164,7 +21169,7 @@ int wifi_drv_set_key(const char *ifname, void *priv, enum wpa_alg alg,
     wifi_hal_dbg_print("%s:%d: ifname:%s vap_index:%d\n", __func__, __LINE__,
                        interface->name, vap->vap_index);
 
-#if defined(QCOM_ATH12K_PORT) && HOSTAPD_VERSION >= 210
+#if HOSTAPD_VERSION >= 210
     {
         wifi_hal_dbg_print("%s:%d: alg=%d addr=%p key_idx=%d set_tx=%d "
                            "seq_len=%lu key_len=%lu key_flag=0x%x link_id=%d\n",
@@ -21624,7 +21629,7 @@ qca_fail_msg:
 #endif /* QCOM_ATH12K_PORT */
     } /* HOSTAPD_VERSION >= 210 block */
 
-#else /* !QCOM_ATH12K_PORT || HOSTAPD_VERSION < 210 */
+#else /* HOSTAPD_VERSION < 210 */
     if (alg == WPA_ALG_NONE) {
         return -1;
     }
@@ -21719,19 +21724,11 @@ qca_fail_msg:
     }
 
     nla_put_u8(key_msg, NL80211_KEY_IDX, key_idx);
-#if HOSTAPD_VERSION >= 210
-    if (nla_put_flag(key_msg, wpa_alg_bip(alg) ?
-                     NL80211_KEY_DEFAULT_MGMT :
-                     NL80211_KEY_DEFAULT))
-#else
-    if (nla_put_flag(key_msg, (alg == WPA_ALG_IGTK ||
-                               alg == WPA_ALG_BIP_GMAC_128 ||
-                               alg == WPA_ALG_BIP_GMAC_256 ||
-                               alg == WPA_ALG_BIP_CMAC_256) ?
-                     NL80211_KEY_DEFAULT_MGMT :
-                     NL80211_KEY_DEFAULT))
-#endif
-    {
+    if (nla_put_flag(key_msg,
+            (alg == WPA_ALG_IGTK || alg == WPA_ALG_BIP_GMAC_128 || alg == WPA_ALG_BIP_GMAC_256 ||
+                alg == WPA_ALG_BIP_CMAC_256) ?
+                NL80211_KEY_DEFAULT_MGMT :
+                NL80211_KEY_DEFAULT)) {
         nl80211_nlmsg_clear(msg);
         nlmsg_free(msg);
         nl80211_nlmsg_clear(key_msg);
@@ -21788,7 +21785,7 @@ qca_fail_msg:
                         __func__, __LINE__, interface->name, vap->vap_index);
     return 0;
 
-#endif /* QCOM_ATH12K_PORT && HOSTAPD_VERSION >= 210 */
+#endif /* HOSTAPD_VERSION >= 210 */
 }
 
 int wifi_drv_set_authmode(void *priv, int auth_algs)
