@@ -78,6 +78,7 @@
 #include "wpa_supplicant_i.h"
 #include "bss.h"
 #include "sme.h"
+#include "scan.h"
 #endif
 
 /*
@@ -937,10 +938,14 @@ INT wifi_hal_set_acs_keep_out_chans(wifi_radio_operationParam_t *wifi_radio_oper
 INT wifi_hal_sendDataFrame(int vap_id, unsigned char *dmac, unsigned char *data_buff, int data_len, BOOL insert_llc, int protocal, int priority);
 #ifdef WIFI_HAL_VERSION_3_PHASE2
 INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress);
+INT wifi_hal_addApAclDeviceInternal(INT apIndex, mac_address_t DeviceMacAddress, bool defer_kick, bool *kick_required);
 INT wifi_hal_delApAclDevice(INT apIndex, mac_address_t DeviceMacAddress);
+INT wifi_hal_delApAclDeviceInternal(INT apIndex, mac_address_t DeviceMacAddress, bool allow_kick);
 #else
 INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress);
+INT wifi_hal_addApAclDeviceInternal(INT apIndex, CHAR *DeviceMacAddress, bool defer_kick, bool *kick_required);
 INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress);
+INT wifi_hal_delApAclDeviceInternal(INT apIndex, CHAR *DeviceMacAddress, bool allow_kick);
 #endif
 INT wifi_hal_delApAclDevices(INT apIndex);
 INT wifi_hal_addHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress);
@@ -1266,7 +1271,7 @@ int platform_get_acl_num(int vap_index, uint *acl_hal_count);
 int steering_set_acl_mode(uint32_t apIndex, uint32_t mac_filter_mode);
 
 wifi_steering_apConfig_t* steering_find_ap_cfg(int vap_index, uint32_t *g_idx);
-int wifi_steering_add_mac_list(uint32_t vap_index, bm_sta_list_t *sta_info);
+int wifi_steering_add_mac_list(uint32_t vap_index, bm_sta_list_t *sta_info, bool *kick_required);
 int wifi_steering_del_mac_list(uint32_t vap_index, bm_sta_list_t *sta_info);
 INT wifi_hal_steering_clientDisconnect( UINT steeringgroupIndex, INT apIndex, mac_address_t client_mac,
                                         wifi_disconnectType_t type, UINT reason);
