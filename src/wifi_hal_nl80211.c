@@ -3573,7 +3573,7 @@ void *nl_recv_func(void *arg)
     wifi_hal_priv_t *priv = (wifi_hal_priv_t *)arg;
     wifi_interface_info_t *interface = NULL;
     int eloop_timeout_ms;
-#if defined (_PLATFORM_BANANAPI_R4_)
+#if defined(_PLATFORM_BANANAPI_R4_)
     size_t stack_size2;
     pthread_attr_t attr;
 
@@ -4540,7 +4540,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
     defined(TARGET_GEMINI7_2)
     int ap_index;
 #endif
-#if defined (RDKB_ONE_WIFI_PROD)
+#if defined(RDKB_ONE_WIFI_PROD)
     const char *suffix = "xl";
     char if_name_new[IFNAMSIZ] = "";
 #endif /* RDKB_ONE_WIFI_PROD */
@@ -4629,7 +4629,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
         nl_socket_free(sk);
         return -1;
     }
-#if defined (RDKB_ONE_WIFI_PROD)
+#if defined(RDKB_ONE_WIFI_PROD)
     if ((strlen(if_name) + strlen(suffix)) < IFNAMSIZ) {
         strncpy(if_name_new, if_name, sizeof(if_name_new));
         strcat(if_name_new, suffix);
@@ -4651,7 +4651,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
         nl_socket_free(sk);
         return -1;
     }
-#if defined (RDKB_ONE_WIFI_PROD)
+#if defined(RDKB_ONE_WIFI_PROD)
     wifi_hal_info_print("%s:%d: bridge:%s enslave device %s\n", __func__, __LINE__, br_name,
         (if_name_new[0] !='\0') ? if_name_new : if_name);
 #else
@@ -4659,7 +4659,7 @@ int nl80211_create_bridge(const char *if_name, const char *br_name)
         if_name);
 #endif /* RDKB_ONE_WIFI_PROD */
     if (rtnl_link_enslave(sk, bridge, device)) {
-#if defined (RDKB_ONE_WIFI_PROD)
+#if defined(RDKB_ONE_WIFI_PROD)
         wifi_hal_info_print("%s:%d: bridge:%s failed to enslave device %s\n", __func__, __LINE__,
             br_name, (if_name_new[0] !='\0') ? if_name_new : if_name);
 #else
@@ -10277,7 +10277,7 @@ int nl80211_update_interface(wifi_interface_info_t *interface)
         nla_put_u32(msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_AP);
     } else {
 #ifndef _MERCURY_PRODUCT_REQ_
-#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_DRIVER_BRCM) && !defined (CONFIG_WIFI_EMULATOR)
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_DRIVER_BRCM) && !defined(CONFIG_WIFI_EMULATOR)
         /* In case of BRCM MLO enabled platforms do not reconfigure STA interface to AP */
         nlmsg_free(msg);
         msg = NULL;
