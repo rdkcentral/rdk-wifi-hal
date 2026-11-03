@@ -163,7 +163,7 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
 
 #ifdef XLE_PORT // for Broadcom XLE
 
-#if defined (XLE_3_RADIO_SUPPORT) && defined(XLE_BCM_SDK_504L04P3)
+#if defined(XLE_3_RADIO_SUPPORT) && defined(XLE_BCM_SDK_504L04P3)
     {1, 0,  "wl0.1",   "",  "brlan0",  100,    0,      "private_ssid_2g"},
     {2, 1,  "wl1.1",   "",  "brlan0",  100,    1,      "private_ssid_5gl"},
     {1, 0,  "wl0.2",   "",  "brlan1",  101,    2,      "iot_ssid_2g"},
@@ -188,7 +188,7 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
     {0, 2,  "wl2.6",   "",  "br106",   106,    21,     "lnf_radius_5gh"},
     {0, 2,  "wl2.7",   "",  "brlan113",114,    22,     "mesh_backhaul_5gh"},
     {0, 2,  "wl2",     "",  "",          0,    23,     "mesh_sta_5gh"},
-#elif defined (XLE_3_RADIO_SUPPORT)
+#elif defined(XLE_3_RADIO_SUPPORT)
     {0, 0,  "wl0.1",   "",  "brlan0",  100,    0,      "private_ssid_2g"},
     {1, 1,  "wl1.1",   "",  "brlan0",  100,    1,      "private_ssid_5gl"},
     {0, 0,  "wl0.2",   "",  "brlan1",  101,    2,      "iot_ssid_2g"},
