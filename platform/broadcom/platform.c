@@ -3980,6 +3980,7 @@ INT wifi_getApAssociatedDeviceDiagnosticResult3(INT apIndex,
     wifi_interface_info_t *interface;
 
     interface = get_interface_by_vap_index(apIndex);
+    wifi_hal_stats_dbg_print("%s:%d: RDK-WIFI-HAL SHARMAN-4360\n", __func__, __LINE__);
     if (interface == NULL) {
         wifi_hal_stats_error_print("%s:%d Failed to get interface for index %d\n", __func__, __LINE__,
             apIndex);
