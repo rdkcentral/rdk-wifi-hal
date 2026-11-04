@@ -32,12 +32,12 @@
 #include "nvram_api.h"
 #endif // defined(WLDM_21_2)
 #include "wlcsm_lib_wl.h"
-#if defined (ENABLED_EDPD)
+#if defined(ENABLED_EDPD)
 #include <fcntl.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#endif // defined (ENABLED_EDPD)
+#endif // defined(ENABLED_EDPD)
 
 #include <sys/stat.h>
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
@@ -146,13 +146,18 @@ static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char
 int sta_disassociated(int ap_index, char *mac, int reason);
 int sta_deauthenticated(int ap_index, char *mac, int reason);
 int sta_associated(int ap_index, wifi_associated_dev_t *associated_dev);
-#if defined (ENABLED_EDPD)
+#if defined(ENABLED_EDPD)
 static int check_edpdctl_enabled();
 static int check_dpd_feature_enabled();
 static int enable_echo_feature_and_power_control_configs(void);
 int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down);
 int platform_set_gpio_config_for_ecomode(const int wl_idx, const bool eco_pwr_down);
-#endif // defined (ENABLED_EDPD)
+#endif // defined(ENABLED_EDPD)
+
+#ifdef CONFIG_IEEE80211BE
+static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id,
+    int *nvram_changed);
+#endif
 
 #ifndef NEWPLATFORM_PORT
 static char const *bss_nvifname[] = {
@@ -1258,13 +1263,21 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
     wifi_radio_info_t *radio;
     bool is_radio_apply_required = false;
 
+#if defined(ENABLED_EDPD) && defined(MLO_ENAB)
+    wifi_interface_info_t *interface;
+    wifi_vap_info_t *vap;
+    int nvram_changed = 0;
+    wifi_mld_common_info_t *mld_conf;
+    wifi_radio_info_t *radio_info;
+#endif // MLO_ENAB && ENABLED_EDPD
+
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
         wifi_hal_dbg_print("%s:%d:Could not find radio index:%d\n", __func__, __LINE__, index);
         return RETURN_ERR;
     }
 
-#if defined (ENABLED_EDPD)
+#if defined(ENABLED_EDPD)
     int ret = 0;
     if (operationParam->EcoPowerDown) {
         /* Enable eco mode feature and power control configurations. */
@@ -1278,6 +1291,37 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         if (ret != RETURN_OK) {
            wifi_hal_dbg_print("%s:%d: Failed to enable ECO mode for radio index:%d\n", __func__, __LINE__, index);
         }
+
+#ifdef MLO_ENAB
+        radio_info = get_radio_by_rdk_index(index);
+        if (radio_info == NULL) {
+            wifi_hal_error_print("%s:%d: radio for radio index:%d not found\n", __func__, __LINE__, index);
+            return RETURN_ERR;
+        }
+
+        interface = get_private_vap_interface(radio_info);
+        if (interface == NULL) {
+            wifi_hal_error_print("%s:%d: unable to get private vap for radio index : %d\n",
+                __func__, __LINE__, index);
+            return RETURN_ERR;
+        }
+
+        vap = &interface->vap_info;
+
+        nvram_update_wl_mlo_config(vap->radio_index, -1, &nvram_changed);
+
+        if (nvram_changed & USER_NVRAM_CHANGED) {
+            wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
+            nvram_commit();
+        }
+
+#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+		if (nvram_changed & KERNEL_NVRAM_CHANGED) {
+			wifi_hal_info_print("%s:%d kernel nvram was changed => nvram_kcommit()\n", __func__, __LINE__);
+			nvram_kcommit();
+		}
+#endif//(SCXF10_PORT) || defined(SCXER10_PORT)
+#endif//MLO_ENAB
 
 #ifdef _SR213_PRODUCT_REQ_
         //Disconnect the GPIO
@@ -1305,8 +1349,42 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         if (ret != RETURN_OK) {
             wifi_hal_dbg_print("%s:%d: Failed to disable ECO mode for radio index:%d\n", __func__, __LINE__, index);
         }
+
+#ifdef MLO_ENAB
+        if (_platform_init_done) {
+            radio_info = get_radio_by_rdk_index(index);
+            if (radio_info == NULL) {
+                wifi_hal_error_print("%s:%d: radio for radio index:%d not found\n", __func__, __LINE__, index);
+                return RETURN_ERR;
+            }
+
+            interface = get_private_vap_interface(radio_info);
+            if (interface == NULL) {
+                wifi_hal_error_print("%s:%d: unable to get private vap for radio index : %d\n", __func__, __LINE__, index);
+                return RETURN_ERR;
+            }
+
+            vap = &interface->vap_info;
+
+            mld_conf = &vap->u.bss_info.mld_info.common_info;
+
+            nvram_update_wl_mlo_config(vap->radio_index,
+                    mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
+
+			if (nvram_changed & USER_NVRAM_CHANGED) {
+				wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
+				nvram_commit();
+			}
+#if defined(SCXF10_PORT) || defined(SCXER10_PORT)
+			if (nvram_changed & KERNEL_NVRAM_CHANGED) {
+				wifi_hal_info_print("%s:%d kernel nvram was changed => nvram_kcommit()\n", __func__, __LINE__);
+				nvram_kcommit();
+			}
+#endif//(SCXF10_PORT) || defined(SCXER10_PORT)
+		}
+#endif //MLO_ENAB
     }
-#endif // defined (ENABLED_EDPD)
+#endif // defined(ENABLED_EDPD)
 
     if (radio->radio_presence == false) {
         wifi_hal_dbg_print("%s:%d Skip this radio %d. This is in sleeping mode\n", __FUNCTION__, __LINE__, index);
@@ -2538,6 +2616,9 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
                         __func__, __LINE__, beacon_rate, map->vap_array[index].vap_index);
                     return RETURN_ERR;
                 }
+                prepare_param_name(param_name, interface_name, "_force_bcn_rspec");
+                // BCM nvram expects rate in 500 Kbps units (×2), similar as in nl_set_beacon_rate
+                set_decimal_nvram_param(param_name, beacon_rate*2);
 #endif /* defined(SCXER10_PORT) */
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && defined(MLO_ENAB)
                 need_down = TRUE;
@@ -3025,7 +3106,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
     return RETURN_OK;
 }
 
-#elif defined (TCHCBRV2_PORT) || defined(_SR213_PRODUCT_REQ_) || defined(XER2_PORT)
+#elif defined(TCHCBRV2_PORT) || defined(_SR213_PRODUCT_REQ_) || defined(XER2_PORT)
 
 int platform_get_radio_phytemperature(wifi_radio_index_t index,
     wifi_radioTemperature_t *radioPhyTemperature)
@@ -3052,7 +3133,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
 
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || RDKB_ONE_WIFI_PROD
 
-#if defined (ENABLED_EDPD)
+#if defined(ENABLED_EDPD)
 /* EDPD - WLAN Power down control support APIs. */
 #define GPIO_PIN_24G_RADIO 101
 #define GPIO_PIN_5G_RADIO 102
@@ -3373,7 +3454,7 @@ int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down)
 
     return RETURN_OK;
 }
-#endif // defined (ENABLED_EDPD)
+#endif // defined(ENABLED_EDPD)
 
 int platform_set_txpower(void* priv, uint txpower)
 {
@@ -3394,7 +3475,7 @@ int platform_set_neighbor_report(uint index, uint add, mac_address_t mac)
 
     return 0;
 }
-#if defined (_SR213_PRODUCT_REQ_)
+#if defined(_SR213_PRODUCT_REQ_)
 #define SKY_VENDOR_OUI "DD0480721502"
 int platform_get_vendor_oui(char *vendor_oui, int vendor_oui_len)
 {
@@ -5346,8 +5427,13 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     nvram_update_wl_mlo_apply(conf->iface, 1, &nvram_changed);
 
     if (is_vap_private) {
-        nvram_update_wl_mlo_config(vap->radio_index,
-            mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
+         if (!radio->oper_param.EcoPowerDown) {
+             nvram_update_wl_mlo_config(vap->radio_index,
+                     mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
+         } else {
+             wifi_hal_info_print("%s:%d Not updating the mlo_config for radio_index : %d due to ecomode\n",
+                __func__, __LINE__, vap->radio_index);
+         }
     }
 
     hapd->mld_link_id = platform_get_link_id_for_radio_index(vap->radio_index, vap->vap_index);
