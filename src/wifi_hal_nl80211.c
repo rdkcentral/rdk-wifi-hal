@@ -2323,7 +2323,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             }
 #endif /* FEATURE_SUPPORT_RADIUSGREYLIST */
 #endif
-#if !defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210)
+#if (!defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210) && !defined(_MERCURY_PRODUCT_REQ_))
             ap_free_sta(&interface->u.ap.hapd, station);
 #endif // !defined(CONFIG_GENERIC_MLO)
         } else {
@@ -2402,7 +2402,7 @@ int process_frame_mgmt(wifi_interface_info_t *interface, struct ieee80211_mgmt *
             }
 #endif /* FEATURE_SUPPORT_RADIUSGREYLIST */
 #endif
-#if !defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210)
+#if (!defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210) && !defined(_MERCURY_PRODUCT_REQ_))
             ap_free_sta(&interface->u.ap.hapd, station);
 #endif // !defined(CONFIG_GENERIC_MLO)
         }
@@ -7755,10 +7755,10 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
     int rssi = 0;
     mac_addr_str_t sta_mac_str;
     wifi_associated_dev_t associated_dev = {};
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE)
+#if (HOSTAPD_VERSION >= 211 || defined(_MERCURY_PRODUCT_REQ_)) && defined(CONFIG_IEEE80211BE)
     struct sta_info *sta = NULL;
     bool has_link_stats = false;
-#endif /* HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE */
+#endif /* (HOSTAPD_VERSION >= 211 || _MERCURY_PRODUCT_REQ_) && CONFIG_IEEE80211BE */
 
     interface = (wifi_interface_info_t *)arg;
 
@@ -7798,7 +7798,7 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
         return NL_SKIP;
     }
 
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE)
+#if (HOSTAPD_VERSION >= 211 || defined(_MERCURY_PRODUCT_REQ_)) && defined(CONFIG_IEEE80211BE)
     if (tb[NL80211_ATTR_MLO_LINKS] != NULL) {
         struct nlattr *link_nest;
         int rem_links;
@@ -7873,7 +7873,7 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
             has_link_stats = true;
         }
     }
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE
+#endif // (HOSTAPD_VERSION >= 211 || _MERCURY_PRODUCT_REQ_) && CONFIG_IEEE80211BE
 
     if (stats[NL80211_STA_INFO_CHAIN_SIGNAL] != NULL) {
         nla_for_each_nested(nl, stats[NL80211_STA_INFO_CHAIN_SIGNAL], rem) {
@@ -7888,7 +7888,7 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
     associated_dev.cli_RSSI = rssi;
     wifi_hal_dbg_print("%s:%d: RSSI %d\n", __func__, __LINE__, associated_dev.cli_RSSI);
 
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_IEEE80211BE)
+#if (HOSTAPD_VERSION >= 211 || defined(_MERCURY_PRODUCT_REQ_)) && defined(CONFIG_IEEE80211BE)
     sta = ap_get_sta(&interface->u.ap.hapd, associated_dev.cli_MACAddress);
     if (sta == NULL) {
         wifi_hal_error_print("%s:%d: " MACSTR " sta_info not found!\n", __func__, __LINE__,
@@ -7962,7 +7962,7 @@ static int get_sta_handler(struct nl_msg *msg, void *arg)
         wifi_hal_error_print("%s:%d: Client is MLD STA but no link stats available\n", __func__, __LINE__);
     }
 
-#endif /* HOSTAPD_VERSION >= 211 && CONFIG_IEEE80211BE */
+#endif /* (HOSTAPD_VERSION >= 211 || _MERCURY_PRODUCT_REQ_) && CONFIG_IEEE80211BE */
 
     log_connected_sta(interface, &associated_dev);
     notify_sta_listeners(interface, &associated_dev);
@@ -16435,6 +16435,14 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
         cmd = params->set ? NL80211_CMD_SET_STATION : NL80211_CMD_NEW_STATION;
         cmd_string = params->set ? "NL80211_CMD_SET_STATION" : "NL80211_CMD_NEW_STATION";
     }
+#elif defined(_MERCURY_PRODUCT_REQ_)
+    if (params->mld_link_sta) {
+        cmd = NL80211_CMD_ADD_LINK_STA;
+        cmd_string = "NL80211_CMD_ADD_LINK_STA";
+    } else {
+        cmd = params->set ? NL80211_CMD_SET_STATION : NL80211_CMD_NEW_STATION;
+        cmd_string = params->set ? "NL80211_CMD_SET_STATION" : "NL80211_CMD_NEW_STATION";
+    }
 #else
     cmd = params->set ? NL80211_CMD_SET_STATION : NL80211_CMD_NEW_STATION;
     cmd_string = params->set ? "NL80211_CMD_SET_STATION" : "NL80211_CMD_NEW_STATION";
@@ -16669,7 +16677,7 @@ int wifi_drv_sta_add(void *priv, struct hostapd_sta_add_params *params)
         nla_nest_end(msg, wme);
     }
 
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO) || defined(_MERCURY_PRODUCT_REQ_)
     if (params->mld_link_id >= 0) {
         if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, params->mld_link_id) < 0) {
             goto fail;

@@ -1922,6 +1922,21 @@ int platform_get_country_code_default(char *code)
     }
     return -1;
 }
+#ifdef CONFIG_IEEE80211BE
+int platform_get_mld_address_default(UINT vap_index, mac_address_t out_addr)
+{
+    wifi_interface_info_t *interface;
+
+    interface = get_interface_by_vap_index(vap_index);
+    if (interface == NULL) {
+        return RETURN_ERR;
+    }
+
+    memcpy(out_addr, interface->mac, sizeof(mac_address_t));
+
+    return RETURN_OK;
+}
+#endif
 
 int nvram_get_current_password(char *l_password, int vap_index)
 {
