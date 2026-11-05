@@ -178,8 +178,9 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     }
 #elif defined(QCOM_ATH12K_PORT)
     strncpy(output, get_device_info_details().serial_number, sizeof(output) - 1);
-#elif defined (XLE_PORT)
-    _syscmd("grep -a 'DEVICE_SERIAL_NUMBER' /tmp/serial.txt | cut -d '=' -f2", output, sizeof(output));
+#elif defined(XLE_PORT)
+    _syscmd("grep -a 'DEVICE_SERIAL_NUMBER' /tmp/serial.txt | cut -d '=' -f2", output,
+        sizeof(output));
 #else
     _syscmd("grep -a 'Serial' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
 #endif
@@ -198,7 +199,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     }
 #elif defined(QCOM_ATH12K_PORT)
     _syscmd("grep -ia 'Model Name' /etc/factory_nvram.data | head -1 | cut -d ':' -f2 | cut -c2-", output, sizeof(output));
-#elif defined (XLE_PORT)
+#elif defined(XLE_PORT)
     _syscmd("grep -a 'MODEL' /tmp/serial.txt | cut -d '=' -f2 | xargs", output, sizeof(output));
 #else
     _syscmd("grep -a 'MODEL' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
@@ -237,7 +238,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
             memset(hal->wifi_prop.cm_mac, 0, sizeof(hal->wifi_prop.cm_mac));
        }
     }
-#elif defined (XLE_PORT)
+#elif defined(XLE_PORT)
     unsigned int mac[6];
     _syscmd("grep -a 'ETHERNET_MAC_ADDRESS' /tmp/serial.txt | cut -d '=' -f2", output,
         sizeof(output));
@@ -253,6 +254,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
             hal->wifi_prop.cm_mac[i] = (uint8_t)mac[i];
         }
     } else {
+        memset(hal->wifi_prop.cm_mac, 0, sizeof(hal->wifi_prop.cm_mac));
         wifi_hal_error_print("%s:%d: Unable to parse CM MAC address from XLE serial file\n",
             __func__, __LINE__);
     }
