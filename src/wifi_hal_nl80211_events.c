@@ -187,7 +187,9 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        if (interface->u.sta.wpa_sm != NULL && interface->wpa_s.wpa != NULL) {
+            supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        }
 #endif
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
@@ -246,9 +248,13 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
             }
             event.assoc_reject.status_code = status;
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             supplicant_event(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #else
+            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC_REJECT, &event);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #endif // BANANA_PI_PORT
             return;
         }
@@ -285,9 +291,13 @@ static void nl80211_associate_event(wifi_interface_info_t *interface, struct nla
     }
 
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #else
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_ASSOC, &event);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #endif // BANANA_PI_PORT
 }
 
@@ -315,9 +325,13 @@ static void nl80211_authenticate_event(wifi_interface_info_t *interface, struct 
     }
 
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     supplicant_event(&interface->wpa_s, EVENT_AUTH, &event);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #else
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_AUTH, &event);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #endif // BANANA_PI_PORT
 }
 #endif //CONFIG_WIFI_EMULATOR || BANANA_PI_PORT
@@ -731,6 +745,9 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
 
     if (status != WLAN_STATUS_SUCCESS) {
         wifi_hal_error_print("%s:%d: status code %d unsuccessful, returning\n", __func__, __LINE__, status);
+        /* No new link replaced the one whose disconnect was kept over this attempt: report and
+         * clean up that disconnect first, as it happened first */
+        wifi_hal_sta_settle_owed_disconnect(interface, true);
         send_sta_connection_status_to_cb(backhaul->bssid, interface->vap_info.vap_index, wifi_connection_status_ap_not_found);
         return;    
     }
@@ -794,6 +811,17 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         wifi_hal_dbg_print("%s:%d: pmkid attribute absent\n", __func__, __LINE__);
     }
 
+    /* Freed by a disconnect event that came first; everything below needs it. hapd_lock (the
+     * lock wifi_hal_sta_sm_free() runs under) is held from the check to the last use: a disconnect
+     * replayed on the wifi_hal_connect() caller's thread must not free it in between. */
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    if (interface->u.sta.wpa_sm == NULL) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        wifi_hal_error_print("%s:%d: connect event on %s with no state machine\n", __func__, __LINE__,
+            interface->name);
+        return;
+    }
+
     if (get_vap_security_mode(&interface->vap_info, sec) != wifi_security_mode_none) {
         eapol_sm_notify_eap_fail(interface->u.sta.wpa_sm->eapol, 0);
         eapol_sm_notify_eap_success(interface->u.sta.wpa_sm->eapol, 0);
@@ -833,14 +861,15 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
 #endif
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
-static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nlattr **tb)
+/* Acts on a disconnect of the link reported as bssid: state, DFS evacuation, the status callback,
+ * then the state machine cleanup. gen is connect_gen when the event was taken; count adds the event
+ * to disconnect_events once fully handled (false for a replay, which was counted when deferred) */
+static void sta_handle_disconnect(wifi_interface_info_t *interface, const unsigned char *bssid,
+    unsigned int gen, bool count)
 {
-    mac_address_t mac;
-    mac_addr_str_t mac_str;
-    struct nlattr *attr;
-
     wifi_device_callbacks_t *callbacks;
     wifi_vap_info_t *vap;
     wifi_bss_info_t bss;
@@ -851,6 +880,12 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
 #endif /* XLE_PORT && FEATURE_HOSTAP_MGMT_FRAME_CTRL */
 
     vap = &interface->vap_info;
+
+    /* This report also covers a disconnect kept over a submitted connect */
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    interface->u.sta.disconnect_owed = false;
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
     interface->u.sta.state = WPA_DISCONNECTED;
 
 #if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
@@ -885,7 +920,7 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     callbacks = get_hal_device_callbacks();
 
     if (callbacks->sta_conn_status_callback) {
-        memcpy(bss.bssid, interface->u.sta.backhaul.bssid, sizeof(bssid_t));
+        memcpy(bss.bssid, bssid, sizeof(bssid_t));
 
 #ifdef CONFIG_WIFI_EMULATOR_EXT_AGENT
         sta.vap_index = interface->index;
@@ -898,22 +933,183 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
         callbacks->sta_conn_status_callback(vap->vap_index, &bss, &sta);
     }
 
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    if (interface->u.sta.connect_in_progress || interface->u.sta.connect_gen != gen) {
+        /* A connect began after the event was taken (this disconnect was real and is reported);
+         * its state machine must survive, also when that connect has already returned */
+        if (count) {
+            interface->u.sta.disconnect_events++;
+        }
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        wifi_hal_info_print("%s:%d: connect started on %s, keeping its state machine\n",
+            __func__, __LINE__, interface->name);
+        return;
+    }
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+    /* Timer/flag cleanup needs no wpa state machine, so it runs for open/non-RSN bSTAs too;
+     * only the supplicant event itself requires wpa_s.wpa. */
     wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
     interface->wpa_s.disconnected = 1;
+    if (interface->wpa_s.wpa != NULL) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-    supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
+        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, NULL);
 #else
-    wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
+        wpa_supplicant_event_wpa(&interface->wpa_s, EVENT_DISASSOC, NULL);
 #endif // BANANA_PI_PORT
-#endif
-    if (interface->u.sta.wpa_sm != NULL) {
-        eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
-        interface->u.sta.wpa_sm->eapol = NULL;
-
-        wpa_sm_deinit(interface->u.sta.wpa_sm);
-        interface->u.sta.wpa_sm = NULL;
     }
+#endif
+    wifi_hal_sta_sm_free(interface);
+    /* Fully handled: lets wifi_hal_disconnect() return */
+    if (count) {
+        interface->u.sta.disconnect_events++;
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+}
+
+/* Called by wifi_hal_connect() once nl80211_connect_sta() has returned, with connect_in_progress
+ * already cleared. A disconnect deferred during the attempt is acted on when nothing has replaced
+ * the link it reports: the attempt failed (no new link exists), or the event followed the new
+ * link's own connect/auth/assoc event (the new link itself went down). Otherwise the attempt was
+ * only submitted, so whether it replaces the old link is not known yet: the disconnect is kept
+ * (disconnect_owed) for wifi_hal_sta_settle_owed_disconnect() to act on with the result. The
+ * result may already have come (the nl thread can handle it before this runs): it was recorded for
+ * this attempt (connect_result_gen), and settles the disconnect here the way it would have. */
+void wifi_hal_sta_reconcile_deferred_disconnect(wifi_interface_info_t *interface, bool connect_ok)
+{
+    mac_address_t bssid;
+    unsigned int gen;
+    bool replay, owe, settled = false;
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    gen = interface->u.sta.connect_gen;
+    replay = interface->u.sta.disconnect_deferred &&
+        (!connect_ok || interface->u.sta.disconnect_deferred_new_link);
+    owe = interface->u.sta.disconnect_deferred && !replay;
+    memcpy(bssid, interface->u.sta.disconnect_deferred_bssid, sizeof(bssid));
+    if (owe && interface->u.sta.connect_result_known && interface->u.sta.connect_result_gen == gen) {
+        /* The result came first: settle with it now instead of waiting for one already consumed */
+        owe = false;
+        replay = interface->u.sta.connect_result_replay;
+        settled = true;
+        interface->u.sta.connect_result_known = false;
+    }
+    if (owe) {
+        interface->u.sta.disconnect_owed = true;
+        memcpy(interface->u.sta.disconnect_owed_bssid, bssid, sizeof(bssid));
+    }
+    interface->u.sta.disconnect_deferred = false;
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+    if (settled && !replay) {
+        wifi_hal_info_print("%s:%d: disconnect on %s deferred during connect superseded by its"
+            " earlier result\n", __func__, __LINE__, interface->name);
+    }
+    if (owe) {
+        wifi_hal_info_print("%s:%d: disconnect on %s deferred during connect kept until its result\n",
+            __func__, __LINE__, interface->name);
+    }
+    if (!replay) {
+        return;
+    }
+    wifi_hal_info_print("%s:%d: handling disconnect on %s deferred during connect\n", __func__,
+        __LINE__, interface->name);
+    sta_handle_disconnect(interface, bssid, gen, false);
+}
+
+/* Settles a disconnect kept over a submitted connect (disconnect_owed) once the attempt's result is
+ * known. replay false: the result reports the link itself (the new link is up, or a disconnect is
+ * reported anyway), so the old link's disconnect is dropped. replay true: the attempt failed with
+ * no disconnect report, so it is reported and cleaned up now. A result with nothing owed yet is
+ * recorded for the current attempt: wifi_hal_connect() may still be about to keep a disconnect
+ * over it (wifi_hal_sta_reconcile_deferred_disconnect()), which then settles with it. */
+void wifi_hal_sta_settle_owed_disconnect(wifi_interface_info_t *interface, bool replay)
+{
+    mac_address_t bssid;
+    unsigned int gen;
+    bool owed;
+
+    /* u.sta shares storage with u.ap */
+    if (interface->vap_info.vap_mode != wifi_vap_mode_sta) {
+        return;
+    }
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    owed = interface->u.sta.disconnect_owed;
+    interface->u.sta.disconnect_owed = false;
+    memcpy(bssid, interface->u.sta.disconnect_owed_bssid, sizeof(bssid));
+    gen = interface->u.sta.connect_gen;
+    if (!owed) {
+        interface->u.sta.connect_result_known = true;
+        interface->u.sta.connect_result_replay = replay;
+        interface->u.sta.connect_result_gen = gen;
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+    if (!owed) {
+        return;
+    }
+    if (!replay) {
+        wifi_hal_info_print("%s:%d: disconnect on %s kept during connect superseded by its result\n",
+            __func__, __LINE__, interface->name);
+        return;
+    }
+    wifi_hal_info_print("%s:%d: connect on %s failed, handling the disconnect kept during it\n",
+        __func__, __LINE__, interface->name);
+    sta_handle_disconnect(interface, bssid, gen, false);
+}
+
+static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nlattr **tb)
+{
+    mac_address_t mac;
+    mac_addr_str_t mac_str;
+    struct nlattr *attr;
+    unsigned int gen;
+
+    /* Netlink keeps events in order, so the first disconnect after a wifi_hal_disconnect() that
+     * timed out is that late one: once wifi_hal_connect() has started a new link since (which may
+     * already be past connect_in_progress), it is identified as the old link's and dropped before
+     * it can change the new connection's state, report a disconnect or free its state machine.
+     * disconnect_events is counted only once an event is fully handled (or deferred), so
+     * wifi_hal_disconnect() returns after the callback and the cleanup. */
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    gen = interface->u.sta.connect_gen;
+    if (interface->u.sta.stale_disconnect_pending && interface->u.sta.stale_disconnect_gen != gen) {
+        interface->u.sta.stale_disconnect_pending = false;
+        interface->u.sta.disconnect_events++;
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        wifi_hal_info_print("%s:%d: ignoring stale disconnect on %s\n", __func__, __LINE__,
+            interface->name);
+        return;
+    }
+    interface->u.sta.stale_disconnect_pending = false;
+    /* During nl80211_connect_sta() (which waits here for scan results and command replies) the
+     * event cannot be told apart yet: a real drop of the current link, or one that loses to the
+     * new attempt. It must not touch the state machine the attempt is using, and reporting it now
+     * would read as the attempt failing, so it is kept for wifi_hal_connect() to reconcile with
+     * the connect result. The reported link is the event's, as backhaul already names the target. */
+    if (interface->u.sta.connect_in_progress) {
+        interface->u.sta.disconnect_deferred = true;
+        interface->u.sta.disconnect_deferred_new_link = interface->u.sta.connect_link_event;
+        if (tb[NL80211_ATTR_MAC] != NULL && nla_len(tb[NL80211_ATTR_MAC]) == ETH_ALEN) {
+            memcpy(interface->u.sta.disconnect_deferred_bssid, nla_data(tb[NL80211_ATTR_MAC]),
+                ETH_ALEN);
+        } else {
+            memcpy(interface->u.sta.disconnect_deferred_bssid, interface->u.sta.backhaul.bssid,
+                ETH_ALEN);
+        }
+        interface->u.sta.disconnect_events++;
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        wifi_hal_info_print("%s:%d: disconnect on %s during connect, deferred\n", __func__,
+            __LINE__, interface->name);
+        return;
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+    if (tb[NL80211_ATTR_MAC] != NULL && nla_len(tb[NL80211_ATTR_MAC]) == ETH_ALEN) {
+         memcpy(mac, nla_data(tb[NL80211_ATTR_MAC]), ETH_ALEN);
+     } else {
+         memcpy(mac, interface->u.sta.backhaul.bssid, ETH_ALEN);
+     }
+     sta_handle_disconnect(interface, mac, gen, true);
 
     if ((attr = tb[NL80211_ATTR_REASON_CODE]) != NULL) {
         wifi_hal_info_print("%s:%d: reason code:%d\n", __func__, __LINE__, nla_get_u16(attr));
@@ -1854,6 +2050,24 @@ static void nl80211_vendor_event(wifi_interface_info_t *interface,
     }
 }
 
+/* An event of the link wifi_hal_connect() started: netlink keeps events in order, so the
+ * disconnect a timed out wifi_hal_disconnect() was waiting for will not come any more, and any
+ * disconnect after this one is a real one of this link */
+static void sta_new_link_event(wifi_interface_info_t *interface)
+{
+    /* u.sta shares storage with u.ap */
+    if (interface->vap_info.vap_mode != wifi_vap_mode_sta) {
+        return;
+    }
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    interface->u.sta.stale_disconnect_pending = false;
+    /* A disconnect after this one during the same connect is the new link's own */
+    if (interface->u.sta.connect_in_progress) {
+        interface->u.sta.connect_link_event = true;
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+}
+
 static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, struct nlattr **tb)
 {
     switch (cmd) {
@@ -1883,13 +2097,16 @@ static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, stru
         break;
 
     case NL80211_CMD_CONNECT:
+        sta_new_link_event(interface);
         nl80211_connect_event(interface, tb);
         break;
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     case NL80211_CMD_AUTHENTICATE:
+        sta_new_link_event(interface);
         nl80211_authenticate_event(interface, tb);
         break;
     case NL80211_CMD_ASSOCIATE:
+        sta_new_link_event(interface);
         nl80211_associate_event(interface, tb);
         break;
 #endif

@@ -1584,6 +1584,10 @@ int update_hostap_iface_flags(wifi_interface_info_t *interface)
     iface = &interface->u.ap.iface;
 
     iface->drv_flags = radio->driver_data.capa.flags;
+#ifdef WIFI_HAL_MAC80211_AP_SME
+    /* Keeps the kernel STA until its deauth/disassoc went out, see wifi_sta_remove() */
+    iface->drv_flags |= WPA_DRIVER_FLAGS_DEAUTH_TX_STATUS;
+#endif
     iface->drv_flags |= WPA_DRIVER_FLAGS_EAPOL_TX_STATUS;
     iface->drv_flags |= WPA_DRIVER_FLAGS_AP_MLME;
     iface->drv_flags |= WPA_DRIVER_FLAGS_AP_CSA;
@@ -2021,6 +2025,9 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     iface->ema_max_periodicity = radio->driver_data.capa.ema_max_periodicity;
 #endif /* HOSTAPD_VERSION >= 210 */
 
+#ifdef WIFI_HAL_MAC80211_AP_SME
+    iface->drv_flags |= WPA_DRIVER_FLAGS_DEAUTH_TX_STATUS;
+#endif
     iface->drv_flags |= WPA_DRIVER_FLAGS_EAPOL_TX_STATUS;
     iface->drv_flags |= WPA_DRIVER_FLAGS_AP_MLME;
     iface->drv_flags |= WPA_DRIVER_FLAGS_AP_CSA;
@@ -2947,10 +2954,15 @@ static void wpa_sm_sta_set_state(void *ctx, enum wpa_states state)
     vap = &interface->vap_info;
 
     if (state == WPA_COMPLETED) {
+        /* The new link is up: it replaced a link whose disconnect was kept over its connect */
+        wifi_hal_sta_settle_owed_disconnect(interface, false);
         nl80211_get_channel_bw_conn(interface);
         wifi_hal_configure_sta_4addr_to_bridge(interface, 1);
     } else if (state == WPA_DISCONNECTED) {
         callbacks = get_hal_device_callbacks();
+        /* Reported below; the kernel disconnect that follows frees the state machine. Replaying
+         * here would free the state machine inside its own callback. */
+        wifi_hal_sta_settle_owed_disconnect(interface, false);
         
         wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
         if (callbacks->sta_conn_status_callback) {
