@@ -178,12 +178,16 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     }
 #elif defined(QCOM_ATH12K_PORT)
     strncpy(output, get_device_info_details().serial_number, sizeof(output) - 1);
+#elif defined(XLE_PORT)
+    _syscmd("grep -a 'DEVICE_SERIAL_NUMBER' /tmp/serial.txt | cut -d '=' -f2", output,
+        sizeof(output));
 #else
     _syscmd("grep -a 'Serial' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
 #endif
     len = strnlen(output, sizeof(output));
-    if (len != 0 && output[len - 1] == '\n') {
+    while (len != 0 && (output[len - 1] == '\n' || output[len - 1] == '\r')) {
         output[len - 1] = '\0';
+        len--;
     }
     strcpy(hal->wifi_prop.serialNo,output);
 
@@ -195,12 +199,15 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     }
 #elif defined(QCOM_ATH12K_PORT)
     _syscmd("grep -ia 'Model Name' /etc/factory_nvram.data | head -1 | cut -d ':' -f2 | cut -c2-", output, sizeof(output));
+#elif defined(XLE_PORT)
+    _syscmd("grep -a 'MODEL' /tmp/serial.txt | cut -d '=' -f2 | xargs", output, sizeof(output));
 #else
     _syscmd("grep -a 'MODEL' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
 #endif
     len = strnlen(output, sizeof(output));
-    if (len != 0 && output[len - 1] == '\n') {
+    while (len != 0 && (output[len - 1] == '\n' || output[len - 1] == '\r')) {
         output[len - 1] = '\0';
+        len--;
     }
     strcpy(hal->wifi_prop.manufacturerModel, output);
 #if defined(QCOM_ATH12K_PORT)
@@ -231,6 +238,27 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
             memset(hal->wifi_prop.cm_mac, 0, sizeof(hal->wifi_prop.cm_mac));
        }
     }
+#elif defined(XLE_PORT)
+    unsigned int mac[6];
+    _syscmd("grep -a 'ETHERNET_MAC_ADDRESS' /tmp/serial.txt | cut -d '=' -f2", output,
+        sizeof(output));
+    len = strnlen(output, sizeof(output));
+    while (len != 0 && (output[len - 1] == '\n' || output[len - 1] == '\r')) {
+        output[len - 1] = '\0';
+        len--;
+    }
+
+    if (sscanf(output, "%2x%2x%2x%2x%2x%2x", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4],
+            &mac[5]) == 6) {
+        for (int i = 0; i < 6; i++) {
+            hal->wifi_prop.cm_mac[i] = (uint8_t)mac[i];
+        }
+    } else {
+        memset(hal->wifi_prop.cm_mac, 0, sizeof(hal->wifi_prop.cm_mac));
+        wifi_hal_error_print("%s:%d: Unable to parse CM MAC address from XLE serial file\n",
+            __func__, __LINE__);
+    }
+
 #else
     _syscmd("grep -a 'CM' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
     len = strnlen(output, sizeof(output));
