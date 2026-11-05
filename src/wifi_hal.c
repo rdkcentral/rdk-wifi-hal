@@ -680,6 +680,19 @@ INT wifi_hal_get_default_wps_pin(char *pin)
     return RETURN_ERR;
 }
 
+#ifdef CONFIG_MLO
+INT wifi_hal_get_default_mld_address(UINT vap_index, mac_address_t out_addr)
+{
+    platform_mld_address_default_t platform_mld_address_default_fn;
+    if ((platform_mld_address_default_fn = get_platform_mld_address_default_fn()) != NULL) {
+        wifi_hal_dbg_print("%s:%d: platform mld address init\n", __func__, __LINE__);
+        return (platform_mld_address_default_fn(vap_index, out_addr));
+    }
+
+    return RETURN_ERR;
+}
+#endif /* CONFIG_MLO */
+
 INT wifi_hal_wps_event(wifi_wps_event_t data)
 {
     platform_wps_event_t platform_wps_event_fn;
@@ -1482,15 +1495,6 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
 #endif
 
-#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
-#ifdef CONFIG_MLO
-        if (platform_set_intf_mld_bonding(radio, interface) != RETURN_OK) {
-            wifi_hal_error_print("%s:%d: vap index:%d failed to create bonding\n", __func__, __LINE__,
-                vap->vap_index);
-            continue;
-        }
-#endif
-#endif
         wifi_hal_info_print("%s:%d: vap index:%d mode:%d vap_name:%s\n", __func__, __LINE__,
             vap->vap_index, vap->vap_mode, vap->vap_name);
         if (vap->vap_mode == wifi_vap_mode_ap) {
@@ -1540,7 +1544,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif /* QCOM_ATH12K_PORT */
         interface_name = wifi_hal_get_interface_name(interface);
 
-#ifdef CONFIG_GENERIC_MLO
+#if defined(CONFIG_GENERIC_MLO) || defined(CONFIG_MLO)
         // VAP down removes MLO links, so restrict down of interface to sta mode and NON-MLD AP
         if (vap->vap_mode == wifi_vap_mode_sta) {
 #endif
@@ -1552,7 +1556,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             nl80211_interface_enable(interface->name, false);
 #endif /* KERNEL_6_18 */
 
-#ifdef CONFIG_GENERIC_MLO
+#if defined(CONFIG_GENERIC_MLO) || defined(CONFIG_MLO)
         }
 #endif
 
@@ -1602,8 +1606,15 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 wifi_hal_info_print("%s:%d: interface:%s create bridge:%s\n", __func__, __LINE__,
                     interface_name, vap->bridge_name);
 #if (defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)) && defined(CONFIG_MLO)
-                if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
-                    snprintf(mld_ifname, sizeof(mld_ifname), "mld%d",  vap->vap_index);
+                if ((radio->oper_param.variant & WIFI_80211_VARIANT_BE) &&
+		    wifi_hal_is_mld_enabled(interface)) {
+		    if (wifi_hal_get_mld_name_by_interface_name(interface->name) == NULL) {
+			wifi_hal_error_print("%s:%d: interface:%s MLD enabled but no "
+					     "mld_interface_name configured in interface map\n",
+					     __func__, __LINE__, interface->name);
+			continue;
+		    }
+                    snprintf(mld_ifname, sizeof(mld_ifname), "%s", wifi_hal_get_mld_name_by_interface_name(interface->name));
                     if (nl80211_create_bridge(mld_ifname, vap->bridge_name) != 0) {
                         wifi_hal_error_print("%s:%d: interface:%s failed to create bridge:%s\n",
                             __func__, __LINE__, interface_name, vap->bridge_name);
@@ -1629,6 +1640,14 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 }
             }
 
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
+#ifdef CONFIG_MLO
+	    if (platform_set_intf_mld_bonding(radio, interface) != RETURN_OK) {
+		wifi_hal_error_print("%s:%d: vap index:%d failed to create bonding\n", __func__, __LINE__, vap->vap_index);
+		continue;
+	    }
+#endif
+#endif
             wifi_hal_info_print("%s:%d: interface:%s update hostapd params\n", __func__, __LINE__,
                 interface_name);
             if (update_hostap_interface_params(interface) != RETURN_OK) {
@@ -1714,10 +1733,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif /* QCOM_ATH12K_PORT */
 #if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 #ifdef CONFIG_MLO
-                if (radio->oper_param.variant & WIFI_80211_VARIANT_BE)
-                {
-                    snprintf(mld_ifname, sizeof(mld_ifname), "mld%d", vap->vap_index);
-                    nl80211_interface_enable(mld_ifname, vap->u.bss_info.enabled);
+                if ((radio->oper_param.variant & WIFI_80211_VARIANT_BE) &&
+		    wifi_hal_is_mld_enabled(interface)) {
+		    if (wifi_hal_get_mld_name_by_interface_name(interface->name) != NULL) {
+			snprintf(mld_ifname, sizeof(mld_ifname), "%s", wifi_hal_get_mld_name_by_interface_name(interface->name));
+			nl80211_interface_enable(mld_ifname, vap->u.bss_info.enabled);
+		    }
                 }
 #endif
 #endif

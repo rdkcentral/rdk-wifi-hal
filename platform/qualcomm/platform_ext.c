@@ -59,6 +59,11 @@
 #define DEFAULT_XHS_PASSWORD_KEY "Default XHS Password"
 
 #define MLD_PREFIX "mld"
+#define MLD_COMMON_IFNAME "mld0"
+#define MLD_PHY_NAME "mld-phy0"
+/* Max MLO links per group - matches driver WLAN_UMAC_MLO_MAX_VDEVS */
+#define MLO_MAX_LINKS_PER_GROUP 4
+
 #define BACKHAUL_STA_SSID  "we.connect.yellowstone"
 #define BHAUL_CREDS_PATH   "/mnt/data/pstore/mesh_bhaul_creds"
 #define BHAUL_CREDS_LEN     50
@@ -76,6 +81,7 @@ static void *dfs_event_thread(void *arg);
 static void parse_iwcustom_buffer(const void *buf, unsigned int len);
 static pthread_t dfs_thread;
 static int dfs_thread_running = 0;
+static bool is_bonding_slave(const char *mld_name, const char *ifname);
 
 extern INT wifi_setMLDaddr(INT apIndex, CHAR *mldMacAddress);
 
@@ -781,6 +787,50 @@ int platform_get_country_code_default(char *code)
     return 0;
 }
 
+#ifdef CONFIG_MLO
+/* Fixed per-category offsets, keyed by VAP category derived from vap_index.
+ * Mirrors the existing is_wifi_hal_vap_*() classification already used by
+ * platform_get_ssid_default()/platform_get_keypassphrase_default() above. */
+#define MLD_ADDR_OFFSET_PRIVATE       0x0C
+#define MLD_ADDR_OFFSET_BACKHAUL_STA  0x0D
+#define MLD_ADDR_OFFSET_BACKHAUL_AP   0x0E
+
+int platform_get_mld_address_default(UINT vap_index, mac_address_t out_addr)
+{
+    mac_address_t base_mac = { 0 };
+    unsigned int sum;
+    uint8_t offset;
+    int i;
+
+    if (is_wifi_hal_vap_private(vap_index)) {
+        offset = MLD_ADDR_OFFSET_PRIVATE;
+    } else if (is_wifi_hal_vap_mesh_backhaul(vap_index)) {
+        offset = MLD_ADDR_OFFSET_BACKHAUL_AP;
+    } else if (is_wifi_hal_vap_mesh_sta(vap_index)) {
+        offset = MLD_ADDR_OFFSET_BACKHAUL_STA;
+    } else {
+        return RETURN_ERR;
+    }
+
+    if (get_mac_address("eth0", base_mac) != RETURN_OK) {
+        return RETURN_ERR;
+    }
+
+    memcpy(out_addr, base_mac, sizeof(mac_address_t));
+
+    sum = out_addr[5] + offset;
+    out_addr[5] = (uint8_t)sum;
+    for (i = 4; i >= 0 && sum > 0xFF; i--) {
+        sum = out_addr[i] + (sum >> 8);
+        out_addr[i] = (uint8_t)sum;
+    }
+
+    wifi_hal_info_print("%s:%d MLD address for vap Index %d based on base mac" MACSTR "\n", 
+		        __func__,__LINE__, vap_index, MAC2STR(out_addr));
+    return RETURN_OK;
+}
+#endif /* CONFIG_MLO */
+
 int nvram_get_current_password(char *l_password, int vap_index)
 {
     wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);
@@ -796,17 +846,34 @@ int nvram_get_current_ssid(char *l_ssid, int vap_index)
 #if defined(CONFIG_MLO)
 static int qca_get_vap_mld_addr(wifi_vap_info_t* vap_info, char* mld_mac_buf)
 {
-    if (vap_info == NULL) {
-        wifi_hal_error_print("%s:%d: vap_info is NULL\n", __func__, __LINE__);
+    mac_address_t zero_mac = {0};
+
+    if (vap_info == NULL || mld_mac_buf == NULL) {
+        wifi_hal_error_print("%s:%d: invalid arguments\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
-    mld_mac_buf[0] = 0x00;
-    mld_mac_buf[1] = 0x00;
-    mld_mac_buf[2] = 0xaa;
-    mld_mac_buf[3] = 0xbb;
-    mld_mac_buf[4] = 0xcc;
-    mld_mac_buf[5] = vap_info->vap_index;
+    /* Use OneWifi-provided shared MLD address when available */
+    if (vap_info->vap_mode == wifi_vap_mode_ap &&
+        vap_info->u.bss_info.mld_info.common_info.mld_enable &&
+        memcmp(vap_info->u.bss_info.mld_info.common_info.mld_addr, zero_mac,
+               sizeof(mac_address_t)) != 0) {
+        memcpy(mld_mac_buf, vap_info->u.bss_info.mld_info.common_info.mld_addr, ETH_ALEN);
+    } else if (vap_info->vap_mode == wifi_vap_mode_ap &&
+               memcmp(vap_info->u.bss_info.bssid, zero_mac, sizeof(mac_address_t)) != 0) {
+        /* Fallback: derive from BSSID with locally-administered bit */
+        memcpy(mld_mac_buf, vap_info->u.bss_info.bssid, ETH_ALEN);
+        mld_mac_buf[0] |= 0x02;
+    } else {
+        /* Last resort: synthetic placeholder for early init */
+        mld_mac_buf[0] = 0x00;
+        mld_mac_buf[1] = 0x00;
+        mld_mac_buf[2] = 0xaa;
+        mld_mac_buf[3] = 0xbb;
+        mld_mac_buf[4] = 0xcc;
+        mld_mac_buf[5] = vap_info->vap_index;
+    }
+
     wifi_hal_info_print("%s:%d: mld address for vap index %d is " MACSTR "\n",
        __func__, __LINE__, vap_info->vap_index, MAC2STR(mld_mac_buf));
     return RETURN_OK;
@@ -837,28 +904,63 @@ int platform_create_interface_attributes(struct nl_msg **msg_ptr, wifi_radio_inf
 }
 
 #if defined(CONFIG_MLO)
+/**
+ * qca_has_shared_mld_addr - Check if OneWifi populated this VAP with a shared MLD address.
+ * Returns true if the VAP's mld_addr field is non-zero (meaning OneWifi explicitly set it
+ * for multi-link grouping). VAPs without a shared MLD address operate as single-link MLO.
+ */
+static bool qca_has_shared_mld_addr(wifi_vap_info_t *vap_info)
+{
+    static const unsigned char zero_mac[ETH_ALEN] = {0};
+    return (memcmp(vap_info->u.bss_info.mld_info.common_info.mld_addr, zero_mac, ETH_ALEN) != 0);
+}
+
 static int qca_create_mld_interfaces(wifi_vap_info_map_t *map)
 {
     char cmd[DEFAULT_CMD_SIZE];
-    int i;
-    wifi_vap_info_t *vap;
     char mld_mac_addr[ETH_ALEN];
+    int i;
+    wifi_vap_info_t *vap = NULL;
 
-    for (i = 0; i < map->num_vaps; i++) {
+    /* Check if mld0 already exists */
+    snprintf(cmd, sizeof(cmd), "iw dev | grep -w %s", MLD_COMMON_IFNAME);
+    wifi_hal_info_print("%s:%d: Executing %s\n", __func__, __LINE__, cmd);
+    if (system(cmd) == 0) {
+        wifi_hal_info_print("%s:%d: %s already present\n", __func__, __LINE__, MLD_COMMON_IFNAME);
+        return RETURN_OK;
+    }
+
+    /* Find first AP VAP with shared MLD address (OneWifi-populated for multi-link group) */
+    for (i = 0; i < (int)map->num_vaps; i++) {
         vap = &map->vap_array[i];
-        snprintf(cmd, sizeof(cmd), "iw dev | grep -w mld%d", vap->vap_index);
-        wifi_hal_info_print("%s:%d: Executing %s\n", __func__, __LINE__, cmd);
-
-        if (system(cmd) == 0) {
-            wifi_hal_info_print("%s:%d: mld%d already present\n", __func__, __LINE__, vap->vap_index);
-        } else {
-            qca_get_vap_mld_addr(vap, mld_mac_addr);
-            snprintf(cmd, sizeof(cmd), "iw phy mld-phy0 interface add mld%d type __ap mld_addr " MACSTR,
-                                            vap->vap_index, MAC2STR(mld_mac_addr));
-            wifi_hal_info_print("%s:%d Executing %s\n", __func__, __LINE__, cmd);
-            system(cmd);
+        if (vap->vap_mode == wifi_vap_mode_ap &&
+            vap->u.bss_info.mld_info.common_info.mld_enable &&
+            qca_has_shared_mld_addr(vap)) {
+            break;
         }
     }
+
+    if (i >= (int)map->num_vaps) {
+        wifi_hal_info_print("%s:%d: No AP VAP with shared MLD address found, skipping MLD creation\n",
+            __func__, __LINE__);
+        return RETURN_OK;
+    }
+
+    if (qca_get_vap_mld_addr(vap, mld_mac_addr) == RETURN_ERR) {
+        wifi_hal_error_print("%s:%d: Failed to get MLD address\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    /* Create single mld0 on mld-phy0 with shared MLD MAC */
+    snprintf(cmd, sizeof(cmd), "iw phy %s interface add %s type __ap mld_addr " MACSTR,
+        MLD_PHY_NAME, MLD_COMMON_IFNAME, MAC2STR(mld_mac_addr));
+    wifi_hal_info_print("%s:%d: Executing %s\n", __func__, __LINE__, cmd);
+    if (system(cmd) != 0) {
+        wifi_hal_error_print("%s:%d: Failed to create %s interface\n",
+            __func__, __LINE__, MLD_COMMON_IFNAME);
+        return RETURN_ERR;
+    }
+
     return RETURN_OK;
 }
 #endif
@@ -1130,44 +1232,201 @@ void wifi_drv_get_phy_eht_cap_mac(struct eht_capabilities *eht_capab, struct nla
         if (len > sizeof(eht_capab->mac_cap)) {
             len = sizeof(eht_capab->mac_cap);
         }
-        os_memcpy(eht_capab->mac_cap,
+        os_memcpy(&eht_capab->mac_cap,
                 nla_data(tb[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC]), len);
     }
+}
+
+static int qca_prepare_shared_hostap_mlo(wifi_interface_info_t *interface,
+                                         const u8 *shared_mld_mac)
+{
+    wifi_interface_info_t *partners[MLO_MAX_LINKS_PER_GROUP] = { 0 };
+    struct hapd_interfaces *shared_interfaces = NULL;
+    wifi_interface_info_t *owner = NULL;
+    char slave_path[128];
+    char linebuf[512];
+    char *saveptr = NULL;
+    char *token;
+    FILE *fp;
+    size_t count = 0;
+    size_t i;
+
+    if (!interface || !shared_mld_mac)
+        return RETURN_ERR;
+
+    if (!is_bonding_slave(MLD_COMMON_IFNAME, interface->name))
+        return RETURN_OK;
+
+    if (snprintf(slave_path, sizeof(slave_path),
+                 "/sys/class/net/%s/bonding/slaves",
+                 MLD_COMMON_IFNAME) >= (int) sizeof(slave_path))
+        return RETURN_ERR;
+
+    fp = fopen(slave_path, "r");
+    if (!fp) {
+        wifi_hal_error_print("%s:%d: failed to open %s: %s\n",
+                             __func__, __LINE__, slave_path,
+                             strerror(errno));
+        return RETURN_ERR;
+    }
+
+    if (!fgets(linebuf, sizeof(linebuf), fp)) {
+        fclose(fp);
+        return RETURN_ERR;
+    }
+    fclose(fp);
+
+    linebuf[strcspn(linebuf, "\r\n")] = '\0';
+
+    /*
+     * Phase 1: resolve every bonded VAP without changing hostapd state.
+     */
+    for (token = strtok_r(linebuf, " \t", &saveptr); token; token = strtok_r(NULL, " \t", &saveptr)) {
+        wifi_interface_info_t *partner = NULL;
+        unsigned int radio;
+        size_t j;
+
+        if (count >= MLO_MAX_LINKS_PER_GROUP)
+            return RETURN_ERR;
+
+        for (radio = 0; radio < g_wifi_hal.num_radios; radio++) {
+            wifi_radio_info_t *rad = get_radio_by_rdk_index(radio);
+
+            if (!rad || !rad->interface_map)
+                continue;
+
+            partner = hash_map_get(rad->interface_map, token);
+            if (partner)
+                break;
+        }
+
+        if (!partner)
+            return RETURN_ERR;
+
+        for (j = 0; j < count; j++) {
+            if (partners[j] == partner)
+                break;
+        }
+        if (j != count)
+            continue;
+
+	/* Prefer the FIRST already-registered link (mlo_link set) as the owner */
+        if (!owner && partner->u.ap.hapd.mlo_link)
+            owner = partner;
+
+        partners[count++] = partner;
+    }
+
+    if (count < 2)
+        return RETURN_ERR;
+
+    /* No partner was already registered: default to the first resolved link. */
+    if (!owner)
+	owner = partners[0];
+
+    shared_interfaces = owner->u.ap.iface.interfaces;
+    if (!shared_interfaces)
+        return RETURN_ERR;
+
+    /*
+     * Do not rebind an already-created link to another runtime container.
+     * A mismatch requires full MLO teardown before retrying setup.
+     */
+    for (i = 0; i < count; i++) {
+        struct hostapd_data *partner_hapd = &partners[i]->u.ap.hapd;
+
+	if (partners[i] == owner)
+	    continue;
+
+        if (partner_hapd->mlo_link &&
+            (partner_hapd->iface->interfaces != shared_interfaces ||
+             !partner_hapd->mlo_link->mld ||
+             os_memcmp(partner_hapd->mlo_link->mld->mld_mac_addr,
+                       shared_mld_mac, ETH_ALEN) != 0)) {
+            wifi_hal_error_print("%s:%d: conflicting existing MLO state for %s\n", __func__, __LINE__, partners[i]->name);
+            return RETURN_ERR;
+        }
+    }
+
+    /*
+     * Initialize the shared list only if it has never been initialized.
+     * Never reinitialize an active list.
+     */
+    if (shared_interfaces->mlds.next == NULL)
+        dl_list_init(&shared_interfaces->mlds);
+
+    /*
+     * Phase 2: make every participating BSS use the same hostapd
+     * interface container and the same MLD configuration.
+     */
+    for (i = 0; i < count; i++) {
+        struct hostapd_bss_config *conf = &partners[i]->u.ap.conf;
+        size_t link;
+
+        partners[i]->u.ap.iface.interfaces = shared_interfaces;
+        os_memcpy(conf->mld_mac_addr, shared_mld_mac, ETH_ALEN);
+
+        os_memset(&conf->mld_link_mac_list, 0,
+                  sizeof(conf->mld_link_mac_list));
+        os_memset(&conf->mld_link_id_list, 0,
+                  sizeof(conf->mld_link_id_list));
+
+        for (link = 0; link < count; link++) {
+            os_memcpy(conf->mld_link_mac_list.addr[link],
+                      partners[link]->mac, ETH_ALEN);
+            conf->mld_link_id_list.link_id[link] =
+                partners[link]->vap_info.radio_index;
+        }
+
+        conf->mld_link_mac_list.num_links = count;
+        conf->mld_link_id_list.num_links = count;
+
+        wifi_hal_info_print("%s:%d: shared MLO iface=%s hapd=%p interfaces=%p mld_mac=" MACSTR " links=%zu\n",
+			    __func__, __LINE__, partners[i]->name, (void *) &partners[i]->u.ap.hapd,
+			    (void *) shared_interfaces, MAC2STR(conf->mld_mac_addr), count);
+    }
+
+    /*
+     * Do not allocate mld_device_info or link_info here.
+     * hostapd_update_mld_links() owns those objects.
+     */
+    return RETURN_OK;
 }
 
 int update_hostap_mlo(wifi_interface_info_t *interface) {
 #ifdef CONFIG_MLO
     struct hostapd_bss_config *const conf = &interface->u.ap.conf;
     struct hostapd_data *const hapd = &interface->u.ap.hapd;
-    char mld_mac_addr[ETH_ALEN];
 
     wifi_hal_dbg_print("%s:%d: ENTER\n", __func__, __LINE__);
-    if(hapd->iface->interfaces->mlds.next == NULL)
-    {
+    if (hapd->iface->interfaces->mlds.next == NULL) {
         dl_list_init(&hapd->iface->interfaces->mlds);
-        wifi_hal_info_print("%s:%d: init dl_list_init(&hapd->iface->interfaces.mld\n", __func__, __LINE__);
+        wifi_hal_info_print("%s:%d: init dl_list for MLD interfaces\n", __func__, __LINE__);
     }
-    else
-    {
-        wifi_hal_info_print("%s:%d: Not initializing dl_list_init(&hapd->iface->interfaces.mld Again\n",
-                                                                                       __func__, __LINE__);
-    }
-    if (!conf->disable_11be) {
-        wifi_hal_info_print("%s:%d: hostap disable_11be is false\n", __func__, __LINE__);
-        //mld_link_mac_list
-        os_memcpy(&(conf->mld_link_mac_list.addr[0]), hapd->own_addr, ETH_ALEN);
-        conf->mld_link_mac_list.num_links = 1;
 
-        //mld_mac_addr
-        qca_get_vap_mld_addr(&interface->vap_info, mld_mac_addr);
-        os_memcpy(conf->mld_mac_addr, mld_mac_addr, ETH_ALEN);
+    if (!conf->disable_11be && wifi_hal_is_mld_enabled(interface)) {
+        char this_vap_mld_mac[ETH_ALEN];
 
-        //mld_link_ids
-        conf->mld_link_id_list.link_id[0] = interface->vap_info.radio_index;
-        conf->mld_link_id_list.num_links = 1;
-        wifi_hal_dbg_print("%s:%d: Setting MLD-link-MAC: " MACSTR " link ID: %d MLD_MAC: " MACSTR "\n",
-                                          __func__, __LINE__, MAC2STR(conf->mld_link_mac_list.addr[0]),
-                                          conf->mld_link_id_list.link_id[0], MAC2STR(conf->mld_mac_addr));
+        /* Resolve this VAP's MLD MAC */
+        if (qca_get_vap_mld_addr(&interface->vap_info, this_vap_mld_mac) == RETURN_ERR) {
+            wifi_hal_error_print("%s:%d: Failed to get MLD addr for vap %d\n",
+                __func__, __LINE__, interface->vap_info.vap_index);
+            return RETURN_ERR;
+        }
+
+	os_memcpy(conf->mld_mac_addr, this_vap_mld_mac, ETH_ALEN);
+
+	if (qca_prepare_shared_hostap_mlo(interface, this_vap_mld_mac) != RETURN_OK) {
+		wifi_hal_error_print("%s:%d: failed to prepare shared hostap MLO state\n", __func__, __LINE__);
+		return RETURN_ERR;
+	}
+
+	if (!is_bonding_slave(MLD_COMMON_IFNAME, interface->name)) {
+		os_memcpy(conf->mld_link_mac_list.addr[0], interface->mac, ETH_ALEN);
+		conf->mld_link_id_list.link_id[0] = interface->vap_info.radio_index;
+		conf->mld_link_mac_list.num_links = 1;
+		conf->mld_link_id_list.num_links = 1;
+	}
     } else {
         os_memset(&conf->mld_link_mac_list, 0, sizeof(conf->mld_link_mac_list));
         os_memset(conf->mld_mac_addr, 0, sizeof(conf->mld_mac_addr));
@@ -1226,7 +1485,7 @@ static int qca_add_intf_to_bridge(wifi_interface_info_t *interface, bool is_mld)
             wifi_hal_info_print("%s:%d: interface:%s create bridge:%s\n", __func__, __LINE__,
                 interface->name, vap->bridge_name);
 
-            snprintf(mld_ifname, sizeof(mld_ifname), "%s%d", MLD_PREFIX, vap->vap_index);
+            snprintf(mld_ifname, sizeof(mld_ifname), "%s", MLD_COMMON_IFNAME);
             if (is_mld) {
                 if (nl80211_remove_from_bridge(interface->name) != 0) {
                     wifi_hal_error_print("%s:%d: interface:%s failed to remove from OVS bridge\n",
@@ -1304,15 +1563,25 @@ static bool is_bonding_slave(const char *mld_name, const char *ifname)
 INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_t *interface)
 {
     char cmd[QCA_MAX_CMD_SZ];
-    char mld_ifname[32];
     char ifname[32];
     char mld_mac_addr[ETH_ALEN];
     char mld_mac_str[18];
+    const char *mld_ifname = MLD_COMMON_IFNAME;
+    bool is_be;
+    bool is_bonded;
 
     if (interface == NULL || radio == NULL) {
         wifi_hal_error_print("%s:%d: Invalid arguments\n", __func__, __LINE__);
         return RETURN_ERR;
     }
+
+    /* Only AP mode VAPs participate in MLO bonding to mld0 */
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_dbg_print("%s:%d: vap index:%d is not AP mode, skipping MLO bonding\n",
+            __func__, __LINE__, interface->vap_info.vap_index);
+        return RETURN_OK;
+    }
+
     if ((int)interface->vap_info.vap_index >= 0) {
         if (get_interface_name_from_vap_index(interface->vap_info.vap_index, ifname) != RETURN_OK) {
             wifi_hal_error_print(
@@ -1320,6 +1589,10 @@ INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_
                 __LINE__, interface->vap_info.vap_index);
             return RETURN_ERR;
         }
+
+	is_be = (radio->oper_param.variant & WIFI_80211_VARIANT_BE) != 0;
+	is_bonded = is_bonding_slave(mld_ifname, ifname);
+
         if (qca_get_vap_mld_addr(&interface->vap_info, mld_mac_addr) == RETURN_ERR) {
             wifi_hal_error_print("%s:%d: vap index:%d failed to get mld address\n", __func__,
                 __LINE__, interface->vap_info.vap_index);
@@ -1327,23 +1600,34 @@ INT platform_set_intf_mld_bonding(wifi_radio_info_t *radio, wifi_interface_info_
         }
 
         snprintf(mld_mac_str, sizeof(mld_mac_str), MACSTR, MAC2STR(mld_mac_addr));
-        snprintf(mld_ifname, sizeof(mld_ifname), "mld%d", interface->vap_info.vap_index);
 
-        if ((!(radio->oper_param.variant & WIFI_80211_VARIANT_BE)) &&
-            is_bonding_slave(mld_ifname, ifname)) {
+        if (!is_be && is_bonded) {
+            /* Remove bonding and downgrade from EHT mode */
+            nl80211_interface_enable(ifname, false);
             snprintf(cmd, sizeof(cmd), "cfg80211tool %s mode %s",
-                getInterface(interface->vap_info.vap_index),
-                (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND) ? "11GHE20" : "11AHE80");
-            wifi_hal_info_print("%s:%d Executing: %s\n", __func__, __LINE__, cmd);
-            system(cmd);
-            wifi_hal_info_print("%s:%d Delete bonding between ifname:%s and mld:%s\n", __func__,
-                __LINE__, ifname, mld_ifname);
-            // ToDo :- Check and enable if required
-            // wifi_setMLDaddr(interface->vap_info.vap_index, "00:00:00:00:00:00");
-            wifi_setMLDaddr(interface->vap_info.vap_index, mld_mac_str);
+                ifname,
+                (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND) ?
+                    "11GHE20" : "11AHE80");
+            if (system(cmd) != 0) {
+                wifi_hal_error_print("%s:%d: Failed to downgrade %s\n",
+                    __func__, __LINE__, ifname);
+                return RETURN_ERR;
+            }
+
+	    if (wifi_setMLDaddr(interface->vap_info.vap_index,
+                    "00:00:00:00:00:00") != RETURN_OK) {
+                wifi_hal_error_print("%s:%d: Failed to clear MLD address\n",
+                    __func__, __LINE__);
+                return RETURN_ERR;
+            }
+
+            nl80211_interface_enable(ifname, true);
+        } else if (is_be && !is_bonded) {
+            /* Create bonding and configure EHT mode */
+	    wifi_hal_dbg_print("%s:%d: Single link MLO vaps:%d\n",  __func__, __LINE__, interface->vap_info.vap_index);
         } else {
-            wifi_hal_dbg_print("%s:%d No need to changing bonding state for %s\n", __func__,
-                __LINE__, ifname);
+            wifi_hal_dbg_print("%s:%d: No bonding change required for %s\n",
+                __func__, __LINE__, ifname);
         }
     }
     return RETURN_OK;

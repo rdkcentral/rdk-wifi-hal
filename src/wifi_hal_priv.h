@@ -804,6 +804,7 @@ typedef int    (* platform_set_dfs_t)(wifi_radio_index_t index, wifi_radio_opera
 typedef int    (* platform_get_radio_caps_t)(wifi_radio_index_t index);
 typedef int    (* platform_get_RegDomain_t)(wifi_radio_index_t index, uint *reg_domain);
 typedef int    (* platform_set_beacon_prot_t)(uint apIndex, bool enabled);
+typedef int    (* platform_mld_address_default_t)(UINT vap_index, mac_address_t out_addr);
 
 int wifi_hal_parse_rrm_beacon_rep(wifi_interface_info_t *interface, char *buff,
         size_t len, struct rrm_measurement_beacon_report *meas_rep);
@@ -893,6 +894,7 @@ typedef struct {
     platform_get_radio_caps_t         platform_get_radio_caps_fn;
     platform_get_RegDomain_t platform_get_RegDomain_fn;
     platform_set_beacon_prot_t platform_set_beacon_prot_fn;
+    platform_mld_address_default_t    platform_mld_address_default_fn;
 } wifi_driver_info_t;
 
 typedef enum bm_sta_rssi_type {
@@ -1431,6 +1433,7 @@ extern int platform_get_sta_measurements(void *priv, const u8 *sta_addr, struct 
 extern int platform_set_dfs(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
 extern int platform_get_reg_domain(wifi_radio_index_t radioIndex, UINT *reg_domain);
 extern int platform_set_beacon_prot(uint apIndex, bool isEnabled);
+extern int platform_get_mld_address_default(UINT vap_index, mac_address_t out_addr);
 
 #if defined(VNTXER5_PORT)
 INT platform_create_interface_attributes(struct nl_msg **msg_ptr, wifi_radio_info_t *radio,
@@ -1478,7 +1481,9 @@ platform_set_dfs_t                  get_platform_dfs_set_fn();
 platform_get_radio_caps_t           get_platform_get_radio_caps_fn();
 platform_get_RegDomain_t get_platform_get_RegDomain_fn();
 platform_set_beacon_prot_t get_platform_set_beacon_prot_fn();
+platform_mld_address_default_t      get_platform_mld_address_default_fn();
 
+INT wifi_hal_get_default_mld_address(UINT vap_index, mac_address_t out_addr);
 INT wifi_hal_wps_event(wifi_wps_event_t data);
 INT wifi_hal_get_default_wps_pin(char *pin);
 
