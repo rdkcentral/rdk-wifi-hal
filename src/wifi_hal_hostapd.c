@@ -1140,6 +1140,9 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     wifi_radio_info_t *radio;
     wifi_radio_operationParam_t *op_param;
     int vlan_id = 0;
+#if defined(EASY_MESH_NODE) && defined(CONFIG_VENDOR_MXL)
+    int ret;
+#endif
     // re-initialize the default parameters
     init_hostap_bss(interface);
 
@@ -1204,6 +1207,18 @@ int update_hostap_bss(wifi_interface_info_t *interface)
         conf->wds_sta = 1;
         strncpy(conf->wds_bridge, interface->bridge, sizeof(conf->wds_bridge));
 
+#ifdef CONFIG_VENDOR_MXL
+        /* For WDS STA creation (wds_sta=1), send multi_ap mode to Wave driver before creating interface.
+         * The Wave driver needs multi_ap_mode set in its PDB before it can create WDS interfaces.
+         * This fixes the "Wrong multi_ap_mode: 0" error when backhaul STA connects.
+         */
+        ret = wifi_drv_vendor_cmd(interface, OUI_LTQ, LTQ_NL80211_VENDOR_SUBCMD_SET_MESH_MODE,
+            (u8 *)&conf->multi_ap, sizeof(conf->multi_ap), NESTED_ATTR_NOT_USED, NULL);
+        if (ret < 0) {
+            wifi_hal_error_print("%s:%d: Failed to set multi_ap to Wave driver %s: %d\n",
+                __func__, __LINE__, interface->name, ret);
+        }
+#endif
         wifi_hal_info_print("%s:%d: Enabled multi_ap:%d for interface:%s, wds_bridge:%s\n",
             __func__, __LINE__, conf->multi_ap, interface->name, conf->wds_bridge);
     }
@@ -2913,7 +2928,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                 } else if (sec->mode == wifi_security_mode_enhanced_open) {
                     sel = (WPA_KEY_MGMT_OWE | wpa_key_mgmt_11w) & data.key_mgmt;
                 } else if (sec->mode == wifi_security_mode_wpa3_compatibility) {
-#if HOSTAPD_VERSION >= 211 //2.11
+#if !defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
                     wpa_sm_set_param(sm, WPA_PARAM_RSN_OVERRIDE_SUPPORT, true);
 #ifdef CONFIG_IEEE80211BE
                     if (wpa_sm_get_rsn_override(sm) == RSN_OVERRIDE_RSNE_OVERRIDE_2) {
@@ -2922,7 +2937,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
                         sel = (wpa_key_mgmt_11w | WPA_KEY_MGMT_SAE_EXT_KEY) & data.key_mgmt;
                     } else
 #endif //CONFIG_IEEE80211BE
-#endif //2.11
+#endif //!BANANA_PI_PORT && HOSTAPD_VERSION >= 211
                     {
                         sel = (wpa_key_mgmt_11w | WPA_KEY_MGMT_SAE) & data.key_mgmt;
                     }
