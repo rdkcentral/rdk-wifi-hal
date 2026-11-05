@@ -455,6 +455,7 @@ INT wifi_hal_init()
     pthread_mutexattr_init(&g_wifi_hal.hapd_lock_attr);
     pthread_mutexattr_settype(&g_wifi_hal.hapd_lock_attr, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&g_wifi_hal.hapd_lock, &g_wifi_hal.hapd_lock_attr);
+    pthread_mutex_init(&g_wifi_hal.acl_map_lock, NULL);
 
     pthread_mutex_init(&g_wifi_hal.nl_create_socket_lock, NULL);
     pthread_mutex_init(&g_wifi_hal.steering_data_lock, NULL);
@@ -718,13 +719,29 @@ void wifi_hal_deauth(int vap_index, int status, uint8_t *mac)
 {
     u8 own_addr[ETH_ALEN];
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
-    struct hostapd_data *hapd = &interface->u.ap.hapd;
+    struct hostapd_data *hapd;
+
+    /* u.ap is only valid in AP mode */
+    if ((interface == NULL) || (interface->vap_info.vap_mode != wifi_vap_mode_ap)) {
+        wifi_hal_error_print("%s:%d: vap %d is not an AP\n", __func__, __LINE__, vap_index);
+        return;
+    }
+    hapd = &interface->u.ap.hapd;
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #ifdef HOSTAPD_2_10
     wifi_drv_sta_deauth(interface, own_addr, mac, status);
+#ifdef WIFI_HAL_MAC80211_AP_SME
+    /* wifi_sta_remove() leaves a tracked STA for hostapd to remove */
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    struct sta_info *sta = ap_get_sta(hapd, mac);
+    if (sta != NULL) {
+        ap_sta_deauthenticate(hapd, sta, status);
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+#endif
 #endif
     return;
 }
@@ -1155,12 +1172,9 @@ INT wifi_hal_sm_deinit(INT vap_index)
         return RETURN_ERR;
     }
 
-    if (interface->u.sta.wpa_sm != NULL) {
-        eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
-        interface->u.sta.wpa_sm->eapol = NULL;
-        wpa_sm_deinit(interface->u.sta.wpa_sm);
-        interface->u.sta.wpa_sm = NULL;
-    }
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    wifi_hal_sta_sm_free(interface);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return RETURN_OK;
 }
 
@@ -1212,17 +1226,87 @@ INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss)
         pthread_mutex_unlock(&interface->scan_info_mutex);
     }
 
-    if (nl80211_connect_sta(interface) != 0) {
-        return RETURN_ERR;
-    }
+    /* hapd_lock cannot be held across this call: it waits for scan results from the nl thread,
+     * which needs that lock. The flag keeps a stale disconnect event off the state machine. */
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    interface->u.sta.connect_in_progress = true;
+    /* A disconnect event that arrives late still finds out it predates this connect */
+    interface->u.sta.connect_gen++;
+    interface->u.sta.connect_link_event = false;
+    interface->u.sta.disconnect_deferred = false;
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-    return RETURN_OK;
+    int connect_rc = nl80211_connect_sta(interface);
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    interface->u.sta.connect_in_progress = false;
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+    /* A disconnect that arrived during the attempt is reported and cleaned up now if it was not
+     * superseded by it */
+    wifi_hal_sta_reconcile_deferred_disconnect(interface, connect_rc == 0);
+
+    return (connect_rc != 0) ? RETURN_ERR : RETURN_OK;
 }
 
+/* Frees the bSTA state machine and clears both pointers to it. Call with hapd_lock held. */
+void wifi_hal_sta_sm_free(wifi_interface_info_t *interface)
+{
+    if (interface->u.sta.wpa_sm != NULL) {
+        eapol_sm_deinit(interface->u.sta.wpa_sm->eapol);
+        interface->u.sta.wpa_sm->eapol = NULL;
+        wpa_sm_deinit(interface->u.sta.wpa_sm);
+        interface->u.sta.wpa_sm = NULL;
+    }
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
+    interface->wpa_s.wpa = NULL;
+    interface->wpa_s.eapol = NULL;
+#endif
+}
+
+#define STA_DISCONNECT_WAIT_NS 1000000000L /* 1 s */
+#define STA_DISCONNECT_POLL_NS 10000000L   /* 10 ms */
+
+/* Waits until the nl thread has handled the disconnect event that follows a successful
+ * NL80211_CMD_DISCONNECT, i.e. until disconnect_events moves past seen. Polled because hapd_lock is
+ * recursive (no condition variable on it), timed on CLOCK_MONOTONIC. Never call it on the nl
+ * thread, which is the one that has to handle the event. Returns false on timeout. */
+static bool wait_sta_disconnect_consumed(wifi_interface_info_t *interface, unsigned int seen)
+{
+    struct timespec start, now;
+    struct timespec pause = { 0, STA_DISCONNECT_POLL_NS };
+    bool consumed;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &start) != 0) {
+        return false;
+    }
+    for (;;) {
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        consumed = (interface->u.sta.disconnect_events != seen);
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        if (consumed) {
+            return true;
+        }
+        if (clock_gettime(CLOCK_MONOTONIC, &now) != 0 ||
+            (now.tv_sec - start.tv_sec) * 1000000000L + (now.tv_nsec - start.tv_nsec) >=
+                STA_DISCONNECT_WAIT_NS) {
+            return false;
+        }
+        (void)nanosleep(&pause, NULL);
+    }
+}
+
+/* Returns once the resulting disconnect event has been handled: the handler frees the bSTA state
+ * machine, so a caller that connects next (wifi_hal_createVAP, then wifi_hal_connect) must not
+ * let that event arrive after the replacement state machine is set up. If the event is not handled
+ * in time it is marked stale, so that when it does arrive it frees only the old link's state machine
+ * and never a replacement one. The disconnect itself was accepted, so this still returns RETURN_OK:
+ * OneWifi callers treat anything else as a failed disconnect. */
 INT wifi_hal_disconnect(INT ap_index)
 {
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
+    unsigned int seen;
 
     if ((interface = get_interface_by_vap_index(ap_index)) == NULL) {
         wifi_hal_error_print("%s:%d:interface for ap index:%d not found\n", __func__, __LINE__, ap_index);
@@ -1235,10 +1319,26 @@ INT wifi_hal_disconnect(INT ap_index)
         return WIFI_HAL_INVALID_ARGUMENTS;     // RDKB-45722 - Returns -4 when the ap index is not suitable for station mode
     }
 
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    seen = interface->u.sta.disconnect_events;
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+
+    /* Fails (no event follows) when the STA is not connected */
     if (nl80211_disconnect_sta(interface) != 0) {
         return RETURN_ERR;
     }
 
+    if (!wait_sta_disconnect_consumed(interface, seen)) {
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        /* Re-checked under the lock: the event may have been handled since the last poll */
+        if (interface->u.sta.disconnect_events == seen) {
+            interface->u.sta.stale_disconnect_pending = true;
+            interface->u.sta.stale_disconnect_gen = interface->u.sta.connect_gen;
+            wifi_hal_info_print("%s:%d: disconnect event on %s not seen within %ld ms, marked stale\n",
+                __func__, __LINE__, interface->name, STA_DISCONNECT_WAIT_NS / 1000000L);
+        }
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+    }
     return RETURN_OK;
 }
 
@@ -1330,6 +1430,18 @@ struct wpa_ssid *get_wifi_wpa_current_ssid(wifi_interface_info_t *interface)
 int deinit_wpa_supplicant(wifi_interface_info_t *interface)
 {
     wifi_hal_info_print("%s:%d: deinit wpa supplicant params\n", __func__, __LINE__);
+
+    /* Cancel any pending eloop timeouts registered by the supplicant
+     * (SME auth/assoc timers, scan timers, auth timeout).  These fire
+     * in nl_recv_func via eloop_timeout_run() and will dereference
+     * wpa_s fields (e.g. drv_priv) that we are about to zero. hapd_lock is what eloop_timeout_run()
+     * and the disconnect event hold, so neither can see wpa_s half torn down.
+     */
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    sme_deinit(&interface->wpa_s);
+    wpa_supplicant_cancel_scan(&interface->wpa_s);
+    wpa_supplicant_cancel_auth_timeout(&interface->wpa_s);
+
     if (interface->wpa_s.p2pdev != NULL) {
         free(interface->wpa_s.p2pdev);
         interface->wpa_s.p2pdev = NULL;
@@ -1346,6 +1458,7 @@ int deinit_wpa_supplicant(wifi_interface_info_t *interface)
     }
 
     memset(&interface->wpa_s, 0, sizeof(struct wpa_supplicant));
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return RETURN_OK;
 }
 
@@ -1457,6 +1570,16 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             vap->vap_index, vap->vap_name);
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
+#if defined(EASY_MESH_NODE)
+            /* An EasyMesh backhaul BSS always filters: the controller owns its allow list, and
+             * OneWifi's stored config (often filter off) must not turn that off on a VAP restart.
+             * Set on the input before anything reads it (set_acl below, the vap_info copy, BSS
+             * start/reload, the vendor filter call), so the BSS is never up without its whitelist */
+            if (is_wifi_hal_vap_mesh_backhaul(vap->vap_index)) {
+                vap->u.bss_info.mac_filter_enable = true;
+                vap->u.bss_info.mac_filter_mode = wifi_mac_filter_mode_white_list;
+            }
+#endif // EASY_MESH_NODE
             if (validate_wifi_interface_vap_info_params(vap, msg, sizeof(msg)) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d:Failed to validate interface vap_info params for vap_index: %d on radio index: %d. %s\n", __func__, __LINE__, vap->vap_index, index, msg);
                 return WIFI_HAL_INVALID_ARGUMENTS;
@@ -1475,6 +1598,10 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
 
 #ifdef NL80211_ACL
+        /* Known start for the ACL deauth rate limiter, also when the interface is reused */
+        if (vap->vap_mode == wifi_vap_mode_ap) {
+            nl80211_acl_deauth_reset(interface);
+        }
         if ((vap->u.bss_info.enabled == 1) &&
             ((vap->u.bss_info.mac_filter_enable == TRUE) ||
              (interface->vap_info.u.bss_info.mac_filter_enable != vap->u.bss_info.mac_filter_enable))) {
@@ -1540,6 +1667,10 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif /* QCOM_ATH12K_PORT */
         interface_name = wifi_hal_get_interface_name(interface);
 
+        if (vap->vap_mode == wifi_vap_mode_sta) {
+            /* A STA that is not connected fails this harmlessly */
+            (void)wifi_hal_disconnect(vap->vap_index);
+        }
 #ifdef CONFIG_GENERIC_MLO
         // VAP down removes MLO links, so restrict down of interface to sta mode and NON-MLD AP
         if (vap->vap_mode == wifi_vap_mode_sta) {
@@ -1794,11 +1925,6 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
-#if defined(EASY_MESH_NODE)
-            if (is_wifi_hal_vap_mesh_backhaul(vap->vap_index)) {
-                interface->vap_info.u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
-            }
-#endif // EASY_MESH_NODE
 #ifdef NL80211_ACL
             if (set_acl == 1) {
                 nl80211_set_acl(interface);
@@ -1873,6 +1999,13 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
         wifi_hal_error_print("%s:%d: NULL Interface pointer \n", __func__, __LINE__);
         return RETURN_ERR;
     }
+    /* u.ap is only valid in AP mode */
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d: vap %d is not an AP\n", __func__, __LINE__, ap_index);
+        return RETURN_ERR;
+    }
+    wifi_hal_info_print("%s:%d: disassociation requested vap=%d sta=%02x:%02x:%02x:%02x:%02x:%02x\n",
+        __func__, __LINE__, ap_index, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     u8 own_addr[ETH_ALEN];
     mac_address_t bcastmac= {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
@@ -1887,39 +2020,48 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         return RETURN_ERR;
     }
-    struct sta_info *tmp = NULL;
+    struct sta_info *tmp = NULL, *next = NULL;
+#if (defined(BANANA_PI_PORT) && defined(KERNEL_6_6)) || defined(QCOM_ATH12K_PORT)
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+    int link_id = wifi_hal_get_mld_link_id(interface);
+#else
+    int link_id = NL80211_DRV_LINK_ID_NA;
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+#endif // BANANA_PI_PORT && KERNEL_6_6
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
     if (memcmp(mac, bcastmac, sizeof(mac_address_t)) == 0) {
         tmp = hapd->sta_list;
-        while (tmp) {
+    } else {
+        wifi_hal_info_print("%s:%d:mac is not a broadcast mac address\n", __func__, __LINE__);
+        tmp = ap_get_sta(hapd, mac);
+    }
+    if (tmp == NULL) {
+        /* A STA hostapd does not track may still be in the kernel */
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        (void)nl80211_kick_device(interface, mac);
+        return RETURN_OK;
+    }
+    /* Held across the driver calls, as hostapd's own disconnect paths do. hostapd frees a sta on
+     * a later timer, so next stays valid. */
+    while (tmp != NULL) {
+        next = (memcmp(mac, bcastmac, sizeof(mac_address_t)) == 0) ? tmp->next : NULL;
+        /* Already deauthenticated (ACL removal right before this kick): it only waits to be freed */
+        if (tmp->flags & (WLAN_STA_AUTH | WLAN_STA_ASSOC)) {
 #if (defined(BANANA_PI_PORT) && defined(KERNEL_6_6)) || defined(QCOM_ATH12K_PORT)
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-            int link_id = wifi_hal_get_mld_link_id(interface);
-#else
-            int link_id = NL80211_DRV_LINK_ID_NA;
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
             wifi_drv_sta_disassoc(interface, own_addr, tmp->addr, WLAN_REASON_UNSPECIFIED, link_id);
 #else
             wifi_drv_sta_disassoc(interface, own_addr, tmp->addr, WLAN_REASON_UNSPECIFIED);
 #endif // BANANA_PI_PORT && KERNEL_6_6
-            tmp=tmp->next;
+#ifdef WIFI_HAL_MAC80211_AP_SME
+            /* wifi_sta_remove() leaves a tracked STA for hostapd to remove */
+            ap_sta_disassociate(hapd, tmp, WLAN_REASON_UNSPECIFIED);
+#endif
+            wifi_hal_info_print("%s:%d: disassociation driver API invoked vap=%d sta=%02x:%02x:%02x:%02x:%02x:%02x; API provides no completion status\n",
+                __func__, __LINE__, ap_index, MAC2STR(tmp->addr));
         }
-        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        tmp = next;
     }
-    else {
-        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-        wifi_hal_info_print("%s:%d:mac is not a broadcast mac address\n", __func__, __LINE__);
-#if (defined(BANANA_PI_PORT) && defined(KERNEL_6_6)) || defined(QCOM_ATH12K_PORT)
-#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
-        int link_id = wifi_hal_get_mld_link_id(interface);
-#else
-        int link_id = NL80211_DRV_LINK_ID_NA;
-#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
-        wifi_drv_sta_disassoc(interface, own_addr, mac, WLAN_REASON_UNSPECIFIED, link_id);
-#else
-        wifi_drv_sta_disassoc(interface, own_addr, mac, WLAN_REASON_UNSPECIFIED);
-#endif // BANANA_PI_PORT && KERNEL_6_6
-    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return RETURN_OK;
 }
 
@@ -2106,6 +2248,31 @@ INT wifi_hal_getScanResults(wifi_radio_index_t index, wifi_channel_t *channel, w
 * helper APIs, which update hapd->conf->deny_mac and refresh the ACL
 * configuration via hostapd_set_acl().
 */
+/* Pushes the ACL to the kernel and tells whether the caller must undo its list change. mac80211
+ * only stores no list (its set_mac_acl is a stub) and rejects the call while the AP is not beaconing;
+ * there acl_map itself is the filter, so a kernel error changes nothing. */
+/* Serializes an acl_map change, its kernel update and, on failure, its rollback as one step. The
+ * update runs outside acl_map_lock (nl80211_set_acl takes that lock itself), so without this an
+ * older call's rollback could undo a newer add or delete of the same MAC done in between, leaving
+ * acl_map and the driver inconsistent. Order: acl_txn_lock, then acl_map_lock. Kicks run after it
+ * is released: they take hapd_lock, which the nl thread can hold while it re-applies steering
+ * entries through these calls. */
+static pthread_mutex_t acl_txn_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static bool acl_kernel_update_failed(wifi_interface_info_t *interface)
+{
+    if (nl80211_set_acl(interface) == 0) {
+        return false;
+    }
+#ifdef WIFI_HAL_MAC80211_AP_SME
+    wifi_hal_info_print("%s:%d: kernel ACL not updated on %s, list applies through acl_map\n",
+        __func__, __LINE__, interface->name);
+    return false;
+#else
+    return true;
+#endif
+}
+
 INT wifi_hal_addHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress)
 {
     wifi_hal_dbg_print("%s:%d:Enter\n", __func__, __LINE__);
@@ -2203,10 +2370,14 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
         }
     }
 
+    pthread_mutex_lock(&acl_txn_lock);
+    pthread_mutex_lock(&g_wifi_hal.acl_map_lock);
     acl_map = hash_map_get(interface->acl_map, key);
 
     if (acl_map != NULL) {
         wifi_hal_error_print("%s:%d: MAC %s already present in acl list\n", __func__, __LINE__, key);
+        pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
+        pthread_mutex_unlock(&acl_txn_lock);
         return RETURN_OK;
     }
 
@@ -2216,11 +2387,18 @@ INT wifi_hal_addApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
     memcpy(acl_map->mac_addr, DeviceMacAddress, sizeof(mac_address_t));
 
     hash_map_put(interface->acl_map, strdup(key), acl_map);
+    pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
 
-    if (nl80211_set_acl(interface) != 0) {
+    if (acl_kernel_update_failed(interface)) {
         wifi_hal_error_print("%s:%d: MAC %s nl80211_set_acl failure for ap_index:%d\n", __func__, __LINE__, key, apIndex);
+        /* Not in the driver, so a retry must not find it "already present" */
+        pthread_mutex_lock(&g_wifi_hal.acl_map_lock);
+        free(hash_map_remove(interface->acl_map, key));
+        pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
+        pthread_mutex_unlock(&acl_txn_lock);
         return RETURN_ERR;
     }
+    pthread_mutex_unlock(&acl_txn_lock);
 
     if ((vap->u.bss_info.mac_filter_enable == true) &&
         (vap->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_black_list)) {
@@ -2262,10 +2440,14 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
         }
     }
 
+    pthread_mutex_lock(&acl_txn_lock);
+    pthread_mutex_lock(&g_wifi_hal.acl_map_lock);
     acl_map = hash_map_get(interface->acl_map, DeviceMacAddress);
 
     if (acl_map != NULL) {
         wifi_hal_error_print("%s:%d: MAC %s already present in acl list\n", __func__, __LINE__, DeviceMacAddress);
+        pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
+        pthread_mutex_unlock(&acl_txn_lock);
         return RETURN_OK;
     }
 
@@ -2275,11 +2457,18 @@ INT wifi_hal_addApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
     to_mac_bytes(acl_map->mac_addr_str, acl_map->mac_addr);
 
     hash_map_put(interface->acl_map, strdup(DeviceMacAddress), acl_map);
+    pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
 
-    if (nl80211_set_acl(interface) != 0) {
+    if (acl_kernel_update_failed(interface)) {
         wifi_hal_error_print("%s:%d: MAC %s nl80211_set_acl failure for ap_index:%d\n", __func__, __LINE__, DeviceMacAddress, apIndex);
+        /* Not in the driver, so a retry must not find it "already present" */
+        pthread_mutex_lock(&g_wifi_hal.acl_map_lock);
+        free(hash_map_remove(interface->acl_map, DeviceMacAddress));
+        pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
+        pthread_mutex_unlock(&acl_txn_lock);
         return RETURN_ERR;
     }
+    pthread_mutex_unlock(&acl_txn_lock);
 
     to_mac_bytes(DeviceMacAddress, sta_mac);
     if ((vap->u.bss_info.mac_filter_enable == true) &&
@@ -2309,7 +2498,7 @@ INT wifi_hal_delApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
     }
     vap = &interface->vap_info;
 
-    key = to_mac_str(sta_mac, sta_mac_str);
+    key = to_mac_str(DeviceMacAddress, sta_mac_str);
     
     wifi_hal_info_print("%s:%d: Interface: %s MAC: %s\n", __func__, __LINE__, interface->name, key);
 
@@ -2323,27 +2512,43 @@ INT wifi_hal_delApAclDevice(INT apIndex, mac_address_t DeviceMacAddress)
         return RETURN_OK;
     }
 
+    pthread_mutex_lock(&acl_txn_lock);
+    pthread_mutex_lock(&g_wifi_hal.acl_map_lock);
     acl_map = hash_map_get(interface->acl_map, key);
 
     if (acl_map == NULL) {
+        pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
+        pthread_mutex_unlock(&acl_txn_lock);
         wifi_hal_error_print("%s:%d: MAC %s is not present in acl list\n", __func__, __LINE__, key);
         return RETURN_OK;
     }
 
     hash_map_remove(interface->acl_map, key);
-    if (acl_map != NULL) {
-        free(acl_map);
-    }
+    free(acl_map);
+    pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
 
-    if (nl80211_set_acl(interface) != 0) {
+    if (acl_kernel_update_failed(interface)) {
         acl_map = (acl_map_t *)malloc(sizeof(acl_map_t));
         wifi_hal_error_print("%s:%d MAC %s nl80211_set_acl failure for interface:%s\n", __func__, __LINE__, key, interface->name);
         memcpy(acl_map->mac_addr_str, key, sizeof(mac_addr_str_t));
-        memcpy(acl_map->mac_addr, DeviceMacAddress, sizeof(mac_addr_str_t));
+        memcpy(acl_map->mac_addr, DeviceMacAddress, sizeof(mac_address_t));
 
+        pthread_mutex_lock(&g_wifi_hal.acl_map_lock);
         hash_map_put(interface->acl_map, strdup(key), acl_map);
+        pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
+        pthread_mutex_unlock(&acl_txn_lock);
 
         return -1;
+    }
+    pthread_mutex_unlock(&acl_txn_lock);
+
+    /* After the list update: a failed one restores the entry, so the STA must stay connected */
+    if ((vap->u.bss_info.mac_filter_enable == true) &&
+        (vap->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_white_list)) {
+        if (nl80211_kick_device_wait(interface, DeviceMacAddress) != 0) {
+            wifi_hal_info_print("%s:%d: STA %s not associated on ap_index %d, skip kick\n", __func__,
+                __LINE__, key, apIndex);
+        }
     }
 
     return 0;
@@ -2374,27 +2579,45 @@ INT wifi_hal_delApAclDevice(INT apIndex, CHAR *DeviceMacAddress)
         return RETURN_OK;
     }
 
+    pthread_mutex_lock(&acl_txn_lock);
+    pthread_mutex_lock(&g_wifi_hal.acl_map_lock);
     acl_map = hash_map_get(interface->acl_map, DeviceMacAddress);
 
     if (acl_map == NULL) {
+        pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
+        pthread_mutex_unlock(&acl_txn_lock);
         wifi_hal_error_print("%s:%d: MAC %s is not present in acl list\n", __func__, __LINE__, DeviceMacAddress);
         return RETURN_OK;
     }
 
     hash_map_remove(interface->acl_map, DeviceMacAddress);
-    if (acl_map != NULL) {
-        free(acl_map);
-    }
+    free(acl_map);
+    pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
 
-    if (nl80211_set_acl(interface) != 0) {
+    if (acl_kernel_update_failed(interface)) {
         acl_map = (acl_map_t *)malloc(sizeof(acl_map_t));
         wifi_hal_error_print("%s:%d MAC %s nl80211_set_acl failure for interface:%s\n", __func__, __LINE__, DeviceMacAddress, interface->name);
         memcpy(acl_map->mac_addr_str, DeviceMacAddress, sizeof(mac_addr_str_t));
         to_mac_bytes(acl_map->mac_addr_str, acl_map->mac_addr);
 
+        pthread_mutex_lock(&g_wifi_hal.acl_map_lock);
         hash_map_put(interface->acl_map, strdup(DeviceMacAddress), acl_map);
+        pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
+        pthread_mutex_unlock(&acl_txn_lock);
 
         return -1;
+    }
+    pthread_mutex_unlock(&acl_txn_lock);
+
+    /* After the list update: a failed one restores the entry, so the STA must stay connected */
+    if ((vap->u.bss_info.mac_filter_enable == true) &&
+        (vap->u.bss_info.mac_filter_mode == wifi_mac_filter_mode_white_list)) {
+        mac_address_t sta_mac;
+        to_mac_bytes(DeviceMacAddress, sta_mac);
+        if (nl80211_kick_device_wait(interface, sta_mac) != 0) {
+            wifi_hal_info_print("%s:%d: STA %s not associated on ap_index %d, skip kick\n", __func__,
+                __LINE__, DeviceMacAddress, apIndex);
+        }
     }
 
     return 0;
@@ -2426,9 +2649,13 @@ INT wifi_hal_delApAclDevices(INT apIndex)
         return RETURN_ERR;
     }
 
+    pthread_mutex_lock(&acl_txn_lock);
+    pthread_mutex_lock(&g_wifi_hal.acl_map_lock);
     acl_map = hash_map_get_first(interface->acl_map);
 
     if (acl_map == NULL) {
+        pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
+        pthread_mutex_unlock(&acl_txn_lock);
         wifi_hal_dbg_print("%s:%d: ACL list is empty for ap index %d\n", __func__, __LINE__, apIndex);
         return RETURN_OK;
     }
@@ -2441,8 +2668,12 @@ INT wifi_hal_delApAclDevices(INT apIndex)
             free(temp_acl_map);
         }
     }
+    pthread_mutex_unlock(&g_wifi_hal.acl_map_lock);
 
-    return nl80211_set_acl(interface);
+    /* Pushed under acl_txn_lock so no per-MAC rollback interleaves with the cleared list */
+    int ret = nl80211_set_acl(interface);
+    pthread_mutex_unlock(&acl_txn_lock);
+    return ret;
 }
 
 INT wifi_hal_getApAclDeviceNum(INT apIndex, uint *aclCount)
@@ -4909,16 +5140,35 @@ void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac)
 {
     u8 own_addr[ETH_ALEN];
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
-    struct hostapd_data *hapd = &interface->u.ap.hapd;
+    struct hostapd_data *hapd;
     struct sta_info *sta;
+
+    /* u.ap is only valid in AP mode */
+    if ((interface == NULL) || (interface->vap_info.vap_mode != wifi_vap_mode_ap)) {
+        wifi_hal_error_print("%s:%d: vap %d is not an AP\n", __func__, __LINE__, vap_index);
+        return;
+    }
+    hapd = &interface->u.ap.hapd;
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
 
     sta = ap_get_sta(hapd, mac);
+#ifdef WIFI_HAL_MAC80211_AP_SME
+    /* A STA already deauthenticated only waits to be freed */
+    if ((sta == NULL) || !(sta->flags & (WLAN_STA_AUTH | WLAN_STA_ASSOC))) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        /* A STA hostapd does not track may still be in the kernel */
+        if (sta == NULL) {
+            (void)nl80211_kick_device(interface, mac);
+        }
+        return;
+    }
+#else
     if (sta != NULL) {
         sta->flags &= ~WLAN_STA_ASSOC;
     }
+#endif
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
 #if (defined(BANANA_PI_PORT) && defined(KERNEL_6_6)) || defined(QCOM_ATH12K_PORT)
@@ -4931,6 +5181,15 @@ void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac)
 #else
     wifi_drv_sta_disassoc(interface, own_addr, mac, status);
 #endif // BANANA_PI_PORT && KERNEL_6_6
+
+#ifdef WIFI_HAL_MAC80211_AP_SME
+    /* wifi_sta_remove() leaves a tracked STA for hostapd to remove */
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    if ((sta = ap_get_sta(hapd, mac)) != NULL) {
+        ap_sta_disassociate(hapd, sta, status);
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+#endif
 }
 
 void wifi_hal_set_neighbor_report(uint apIndex,uint add,mac_address_t mac)
