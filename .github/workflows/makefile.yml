@@ -130,6 +130,38 @@ jobs:
         git config --global user.name "${GITHUB_ACTOR}"
         make -f ${{ matrix.platform.makefile_path }} setup
 
+    # TEMPORARY advisory check (LTE-3093), see .github/scripts/opclass/check.py: compares the
+    # op-class -> frequency mapping of this change with its base (HEAD^1: the target branch for
+    # a PR merge ref, the previous commit on push), both against this leg's hostap (rpi = 2.10,
+    # bpi = 2.11). Never fails the job; runs before the build so a red build still reports.
+    - name: op-class round trip vs base for ${{ matrix.platform.name }}
+      if: always()
+      working-directory: easymesh_project/rdk-wifi-hal
+      run: |
+        set -uo pipefail
+        case "${{ matrix.platform.id }}" in
+          rpi) V=210 ;;
+          bpi) V=211 ;;
+          *)   exit 0 ;;
+        esac
+        OUT="$RUNNER_TEMP/opclass"
+        mkdir -p "$OUT/base"
+        echo "### 🧭 op-class round trip (hostap ${V:0:1}.${V:1}) vs base" >> "$GITHUB_STEP_SUMMARY"
+        rc=0
+        if git archive HEAD^1 src | tar -x -C "$OUT/base"; then
+          python3 .github/scripts/opclass/check.py "$OUT/base" . \
+            "../rdk-wifi-libhostap/source/hostap-${V:0:1}.${V:1}" ../halinterface/include "$V" \
+            > "$OUT/report.md" 2> "$OUT/err.txt" || rc=$?
+        else
+          rc=1; echo "no base tree (HEAD^1)" > "$OUT/err.txt"
+        fi
+        if [ "$rc" = 3 ]; then
+          echo "::warning title=op-class round trip (hostap ${V:0:1}.${V:1})::Op-class -> frequency mapping changed vs the base (see the job summary). This may affect downstream behaviour; make sure it is intended."
+        elif [ "$rc" != 0 ]; then
+          { echo "mechanism error, nothing checked:"; echo '```'; tail -20 "$OUT/err.txt"; echo '```'; } > "$OUT/report.md"
+        fi
+        cat "$OUT/report.md" >> "$GITHUB_STEP_SUMMARY"
+
     - name: Build OneWiFi for ${{ matrix.platform.name }}
       id: build
       working-directory: easymesh_project/OneWifi
@@ -249,11 +281,14 @@ jobs:
         # De-promote just that class for clang, so the analyzer can run. No effect on the gcc gate.
         # Harmless until a clang-analyzer-* check is enabled.
         extra+=( '--extra-arg=-Wno-error=incompatible-pointer-types-discards-qualifiers' )
+        # Paths never scanned, git pathspec syntax ':!<pattern>' (as EXCLUDES in clang-format.yml).
+        # .github/: CI helper sources (e.g. scripts/opclass/driver.c) are not in the compile DB.
+        EXCLUDES=(':!.github/**')
         BASE='${{ github.event.pull_request.base.sha }}'
         CHANGED=''
         if [ -n "$BASE" ]; then
           git -C "$HAL" fetch --no-tags --depth=1 origin "$BASE" >/dev/null 2>&1 || true
-          CHANGED=$(git -C "$HAL" diff --name-only --diff-filter=ACM "$BASE" HEAD -- '*.c' '*.cpp' 2>/dev/null || true)
+          CHANGED=$(git -C "$HAL" diff --name-only --diff-filter=ACM "$BASE" HEAD -- '*.c' '*.cpp' "${EXCLUDES[@]}" 2>/dev/null || true)
         fi
         : > tidy.log
         for f in $CHANGED; do
