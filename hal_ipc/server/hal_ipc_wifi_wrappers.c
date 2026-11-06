@@ -606,7 +606,8 @@ INT wifi_hal_getRadioIfName(INT radioIndex, CHAR *output_string)
 {
     wifi_hal_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
 
-    if (radioIndex > g_wifi_hal.num_radios){
+    if (radioIndex < 0 || (unsigned int)radioIndex >= g_wifi_hal.num_radios ||
+        (unsigned int)radioIndex >= ARRAY_SZ(cloud_radio_map)){
         wifi_hal_dbg_print("%s:%d: radio index %d out of range.\n", __func__, __LINE__, radioIndex);
         return -1;
     }
