@@ -448,13 +448,33 @@ INT wifi_hal_getSSIDName(   INT apIndex,
     wifi_interface_info_t *interface = NULL;
     wifi_hal_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
 
+    if (output_string == NULL) {
+        return RETURN_ERR;
+    }
     interface = get_interface_by_vap_index(apIndex);
     if(!interface) {
       wifi_hal_error_print("%s:%d:interface for ap index:%d not found\n", __func__, __LINE__, apIndex);
       return RETURN_ERR;
     }
 
-    strcpy(output_string, interface->vap_info.u.bss_info.ssid);
+    {
+        const char *ssid;
+        size_t max, n;
+
+        if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
+            ssid = interface->vap_info.u.bss_info.ssid;
+            max = sizeof(interface->vap_info.u.bss_info.ssid) - 1;
+        } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
+            ssid = interface->vap_info.u.sta_info.ssid;
+            max = sizeof(interface->vap_info.u.sta_info.ssid);
+        } else {
+            return RETURN_ERR;
+        }
+        for (n = 0; n < max && ssid[n] != '\0'; n++) {
+        }
+        memcpy(output_string, ssid, n);
+        output_string[n] = '\0';
+    }
 
     return 0;
 }
@@ -606,7 +626,8 @@ INT wifi_hal_getRadioIfName(INT radioIndex, CHAR *output_string)
 {
     wifi_hal_dbg_print("%s:%d: Enter.\n", __func__, __LINE__);
 
-    if (radioIndex > g_wifi_hal.num_radios){
+    if (radioIndex < 0 || (unsigned int)radioIndex >= g_wifi_hal.num_radios ||
+        (unsigned int)radioIndex >= ARRAY_SZ(cloud_radio_map)){
         wifi_hal_dbg_print("%s:%d: radio index %d out of range.\n", __func__, __LINE__, radioIndex);
         return -1;
     }
