@@ -57,11 +57,22 @@ int sync_hostapd_freq_param(unsigned int apIndex)
     }
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: radio index:%u for ap index:%u not found\n", __func__, __LINE__, vap->radio_index, apIndex);
+        return RETURN_ERR;
+    }
     radio_param = &radio->oper_param;
 
     get_coutry_str_from_code(radio_param->countryCode, country);
 
     freq = ieee80211_chan_to_freq(country, radio_param->operatingClass, radio_param->channel);
+    if (freq <= 0) {
+        wifi_hal_error_print("%s:%d: ap index:%u no frequency for op class:%u channel:%u\n", __func__, __LINE__, apIndex, radio_param->operatingClass, radio_param->channel);
+        return RETURN_ERR;
+    }
+    if (interface->u.ap.hapd.iface == NULL) {
+        wifi_hal_error_print("%s:%d: ap index:%u hostapd interface not created\n", __func__, __LINE__, apIndex);
+    }
     if (interface->u.ap.hapd.iface->freq != freq) {
         wifi_hal_info_print("%s:%d: ap index:%u existing freq:%d curr freq:%d\n", __func__, __LINE__, apIndex, interface->u.ap.hapd.iface->freq, freq);
         interface->u.ap.hapd.iface->freq = freq;
