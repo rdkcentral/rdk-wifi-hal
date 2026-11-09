@@ -1430,12 +1430,13 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
         sprintf(cmd, "wl -i %s eht enab %d", interface_name, eht_enab);
         system(cmd);
-
+#if 0
         for (bss = 1; bss < MAX_NUM_VAP_PER_RADIO; bss++) {
 	    memset(cmd, 0 ,sizeof(cmd));
             sprintf(cmd, "wl -i %s.%d eht bssehtmode %d", interface_name, bss, eht_enab);
             system(cmd);
         }
+#endif
     }
     if (_platform_init_done && is_eht_enab_changed)
         platform_radio_up(index, TRUE);
