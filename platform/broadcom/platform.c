@@ -4450,7 +4450,7 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x22, 0x20, 0x02, 0xc0, 0x02, 0x03, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
 #endif // SCXER10_PORT || SCXF10_PORT || RDKB_ONE_WIFI_PROD
-#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
+#if defined(SCXER10_PORT)
     static const u8 eht_phy_cap[EHT_PHY_CAPAB_LEN] = { 0x2c, 0x00, 0x03, 0xe0, 0x00, 0xe7, 0x00,
         0x7e, 0x00 };
 #endif // SCXER10_PORT
@@ -4491,7 +4491,7 @@ static void platform_get_radio_caps_2g(wifi_radio_info_t *radio, wifi_interface_
 #endif /* HOSTAPD_VERSION >= 211 */
 
 // XER-10 uses old kernel that does not support EHT cap NL parameters
-#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
+#if defined(SCXER10_PORT)
         iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].eht_supported = true;
         iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].mac_cap = 0x0082;
         memcpy(iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].phy_cap, eht_phy_cap,
@@ -4549,7 +4549,7 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_phy_cap[HE_MAX_PHY_CAPAB_SIZE] = { 0x4c, 0x20, 0x02, 0xc0, 0x02, 0x1b, 0x95,
         0x00, 0x00, 0xcc, 0x00 };
 #endif // TCXB8_PORT || SCXER10_PORT || SCXF10_PORT
-#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
+#if defined(SCXER10_PORT)
     static const u8 eht_phy_cap[EHT_PHY_CAPAB_LEN] = { 0x2c, 0x00, 0x1b, 0xe0, 0x00, 0xe7, 0x00,
         0x7e, 0x00 };
 #endif // SCXER10_PORT
@@ -4603,7 +4603,7 @@ static void platform_get_radio_caps_5g(wifi_radio_info_t *radio, wifi_interface_
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || TCHCBRV2_PORT || SKYSR213_PORT || SCXF10_PORT
 
 // XER-10 uses old kernel that does not support EHT cap NL parameters
-#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
+#if defined(SCXER10_PORT)
         iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].eht_supported = true;
         iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].mac_cap = 0x00c2;
         memcpy(iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].phy_cap, eht_phy_cap,
@@ -4650,7 +4650,7 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
     static const u8 he_ppet[HE_MAX_PPET_CAPAB_SIZE] = { 0x7b, 0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71,
         0x1c, 0xc7, 0x71, 0x1c, 0xc7, 0x71 };
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT || SCXF10_PORT
-#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
+#if defined(SCXER10_PORT)
     static const u8 eht_phy_cap[EHT_PHY_CAPAB_LEN] = { 0x2e, 0x00, 0x00, 0x60, 0x00, 0xe7, 0x00,
         0x0e, 0x00 };
 #endif // SCXER10_PORT
@@ -4688,7 +4688,7 @@ static void platform_get_radio_caps_6g(wifi_radio_info_t *radio, wifi_interface_
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || SCXER10_PORT
 
 // XER-10 uses old kernel that does not support EHT cap NL parameters
-#if defined(SCXER10_PORT) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
+#if defined(SCXER10_PORT)
         iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].eht_supported = true;
         iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].mac_cap = 0x00c2;
         memcpy(iface->hw_features[i].eht_capab[IEEE80211_MODE_AP].phy_cap, eht_phy_cap,
