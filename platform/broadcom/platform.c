@@ -1410,7 +1410,6 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 #elif defined(XB10_PORT) || (defined(SCXER10_PORT) && (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)))
     int eht_enab = (operationParam->variant & WIFI_80211_VARIANT_BE) ? 1 : 0;
     bool is_eht_enab_changed = false;
-    int bss;
 
     if (_platform_init_done) {
         int old_eht_enab = (radio->oper_param.variant & WIFI_80211_VARIANT_BE) ? 1 : 0;
