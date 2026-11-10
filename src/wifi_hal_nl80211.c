@@ -10002,7 +10002,7 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
     if (security->mode != wifi_security_mode_wpa3_compatibility) {
         interface->wpa_s.current_ssid->group_mgmt_cipher = WPA_CIPHER_AES_128_CMAC;
     }
-#if HOSTAPD_VERSION >= 211 //2.11
+#if !defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
 #ifdef CONFIG_IEEE80211BE
     if (security->mode == wifi_security_mode_wpa3_compatibility &&
         wpa_sm_get_rsn_override(interface->u.sta.wpa_sm) == RSN_OVERRIDE_RSNE_OVERRIDE_2) {
@@ -10375,7 +10375,11 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
         interface->wpa_s.drv_flags2 |= WPA_DRIVER_FLAGS2_MLO;
 
     if (interface->wpa_s.conf) {
+#if !defined(HOSTAPD_211_V6)
         interface->wpa_s.conf->mld_allowed_phy = DEFAULT_MLD_ALLOWED_PHY;
+#else
+        interface->wpa_s.conf->disable_mld = 0;
+#endif
         interface->wpa_s.conf->mld_force_single_link = 0;
     }
 #else
@@ -13864,26 +13868,6 @@ int wifi_drv_set_wds_sta(void *priv, const u8 *addr, int aid, int val, const cha
     if (ifname_wds) {
         os_strlcpy(ifname_wds, name, IFNAMSIZ + 1);
     }
-
-#ifdef CONFIG_VENDOR_MXL
-    /* For WDS STA creation (val=1), send multi_ap mode to Wave driver BEFORE creating interface.
-     * The Wave driver needs multi_ap_mode set in its PDB before it can create WDS interfaces.
-     * This fixes the "Wrong multi_ap_mode: 0" error when backhaul STA connects.
-     */
-    if (val && interface->u.ap.conf.multi_ap) {
-        wifi_hal_info_print("%s:%d: Sending multi_ap=%d to driver before WDS STA creation for %s\r\n",
-            __func__, __LINE__, interface->u.ap.conf.multi_ap, interface->name);
-
-        ret = wifi_drv_vendor_cmd(interface, OUI_LTQ, LTQ_NL80211_VENDOR_SUBCMD_SET_MESH_MODE,
-                                 (u8 *)&interface->u.ap.conf.multi_ap,
-                                 sizeof(interface->u.ap.conf.multi_ap),
-                                 NESTED_ATTR_NOT_USED, NULL);
-        if (ret < 0) {
-            wifi_hal_error_print("%s:%d: Failed to set multi_ap mode before WDS STA creation: %d\r\n",
-                __func__, __LINE__, ret);
-        }
-    }
-#endif /* CONFIG_VENDOR_MXL */
 
     wifi_hal_info_print("%s:%d:nl80211: Set WDS STA addr=" MACSTR " aid=%d val=%d name=%s ifindex:%d\r\n",
         __func__, __LINE__, MAC2STR(addr), aid, val, name, if_nametoindex(name));
