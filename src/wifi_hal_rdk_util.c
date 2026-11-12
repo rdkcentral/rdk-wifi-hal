@@ -51,8 +51,8 @@
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
 #include <aes_siv.h>
-#include <wifi_hal_rdk_framework.h>
 #include "wifi_hal_priv.h"
+#include <wifi_hal_rdk_framework.h>
 #include <cjson/cJSON.h>
 #include <sys/types.h>
 #include <ifaddrs.h>
@@ -70,7 +70,7 @@ wifi_device_callbacks_t *get_device_callbacks()
     return &g_device_callbacks;
 }
 #if !defined(PLATFORM_LINUX)
-char *to_mac_str (mac_address_t mac, mac_addr_str_t key) {
+char *to_mac_str (const mac_address_t mac, mac_addr_str_t key) {
     snprintf(key, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
@@ -203,7 +203,7 @@ int adjust_radio_capability_band(wifi_radio_capabilities_t *cap, unsigned int ra
     unsigned int i = 0;
 
     memset(&tmp_cap, 0, sizeof(wifi_radio_capabilities_t));
-    for (i = 0; i <= cap->numSupportedFreqBand; i++) {
+    for (i = 0; i < MAX_NUM_FREQ_BAND; i++) {
         // The driver reports 5G low and high bands as 5G band. We fix the band based on VAP name.
         if (cap->band[i] == WIFI_FREQUENCY_5_BAND && (radio_band == WIFI_FREQUENCY_5H_BAND ||
             radio_band == WIFI_FREQUENCY_5L_BAND)) {
@@ -393,7 +393,7 @@ int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg
         ret = RETURN_ERR;
         snprintf(msg + strlen(msg), len - strlen(msg), " showSsid: %d", bss_info->showSsid);
     }
-#ifndef TARGET_GEMINI7_2
+#ifndef _MERCURY_PRODUCT_REQ_
     if (strncmp(vap_info->bridge_name, "", strlen(vap_info->bridge_name)) == 0) {
         ret = RETURN_ERR;
         snprintf(msg + strlen(msg), len - strlen(msg), " Bridge name is null for vap index %u", vap_info->vap_index);

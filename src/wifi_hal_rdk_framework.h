@@ -141,6 +141,8 @@ typedef struct {
     wifi_handshake_callback                 handshake_cb[MAX_REGISTERED_CB_NUM];
     unsigned int                            num_eapol_timeouts_cbs;
     wifi_eapol_timeouts_callback            eapol_timeouts_cb[MAX_REGISTERED_CB_NUM];
+    unsigned int                            num_eapol_key_cbs;
+    wifi_eapol_key_callback                 eapol_key_cb[MAX_REGISTERED_CB_NUM];
     queue_t                                 *queue;
     wifi_RMBeaconReport_callback            bcnrpt_callback[MAX_AP_INDEX];
     wifi_BTM_callbacks_t                    btm_callback[MAX_AP_INDEX];
@@ -155,6 +157,8 @@ typedef struct {
     wifi_device_deauthenticated_callback    apDeAuthEvent_cb[MAX_REGISTERED_CB_NUM];
     wifi_vapstatus_callback                 vapstatus_cb[MAX_REGISTERED_CB_NUM];
     unsigned int                            num_apDeAuthEvent_cbs;
+    wifi_apFrameDropUnencrypted_callback    frame_drop_unenc_cb[MAX_REGISTERED_CB_NUM];
+    unsigned int                            num_frame_drop_unenc_cbs;
     wifi_receivedMgmtFrame_callback         mgmt_frame_rx_callback;
     wifi_receivedDataFrame_callback         data_frame_rx_callback;
        

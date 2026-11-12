@@ -36,7 +36,10 @@
 #include "hostapd/eap_register.h"
 #include "ap/rrm.h"
 #include "ap/neighbor_db.h"
-
+#include "ap/ctrl_iface_ap.h"
+#if defined(QCOM_ATH12K_PORT)
+#include "common/qca-vendor.h"
+#endif
 #ifdef CONFIG_WIFI_EMULATOR
 #include "config_supplicant.h"
 #endif
@@ -45,6 +48,8 @@
 #endif
 
 #define MAC_ADDRESS_LEN 6
+
+#define EASYMESH_OFF_FLAG "/nvram/rdkb_user_easymesh_off"
 
 #ifdef CONFIG_WIFI_EMULATOR
 #define RADIO_INDEX_ASSERT_RC(radioIndex, retcode) \
@@ -156,7 +161,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 #if defined(_SKY_HUB_COMMON_PRODUCT_REQ_) && !defined(_SR213_PRODUCT_REQ_) && !defined(_SCER11BEL_PRODUCT_REQ_) && !defined(_SCXF11BFL_PRODUCT_REQ_)
     /* For SKY platforms, set as per _SKY macro defined */
     hal->wifi_prop.BssMaxStaAllow = BSS_MAX_NUM_STA_SKY;
-#elif defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(SCXF10_PORT)
+#elif defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || defined(SCXF10_PORT) || defined(XER2_PORT) || defined(QCOM_ATH12K_PORT)
     /* For TCHXB8 platforms, set as per _XB8 macro defined */
     hal->wifi_prop.BssMaxStaAllow = BSS_MAX_NUM_STA_XB8;
 #else
@@ -166,11 +171,13 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 #if !defined(_PLATFORM_RASPBERRYPI_)
     /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
-#if defined (_PLATFORM_BANANAPI_R4_)
+#if defined(_PLATFORM_BANANAPI_R4_)
     _syscmd("cat /etc/machine-id", output, sizeof(output));
     if (strlen(output) == 0) {
         strncpy(output, "bpi-123", sizeof(output));
     }
+#elif defined(QCOM_ATH12K_PORT)
+    strncpy(output, get_device_info_details().serial_number, sizeof(output) - 1);
 #else
     _syscmd("grep -a 'Serial' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
 #endif
@@ -181,11 +188,13 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     strcpy(hal->wifi_prop.serialNo,output);
 
     memset(output, '\0', sizeof(output));
-#if defined (_PLATFORM_BANANAPI_R4_)
+#if defined(_PLATFORM_BANANAPI_R4_)
     _syscmd("cat /proc/device-tree/model | tr -d ' '", output, sizeof(output));
     if (strlen(output) == 0) {
         strncpy(output, "Banana Pi - R4", sizeof(output));
     }
+#elif defined(QCOM_ATH12K_PORT)
+    _syscmd("grep -ia 'Model Name' /etc/factory_nvram.data | head -1 | cut -d ':' -f2 | cut -c2-", output, sizeof(output));
 #else
     _syscmd("grep -a 'MODEL' /tmp/factory_nvram.data | cut -d ' ' -f2", output, sizeof(output));
 #endif
@@ -193,8 +202,12 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     if (len != 0 && output[len - 1] == '\n') {
         output[len - 1] = '\0';
     }
-    strcpy(hal->wifi_prop.manufacturerModel,output);
-    strcpy(hal->wifi_prop.manufacturer,output);
+    strcpy(hal->wifi_prop.manufacturerModel, output);
+#if defined(QCOM_ATH12K_PORT)
+    _syscmd("grep -ia 'Manufacturer' /etc/factory_nvram.data | head -1 | cut -d ':' -f2 | cut -c2- | tr -d '\\n'", hal->wifi_prop.manufacturer, sizeof(hal->wifi_prop.manufacturer));
+#else
+    strcpy(hal->wifi_prop.manufacturer, output);
+#endif
 
     memset(output, '\0', sizeof(output));
     _syscmd("grep 'imagename:' /version.txt | cut -d ':' -f2 ", output, sizeof(output));
@@ -211,7 +224,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
     // CM mac
     memset(output, '\0', sizeof(output));
-#if defined (_PLATFORM_BANANAPI_R4_)
+#if defined(_PLATFORM_BANANAPI_R4_)
     if (get_mac_address("erouter0", hal->wifi_prop.cm_mac) != RETURN_OK) {
        if (get_mac_address("eth0", hal->wifi_prop.cm_mac) != RETURN_OK) {
             wifi_hal_error_print("%s:%d: Unable to get CM mac address\n", __func__, __LINE__);
@@ -229,7 +242,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
 
 
     memset(output, '\0', sizeof(output));
-#if defined (_PLATFORM_BANANAPI_R4_)
+#if defined(_PLATFORM_BANANAPI_R4_)
     if (get_mac_address("erouter0", hal->wifi_prop.al_1905_mac) != RETURN_OK) {
        if (get_mac_address("eth0", hal->wifi_prop.al_1905_mac) != RETURN_OK) {
             wifi_hal_error_print("%s:%d: Unable to get AL mac address\n", __func__, __LINE__);
@@ -243,7 +256,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     }
 #endif
 
-#elif (defined (_PLATFORM_RASPBERRYPI_))
+#elif (defined(_PLATFORM_RASPBERRYPI_))
    /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
     _syscmd("grep -a 'Serial' /proc/cpuinfo | cut -d ':' -f2", output, sizeof(output));
@@ -284,6 +297,13 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     }
 #endif
 
+    if (access(EASYMESH_OFF_FLAG, F_OK) == 0) {
+        hal->wifi_prop.colocated_mode = -1;
+        wifi_hal_info_print("%s:%d: %s file exists, easymesh is disabled\n", __func__, __LINE__, EASYMESH_OFF_FLAG);
+    } else {
+        if (errno != ENOENT) {
+            wifi_hal_error_print("%s:%d: access(%s) failed: %s\n", __func__, __LINE__, EASYMESH_OFF_FLAG, strerror(errno));
+        }
     /* Read the al_mac address from EM_CFG_FILE */
     ret = json_parse_string(EM_CFG_FILE, "Al_MAC_ADDR", al_ctrl_mac, sizeof(al_ctrl_mac));
     if (ret == 0) {
@@ -332,6 +352,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
             __func__, __LINE__, EM_CFG_FILE, ret);
         hal->wifi_prop.colocated_mode = -1;
     }
+    } /* EASYMESH_OFF_FLAG not present */
 
     wifi_hal_info_print("%s:%d: serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s "
                         "al_mac_addr=%s colocated_mode:%d\n",
@@ -509,7 +530,9 @@ INT wifi_hal_init()
         return RETURN_ERR;
     }
 
-#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+    wifi_hal_dbg_print("%s:%d: get platform radio capabilities\n", __func__, __LINE__);
+#if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_) || \
+    defined(QCOM_ATH12K_PORT)
     for (i = 0; i < g_wifi_hal.num_radios; i++) {
         wifi_interface_info_t *first_ap_interface = NULL;
         wifi_interface_info_t *interface;
@@ -544,7 +567,7 @@ INT wifi_hal_init()
             wifi_hal_dbg_print("%s:%d: No AP interface found for radio %u\n", __func__, __LINE__, i);
         }
     }
-#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || TARGET_GEMINI7_2
+#endif // CONFIG_HW_CAPABILITIES || VNTXER5_PORT || _MERCURY_PRODUCT_REQ_
 
     if ((get_radio_caps_fn = get_platform_get_radio_caps_fn()) != NULL) {
         wifi_hal_dbg_print("%s:%d: get platform radio capabilities\n", __func__, __LINE__);
@@ -788,8 +811,10 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     }
     memcpy((unsigned char *)old_operationParam, (unsigned char *)&radio->oper_param, sizeof(wifi_radio_operationParam_t));
 
+#if !defined(BANANA_PI_PORT) && !defined(CONFIG_GENERIC_MLO) && !defined(QCOM_ATH12K_PORT)
     nl80211_interface_enable(wifi_hal_get_interface_name(primary_interface),
         operationParam->enable);
+#endif
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
     if (nl80211_set_amsdu_tid(primary_interface, operationParam->amsduTid) != RETURN_OK)
     {
@@ -835,17 +860,58 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                                 __func__, __LINE__, ret);
                         }
                     }
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
+                    if (wifi_hal_is_mld_enabled(interface)) {
+                        if (setup_mlo_vap(interface, &interface->vap_info) != RETURN_OK) {
+                            free(old_operationParam);
+                            old_operationParam = NULL;
+                            return RETURN_ERR;
+                        }
+                    }
+
+                    //Important side effect to this is that this will make sure we trigger the beacon twice
+                    if (restart_interface(interface)) {
+                            free(old_operationParam);
+                            old_operationParam = NULL;
+                            return RETURN_ERR;
+                    }
+
+                    if (nl80211_create_bridge(interface_name, interface->vap_info.bridge_name) != 0) {
+                        wifi_hal_error_print("%s:%d: Failed add interface %s to bridge %s\n",
+                            __func__, __LINE__, interface_name, interface->vap_info.bridge_name);
+                        free(old_operationParam);
+                        old_operationParam = NULL;
+                        return RETURN_ERR;
+                    }
+
+#else
                     if (update_hostap_interface_params(interface) != RETURN_OK) {
                         free(old_operationParam);
                         old_operationParam = NULL;
                         return RETURN_ERR;
                     }
+#endif // defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
                     interface->beacon_set = 0;
                     start_bss(interface);
                     interface->bss_started = true;
                 }
 
                 if (radio->oper_param.enable == false && interface->bss_started) {
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO)
+                    if (wifi_hal_is_mld_enabled(interface)) {
+                        if (teardown_mlo_vap(interface)) {
+                            free(old_operationParam);
+                            old_operationParam = NULL;
+                            return RETURN_ERR;
+                        }
+                    }
+
+                    if (reload_interface(interface)) {
+                        free(old_operationParam);
+                        old_operationParam = NULL;
+                        return RETURN_ERR;
+                    }
+#else
                     /* Clear beacon interval in wdev by stoping AP */
                     nl80211_interface_enable(interface_name, false);
                     nl80211_interface_enable(interface_name, true);
@@ -872,9 +938,9 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                     }
                     interface->bss_started = false;
                     nl80211_interface_enable(interface_name, false);
+#endif // BANANA_PI_PORT && CONFIG_GENERIC_MLO
                 }
             }
-
             if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
                 if (radio->oper_param.enable == false) {
                     if (interface->u.sta.state == WPA_COMPLETED) {
@@ -1046,31 +1112,6 @@ Exit:
         radio->configured = true;
     }
 
-#if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) && (HOSTAPD_VERSION >= 210)
-    for (unsigned int radio_index = 0; radio_index < g_wifi_hal.num_radios; radio_index++) {
-        wifi_interface_info_t *interface_iter = NULL;
-
-        if (index == radio_index) {
-            continue;
-        }
-        wifi_radio_info_t *radio_iter = get_radio_by_rdk_index(radio_index);
-        if (radio_iter == NULL) {
-            continue;
-        }
-
-        hash_map_foreach(radio_iter->interface_map, interface_iter) {
-            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap ||
-                !interface_iter->vap_info.u.bss_info.enabled ||
-                !interface_iter->vap_info.u.bss_info.hostap_mgt_frame_ctrl) {
-                continue;
-            }
-
-            ieee802_11_set_beacon(&interface_iter->u.ap.hapd);
-        }
-    }
-
-#endif // defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) &&  (HOSTAPD_VERSION >= 210)
-
     free(old_operationParam);
     old_operationParam = NULL;
     radio->configuration_in_progress = false;
@@ -1207,7 +1248,7 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
     wifi_bss_info_t *bss;
-    unsigned int num = 0;
+    unsigned int num = 0, write_index = 0;
     wifi_bss_info_t *bss_info;
     u8 chan;
 
@@ -1255,17 +1296,26 @@ INT wifi_hal_findNetworks(INT ap_index, wifi_channel_t *channel, wifi_bss_info_t
 
     bss = hash_map_get_first(interface->scan_info_map);
     while (bss != NULL) {
+        bool copy_bss = false;
         if (channel->channel == 0) {
-            memcpy(bss_info, bss, sizeof(wifi_bss_info_t));
+            copy_bss = true;
         } else {
             ieee80211_freq_to_chan(bss->freq, &chan);
             if (chan == channel->channel) {
-                memcpy(bss_info, bss, sizeof(wifi_bss_info_t));
+                copy_bss = true;
             }
         }
+        if (copy_bss) {
+            if (write_index >= num) {
+                wifi_hal_error_print("%s:%d:Scan result count exceeded allocated count\n",__func__, __LINE__);
+                break;
+            }
+            memcpy(&(*bss_array)[write_index],bss,sizeof(wifi_bss_info_t));
+            write_index++;
+        }
         bss = hash_map_get_next(interface->scan_info_map, bss);
-        bss_info++;
     }
+    *num_bss = write_index;
     pthread_mutex_unlock(&interface->scan_info_mutex);
 
     return RETURN_OK;
@@ -1353,208 +1403,6 @@ int get_sta_4addr_status(bool *sta_4addr)
     return json_parse_boolean(EM_CFG_FILE, "sta_4addr_mode_enabled", sta_4addr);
 }
 
-static int reload_single_vap_configuration(wifi_interface_info_t *interface)
-{
-    char *interface_name = wifi_hal_get_interface_name(interface);
-    wifi_radio_info_t *radio = get_radio_by_rdk_index(interface->rdk_radio_index);
-
-    if (radio == NULL) {
-        wifi_hal_error_print("%s:%d: interface:%s failed to get radio for index:%d\n", __func__,
-            __LINE__, interface_name, interface->rdk_radio_index);
-        return -1;
-    }
-
-    wifi_hal_info_print("%s:%d: interface:%s reload hostapd config\n", __func__, __LINE__,
-        interface_name);
-
-#ifndef CONFIG_GENERIC_MLO
-    interface->beacon_set = 0;
-#endif /* CONFIG_GENERIC_MLO */
-
-    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    if (hostapd_reload_config(interface->u.ap.hapd.iface) < 0) {
-        wifi_hal_error_print("%s:%d: interface:%s failed to reload VAP configuration\n", __func__,
-            __LINE__, interface_name);
-        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-        return -1;
-    }
-#ifdef CONFIG_SAE
-    if (interface->u.ap.conf.sae_groups != NULL) {
-        interface->u.ap.conf.sae_groups = NULL;
-    }
-#endif
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-
-    /* Prevent hostap calling set_ap when client is removed due to VAP disable before
-     * start_bss */
-    interface->in_reconf = true;
-
-    wifi_hal_info_print("%s:%d: interface:%s disable AP\n", __func__, __LINE__, interface_name);
-    nl80211_enable_ap(interface, false);
-    interface->bss_started = false;
-
-    wifi_hal_info_print("%s:%d: interface:%s free hostapd data\n", __func__, __LINE__,
-        interface_name);
-    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    deinit_bss(&interface->u.ap.hapd);
-    if (interface->u.ap.hapd.conf->ssid.wpa_psk != NULL &&
-        interface->u.ap.hapd.conf->ssid.wpa_psk->next == NULL) {
-        hostapd_config_clear_wpa_psk(&interface->u.ap.hapd.conf->ssid.wpa_psk);
-    }
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-
-    wifi_hal_info_print("%s:%d: interface:%s update hostapd params\n", __func__, __LINE__,
-        interface_name);
-    if (update_hostap_interface_params(interface) < 0) {
-        wifi_hal_error_print("%s:%d: interface:%s failed to update hostapd params\n", __func__,
-            __LINE__, interface_name);
-        return -1;
-    }
-
-    interface->in_reconf = false;
-
-    if (interface->vap_info.u.bss_info.enabled && radio->configured && radio->oper_param.enable) {
-        wifi_hal_info_print("%s:%d: interface:%s enable ap\n", __func__, __LINE__, interface_name);
-        interface->beacon_set = 0;
-        if (start_bss(interface) < 0) {
-            wifi_hal_error_print("%s:%d: interface:%s failed to start BSS\n", __func__, __LINE__,
-                interface_name);
-            return -1;
-        }
-        interface->bss_started = true;
-    }
-
-    return 0;
-}
-
-#ifdef CONFIG_GENERIC_MLO
-static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
-{
-    char *interface_name = wifi_hal_get_interface_name(interface);
-    int link_id = wifi_hal_get_mld_link_id(interface);
-
-    wifi_hal_info_print("%s:%d: interface:%s link id:%d reload hostapd config\n", __func__,
-        __LINE__, interface_name, link_id);
-
-    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-    if (hostapd_reload_config(interface->u.ap.hapd.iface) < 0) {
-        wifi_hal_error_print("%s:%d: interface:%s link id:%d failed to reload VAP configuration\n",
-            __func__, __LINE__, interface_name, link_id);
-        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-        return -1;
-    }
-#ifdef CONFIG_SAE
-    if (interface->u.ap.conf.sae_groups != NULL) {
-        interface->u.ap.conf.sae_groups = NULL;
-    }
-#endif
-    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-
-    for (int i = g_wifi_hal.num_radios - 1; i >= 0; i--) {
-        wifi_interface_info_t *interface_iter = NULL;
-        wifi_radio_info_t *radio = get_radio_by_rdk_index(i);
-
-        if (radio == NULL) {
-            wifi_hal_error_print("%s:%d: Failed to get radio for index:%d\n", __func__, __LINE__,
-                i);
-            continue;
-        }
-
-        hash_map_foreach(radio->interface_map, interface_iter) {
-            char *interface_iter_name;
-            int interface_iter_link_id;
-
-            if (!wifi_hal_is_mld_enabled(interface_iter)) {
-                continue;
-            }
-
-            if (interface_iter->index != interface->index) {
-                continue;
-            }
-
-            /* Prevent hostap calling set_ap when client is removed due to VAP disable before
-             * start_bss */
-            interface_iter->in_reconf = true;
-
-            interface_iter_name = wifi_hal_get_interface_name(interface_iter);
-            interface_iter_link_id = wifi_hal_get_mld_link_id(interface_iter);
-            wifi_hal_info_print("%s:%d: interface:%s link id:%d disable AP\n", __func__, __LINE__,
-                interface_iter_name, interface_iter_link_id);
-            nl80211_enable_ap(interface_iter, false);
-            interface_iter->bss_started = false;
-
-            wifi_hal_info_print("%s:%d: interface:%s link id:%d free hostapd data\n", __func__,
-                __LINE__, interface_iter_name, interface_iter_link_id);
-            pthread_mutex_lock(&g_wifi_hal.hapd_lock);
-            deinit_bss(&interface_iter->u.ap.hapd);
-            if (interface_iter->u.ap.hapd.conf->ssid.wpa_psk != NULL &&
-                interface_iter->u.ap.hapd.conf->ssid.wpa_psk->next == NULL) {
-                hostapd_config_clear_wpa_psk(&interface_iter->u.ap.hapd.conf->ssid.wpa_psk);
-            }
-            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
-        }
-    }
-
-    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
-        wifi_interface_info_t *interface_iter = NULL;
-        wifi_radio_info_t *radio = get_radio_by_rdk_index(i);
-
-        hash_map_foreach(radio->interface_map, interface_iter) {
-            char *interface_iter_name;
-            int interface_iter_link_id;
-
-            if (!wifi_hal_is_mld_enabled(interface_iter)) {
-                continue;
-            }
-
-            if (interface_iter->index != interface->index) {
-                continue;
-            }
-
-            interface_iter_name = wifi_hal_get_interface_name(interface_iter);
-            interface_iter_link_id = wifi_hal_get_mld_link_id(interface_iter);
-
-            wifi_hal_info_print("%s:%d: interface:%s link id:%d update hostapd params\n", __func__,
-                __LINE__, interface_iter_name, interface_iter_link_id);
-            if (update_hostap_interface_params(interface_iter) < 0) {
-                wifi_hal_error_print("%s:%d: interface:%s link id:%d failed to update hostapd "
-                                     "params\n",
-                    __func__, __LINE__, interface_iter_name, interface_iter_link_id);
-                return -1;
-            }
-
-            interface_iter->in_reconf = false;
-
-            if (interface->vap_info.u.bss_info.enabled && radio->configured &&
-                radio->oper_param.enable) {
-                wifi_hal_info_print("%s:%d: interface:%s link id:%d enable AP\n", __func__,
-                    __LINE__, interface_iter_name, interface_iter_link_id);
-                if (start_bss(interface_iter) < 0) {
-                    wifi_hal_error_print("%s:%d: interface:%s link id:%d failed to start BSS\n",
-                        __func__, __LINE__, interface_iter_name, interface_iter_link_id);
-                    return -1;
-                }
-                interface_iter->bss_started = true;
-            }
-        }
-    }
-
-    return 0;
-}
-
-#endif /* CONFIG_GENERIC_MLO */
-
-static int reload_vap_configuration(wifi_interface_info_t *interface)
-{
-#ifdef CONFIG_GENERIC_MLO
-    if (wifi_hal_is_mld_enabled(interface)) {
-        return reload_mlo_vap_configuration(interface);
-    }
-#endif /* CONFIG_GENERIC_MLO */
-
-    return reload_single_vap_configuration(interface);
-}
-
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
     wifi_radio_info_t *radio;
@@ -1562,6 +1410,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     wifi_vap_info_t *vap;
     platform_pre_create_vap_t pre_set_vap_params_fn;
     platform_create_vap_t set_vap_params_fn;
+    platform_set_beacon_prot_t set_vap_beacon_prot_fn;
     unsigned int i;
     char msg[2048];
     int ret = RETURN_OK;
@@ -1571,7 +1420,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     int filtermode;
 #endif
     //bssid_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 #ifdef CONFIG_MLO
     char mld_ifname[32];
 #endif 
@@ -1633,7 +1482,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
 #endif
 
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 #ifdef CONFIG_MLO
         if (platform_set_intf_mld_bonding(radio, interface) != RETURN_OK) {
             wifi_hal_error_print("%s:%d: vap index:%d failed to create bonding\n", __func__, __LINE__,
@@ -1662,14 +1511,47 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #endif //!defined(CONFIG_WIFI_EMULATOR) || !defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
         }
         memcpy((unsigned char *)&interface->vap_info, (unsigned char *)vap, sizeof(wifi_vap_info_t));
+
+#if defined(QCOM_ATH12K_PORT)
+        char *mld_name = wifi_hal_get_mld_name_by_interface_name(interface->name);
+        if (mld_name != NULL) {
+            wifi_hal_dbg_print("%s:%d: MLD name for %s: %s\n", __func__, __LINE__,
+                interface->name, mld_name);
+            mac_address_t mld_mac = { 0 };
+
+            if ((interface->index = if_nametoindex(mld_name)) == 0) {
+                wifi_hal_error_print("%s:%d: Failed to get ifindex for MLD interface %s: %s\n",
+                    __func__, __LINE__, mld_name, strerror(errno));
+                return RETURN_ERR;
+            }
+            if (wifi_hal_get_mac_address(mld_name, mld_mac) < 0) {
+                wifi_hal_error_print("%s:%d: Failed to get MAC address for interface %s\n",
+                    __func__, __LINE__, mld_name);
+                return RETURN_ERR;
+            }
+            strncpy(interface->mld_name, mld_name, sizeof(interface->mld_name) - 1);
+            interface->mld_name[sizeof(interface->mld_name) - 1] = '\0';
+
+            // TODO: get MLD configuration from DB
+            wifi_hal_set_mld_enabled(interface, true);
+            wifi_hal_set_mld_mac_address(interface, mld_mac);
+            wifi_hal_set_mld_link_id(interface, radio->rdk_radio_index);
+        }
+#endif /* QCOM_ATH12K_PORT */
         interface_name = wifi_hal_get_interface_name(interface);
 
 #ifdef CONFIG_GENERIC_MLO
-        // VAP down removes MLO links, so restrict down of interface to sta mode only
+        // VAP down removes MLO links, so restrict down of interface to sta mode and NON-MLD AP
         if (vap->vap_mode == wifi_vap_mode_sta) {
 #endif
+
+#ifndef KERNEL_6_18
+            /* Interface down is causing wdev to get cleared and causing stop_ap to fail in
+             * kernel 6.18.26 */
             wifi_hal_info_print("%s:%d: interface:%s set down\n", __func__, __LINE__, interface->name);
             nl80211_interface_enable(interface->name, false);
+#endif /* KERNEL_6_18 */
+
 #ifdef CONFIG_GENERIC_MLO
         }
 #endif
@@ -1695,7 +1577,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         wifi_hal_info_print("%s:%d: interface:%s radio configured:%d radio enabled:%d\n",
             __func__, __LINE__, interface_name, radio->configured, radio->oper_param.enable);
+#ifdef CONFIG_GENERIC_MLO
+        if (radio->oper_param.enable &&
+            ((vap->vap_mode == wifi_vap_mode_sta) || radio->configured)) {
+#else
         if (radio->configured && radio->oper_param.enable) {
+#endif /* CONFIG_GENERIC_MLO */
             wifi_hal_info_print("%s:%d: interface:%s set up\n", __func__, __LINE__,
                 interface_name);
             if (nl80211_interface_enable(interface_name, true) != 0) {
@@ -1714,7 +1601,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             if (vap->bridge_name[0] != '\0' && vap->u.bss_info.enabled) {
                 wifi_hal_info_print("%s:%d: interface:%s create bridge:%s\n", __func__, __LINE__,
                     interface_name, vap->bridge_name);
-#if (defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)) && defined(CONFIG_MLO)
+#if (defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)) && defined(CONFIG_MLO)
                 if (radio->oper_param.variant & WIFI_80211_VARIANT_BE) {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d",  vap->vap_index);
                     if (nl80211_create_bridge(mld_ifname, vap->bridge_name) != 0) {
@@ -1750,6 +1637,23 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 return RETURN_ERR;
             }
 
+#if defined(QCOM_ATH12K_PORT)
+            /* Upstream hostapd 2.12 does not have ppe_vp_type in hostapd_bss_config.
+             * Set the PPE VP type via vendor command directly to avoid kernel panic */
+            UINT intf_offload_type = vap->u.bss_info.intf_offload_type;
+            if (intf_offload_type == QCA_WLAN_INTF_OFFLOAD_TYPE_NONE) {
+                intf_offload_type = QCA_WLAN_INTF_OFFLOAD_TYPE_PPE_DS;
+            }
+            wifi_hal_dbg_print("%s:%d: Setting PPE VP type %u for vap %s\n",
+                __func__, __LINE__, intf_offload_type, interface->name);
+            if (wifi_hal_set_intf_offload_type(interface, OUI_QCA,
+                    QCA_NL80211_VENDOR_SUBCMD_SET_WIFI_CONFIGURATION,
+                    NULL, 0, 0, NULL, interface->name,
+                    intf_offload_type, true) != RETURN_OK) {
+                wifi_hal_error_print("%s:%d: interface:%s failed to set Offload type: %u\n",
+                    __func__, __LINE__, interface_name, intf_offload_type);
+            }
+#endif /* QCOM_ATH12K_PORT */
             wifi_hal_info_print("%s:%d: interface:%s vap_initialized:%d\n", __func__, __LINE__,
                 interface_name, interface->vap_initialized);
             if (interface->vap_initialized == true) {
@@ -1786,10 +1690,31 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             if (radio->configured && radio->oper_param.enable) {
                 wifi_hal_info_print("%s:%d: interface:%s set %s\n", __func__, __LINE__,
                     interface_name, vap->u.bss_info.enabled ? "up" : "down");
+#if defined(QCOM_ATH12K_PORT)
+                /*
+                 * For MLO AP VAPs, interface_name is the shared MLD interface.
+                 * Bringing it DOWN removes ALL links from
+                 * the MLD — not just the one being disabled — because the kernel
+                 * calls cfg80211_remove_links() on the entire wdev.
+                 * When disabling a single MLO link, skip the shared MLD interface-down.
+                 * The per-link STOP_AP was already sent by nl80211_enable_ap(false)
+                 * in the bss_started path above, and the per-link interface (e.g. "mld0")
+                 * is brought down by the CONFIG_MLO block below.
+                 * When enabling, still bring the shared MLD interface up as normal.
+                 */
+                if (!wifi_hal_is_mld_enabled(interface) || vap->u.bss_info.enabled) {
+                    nl80211_interface_enable(interface_name, vap->u.bss_info.enabled);
+                } else {
+                    wifi_hal_info_print("%s:%d: MLO disable: skipping shared MLD "
+                                        "interface %s down (per-link interface %s brought down below)\n",
+                        __func__, __LINE__, interface_name, interface->name);
+                }
+#else
                 nl80211_interface_enable(interface_name, vap->u.bss_info.enabled);
-#if defined(VNTXER5_PORT) || defined(TARGET_GEMINI7_2)
+#endif /* QCOM_ATH12K_PORT */
+#if defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_)
 #ifdef CONFIG_MLO
-                if(radio->oper_param.variant & WIFI_80211_VARIANT_BE)
+                if (radio->oper_param.variant & WIFI_80211_VARIANT_BE)
                 {
                     snprintf(mld_ifname, sizeof(mld_ifname), "mld%d", vap->vap_index);
                     nl80211_interface_enable(mld_ifname, vap->u.bss_info.enabled);
@@ -1847,7 +1772,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             nl80211_set_mac(interface);
             nl80211_interface_enable(interface->name, true);
 #endif
+#ifdef CONFIG_GENERIC_MLO
+        if (radio->oper_param.enable &&
+            ((vap->vap_mode == wifi_vap_mode_sta) || radio->configured)) {
+#else
             if (radio->configured && radio->oper_param.enable) {
+#endif /* CONFIG_GENERIC_MLO */
                 wifi_hal_info_print("%s:%d: interface:%s set operstate 1\n", __func__,
                     __LINE__, interface_name);
                 wifi_drv_set_operstate(interface, 1);
@@ -1896,14 +1826,22 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
 #endif // NL80211_ACL
             re_configure_steering_mac_list(interface);
-        }
-        if (vap->vap_mode == wifi_vap_mode_ap) {
+
             wifi_hal_info_print("%s:%d: vap index:%d set power:%d\n",  __func__, __LINE__,
                 vap->vap_index, vap->u.bss_info.mgmtPowerControl);
             if (wifi_setApManagementFramePowerControl(vap->vap_index,
                 vap->u.bss_info.mgmtPowerControl) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d: vap index:%d failed to set power %d\n", __func__,
                     __LINE__, vap->vap_index, vap->u.bss_info.mgmtPowerControl);
+            }
+
+            if ((set_vap_beacon_prot_fn = get_platform_set_beacon_prot_fn()) != NULL &&
+                    interface->u.ap.iface.drv_flags & WPA_DRIVER_FLAGS_BEACON_PROTECTION) {
+#ifdef BEACON_PROT
+                wifi_hal_info_print("%s:%d: vap index:%d set beacon prot: %d\n", __func__, __LINE__,
+                        vap->vap_index, interface->u.ap.conf.beacon_prot);
+                set_vap_beacon_prot_fn(vap->vap_index, interface->u.ap.conf.beacon_prot);
+#endif
             }
         }
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
@@ -1953,8 +1891,8 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
     if (memcmp(mac, bcastmac, sizeof(mac_address_t)) == 0) {
         tmp = hapd->sta_list;
-        while(tmp) {
-#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+        while (tmp) {
+#if (defined(BANANA_PI_PORT) && defined(KERNEL_6_6)) || defined(QCOM_ATH12K_PORT)
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
             int link_id = wifi_hal_get_mld_link_id(interface);
 #else
@@ -1971,7 +1909,7 @@ INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac)
     else {
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         wifi_hal_info_print("%s:%d:mac is not a broadcast mac address\n", __func__, __LINE__);
-#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+#if (defined(BANANA_PI_PORT) && defined(KERNEL_6_6)) || defined(QCOM_ATH12K_PORT)
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
         int link_id = wifi_hal_get_mld_link_id(interface);
 #else
@@ -2158,6 +2096,75 @@ INT wifi_hal_getScanResults(wifi_radio_index_t index, wifi_channel_t *channel, w
         scan_info = hash_map_get_next(interface->scan_info_map, scan_info);
     }
     pthread_mutex_unlock(&interface->scan_info_mutex);
+
+    return RETURN_OK;
+}
+
+/*
+* EasyMesh CACR enforcement uses hostapd's dynamic deny ACL mechanism.
+* STA MAC addresses are added/removed through the upstream hostapd ACL
+* helper APIs, which update hapd->conf->deny_mac and refresh the ACL
+* configuration via hostapd_set_acl().
+*/
+INT wifi_hal_addHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress)
+{
+    wifi_hal_dbg_print("%s:%d:Enter\n", __func__, __LINE__);
+    wifi_interface_info_t *interface;
+    struct hostapd_data *hapd;
+
+    interface = get_interface_by_vap_index(apIndex);
+
+    if ((!interface) || (interface->vap_info.vap_mode != wifi_vap_mode_ap)  || (DeviceMacAddress == NULL))
+        return RETURN_ERR;
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    hapd = &interface->u.ap.hapd;
+
+    if (!hapd->conf) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d: CACR: Adding STAs to hostapd ACL list\n", __func__, __LINE__);
+    if (hostapd_ctrl_iface_acl_add_mac(&hapd->conf->deny_mac, &hapd->conf->num_deny_mac, DeviceMacAddress)) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
+    }
+
+    hostapd_set_acl(hapd);
+    hostapd_disassoc_deny_mac(hapd);
+
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+    return RETURN_OK;
+}
+
+INT wifi_hal_delHostapdDenyAclDevice(INT apIndex, CHAR *DeviceMacAddress)
+{
+    wifi_hal_dbg_print("%s:%d:Enter\n", __func__, __LINE__);
+    wifi_interface_info_t *interface;
+    struct hostapd_data *hapd;
+
+    interface = get_interface_by_vap_index(apIndex);
+
+    if ((!interface) || (interface->vap_info.vap_mode != wifi_vap_mode_ap)  || (DeviceMacAddress == NULL))
+        return RETURN_ERR;
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    hapd = &interface->u.ap.hapd;
+
+    if (!hapd->conf) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
+    }
+
+    wifi_hal_info_print("%s:%d: CACR: Removing STAs from hostapd ACL list\n", __func__, __LINE__);
+    if (hostapd_ctrl_iface_acl_del_mac(&hapd->conf->deny_mac, &hapd->conf->num_deny_mac, DeviceMacAddress)) {
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return RETURN_ERR;
+    }
+
+    hostapd_set_acl(hapd);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     return RETURN_OK;
 }
@@ -3975,6 +3982,8 @@ exit:
 
 //static uint8_t g_DialogToken[MAX_AP_INDEX][MAX_TOKENS + 1] = {{0}};
 u8_bitmap g_DialogToken[MAX_AP_INDEX] = {{0}};
+/* Sending VAP index + 1 per originating VAP and dialog token (0 = not recorded). */
+u8 g_DialogTokenSender[MAX_AP_INDEX][256] = { { 0 } };
 
 INT wifi_hal_setRMBeaconRequest(UINT apIndex,
                             mac_address_t peer_mac,
@@ -4074,8 +4083,18 @@ INT wifi_hal_setRMBeaconRequest(UINT apIndex,
 
     // (13)
     if (in_req->channelReportPresent) {
-        ap_ch_rep_len = MAX_CHANNELS;
-        ap_ch_rep_p = in_req->channelReport.channels;
+        /* Count valid channels from the zero-terminated channelReport.channels array and pass the correct length to wifi_rrm_send_beacon_req() */
+        ap_ch_rep_len = 0;
+        while (ap_ch_rep_len < MAX_CHANNELS_REPORT &&
+               in_req->channelReport.channels[ap_ch_rep_len] != 0) {
+            ap_ch_rep_len++;
+        }
+        if (ap_ch_rep_len > 0) {
+            ap_ch_rep_p = in_req->channelReport.channels;
+        } else if (in_req->channel == 255) {
+            wifi_hal_error_print("%s:%d: [BTM] REQ_BEACON - channel report is empty for channel 255\n", __func__, __LINE__);
+            return WIFI_HAL_ERROR;
+        }
     }
 
     // (14)
@@ -4145,21 +4164,40 @@ INT wifi_hal_setRMBeaconRequest(UINT apIndex,
     }
 
     *out_DialogToken = ret_dialog_token;
-    //g_DialogToken[apIndex][*out_DialogToken] = 1;
-    set_bit_u8(g_DialogToken[apIndex], *out_DialogToken);
+    /* g_DialogToken bit is set inside wifi_rrm_send_beacon_req() against the VAP
+     * that actually transmitted the request (may differ from apIndex for MLO). */
 
     return WIFI_HAL_SUCCESS;
 }
 
 INT wifi_hal_cancelRMBeaconRequest(UINT apIndex, UCHAR dialogToken)
 {
+    UINT sent_vap_index = apIndex;
+    UINT vap_index;
+
     // - verify input params
     if (_IS_INVALID_ARG(apIndex >= MAX_AP_INDEX)) {
         return WIFI_HAL_INVALID_ARGUMENTS;
     }
 
-    //g_DialogToken[apIndex][dialogToken] = 0;
-    reset_bit_u8(g_DialogToken[apIndex], dialogToken);
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    /* For MLO the request may have been sent on another link's VAP; clear the
+     * bit on the VAP recorded by wifi_rrm_send_beacon_req(). */
+    if (g_DialogTokenSender[apIndex][dialogToken] != 0) {
+        sent_vap_index = g_DialogTokenSender[apIndex][dialogToken] - 1;
+        g_DialogTokenSender[apIndex][dialogToken] = 0;
+    }
+
+    /* Keep the bit if another VAP's request with the same token was sent on it. */
+    for (vap_index = 0; vap_index < MAX_AP_INDEX; vap_index++) {
+        if (g_DialogTokenSender[vap_index][dialogToken] == sent_vap_index + 1) {
+            break;
+        }
+    }
+    if (vap_index == MAX_AP_INDEX) {
+        reset_bit_u8(g_DialogToken[sent_vap_index], dialogToken);
+    }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return WIFI_HAL_SUCCESS;
 }
 
@@ -4502,6 +4540,20 @@ void wifi_hal_apDeAuthEvent_callback_register(wifi_device_deauthenticated_callba
     callbacks->num_apDeAuthEvent_cbs++;
 }
 
+void wifi_hal_apFrameDropUnencrypted_callback_register(wifi_apFrameDropUnencrypted_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+
+    if (callbacks == NULL || callbacks->num_frame_drop_unenc_cbs >= MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+
+    callbacks->frame_drop_unenc_cb[callbacks->num_frame_drop_unenc_cbs] = func;
+    callbacks->num_frame_drop_unenc_cbs++;
+}
+
 INT wifi_vapstatus_callback_register(wifi_vapstatus_callback func) {
     wifi_device_callbacks_t *callbacks;
 
@@ -4557,6 +4609,20 @@ void wifi_hal_eapol_timeouts_callback_register(wifi_eapol_timeouts_callback func
     
     callbacks->eapol_timeouts_cb[callbacks->num_eapol_timeouts_cbs] = func;
     callbacks->num_eapol_timeouts_cbs++;
+}
+
+void wifi_hal_eapol_key_callback_register(wifi_eapol_key_callback func)
+{
+    wifi_device_callbacks_t *callbacks;
+
+    callbacks = get_hal_device_callbacks();
+
+    if (callbacks == NULL || callbacks->num_eapol_key_cbs >= MAX_REGISTERED_CB_NUM) {
+        return;
+    }
+
+    callbacks->eapol_key_cb[callbacks->num_eapol_key_cbs] = func;
+    callbacks->num_eapol_key_cbs++;
 }
 
 void wifi_hal_handshake_callback_register(wifi_handshake_callback func)
@@ -4798,7 +4864,8 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     struct ieee80211_hdr *hdr;
     mac_address_t bssid_buf;
     int res = 0;
-#ifdef HOSTAPD_2_11 // 2.11
+
+#if HOSTAPD_VERSION >= 211
     int link_id = 0;
 #endif
     memset(bssid_buf, 0xff, sizeof(bssid_buf));
@@ -4821,9 +4888,9 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
     os_memcpy(hdr->addr3, bssid_buf, ETH_ALEN);
 
     
-#ifdef HOSTAPD_2_11 // 2.11
+#if HOSTAPD_VERSION >= 211
     // Action frames will get rejected by kernel if we pass a valid link_id for non-MLO case.
-    if(!wifi_hal_is_mld_enabled(interface)) {
+    if (!wifi_hal_is_mld_enabled(interface)) {
         link_id = -1;
     }
     res = wifi_drv_send_mlme(interface, buf, 24 + data_len, 1, freq, NULL, 0, 0, wait, link_id);
@@ -4843,12 +4910,18 @@ void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac)
     u8 own_addr[ETH_ALEN];
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
     struct hostapd_data *hapd = &interface->u.ap.hapd;
+    struct sta_info *sta;
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
+
+    sta = ap_get_sta(hapd, mac);
+    if (sta != NULL) {
+        sta->flags &= ~WLAN_STA_ASSOC;
+    }
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
-#if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
+#if (defined(BANANA_PI_PORT) && defined(KERNEL_6_6)) || defined(QCOM_ATH12K_PORT)
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
     int link_id = wifi_hal_get_mld_link_id(interface);
 #else
@@ -5036,6 +5109,7 @@ INT wifi_hal_get_RegDomain(wifi_radio_index_t radioIndex, UINT *reg_domain)
     return RETURN_ERR;
 }
 
+
 INT wifi_hal_set_acs_exclusion_list(wifi_radio_index_t radioIndex, wifi_hal_acs_exclude_t *list, INT count, INT *operating_channel_excluded)
 {
     (void)radioIndex;
@@ -5046,4 +5120,23 @@ INT wifi_hal_set_acs_exclusion_list(wifi_radio_index_t radioIndex, wifi_hal_acs_
     wifi_hal_error_print("%s:%d: not supported\n", __func__, __LINE__);
 
     return WIFI_HAL_ERROR;
+}
+
+INT wifi_getNASta(INT apIndex, const wifi_na_sta_req_params_t *params, wifi_na_sta_info_t *sta_info)
+{
+#ifdef MXL_WIFI
+    AP_INDEX_ASSERT(apIndex);
+
+    if (!params || !sta_info) {
+        wifi_hal_error_print("%s:%d: Invalid parameters\n", __func__, __LINE__);
+        return WIFI_HAL_ERROR;
+    }
+
+    return platform_get_nasta(apIndex, params, sta_info);
+#else
+    (void)apIndex;
+    (void)params;
+    (void)sta_info;
+    return WIFI_HAL_ERROR;
+#endif /* MXL_WIFI */
 }
