@@ -1822,11 +1822,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
 
         if (vap->vap_mode == wifi_vap_mode_ap) {
-#if defined(EASY_MESH_NODE)
+#if defined(EASY_MESH_NODE) && defined(BANANA_PI_PORT)
             if (is_wifi_hal_vap_mesh_backhaul(vap->vap_index)) {
                 interface->vap_info.u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
             }
-#endif // EASY_MESH_NODE
+#endif // EASY_MESH_NODE && BANANA_PI_PORT
 #ifdef NL80211_ACL
             if (set_acl == 1) {
                 nl80211_set_acl(interface);
