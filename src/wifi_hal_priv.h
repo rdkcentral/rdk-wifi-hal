@@ -21,6 +21,7 @@
 #ifndef WIFI_HAL_PRIV_H
 #define WIFI_HAL_PRIV_H
 
+#include <time.h>
 #include <stdint.h>
 #include <utils/includes.h>
 #include <linux/version.h>
@@ -78,6 +79,7 @@
 #include "wpa_supplicant_i.h"
 #include "bss.h"
 #include "sme.h"
+#include "scan.h"
 #endif
 
 #ifdef QCOM_ATH12K_PORT
@@ -423,6 +425,20 @@ typedef struct {
 
     // supplicant specific data
     struct wpa_sm     *wpa_sm;
+    bool connect_in_progress;
+    unsigned int disconnect_events; /* disconnect events handled; hapd_lock */
+    unsigned int connect_gen;       /* wifi_hal_connect() calls started; hapd_lock */
+    /* A wifi_hal_disconnect() timed out before its event was handled: the next disconnect event
+     * is that late one. It belongs to the link of stale_disconnect_gen; hapd_lock */
+    bool stale_disconnect_pending;
+    unsigned int stale_disconnect_gen;
+    /* Set by an event of the link the running wifi_hal_connect() started; hapd_lock */
+    bool connect_link_event;
+    /* A disconnect taken during wifi_hal_connect(), kept for it to reconcile with the connect
+     * result: whether it followed connect_link_event, and the link it reported; hapd_lock */
+    bool disconnect_deferred;
+    bool disconnect_deferred_new_link;
+    mac_address_t disconnect_deferred_bssid;
     struct eap_peer_config wpa_eapol_config;
     struct eap_method_type wpa_eapol_method;
     unsigned char   assoc_req[512];
@@ -523,6 +539,19 @@ struct txpwr_context {
     int link_id;
 };
 
+/* Platforms on mac80211, whose DEL_STATION sends no frame; hostapd drives the disconnect there */
+#if defined(BANANA_PI_PORT) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
+#define WIFI_HAL_MAC80211_AP_SME
+#endif
+
+/* Last deauth sent to a sender of spurious frames that the ACL blocks; times are CLOCK_MONOTONIC
+ * seconds, as are acl_deauth_second in the interface */
+#define ACL_DEAUTH_RECENT_MAX 8
+typedef struct {
+    mac_address_t addr;
+    time_t time;
+} acl_deauth_entry_t;
+
 typedef struct wifi_interface_info_t {
     char name[32];
     char bridge[32];
@@ -571,6 +600,9 @@ typedef struct wifi_interface_info_t {
     int bss_frames_registered;
     int data_frames_registered;
     hash_map_t  *acl_map;
+    acl_deauth_entry_t acl_deauth_recent[ACL_DEAUTH_RECENT_MAX];
+    time_t      acl_deauth_second;
+    unsigned int acl_deauth_count;
 
     /* Scan support */
     enum scan_state_type_e scan_state;
@@ -756,6 +788,7 @@ typedef struct {
 #endif
     pthread_mutexattr_t hapd_lock_attr;
     pthread_mutex_t hapd_lock;
+    pthread_mutex_t acl_map_lock; /* every acl_map; a leaf lock */
     pthread_mutex_t steering_data_lock;
     wifi_bm_steering_group_t  bm_steer_groups[MAX_STEERING_GROUP_NUM];
     hash_map_t *mgt_frame_rate_limit_hashmap;
@@ -951,6 +984,8 @@ INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss);
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map);
 INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac);
+void wifi_hal_sta_sm_free(wifi_interface_info_t *interface);
+void wifi_hal_sta_reconcile_deferred_disconnect(wifi_interface_info_t *interface, bool connect_ok);
 INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mode, INT dwell_time, UINT num, UINT *chan_list);
 INT wifi_hal_disconnect(INT ap_index);
 INT wifi_hal_getRadioVapInfoMap(wifi_radio_index_t index, wifi_vap_info_map_t *map);
@@ -1052,6 +1087,10 @@ int     handle_public_action_frame(INT ap_index, mac_address_t sta_mac, wifi_pub
 int     nl80211_create_interface(wifi_radio_info_t *radio, wifi_vap_info_t *vap, wifi_interface_info_t **interface);
 int     nl80211_enable_ap(wifi_interface_info_t *interface, bool enable);
 int     nl80211_kick_device(wifi_interface_info_t *interface, mac_address_t mac);
+int     nl80211_kick_device_wait(wifi_interface_info_t *interface, mac_address_t mac);
+#ifdef NL80211_ACL
+void    nl80211_acl_deauth_reset(wifi_interface_info_t *interface);
+#endif
 int     nl80211_create_bridge(const char *if_name, const char *br_name);
 int     nl80211_remove_from_bridge(const char *if_name);
 int     nl80211_update_interface(wifi_interface_info_t *interface);

@@ -1584,6 +1584,10 @@ int update_hostap_iface_flags(wifi_interface_info_t *interface)
     iface = &interface->u.ap.iface;
 
     iface->drv_flags = radio->driver_data.capa.flags;
+#ifdef WIFI_HAL_MAC80211_AP_SME
+    /* Keeps the kernel STA until its deauth/disassoc went out, see wifi_sta_remove() */
+    iface->drv_flags |= WPA_DRIVER_FLAGS_DEAUTH_TX_STATUS;
+#endif
     iface->drv_flags |= WPA_DRIVER_FLAGS_EAPOL_TX_STATUS;
     iface->drv_flags |= WPA_DRIVER_FLAGS_AP_MLME;
     iface->drv_flags |= WPA_DRIVER_FLAGS_AP_CSA;
@@ -2021,6 +2025,9 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     iface->ema_max_periodicity = radio->driver_data.capa.ema_max_periodicity;
 #endif /* HOSTAPD_VERSION >= 210 */
 
+#ifdef WIFI_HAL_MAC80211_AP_SME
+    iface->drv_flags |= WPA_DRIVER_FLAGS_DEAUTH_TX_STATUS;
+#endif
     iface->drv_flags |= WPA_DRIVER_FLAGS_EAPOL_TX_STATUS;
     iface->drv_flags |= WPA_DRIVER_FLAGS_AP_MLME;
     iface->drv_flags |= WPA_DRIVER_FLAGS_AP_CSA;

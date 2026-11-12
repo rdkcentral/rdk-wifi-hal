@@ -6127,7 +6127,9 @@ int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, unsigned char lin
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         interface->wpa_s.mlo_assoc_link_id = link_id;
-        interface->wpa_s.wpa->mlo.assoc_link_id = link_id;
+        if (interface->wpa_s.wpa != NULL) {
+            interface->wpa_s.wpa->mlo.assoc_link_id = link_id;
+        }
 #endif
         return 0;
     }
