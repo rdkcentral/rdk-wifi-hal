@@ -9451,6 +9451,7 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
     while (interface != NULL) {
         if (interface->bss_started) {
                 reconfigure = true;
+#if !defined(CONFIG_GENERIC_MLO)
                 nl80211_enable_ap(interface, false);
                 pthread_mutex_lock(&g_wifi_hal.hapd_lock);
                 deinit_bss(&interface->u.ap.hapd);
