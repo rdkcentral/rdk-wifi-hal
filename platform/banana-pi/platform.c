@@ -25,6 +25,9 @@
 * Licensed under the BSD-3 License
 **************************************************************************/
 
+#include <stdio.h>
+#include <errno.h>
+#include <cjson/cJSON.h>
 #include "wifi_hal.h"
 #include "wifi_hal_priv.h"
 #include <net/if.h>
@@ -202,7 +205,8 @@ int platform_get_keypassphrase_default(char *password, int vap_index)
         if (!json_parse_backhaul_keypassphrase(password)) {
             wifi_hal_dbg_print("%s:%d, read password from jSON file\n", __func__, __LINE__);
             return 0;
-        }
+        } else
+            return -1;
     }
     /*password is not sensitive,won't grant access to real devices*/ 
     wifi_nvram_defaultRead("bpi_wifi_password",password);
@@ -224,7 +228,8 @@ int platform_get_ssid_default(char *ssid, int vap_index)
         if (!json_parse_backhaul_ssid(ssid)) {
             wifi_hal_dbg_print("%s:%d, read SSID:%s from jSON file\n", __func__, __LINE__, ssid);
             return 0;
-        }
+        } else
+            return -1;
     }
     char serial[BPI_LEN_8] = {0};
     FILE *fp = NULL;
@@ -262,8 +267,254 @@ int platform_get_wps_pin_default(char *pin)
 
 int platform_wps_event(wifi_wps_event_t data)
 {
-    wifi_hal_dbg_print("%s:%d \n",__func__,__LINE__);  
+    wifi_interface_info_t *interface;
+    struct wpa_ssid *ssid;
+    FILE *fp;
+    char backhaul_ssid[65] = { 0 };
+    char backhaul_key[129] = { 0 };
+    cJSON *json = NULL;
+    cJSON *item = NULL;
+    char *json_string = NULL;
+    extern cJSON *json_open_file(const char *file_name);
+
+    wifi_hal_dbg_print("%s:%d: Writing WPS credentials to JSON file for vap_index:%d\n", __func__,
+        __LINE__, data.vap_index);
+
+    /* This function is only called for WPS_EV_SUCCESS events (checked in wifi_hal_wps_event) */
+    interface = get_interface_by_vap_index(data.vap_index);
+    if (interface == NULL) {
+        wifi_hal_error_print("%s:%d: Interface not found for vap_index %d\n", __func__, __LINE__,
+            data.vap_index);
+        return -1;
+    }
+
+    /* Access credentials from current_ssid */
+    ssid = interface->wpa_s.current_ssid;
+    if (ssid == NULL) {
+        wifi_hal_error_print("%s:%d: current_ssid is NULL\n", __func__, __LINE__);
+        return -1;
+    }
+
+    /* Extract SSID */
+    if (ssid->ssid && ssid->ssid_len > 0) {
+        size_t len = ssid->ssid_len < 64 ? ssid->ssid_len : 64;
+        memcpy(backhaul_ssid, ssid->ssid, len);
+        backhaul_ssid[len] = '\0';
+    }
+
+    /* Extract passphrase or PSK */
+    if (ssid->passphrase) {
+        size_t len = strlen(ssid->passphrase);
+        if (len > 0 && len < 129) {
+            memcpy(backhaul_key, ssid->passphrase, len);
+            backhaul_key[len] = '\0';
+        }
+    } else if (ssid->psk_set) {
+        /* Convert PSK to hex string */
+        int i;
+        for (i = 0; i < 32 && i < (int)sizeof(backhaul_key) / 2; i++) {
+            snprintf(backhaul_key + i * 2, 3, "%02x", ssid->psk[i]);
+        }
+    }
+
+    if (backhaul_ssid[0] == '\0') {
+        wifi_hal_error_print("%s:%d: No SSID found in credentials\n", __func__, __LINE__);
+        return -1;
+    }
+
+    /* Load existing JSON file or create new JSON object */
+    json = json_open_file(EM_CFG_FILE);
+    if (json == NULL) {
+        /* File doesn't exist or is invalid, create new JSON object */
+        wifi_hal_dbg_print("%s:%d: Creating new JSON object (file doesn't exist or is invalid)\n",
+            __func__, __LINE__);
+        json = cJSON_CreateObject();
+        if (json == NULL) {
+            wifi_hal_error_print("%s:%d: Failed to create JSON object\n", __func__, __LINE__);
+            return -1;
+        }
+    }
+
+    /* Update or add Backhaul_SSID */
+    item = cJSON_GetObjectItem(json, "Backhaul_SSID");
+    if (item != NULL) {
+        cJSON_SetValuestring(item, backhaul_ssid);
+    } else {
+        cJSON_AddStringToObject(json, "Backhaul_SSID", backhaul_ssid);
+    }
+
+    /* Update or add Backhaul_KeyPassphrase */
+    item = cJSON_GetObjectItem(json, "Backhaul_KeyPassphrase");
+    if (item != NULL) {
+        cJSON_SetValuestring(item, backhaul_key);
+    } else {
+        cJSON_AddStringToObject(json, "Backhaul_KeyPassphrase", backhaul_key);
+    }
+
+    /* Write updated JSON back to file */
+    json_string = cJSON_Print(json);
+    if (json_string == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to convert JSON to string\n", __func__, __LINE__);
+        cJSON_Delete(json);
+        return -1;
+    }
+
+    fp = fopen(EM_CFG_FILE, "w");
+    if (fp == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to open %s for writing (err=%d, msg=%s)\n", __func__,
+            __LINE__, EM_CFG_FILE, errno, strerror(errno));
+        free(json_string);
+        cJSON_Delete(json);
+        return -1;
+    }
+
+    int write_failed = fprintf(fp, "%s", json_string) < 0;
+    if (fclose(fp) != 0) {
+        write_failed = 1;
+    }
+    if (write_failed) {
+        wifi_hal_error_print("%s:%d: Failed to write %s (err=%d, msg=%s)\n",
+            __func__, __LINE__, EM_CFG_FILE, errno, strerror(errno));
+        free(json_string);
+        cJSON_Delete(json);
+        return -1;
+    }
+
+    free(json_string);
+    cJSON_Delete(json);
+
+    wifi_hal_info_print("%s:%d: Updated backhaul credentials in %s: SSID=%s\n", __func__, __LINE__,
+        EM_CFG_FILE, backhaul_ssid);
+
     return 0;
+}
+
+bool platform_wps_has_backhaul_credentials(void)
+{
+    cJSON *json = NULL;
+    cJSON *ssid = NULL;
+    bool present = false;
+    extern cJSON *json_open_file(const char *file_name);
+
+    json = json_open_file(EM_CFG_FILE);
+    if (json == NULL) {
+        return false;
+    }
+
+    ssid = cJSON_GetObjectItem(json, "Backhaul_SSID");
+    present = ssid != NULL && cJSON_IsString(ssid) && ssid->valuestring != NULL &&
+        ssid->valuestring[0] != '\0';
+
+    cJSON_Delete(json);
+    return present;
+}
+
+int platform_wps_backup_backhaul_credentials(void)
+{
+    FILE *fp = NULL;
+    cJSON *json = NULL;
+    char *json_string = NULL;
+    int ret = -1;
+    extern cJSON *json_open_file(const char *file_name);
+
+    json = json_open_file(EM_CFG_FILE);
+    if (json == NULL) {
+        return -1;
+    }
+
+    json_string = cJSON_Print(json);
+    if (json_string == NULL) {
+        goto out;
+    }
+
+    fp = fopen(EM_CFG_FILE ".wps-backup", "w");
+    if (fp == NULL || fprintf(fp, "%s", json_string) < 0 || fflush(fp) != 0) {
+        wifi_hal_error_print("%s:%d: Failed to back up %s (err=%d, msg=%s)\n", __func__, __LINE__,
+            EM_CFG_FILE, errno, strerror(errno));
+        goto out;
+    }
+
+    ret = 0;
+
+out:
+    if (fp != NULL && fclose(fp) != 0) {
+        ret = -1;
+    }
+    free(json_string);
+    cJSON_Delete(json);
+    return ret;
+}
+
+int platform_wps_restore_backhaul_credentials(void)
+{
+    if (rename(EM_CFG_FILE ".wps-backup", EM_CFG_FILE) != 0) {
+        wifi_hal_error_print("%s:%d: Failed to restore %s (err=%d, msg=%s)\n", __func__, __LINE__,
+            EM_CFG_FILE, errno, strerror(errno));
+        return -1;
+    }
+
+    wifi_hal_info_print("%s:%d: Restored saved backhaul credentials to %s\n", __func__, __LINE__,
+        EM_CFG_FILE);
+    return 0;
+}
+
+void platform_wps_discard_backhaul_credentials_backup(void)
+{
+    if (unlink(EM_CFG_FILE ".wps-backup") != 0 && errno != ENOENT) {
+        wifi_hal_error_print("%s:%d: Failed to remove WPS credential backup (err=%d, msg=%s)\n",
+            __func__, __LINE__, errno, strerror(errno));
+    }
+}
+
+int platform_wps_clear_backhaul_credentials(void)
+{
+    FILE *fp = NULL;
+    cJSON *json = NULL;
+    char *json_string = NULL;
+    int ret = -1;
+    extern cJSON *json_open_file(const char *file_name);
+
+    json = json_open_file(EM_CFG_FILE);
+    if (json == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to read %s\n", __func__, __LINE__, EM_CFG_FILE);
+        return -1;
+    }
+
+    cJSON_DeleteItemFromObject(json, "Backhaul_SSID");
+    cJSON_DeleteItemFromObject(json, "Backhaul_KeyPassphrase");
+
+    json_string = cJSON_Print(json);
+    if (json_string == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to serialize %s\n", __func__, __LINE__, EM_CFG_FILE);
+        goto out;
+    }
+
+    fp = fopen(EM_CFG_FILE, "w");
+    if (fp == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to open %s for writing (err=%d, msg=%s)\n", __func__,
+            __LINE__, EM_CFG_FILE, errno, strerror(errno));
+        goto out;
+    }
+
+    if (fprintf(fp, "%s", json_string) < 0 || fflush(fp) != 0) {
+        wifi_hal_error_print("%s:%d: Failed to write %s (err=%d, msg=%s)\n", __func__, __LINE__,
+            EM_CFG_FILE, errno, strerror(errno));
+        goto out;
+    }
+
+    ret = 0;
+    wifi_hal_info_print("%s:%d: Cleared saved backhaul credentials from %s\n", __func__, __LINE__,
+        EM_CFG_FILE);
+
+out:
+    if (fp != NULL && fclose(fp) != 0) {
+        wifi_hal_error_print("%s:%d: Failed to close %s (err=%d, msg=%s)\n", __func__, __LINE__,
+            EM_CFG_FILE, errno, strerror(errno));
+        ret = -1;
+    }
+    free(json_string);
+    cJSON_Delete(json);
+    return ret;
 }
 
 int platform_get_country_code_default(char *code)
