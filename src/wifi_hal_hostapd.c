@@ -1659,7 +1659,18 @@ int update_hostap_iface(wifi_interface_info_t *interface)
     param = &radio->oper_param;
     
     iface = &interface->u.ap.iface;
+#if (defined(_MERCURY_PRODUCT_REQ_) && defined(CONFIG_MLO))
+    if (interface->u.ap.hapd.mlo_link) {
+	if (iface->interfaces == NULL) {
+	    wifi_hal_error_print("%s:%d: registered MLO link %s has no interface container\n", __func__, __LINE__, interface->name);
+	    return RETURN_ERR;
+	}
+    } else {
+	iface->interfaces = &radio->interfaces;
+    }
+#else
     iface->interfaces = &radio->interfaces;
+#endif
     iface->conf = &radio->iconf;
     strncpy(iface->phy, radio->name, sizeof(iface->phy) - 1);
     iface->phy[sizeof(iface->phy) - 1] = '\0';
