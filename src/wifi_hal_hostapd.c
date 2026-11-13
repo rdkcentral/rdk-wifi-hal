@@ -347,10 +347,7 @@ void init_oem_config(wifi_interface_info_t *interface)
     conf->manufacturer_url = (char *)&interface->manufacturer_url;
     conf->model_description = (char *)&interface->model_description;
     conf->model_url = (char *)&interface->model_url;
-    conf->fw_version = malloc(strlen(interface->firmware_version) + 1);
-    if (conf->fw_version != NULL) {
-        strcpy(conf->fw_version, interface->firmware_version);
-    }
+    conf->fw_version = (char *)&interface->firmware_version;
 
     if(wps_dev_type_str2bin("6-0050F204-1", conf->device_type)) {
         wifi_hal_dbg_print("%s:%d: WPS, invalid device_type\n", __func__, __LINE__);
