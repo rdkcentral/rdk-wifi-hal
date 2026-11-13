@@ -4993,6 +4993,15 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
             goto skip;
         }
 
+        if (tb_freq[NL80211_FREQUENCY_ATTR_DISABLED])
+        {
+            chan->flag |= HOSTAPD_CHAN_DISABLED;
+        }
+        else
+        {
+            chan->flag &= ~HOSTAPD_CHAN_DISABLED;
+        }
+
         if (tb_freq[NL80211_FREQUENCY_ATTR_NO_IR]) {
             chan->flag |= HOSTAPD_CHAN_NO_IR;
         }
@@ -5089,6 +5098,7 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
             }
         }
 #endif // CONFIG_WMM
+       chan->flag &= ~HOSTAPD_CHAN_DISABLED;
 
         if (!found) {
             mode->num_channels++;
@@ -9513,6 +9523,7 @@ int nl80211_update_wiphy(wifi_radio_info_t *radio)
         nlmsg_free(msg);
         return -1;
     }
+
     if (nl80211_fill_chandef(msg, radio, interface) == -1) {
         wifi_hal_error_print("%s:%d: Failed to fill channel definition\n", __func__, __LINE__);
         nlmsg_free(msg);
