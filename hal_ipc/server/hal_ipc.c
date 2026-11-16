@@ -1191,6 +1191,11 @@ hal_ipc_node_t *rdk_create_hal_ipc_node(hal_ipc_node_type_t type)
 {
     hal_ipc_node_t *node;
 
+    if ((int)type < 0 || type >= hal_ipc_node_type_max) {
+        wifi_hal_dbg_print("%s:%d: Invalid node type %d.\n", __func__, __LINE__, (int)type);
+        return NULL;
+    }
+
     // always return the node based on enumeration of node type which is also the index of the array
     node = &g_ipc_node[type];
 
