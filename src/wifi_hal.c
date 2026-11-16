@@ -5138,7 +5138,7 @@ INT wifi_hal_get_RegDomain(wifi_radio_index_t radioIndex, UINT *reg_domain)
 }
 
 
-INT wifi_hal_set_acs_exclusion_list(wifi_radio_index_t radioIndex, wifi_hal_acs_exclude_t *list, INT count, INT *operating_channel_excluded)
+INT wifi_hal_set_acs_exclusion_list(wifi_radio_index_t radioIndex, wifi_hal_acs_exclude_t *list, UINT count, BOOL *operating_channel_excluded)
 {
     (void)radioIndex;
     (void)list;
