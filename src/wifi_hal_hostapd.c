@@ -618,7 +618,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
             }
             wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d wpa_key_mgmt:%d wpa_key_mgmt_rsno_2:%d \n",
                 __FUNCTION__, __LINE__, conf->iface, conf->disable_11be, conf->wpa_key_mgmt, conf->wpa_key_mgmt_rsno_2);
-#elif defined(QCOM_ATH12K_PORT)
+#else
             if (is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
                 conf->wpa_key_mgmt = WPA_KEY_MGMT_SAE;
             }
@@ -705,7 +705,7 @@ int update_security_config(wifi_vap_security_t *sec, struct hostapd_bss_config *
                 wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d ieee80211w:%d ieee80211w_rsno:%d \n",
                     __func__, __LINE__, conf->iface, conf->disable_11be, conf->ieee80211w, conf->ieee80211w_rsno);
             }
-#elif defined(QCOM_ATH12K_PORT)
+#else
             if (is_wifi_hal_6g_radio_from_interfacename(conf->iface) == true) {
                 conf->ieee80211w = (enum mfp_options)MGMT_FRAME_PROTECTION_REQUIRED;
                 wifi_hal_info_print("%s:%d: interface_name:%s disable_11be:%d ieee80211w:%d\n",
@@ -1724,9 +1724,9 @@ int update_hostap_iface(wifi_interface_info_t *interface)
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_12)
     hdata->basic_rates = radio->basic_rates[band];
 #elif defined(QCOM_ATH12K_PORT)
-    iface->bss[0]->basic_rates = radio->basic_rates[band];
+    /* hapd aliases iface->bss[0]; keep basic_rates as a heap copy so it can be freed. */
     if (hapd->basic_rates)
-        free(hapd->basic_rates);
+        os_free(hapd->basic_rates);
     hapd->basic_rates = int_array_dup(radio->basic_rates[band]);
 #else
     iface->basic_rates = radio->basic_rates[band];

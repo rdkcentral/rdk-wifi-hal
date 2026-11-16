@@ -6091,10 +6091,11 @@ uint8_t *wifi_hal_get_mld_mac_address(wifi_interface_info_t *interface)
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_ap) {
         return interface->vap_info.u.bss_info.mld_info.common_info.mld_addr;
-#if defined(BANANA_PI_PORT) && defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+#if (defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)) && \
+    defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
     } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
         return interface->wpa_s.own_addr;
-#endif /* BANANA_PI_PORT && CONFIG_IEEE80211BE && CONFIG_GENERIC_MLO */
+#endif /* (CONFIG_WIFI_EMULATOR || BANANA_PI_PORT) && CONFIG_IEEE80211BE && CONFIG_GENERIC_MLO */
     }
 
     return NULL;
@@ -6127,10 +6128,10 @@ int wifi_hal_set_mld_link_id(wifi_interface_info_t *interface, unsigned char lin
 #endif /* QCOM_ATH12K_PORT */
 
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-#ifdef BANANA_PI_PORT
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         interface->wpa_s.mlo_assoc_link_id = link_id;
         interface->wpa_s.wpa->mlo.assoc_link_id = link_id;
-#endif /* BANANA_PI_PORT */
+#endif /* CONFIG_WIFI_EMULATOR || BANANA_PI_PORT */
         return 0;
     }
 #else /* !CONFIG_IEEE80211BE || !CONFIG_GENERIC_MLO */
@@ -6153,9 +6154,9 @@ int wifi_hal_set_mld_mac_address(wifi_interface_info_t *interface, mac_address_t
         return 0;
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
     } else if (interface->vap_info.vap_mode == wifi_vap_mode_sta) {
-#ifdef BANANA_PI_PORT
+#if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
         memcpy(interface->wpa_s.own_addr, mac, ETH_ALEN);
-#endif /* BANANA_PI_PORT */
+#endif /* CONFIG_WIFI_EMULATOR || BANANA_PI_PORT */
         return 0;
 #endif /* CONFIG_IEEE80211BE && CONFIG_GENERIC_MLO */
     }

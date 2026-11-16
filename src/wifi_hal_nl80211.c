@@ -8284,6 +8284,95 @@ static int map_rdk_radios_and_indexes(void)
 }
 #endif /* QCOM_ATH12K_PORT */
 
+#ifdef CONFIG_DRIVER_NL80211_QCA
+typedef struct {
+    u8 *flags;
+    size_t flags_len;
+} qca_features_info_t;
+
+static int qca_features_info_handler(struct nl_msg *msg, void *arg)
+{
+    struct nlattr *tb[NL80211_ATTR_MAX + 1];
+    struct nlattr *tb_vendor[QCA_WLAN_VENDOR_ATTR_MAX + 1];
+    struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+    qca_features_info_t *info = arg;
+    struct nlattr *attr;
+    int len;
+
+    nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
+    if (!tb[NL80211_ATTR_VENDOR_DATA]) {
+        return NL_SKIP;
+    }
+
+    nla_parse(tb_vendor, QCA_WLAN_VENDOR_ATTR_MAX, nla_data(tb[NL80211_ATTR_VENDOR_DATA]),
+        nla_len(tb[NL80211_ATTR_VENDOR_DATA]), NULL);
+
+    attr = tb_vendor[QCA_WLAN_VENDOR_ATTR_FEATURE_FLAGS];
+    if (attr && info->flags == NULL) {
+        len = nla_len(attr);
+        info->flags = os_malloc(len);
+        if (info->flags != NULL) {
+            os_memcpy(info->flags, nla_data(attr), len);
+            info->flags_len = len;
+        }
+    }
+
+    return NL_SKIP;
+}
+
+static bool qca_check_feature(enum qca_wlan_vendor_features feature, const qca_features_info_t *info)
+{
+    size_t idx = feature / 8;
+
+    if (idx >= info->flags_len) {
+        return false;
+    }
+
+    return (info->flags[idx] & BIT(feature % 8)) != 0;
+}
+
+static void qca_nl80211_get_features(wifi_radio_info_t *radio)
+{
+    wifi_interface_info_t *interface;
+    qca_features_info_t info = { 0 };
+    struct nl_msg *msg;
+
+    if (!radio->driver_data.get_features_vendor_cmd_avail) {
+        return;
+    }
+
+    interface = hash_map_get_first(radio->interface_map);
+    if (interface == NULL) {
+        wifi_hal_dbg_print("%s:%d: radio[%d] no interface to query QCA features\n", __func__,
+            __LINE__, radio->index);
+        return;
+    }
+
+    msg = nl80211_drv_vendor_cmd_msg(g_wifi_hal.nl80211_id, interface, 0, OUI_QCA,
+        QCA_NL80211_VENDOR_SUBCMD_GET_FEATURES);
+    if (msg == NULL) {
+        return;
+    }
+
+    if (nl80211_send_and_recv(msg, qca_features_info_handler, &info, NULL, NULL) ||
+        info.flags == NULL) {
+        wifi_hal_dbg_print("%s:%d: radio[%d] failed to get QCA features\n", __func__, __LINE__,
+            radio->index);
+        os_free(info.flags);
+        return;
+    }
+
+    if (qca_check_feature(QCA_WLAN_VENDOR_FEATURE_AP_ALLOWED_FREQ_LIST, &info)) {
+        radio->driver_data.qca_ap_allowed_freqs = 1;
+    }
+
+    wifi_hal_dbg_print("%s:%d: radio[%d] qca_ap_allowed_freqs:%u\n", __func__, __LINE__,
+        radio->index, radio->driver_data.qca_ap_allowed_freqs);
+
+    os_free(info.flags);
+}
+#endif /* CONFIG_DRIVER_NL80211_QCA */
+
 int init_nl80211()
 {
     int ret;
@@ -8562,6 +8651,10 @@ int init_nl80211()
 
         wifi_hal_dbg_print("%s:%d: Found %d interfaces on radio index:%d\n", __func__, __LINE__,
             hash_map_count(radio->interface_map), radio->index);
+
+#ifdef CONFIG_DRIVER_NL80211_QCA
+        qca_nl80211_get_features(radio);
+#endif /* CONFIG_DRIVER_NL80211_QCA */
     }
 
     return 0;
