@@ -1744,8 +1744,9 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 #if (defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_) || defined(TARGET_GEMINI7_2)) && defined(CONFIG_MLO)
                 if (radio->oper_param.variant & WIFI_80211_VARIANT_BE)
                 {
-                    snprintf(mld_ifname, sizeof(mld_ifname), "mld%d", vap->vap_index);
-                    nl80211_interface_enable(mld_ifname, vap->u.bss_info.enabled);
+                    char mld_interface_name[32];
+                    snprintf(mld_interface_name, sizeof(mld_interface_name), "mld%d", vap->vap_index);
+                    nl80211_interface_enable(mld_interface_name, vap->u.bss_info.enabled);
                 }
 #endif /* (VNTXER5_PORT || _MERCURY_PRODUCT_REQ_ || TARGET_GEMINI7_2) && CONFIG_MLO */
             }
