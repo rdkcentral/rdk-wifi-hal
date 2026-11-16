@@ -1018,7 +1018,7 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
 static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, struct nlattr **tb, wifi_chan_eventType_t wifi_chan_event_type)
 {
     int ifidx = 0, freq = 0, bw = NL80211_CHAN_WIDTH_20_NOHT, cf1 = 0, cf2 = 0;
-#if defined(CONFIG_GENERIC_MLO)
+#if defined(CONFIG_GENERIC_MLO) && defined(QCOM_ATH12K_PORT)
     int link_id = -1;
 #endif
     enum nl80211_channel_type ch_type = 0;
@@ -1040,7 +1040,7 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         ifidx = nla_get_u32(tb[NL80211_ATTR_IFINDEX]);
     }
 
-#if defined(CONFIG_GENERIC_MLO)
+#if defined(CONFIG_GENERIC_MLO) && defined(QCOM_ATH12K_PORT)
     if (tb[NL80211_ATTR_MLO_LINK_ID]) {
         link_id = nla_get_u8(tb[NL80211_ATTR_MLO_LINK_ID]);
         if (link_id >= 0) {
@@ -1053,7 +1053,7 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
                 link_iface ? link_iface->name : "NULL");
         }
     }
-#endif
+#endif /* QCOM_ATH12K_PORT */
 
     if (tb[NL80211_ATTR_WIPHY_FREQ] == NULL) {
         wifi_hal_dbg_print("%s:%d: channel attribute not present\n", __func__, __LINE__);
