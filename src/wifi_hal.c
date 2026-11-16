@@ -5143,7 +5143,9 @@ INT wifi_hal_set_acs_exclusion_list(wifi_radio_index_t radioIndex, wifi_hal_acs_
     (void)radioIndex;
     (void)list;
     (void)count;
-    (void)operating_channel_excluded;
+    if (operating_channel_excluded != NULL) {
+        *operating_channel_excluded = FALSE;
+    }
 
     wifi_hal_error_print("%s:%d: not supported\n", __func__, __LINE__);
 
