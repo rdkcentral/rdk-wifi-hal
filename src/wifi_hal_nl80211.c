@@ -11600,6 +11600,27 @@ scan_msg_nla_put_failure:
 
 #define MAX_PWD_LEN 64
 #define MAX_SAE_GROUP 5
+
+#if defined(EASY_MESH_NODE) && !defined(CONFIG_WIFI_EMULATOR) && !defined(BANANA_PI_PORT)
+/* Backhaul-only BSS rejects association (status 12) unless the assoc request carries
+ * the Wi-Fi Alliance Multi-AP IE with the backhaul STA bit set. */
+static size_t nl80211_add_multi_ap_backhaul_sta_ie(wifi_vap_info_t *vap, u8 *buf, size_t len)
+{
+    static const u8 multi_ap_ie[] = {
+        WLAN_EID_VENDOR_SPECIFIC, 7, 0x50, 0x6f, 0x9a, 0x1b, /* WFA OUI + Multi-AP OUI type */
+        0x06, 0x01, /* Multi-AP Extension subelement, length 1 */
+        0x80 /* Backhaul STA */
+    };
+
+    if (!is_wifi_hal_vap_mesh_sta(vap->vap_index) || len < sizeof(multi_ap_ie)) {
+        return 0;
+    }
+
+    memcpy(buf, multi_ap_ie, sizeof(multi_ap_ie));
+    return sizeof(multi_ap_ie);
+}
+#endif
+
 int nl80211_connect_sta(wifi_interface_info_t *interface)
 {
     int ret;
@@ -12451,6 +12472,9 @@ int nl80211_connect_sta(wifi_interface_info_t *interface)
                     interface->u.sta.wpa_sm->assoc_rsnxe_len);
                 pos += interface->u.sta.wpa_sm->assoc_rsnxe_len;
             }
+#endif
+#if defined(EASY_MESH_NODE) && !defined(CONFIG_WIFI_EMULATOR) && !defined(BANANA_PI_PORT)
+            pos += nl80211_add_multi_ap_backhaul_sta_ie(vap, pos, rsn_ie + sizeof(rsn_ie) - pos);
 #endif
             if (nla_put(msg, NL80211_ATTR_IE, pos - rsn_ie, rsn_ie) < 0) {
                 wifi_hal_error_print("%s:%d: Failed to set RSN IE\n", __func__, __LINE__);

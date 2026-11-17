@@ -139,6 +139,10 @@ typedef struct wnm_notif_req {
     u8 type;
 } STRUCT_PACKED wnm_notif_req_t;
 
+static inline bool is_valid_ap_index(int ap_index)
+{
+    return (ap_index >= MIN_AP_INDEX && ap_index < MAX_AP_INDEX);
+}
 
 #if !defined(QCOM_ATH12K_PORT)
 /* Implementation is based on ieee802_11_send_bss_trans_mgmt_request() from wnm_ap.c */
@@ -212,6 +216,11 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
     bool mutex_locked = false;
     struct hostapd_data *hapd = &interface->u.ap.hapd;
     int ap_index = interface->vap_info.vap_index;
+
+     if (!is_valid_ap_index(ap_index)) {
+        wifi_hal_error_print("%s:%d: invalid ap_index=%d\n", __func__, __LINE__, ap_index);
+        return ret;
+    }
 #ifdef CONFIG_USE_HOSTAP_BTM_PATCH
     bool wnm_bss_trans_query_auto_resp = hapd->conf->wnm_bss_trans_query_auto_resp;
 #else
@@ -427,6 +436,11 @@ static int handle_rx_bss_trans_mgmt_resp(wifi_interface_info_t *interface,
     bool mutex_locked = false;
     struct hostapd_data *hapd = &interface->u.ap.hapd;
     int ap_index = interface->vap_info.vap_index;
+
+    if (!is_valid_ap_index(ap_index)) {
+        wifi_hal_error_print("%s:%d invalid ap_index=%d\n", __func__, __LINE__, ap_index);
+        return ret;
+    }
 
     if (NULL == callbacks->btm_callback[ap_index].response_callback)
         return WIFI_HAL_SUCCESS;
