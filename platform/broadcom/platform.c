@@ -32,12 +32,12 @@
 #include "nvram_api.h"
 #endif // defined(WLDM_21_2)
 #include "wlcsm_lib_wl.h"
-#if defined (ENABLED_EDPD)
+#if defined(ENABLED_EDPD)
 #include <fcntl.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#endif // defined (ENABLED_EDPD)
+#endif // defined(ENABLED_EDPD)
 
 #include <sys/stat.h>
 #if defined(TCXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXF10_PORT) || \
@@ -146,13 +146,13 @@ static int get_chanspec_string(wifi_radio_operationParam_t *operationParam, char
 int sta_disassociated(int ap_index, char *mac, int reason);
 int sta_deauthenticated(int ap_index, char *mac, int reason);
 int sta_associated(int ap_index, wifi_associated_dev_t *associated_dev);
-#if defined (ENABLED_EDPD)
+#if defined(ENABLED_EDPD)
 static int check_edpdctl_enabled();
 static int check_dpd_feature_enabled();
 static int enable_echo_feature_and_power_control_configs(void);
 int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down);
 int platform_set_gpio_config_for_ecomode(const int wl_idx, const bool eco_pwr_down);
-#endif // defined (ENABLED_EDPD)
+#endif // defined(ENABLED_EDPD)
 
 #ifdef CONFIG_IEEE80211BE
 static void nvram_update_wl_mlo_config(unsigned int radio_index, int mld_link_id,
@@ -1277,7 +1277,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
         return RETURN_ERR;
     }
 
-#if defined (ENABLED_EDPD)
+#if defined(ENABLED_EDPD)
     int ret = 0;
     if (operationParam->EcoPowerDown) {
         /* Enable eco mode feature and power control configurations. */
@@ -1384,7 +1384,7 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 		}
 #endif //MLO_ENAB
     }
-#endif // defined (ENABLED_EDPD)
+#endif // defined(ENABLED_EDPD)
 
     if (radio->radio_presence == false) {
         wifi_hal_dbg_print("%s:%d Skip this radio %d. This is in sleeping mode\n", __FUNCTION__, __LINE__, index);
@@ -3106,7 +3106,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
     return RETURN_OK;
 }
 
-#elif defined (TCHCBRV2_PORT) || defined(_SR213_PRODUCT_REQ_) || defined(XER2_PORT)
+#elif defined(TCHCBRV2_PORT) || defined(_SR213_PRODUCT_REQ_) || defined(XER2_PORT)
 
 int platform_get_radio_phytemperature(wifi_radio_index_t index,
     wifi_radioTemperature_t *radioPhyTemperature)
@@ -3133,7 +3133,7 @@ int platform_get_radio_phytemperature(wifi_radio_index_t index,
 
 #endif // TCXB7_PORT || TCXB8_PORT || XB10_PORT || RDKB_ONE_WIFI_PROD
 
-#if defined (ENABLED_EDPD)
+#if defined(ENABLED_EDPD)
 /* EDPD - WLAN Power down control support APIs. */
 #define GPIO_PIN_24G_RADIO 101
 #define GPIO_PIN_5G_RADIO 102
@@ -3454,7 +3454,7 @@ int platform_set_ecomode_for_radio(const int wl_idx, const bool eco_pwr_down)
 
     return RETURN_OK;
 }
-#endif // defined (ENABLED_EDPD)
+#endif // defined(ENABLED_EDPD)
 
 int platform_set_txpower(void* priv, uint txpower)
 {
@@ -3475,7 +3475,7 @@ int platform_set_neighbor_report(uint index, uint add, mac_address_t mac)
 
     return 0;
 }
-#if defined (_SR213_PRODUCT_REQ_)
+#if defined(_SR213_PRODUCT_REQ_)
 #define SKY_VENDOR_OUI "DD0480721502"
 int platform_get_vendor_oui(char *vendor_oui, int vendor_oui_len)
 {

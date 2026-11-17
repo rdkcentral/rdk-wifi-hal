@@ -139,10 +139,15 @@ typedef struct wnm_notif_req {
     u8 type;
 } STRUCT_PACKED wnm_notif_req_t;
 
+static inline bool is_valid_ap_index(int ap_index)
+{
+    return (ap_index >= MIN_AP_INDEX && ap_index < MAX_AP_INDEX);
+}
 
+#if !defined(QCOM_ATH12K_PORT)
 /* Implementation is based on ieee802_11_send_bss_trans_mgmt_request() from wnm_ap.c */
 static int wifi_ieee802_11_send_bss_trans_mgmt_request(struct hostapd_data *hapd,
-                        const u8 *addr,
+    const u8 *addr,
                         u8 dialog_token,
                         const u8 *nei_rep, size_t nei_rep_len,
                         const u8 *mbo_attrs, size_t mbo_len)
@@ -211,6 +216,11 @@ static int handle_rx_bss_trans_mgmt_query(wifi_interface_info_t *interface,
     bool mutex_locked = false;
     struct hostapd_data *hapd = &interface->u.ap.hapd;
     int ap_index = interface->vap_info.vap_index;
+
+     if (!is_valid_ap_index(ap_index)) {
+        wifi_hal_error_print("%s:%d: invalid ap_index=%d\n", __func__, __LINE__, ap_index);
+        return ret;
+    }
 #ifdef CONFIG_USE_HOSTAP_BTM_PATCH
     bool wnm_bss_trans_query_auto_resp = hapd->conf->wnm_bss_trans_query_auto_resp;
 #else
@@ -395,6 +405,7 @@ exit:
     free(request);
     return ret;
 }
+#endif /* !defined(QCOM_ATH12K_PORT) */
 
 #if 0
 /* Implemented in wnm_ap.c */
@@ -411,6 +422,7 @@ void ap_sta_reset_steer_flag_timer(void *eloop_ctx, void *timeout_ctx)
 }
 #endif
 
+#if !defined(QCOM_ATH12K_PORT)
 /* Implementation is based on ieee802_11_rx_bss_trans_mgmt_resp() */
 static int handle_rx_bss_trans_mgmt_resp(wifi_interface_info_t *interface,
     const mac_address_t addr, const struct bss_tm_resp *frm, size_t len)
@@ -424,6 +436,11 @@ static int handle_rx_bss_trans_mgmt_resp(wifi_interface_info_t *interface,
     bool mutex_locked = false;
     struct hostapd_data *hapd = &interface->u.ap.hapd;
     int ap_index = interface->vap_info.vap_index;
+
+    if (!is_valid_ap_index(ap_index)) {
+        wifi_hal_error_print("%s:%d invalid ap_index=%d\n", __func__, __LINE__, ap_index);
+        return ret;
+    }
 
     if (NULL == callbacks->btm_callback[ap_index].response_callback)
         return WIFI_HAL_SUCCESS;
@@ -564,9 +581,10 @@ static int handle_rx_wnm_notification_req(wifi_interface_info_t *interface,
         default:
             wifi_hal_dbg_print("%s:%d: WNM: Received WNM Notification Request type=%u is not supported by HAL code\n", __func__, __LINE__, frm->type);
             break;
-    }
-    return WIFI_HAL_UNSUPPORTED;
+        }
+        return WIFI_HAL_UNSUPPORTED;
 }
+#endif /* !defined(QCOM_ATH12K_PORT) */
 
 /* Only MLO builds can ever request a beacon report per MLD link; other builds send a single
  * request. */
@@ -612,7 +630,8 @@ static struct sta_info *wifi_rrm_find_sta_in_iface(struct hostapd_iface *iface, 
     return NULL;
 }
 
-#if !defined(PLATFORM_LINUX) || defined(_PLATFORM_BANANAPI_R4_) || defined(_PLATFORM_RASPBERRYPI_)
+#if (!defined(PLATFORM_LINUX) && !defined(QCOM_ATH12K_PORT)) || \
+    defined(_PLATFORM_BANANAPI_R4_) || defined(_PLATFORM_RASPBERRYPI_)
 int handle_wnm_action_frame(wifi_interface_info_t *interface, const mac_address_t sta, struct ieee80211_mgmt *mgmt, size_t len)
 {
     u8 action;
@@ -637,9 +656,10 @@ int handle_wnm_action_frame(wifi_interface_info_t *interface, const mac_address_
         default:
             wifi_hal_dbg_print("%s:%d: Received WNM action=%u is not supported by HAL code\n", __func__, __LINE__, action);
             break;
-    }
-    return WIFI_HAL_UNSUPPORTED;
+        }
+        return WIFI_HAL_UNSUPPORTED;
 }
+#endif /* !defined(PLATFORM_LINUX) && !defined(QCOM_ATH12K_PORT) || ... */
 
 /* based on hostapd_send_beacon_req() */
 int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
@@ -1055,10 +1075,9 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
 
     return dialog_token;
 }
-#endif
-
+#if !defined(QCOM_ATH12K_PORT)
 static void wifi_set_disassoc_timer(struct hostapd_data *hapd, struct sta_info *sta,
-                int disassoc_timer)
+    int disassoc_timer)
 {
     int timeout, beacon_int;
 
@@ -1085,14 +1104,16 @@ static void wifi_set_disassoc_timer(struct hostapd_data *hapd, struct sta_info *
     sta->timeout_next = STA_DISASSOC_FROM_CLI;
     eloop_cancel_timeout(ap_handle_timer, hapd, sta);
     eloop_register_timeout(timeout / 1000,
-                timeout % 1000 * 1000,
-                ap_handle_timer, hapd, sta);
+        timeout % 1000 * 1000,
+        ap_handle_timer, hapd, sta);
 }
+#endif /*!defined(QCOM_ATH12K_PORT) */
 
-#if !defined(PLATFORM_LINUX) || defined(_PLATFORM_BANANAPI_R4_) || defined(_PLATFORM_RASPBERRYPI_)
+#if (!defined(PLATFORM_LINUX) && !defined(QCOM_ATH12K_PORT)) || \
+    defined(_PLATFORM_BANANAPI_R4_) || defined(_PLATFORM_RASPBERRYPI_)
 /* Implementation is based on wnm_send_bss_tm_req() from wnm_ap.c */
 int wifi_wnm_send_bss_tm_req(wifi_interface_info_t *interface, struct sta_info *sta,
-            u8 dialog_token, u8 req_mode, int disassoc_timer, u8 valid_int,
+    u8 dialog_token, u8 req_mode, int disassoc_timer, u8 valid_int,
             const u8 *bss_term_dur, const char *url,
             const u8 *nei_rep, size_t nei_rep_len,
             const u8 *mbo_attrs, size_t mbo_len)
@@ -1784,7 +1805,7 @@ int wifi_hal_parse_rm_beacon_request(unsigned int apIndex, char *buff, size_t le
     return 0;
 }
 
-#if !defined(PLATFORM_LINUX) || defined(_PLATFORM_BANANAPI_R4_) || defined (_PLATFORM_RASPBERRYPI_)
+#if !defined(PLATFORM_LINUX) || defined(_PLATFORM_BANANAPI_R4_) || defined(_PLATFORM_RASPBERRYPI_)
 int handle_rrm_action_frame(wifi_interface_info_t *interface, const mac_address_t sta,
                     const struct ieee80211_mgmt *mgmt, size_t len, int ssi_signal)
 {

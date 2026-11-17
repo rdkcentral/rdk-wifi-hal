@@ -40,7 +40,7 @@
 #include <pthread.h>
 #include <sys/prctl.h>
 #define ANQP_HS2_MIN_LEN 6
-#if defined (RDK_ONEWIFI)
+#if defined(RDK_ONEWIFI)
 #include "wifi_hal_priv.h"
 #endif
 #include <wifi_hal_rdk_framework.h>
@@ -62,7 +62,7 @@ extern char* get_formatted_time(char *);
 
 static wifi_GASConfiguration_t gasCfg[GAS_CFG_TYPE_SUPPORTED];
 
-#if defined (FEATURE_SUPPORT_PASSPOINT)
+#if defined(FEATURE_SUPPORT_PASSPOINT)
 static wifi_HS2Settings_t hs2Settings[MAX_AP_INDEX + 1];
 static BOOL hs2SettingsStored;
 #endif
@@ -105,7 +105,7 @@ void wifi_anqp_dbg_print(int level, char *format, ...)
 
 void wifi_storeInitialPassPointSettings()
 {
-#if defined (FEATURE_SUPPORT_PASSPOINT)
+#if defined(FEATURE_SUPPORT_PASSPOINT)
     int ap_index;
     BOOL _countryIe;
     BOOL _layer2TIF;
@@ -136,7 +136,7 @@ void wifi_storeInitialPassPointSettings()
 
 int enablePassPointSettings(int ap_index, BOOL passpoint_enable, BOOL downstream_disable, BOOL p2p_disable, BOOL layer2TIF)
 {
-#if defined (FEATURE_SUPPORT_PASSPOINT)
+#if defined(FEATURE_SUPPORT_PASSPOINT)
     if (ap_index < 0 || ap_index > MAX_AP_INDEX)
     {
         wifi_anqp_dbg_print(1, "%s:%d:Invalid ap index:   %d\n", __func__, __LINE__, ap_index);
@@ -204,8 +204,8 @@ void callback_anqp_gas_init_frame_received(int ap_index, mac_address_t sta, unsi
         return;
     }
 
-#if defined (FEATURE_SUPPORT_PASSPOINT)
-#if !defined (RDK_ONEWIFI)
+#if defined(FEATURE_SUPPORT_PASSPOINT)
+#if !defined(RDK_ONEWIFI)
     BOOL enabled;
     INT rc;
     rc = wifi_getApInterworkingServiceEnable(ap_index, &enabled);
@@ -595,8 +595,8 @@ INT wifi_anqpSendResponse(UINT apIndex, mac_address_t sta, unsigned char token, 
         tmp = NULL;
     }
  
-#if defined (FEATURE_SUPPORT_PASSPOINT)
-#if !defined (RDK_ONEWIFI)
+#if defined(FEATURE_SUPPORT_PASSPOINT)
+#if !defined(RDK_ONEWIFI)
     BOOL enabled;
     INT rc;
     rc = wifi_getApInterworkingServiceEnable(apIndex, &enabled);
@@ -665,7 +665,7 @@ INT wifi_anqpSendResponse(UINT apIndex, mac_address_t sta, unsigned char token, 
     memcpy(anqp_gas_initial_response_frame->rsp_body, anqpBuffer, total_length);
 
     wifi_anqp_dbg_print(1, "%s:%d: we have a gas query response to fill the buffer\n", __func__, __LINE__);
-#if !defined (RDK_ONEWIFI) || defined(TCHCBRV2_PORT)
+#if !defined(RDK_ONEWIFI) || defined(TCHCBRV2_PORT)
     ULONG hm_channel = 0;
     UINT radioIndex = apIndex % 2;
     wifi_getRadioChannel(radioIndex, &hm_channel);
@@ -704,7 +704,7 @@ INT wifi_setGASConfiguration(UINT advertisementID, wifi_GASConfiguration_t *inpu
     }
     memcpy(&gasCfg[advertisementID], input_struct, sizeof(wifi_GASConfiguration_t));
 
-#if defined (FEATURE_SUPPORT_PASSPOINT)
+#if defined(FEATURE_SUPPORT_PASSPOINT)
     wifi_applyGASConfiguration(input_struct);
 #endif
     return RETURN_OK;
