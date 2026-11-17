@@ -152,6 +152,7 @@ static void nl80211_new_station_event(wifi_interface_info_t *interface, struct n
     event.assoc_info.addr = mac;
     wifi_hal_dbg_print("%s:%d: New station ies_len:%ld, ies:%p\n", __func__, __LINE__, ies_len, ies);
     notify_assoc_data(interface, tb, event);
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
         supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
@@ -159,6 +160,7 @@ static void nl80211_new_station_event(wifi_interface_info_t *interface, struct n
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_ASSOC, &event);
     }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
 static void nl80211_del_station_event(wifi_interface_info_t *interface, struct nlattr **tb)
@@ -181,6 +183,7 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     system(br_buff);
     os_memset(&event, 0, sizeof(event));
     event.disassoc_info.addr = mac;
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
         supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
@@ -188,6 +191,7 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
     }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     //Remove the station from the bridge, if present
     wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
 }
