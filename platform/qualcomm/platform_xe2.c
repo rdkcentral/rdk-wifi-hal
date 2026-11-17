@@ -37,6 +37,13 @@
 
 #define RETRY_LIMIT     7
 
+#define XE2_BHAUL_STA_SSID      "we.connect.yellowstone"
+#define XE2_GET_CONFIG_SCRIPT   "/usr/opensync/scripts/getConfigFile.sh"
+/* getConfigFile.sh only decrypts to fixed paths; this one holds the backhaul passphrase */
+#define XE2_BHAUL_PSK_FILE      "/tmp/.staticCpgCfg_1"
+/* OneWiFi passes 128-byte ssid/password buffers to the default-credential hooks */
+#define XE2_DEFAULT_CRED_LEN    128
+
 int wifi_setApRetrylimit(void *priv)
 {
     int res;
@@ -188,4 +195,51 @@ int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     /* Covers the first VAP on a radio: pre-create had no netdev to send it through */
     xe2_set_radio_enhind(index);
     return 0;
+}
+
+/* Only mesh STA VAPs get platform defaults; other VAPs keep OneWiFi's own fallback */
+int platform_get_ssid_default(char *ssid, int vap_index)
+{
+    if (ssid == NULL || !is_wifi_hal_vap_mesh_sta(vap_index)) {
+        return RETURN_ERR;
+    }
+
+    snprintf(ssid, XE2_DEFAULT_CRED_LEN, "%s", XE2_BHAUL_STA_SSID);
+    return RETURN_OK;
+}
+
+int platform_get_keypassphrase_default(char *password, int vap_index)
+{
+    FILE *fp;
+    int rc;
+    int ret = RETURN_ERR;
+
+    if (password == NULL || !is_wifi_hal_vap_mesh_sta(vap_index)) {
+        return RETURN_ERR;
+    }
+
+    remove(XE2_BHAUL_PSK_FILE);
+    rc = system(XE2_GET_CONFIG_SCRIPT " " XE2_BHAUL_PSK_FILE " >/dev/null 2>&1");
+
+    fp = fopen(XE2_BHAUL_PSK_FILE, "r");
+    if (fp != NULL) {
+        if (fgets(password, XE2_DEFAULT_CRED_LEN, fp) != NULL) {
+            password[strcspn(password, "\r\n")] = '\0';
+            if (password[0] != '\0') {
+                ret = RETURN_OK;
+            }
+        }
+        fclose(fp);
+    }
+    remove(XE2_BHAUL_PSK_FILE);
+
+    if (ret != RETURN_OK) {
+        password[0] = '\0';
+        wifi_hal_error_print("%s:%d: vap %d: default backhaul passphrase unavailable (rc=%d)\n",
+            __func__, __LINE__, vap_index, rc);
+        return ret;
+    }
+
+    wifi_hal_info_print("%s:%d: vap %d: default backhaul passphrase loaded\n", __func__, __LINE__, vap_index);
+    return ret;
 }
