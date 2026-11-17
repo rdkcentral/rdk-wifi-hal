@@ -43,10 +43,6 @@
 #include "config_supplicant.h"
 #endif
 
-#if defined(CONFIG_GENERIC_MLO)
-#define MLD_INTERFACE_NAME "mld0"
-#endif
-
 int no_seq_check(struct nl_msg *msg, void *arg)
 {
     return NL_OK;
@@ -156,6 +152,7 @@ static void nl80211_new_station_event(wifi_interface_info_t *interface, struct n
     event.assoc_info.addr = mac;
     wifi_hal_dbg_print("%s:%d: New station ies_len:%ld, ies:%p\n", __func__, __LINE__, ies_len, ies);
     notify_assoc_data(interface, tb, event);
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
         supplicant_event(&interface->wpa_s, EVENT_ASSOC, &event);
@@ -163,6 +160,7 @@ static void nl80211_new_station_event(wifi_interface_info_t *interface, struct n
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_ASSOC, &event);
     }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 }
 
 static void nl80211_del_station_event(wifi_interface_info_t *interface, struct nlattr **tb)
@@ -186,6 +184,7 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     system(br_buff);
     os_memset(&event, 0, sizeof(event));
     event.disassoc_info.addr = mac;
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
         supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
@@ -193,6 +192,7 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
     }
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     //Remove the station from the bridge, if present
     wifi_hal_configure_sta_4addr_to_bridge(interface, 0);
 #endif
@@ -338,8 +338,8 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     wifi_frame_t mgmt_frame;
     int sig_dbm = -100;
 #if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined (TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || \
-    defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT)
+    defined(TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || \
+    defined(_MERCURY_PRODUCT_REQ_) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT)
     int phy_rate = 60;
 #endif
 #ifdef CONFIG_GENERIC_MLO
@@ -373,8 +373,8 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         sig_dbm = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
     }
 #if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
-    defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT)
+    defined(SCXER10_PORT) || defined(TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
+    defined(_MERCURY_PRODUCT_REQ_) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT)
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]) *10;
     }
@@ -495,16 +495,22 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
 
         case WLAN_FC_STYPE_DISASSOC:
             mgmt_type = WIFI_MGMT_FRAME_TYPE_DISASSOC;
+            /* A TX status event has no reason attribute, the reason is in the frame. */
+            if (event.tx_status.data_len >=
+                offsetof(struct ieee80211_mgmt, u.disassoc.reason_code) +
+                    sizeof(((struct ieee80211_mgmt *)0)->u.disassoc.reason_code)) {
+                reason = WPA_GET_LE16((const u8 *)&mgmt->u.disassoc.reason_code);
+            }
             wifi_hal_dbg_print("%s:%d: Received disassoc frame from: %s\n", __func__, __LINE__,
                            to_mac_str(sta, sta_mac_str));
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             station = ap_get_sta(&interface->u.ap.hapd, sta);
             if (station) {
-#if !defined(PLATFORM_LINUX)
+#if !defined(PLATFORM_LINUX) && defined(FEATURE_SUPPORT_RADIUSGREYLIST)
                 if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
                     reason = station->disconnect_reason_code;
                 }
-#endif
+#endif /* !PLATFORM_LINUX && FEATURE_SUPPORT_RADIUSGREYLIST */
 #if !defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210)
                 ap_free_sta(&interface->u.ap.hapd, station);
 #endif // !defined(CONFIG_GENERIC_MLO)
@@ -555,12 +561,12 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             station = ap_get_sta(&interface->u.ap.hapd, sta);
             if (station) {
-#if !defined(PLATFORM_LINUX)
+#if !defined(PLATFORM_LINUX) && defined(FEATURE_SUPPORT_RADIUSGREYLIST)
                 if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
                     reason = station->disconnect_reason_code;
-                    wifi_hal_info_print("reason from disconnect reason code is %d\n",reason);
+                    wifi_hal_info_print("reason from disconnect reason code is %d\n", reason);
                 }
-#endif
+#endif /* !PLATFORM_LINUX && FEATURE_SUPPORT_RADIUSGREYLIST */
 #if !defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210)
                 ap_free_sta(&interface->u.ap.hapd, station);
 #endif // !defined(CONFIG_GENERIC_MLO)
@@ -614,8 +620,8 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame, 0);
 #else
 #if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || \
-    defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
-    defined (TARGET_GEMINI7_2) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT))
+    defined(XB10_PORT) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
+    defined(_MERCURY_PRODUCT_REQ_) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT))
             callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)event.tx_status.data,
                 event.tx_status.data_len, mgmt_type, dir, sig_dbm, phy_rate, 0);
 #else
@@ -749,14 +755,27 @@ static void nl80211_connect_event(wifi_interface_info_t *interface, struct nlatt
         wifi_hal_dbg_print("%s:%d: req ie attribute absent\n", __func__, __LINE__);
     } else {
         interface->u.sta.assoc_req_len = nla_len(tb[NL80211_ATTR_REQ_IE]);
-        memcpy(assoc_req, nla_data(tb[NL80211_ATTR_REQ_IE]), nla_len(tb[NL80211_ATTR_REQ_IE])); 
-    }
+        if (interface->u.sta.assoc_req_len > sizeof(interface->u.sta.assoc_req)) {
+            wifi_hal_error_print("%s:%d: req IE too large (%u > %u)\n", __func__, __LINE__,
+                interface->u.sta.assoc_req_len, (unsigned int)sizeof(interface->u.sta.assoc_req));
 
+            interface->u.sta.assoc_req_len = 0;
+        } else {
+            memcpy(assoc_req, nla_data(tb[NL80211_ATTR_REQ_IE]), nla_len(tb[NL80211_ATTR_REQ_IE]));
+        }
+    }
     if (tb[NL80211_ATTR_RESP_IE] == NULL) {
         wifi_hal_dbg_print("%s:%d: resp ie attribute absent\n", __func__, __LINE__);
     } else {
         interface->u.sta.assoc_rsp_len = nla_len(tb[NL80211_ATTR_RESP_IE]);
-        memcpy(assoc_rsp, nla_data(tb[NL80211_ATTR_RESP_IE]), nla_len(tb[NL80211_ATTR_RESP_IE])); 
+        if (interface->u.sta.assoc_rsp_len > sizeof(interface->u.sta.assoc_rsp)) {
+            wifi_hal_error_print("%s:%d: resp IE too large (%u > %u)\n", __func__, __LINE__,
+                interface->u.sta.assoc_rsp_len, (unsigned int)sizeof(interface->u.sta.assoc_rsp));
+
+            interface->u.sta.assoc_rsp_len = 0;
+        } else {
+            memcpy(assoc_rsp, nla_data(tb[NL80211_ATTR_RESP_IE]), nla_len(tb[NL80211_ATTR_RESP_IE]));
+        }
     }
 
     if (tb[NL80211_ATTR_TIMED_OUT] == NULL) {
@@ -826,9 +845,43 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     wifi_vap_info_t *vap;
     wifi_bss_info_t bss;
     wifi_station_stats_t sta;
+#if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    wifi_radio_info_t *radio;
+    wifi_interface_info_t *mgt_interface;
+#endif /* XLE_PORT && FEATURE_HOSTAP_MGMT_FRAME_CTRL */
 
     vap = &interface->vap_info;
     interface->u.sta.state = WPA_DISCONNECTED;
+
+#if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
+    if (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
+        is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+        radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+        if (radio != NULL && radio->radar_detected) {
+            if (g_wifi_hal.platform_flags & PLATFORM_FLAGS_UPDATE_WIPHY_ON_PRIMARY) {
+                mgt_interface = get_primary_interface(radio);
+            } else {
+                mgt_interface = get_private_vap_interface(radio);
+            }
+
+            radio->radar_detected = false;
+            if (mgt_interface == NULL) {
+                wifi_hal_error_print(
+                    "%s:%d: [DFS-XLE] failed to find AP interface after mesh STA disconnect\n",
+                    __func__, __LINE__);
+            } else {
+                wifi_hal_info_print(
+                    "%s:%d: [DFS-XLE] mesh STA disconnect confirmed; continue evacuation\n",
+                    __func__, __LINE__);
+                nl80211_dfs_radar_detected(mgt_interface, interface->u.sta.backhaul.freq,
+                    radio->iconf.ieee80211n,
+                    get_sec_channel_offset(radio, interface->u.sta.backhaul.freq),
+                    radio->oper_param.channelWidth, 0, interface->u.sta.backhaul.freq, 0);
+            }
+        }
+    }
+#endif /* XLE_PORT && FEATURE_HOSTAP_MGMT_FRAME_CTRL */
+
     callbacks = get_hal_device_callbacks();
 
     if (callbacks->sta_conn_status_callback) {
@@ -943,13 +996,11 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
     hostapd_set_oper_centr_freq_seg1_idx(iconf, seg1_idx);
     hostapd_set_oper_chwidth(iconf, hostap_channel_width);
 
-#ifdef CONFIG_IEEE80211AX
-#if HOSTAPD_VERSION >= 210
+#if !defined(QCOM_ATH12K_PORT) && defined(CONFIG_IEEE80211AX) && (HOSTAPD_VERSION >= 210)
     if (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND) {
         iconf->he_2ghz_40mhz_width_allowed = hal_channel_width == WIFI_CHANNELBANDWIDTH_40MHZ;
     }
-#endif
-#endif
+#endif /* !QCOM_ATH12K_PORT && CONFIG_IEEE80211AX && HOSTAPD_VERSION >= 210 */
 
     iconf->ht_capab &= ~HT_CAP_INFO_SUPP_CHANNEL_WIDTH_SET;
     if (hal_channel_width >= WIFI_CHANNELBANDWIDTH_40MHZ) {
@@ -967,6 +1018,9 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
 static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, struct nlattr **tb, wifi_chan_eventType_t wifi_chan_event_type)
 {
     int ifidx = 0, freq = 0, bw = NL80211_CHAN_WIDTH_20_NOHT, cf1 = 0, cf2 = 0;
+#if defined(CONFIG_GENERIC_MLO)
+    int link_id = -1;
+#endif
     enum nl80211_channel_type ch_type = 0;
     u8 channel;
     wifi_channel_change_event_t radio_channel_param;
@@ -986,7 +1040,22 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         ifidx = nla_get_u32(tb[NL80211_ATTR_IFINDEX]);
     }
 
-    if(tb[NL80211_ATTR_WIPHY_FREQ] == NULL) {
+#if defined(CONFIG_GENERIC_MLO)
+    if (tb[NL80211_ATTR_MLO_LINK_ID]) {
+        link_id = nla_get_u8(tb[NL80211_ATTR_MLO_LINK_ID]);
+        if (link_id >= 0) {
+            wifi_interface_info_t *link_iface = get_interface_by_if_index(ifidx, link_id);
+            if (link_iface != NULL) {
+                interface = link_iface;
+            }
+            wifi_hal_info_print("%s:%d: [MLO-LINK] ifidx=%d link_id=%d link_iface=%s\n",
+                __func__, __LINE__, ifidx, link_id,
+                link_iface ? link_iface->name : "NULL");
+        }
+    }
+#endif
+
+    if (tb[NL80211_ATTR_WIPHY_FREQ] == NULL) {
         wifi_hal_dbg_print("%s:%d: channel attribute not present\n", __func__, __LINE__);
         return;
     } else {
@@ -1849,6 +1918,43 @@ static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, stru
     }
 }
 
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+/* Radar events carry no link id and all MLD links share one ifindex, so the ifindex lookup
+ * returns the first link. Use the link operating on the event's channel, or else a link whose
+ * radio has that channel (e.g. NOP finished for a channel not in use). */
+static wifi_interface_info_t *get_mld_radar_interface(wifi_interface_info_t *interface, int freq)
+{
+    wifi_interface_info_t *link;
+    wifi_radio_info_t *radio;
+
+    if (!wifi_hal_is_mld_enabled(interface)) {
+        return interface;
+    }
+
+    link = wifi_hal_get_mld_interface_by_freq(interface, freq);
+    radio = get_radio_by_rdk_index(link->vap_info.radio_index);
+    if (link != interface || (radio != NULL && is_chan_freq_supported_on_radio(radio, freq))) {
+        return link;
+    }
+
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        radio = get_radio_by_rdk_index(i);
+        if (radio == NULL || !is_chan_freq_supported_on_radio(radio, freq)) {
+            continue;
+        }
+        hash_map_foreach(radio->interface_map, link) {
+            if (wifi_hal_is_mld_enabled(link) &&
+                link->vap_info.u.bss_info.mld_info.common_info.mld_id ==
+                    interface->vap_info.u.bss_info.mld_info.common_info.mld_id) {
+                return link;
+            }
+        }
+    }
+
+    return interface;
+}
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+
 int process_global_nl80211_event(struct nl_msg *msg, void *arg)
 {
     wifi_hal_priv_t *priv = (wifi_hal_priv_t *)arg;
@@ -1885,6 +1991,14 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
     interface = get_interface_by_if_index(ifidx, link_id);
     switch (gnlh->cmd) {
     case NL80211_CMD_RADAR_DETECT:
+#if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
+        if (link_id == NL80211_DRV_LINK_ID_NA && interface != NULL &&
+            interface->vap_info.vap_mode == wifi_vap_mode_ap && tb[NL80211_ATTR_WIPHY_FREQ]) {
+            interface = get_mld_radar_interface(interface,
+                nla_get_u32(tb[NL80211_ATTR_WIPHY_FREQ]));
+        }
+#endif // HOSTAPD_VERSION >= 211 && CONFIG_GENERIC_MLO
+
         // To handle CAC Finish and CAC Abort for DFS. These event involve only the primary
         // interface of the radio.
         if (!(event_type == NL80211_RADAR_CAC_FINISHED || event_type == NL80211_RADAR_CAC_ABORTED))
@@ -1897,17 +2011,21 @@ int process_global_nl80211_event(struct nl_msg *msg, void *arg)
         /* Special case for SCAN events - don't drop these event even if the interface is not fully
          * configured */
 #if defined(CONFIG_GENERIC_MLO)
-        /* Only for MLD interface when driver does not send LINK_ID, fallback safely */
-        if (link_id == NL80211_DRV_LINK_ID_NA && interface != NULL &&
-             interface->mld_name[0] != '\0' && strcmp(interface->mld_name, MLD_INTERFACE_NAME) == 0) {
+        /* Only for AP MLD interface when driver does not send LINK_ID, fallback safely.
+         * CAC finished/aborted and STA scans must not be gated on AP scan state. */
+        if (gnlh->cmd != NL80211_CMD_RADAR_DETECT && link_id == NL80211_DRV_LINK_ID_NA &&
+            interface != NULL && interface->vap_info.vap_mode == wifi_vap_mode_ap &&
+            interface->mld_name[0] != '\0') {
+            const wifi_interface_info_t *event_interface = interface;
+
             wifi_hal_dbg_print("%s:%d: Using MLO fallback path\n",__func__, __LINE__);
             for (unsigned int i = 0; i < priv->num_radios; i++) {
                 radio = &priv->radio_info[i];
 
                 interface = hash_map_get_first(radio->interface_map);
                 while (interface != NULL) {
-                    /* Process only MLO interfaces */
-                    if (!interface->mld_name[0] || strcmp(interface->mld_name, MLD_INTERFACE_NAME) != 0) {
+                    /* Process only links of the MLD the event was reported on */
+                    if (strcmp(interface->mld_name, event_interface->mld_name) != 0) {
                         interface = hash_map_get_next(radio->interface_map, interface);
                         continue;
                     }

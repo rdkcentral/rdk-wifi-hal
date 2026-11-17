@@ -393,7 +393,7 @@ int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg
         ret = RETURN_ERR;
         snprintf(msg + strlen(msg), len - strlen(msg), " showSsid: %d", bss_info->showSsid);
     }
-#ifndef TARGET_GEMINI7_2
+#ifndef _MERCURY_PRODUCT_REQ_
     if (strncmp(vap_info->bridge_name, "", strlen(vap_info->bridge_name)) == 0) {
         ret = RETURN_ERR;
         snprintf(msg + strlen(msg), len - strlen(msg), " Bridge name is null for vap index %u", vap_info->vap_index);

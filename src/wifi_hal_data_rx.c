@@ -53,10 +53,12 @@ static void DumpHex(const void* data, size_t size)
 }
 #endif
 
+#if !defined(QCOM_ATH12K_PORT)
 static inline unsigned short be_to_host16(unsigned short v)
 {
        return ((v & 0xff) << 8) | (v >> 8);
 }
+#endif
 
 #define MAC2STR(a) (a)[0], (a)[1], (a)[2], (a)[3], (a)[4], (a)[5]
 #define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
