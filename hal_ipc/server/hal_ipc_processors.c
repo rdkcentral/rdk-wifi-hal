@@ -72,6 +72,7 @@ int sync_hostapd_freq_param(unsigned int apIndex)
     }
     if (interface->u.ap.hapd.iface == NULL) {
         wifi_hal_error_print("%s:%d: ap index:%u hostapd interface not created\n", __func__, __LINE__, apIndex);
+        return RETURN_ERR;
     }
     if (interface->u.ap.hapd.iface->freq != freq) {
         wifi_hal_info_print("%s:%d: ap index:%u existing freq:%d curr freq:%d\n", __func__, __LINE__, apIndex, interface->u.ap.hapd.iface->freq, freq);
