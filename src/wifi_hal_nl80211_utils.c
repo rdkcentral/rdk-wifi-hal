@@ -1870,6 +1870,9 @@ static const wifi_enum_to_str_map_t wifi_variant_Map[] =
 #ifdef CONFIG_IEEE80211BE
     {WIFI_80211_VARIANT_BE, "be"},
 #endif /* CONFIG_IEEE80211BE */
+#ifdef CONFIG_IEEE80211BN
+    {WIFI_80211_VARIANT_BN, "bn"},
+#endif /* CONFIG_IEEE80211BN */
 };
 
 static const wifi_enum_to_str_map_t wifi_bandwidth_Map[] =
@@ -5180,17 +5183,20 @@ int wifi_ieee80211Variant_to_str(char *dest, size_t dest_size, wifi_ieee80211Var
             }
             if (variant &
                 (WIFI_80211_VARIANT_N | WIFI_80211_VARIANT_AC | WIFI_80211_VARIANT_AX |
-                    WIFI_80211_VARIANT_BE)) {
-                if ((variant & WIFI_80211_VARIANT_BE) && (variant & WIFI_80211_VARIANT_AX)) {
-                    // Wi-Fi 7 supports both AX (6E base) and BE (Wi-Fi 7)
+                    WIFI_80211_VARIANT_BE | WIFI_80211_VARIANT_BN)) {
+                if (variant & WIFI_80211_VARIANT_BN) {
+                    // Wi-Fi 8 supports both AX (6E base) and BE (Wi-Fi 7)
                     str_list_append(dest, dest_size, "ax");
                     str_list_append(dest, dest_size, "be");
+                    str_list_append(dest, dest_size, "bn");
+                } else if (variant & WIFI_80211_VARIANT_BE) {
+                    // Wi-Fi 7 supports AX (6E base)
+                    str_list_append(dest, dest_size, "ax");
+                    str_list_append(dest, dest_size, "be");
+                } else if (variant & WIFI_80211_VARIANT_AX) {
+                    str_list_append(dest, dest_size, "ax");
                 } else {
-                    if (variant & WIFI_80211_VARIANT_BE) {
-                        mode = "be";
-                    } else if (variant & WIFI_80211_VARIANT_AX) {
-                        mode = "ax";
-                    } else if (variant & WIFI_80211_VARIANT_AC) {
+                    if (variant & WIFI_80211_VARIANT_AC) {
                         mode = "ac";
                     } else {
                         mode = "n";
