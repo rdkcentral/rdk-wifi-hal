@@ -82,8 +82,10 @@
 
 #ifdef QCOM_ATH12K_PORT
 #include "ap/airtime_policy.h"
-#include "common/dhcp.h"
 #include "ap/ap_config.h"
+#include "ap/dfs.h"
+#include "ap/ieee802_11.h"
+#include "common/dhcp.h"
 #endif /* QCOM_ATH12K_PORT */
 
 /*
@@ -402,6 +404,9 @@ typedef struct {
     unsigned int fetch_bss_trans_status : 1;
     unsigned int roam_vendor_cmd_avail : 1;
     unsigned int get_supported_akm_suites_avail : 1;
+#ifdef CONFIG_DRIVER_NL80211_QCA
+    unsigned int qca_ap_allowed_freqs : 1;
+#endif /* CONFIG_DRIVER_NL80211_QCA */
 #if HOSTAPD_VERSION >= 212
     unsigned int puncturing : 1;         /* NL80211_EXT_FEATURE_PUNCT: EHT preamble puncturing */
     unsigned int qca_do_acs : 1;                      /* QCA_NL80211_VENDOR_SUBCMD_DO_ACS available */
@@ -410,11 +415,11 @@ typedef struct {
     unsigned int secure_ranging_ctx_vendor_cmd_avail : 1; /* QCA_NL80211_VENDOR_SUBCMD_SECURE_RANGING_CONTEXT */
     unsigned int connect_ext_vendor_cmd_avail : 1;    /* QCA_NL80211_VENDOR_SUBCMD_CONNECT_EXT */
     unsigned int support_ap_scan : 1;
-#ifdef QCOM_ATH12K_PORT
+#if defined(QCOM_ATH12K_PORT) || defined(QCA_UD_HOSTAPD)
     unsigned int afc_support : 1;
     unsigned int afc_retail_support : 1;
     unsigned int device_bw : 1;
-#endif /* QCOM_ATH12K_PORT */
+#endif /* QCOM_ATH12K_PORT || QCA_UD_HOSTAPD */
 #endif /* HOSTAPD_VERSION >= 212 */
 } wifi_driver_data_t;
 
@@ -1066,7 +1071,7 @@ int wifi_hal_set_intf_offload_type(void *priv, unsigned int vendor_id,
     unsigned int subcmd, const u8 *data,
     size_t data_len, int flags, void *buf,
     const char *ifname, u8 intf_offload_type,
-    bool is_bss);
+    bool is_bss, u8 mld_link_id);
 #endif
 #if defined(TCXB8_PORT) || defined(XB10_PORT) || defined(SCXER10_PORT)
 int nl80211_set_amsdu_tid(wifi_interface_info_t *interface, uint8_t *amsdu_tid);
@@ -1239,9 +1244,9 @@ int pick_akm_suite(int sel);
 int wifi_hal_send_mgmt_frame(int apIndex, mac_address_t sta, const u8 *data, size_t data_len, unsigned int freq, unsigned int wait);
 #if (defined(BANANA_PI_PORT) && defined(KERNEL_6_6)) || defined(QCOM_ATH12K_PORT)
 int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason, int link_id);
-#else
+#else /* (!BANANA_PI_PORT || !KERNEL_6_6) && !QCOM_ATH12K_PORT */
 int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 reason);
-#endif
+#endif /* (BANANA_PI_PORT && KERNEL_6_6) || QCOM_ATH12K_PORT */
 void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac);
 #if HOSTAPD_VERSION >= 211 //2.11
 int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reason,int link_id);
@@ -1517,6 +1522,7 @@ extern u8 g_DialogTokenSender[MAX_AP_INDEX][256];
 
 int wifi_freq_to_channel(int freq, uint *channel);
 int wifi_channel_to_freq(const char* country, UCHAR opclass, uint channel, uint *freq);
+bool is_chan_freq_supported_on_radio(wifi_radio_info_t *radio, int freq);
 int bw_enum_to_mhz(wifi_channelBandwidth_t chwid);
 uint16_t freq_to_primary(uint16_t freq, wifi_channelBandwidth_t chwid);
 enum nl80211_band wifi_freq_band_to_nl80211_band(wifi_freq_bands_t band);
@@ -1613,27 +1619,11 @@ int teardown_mlo_vap(wifi_interface_info_t *interface);
 int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_config);
 #endif /* CONFIG_GENERIC_MLO */
 #endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
-#if defined(QCOM_ATH12K_PORT)
-u16 send_assoc_resp(struct hostapd_data *hapd, struct sta_info *sta,
-    const u8 *addr, u16 status_code, int reassoc,
-    const u8 *ies, size_t ies_len, int rssi,
-    int omit_rsnxe);
+#ifdef QCOM_ATH12K_PORT
 void hostapd_wpa_event(void *ctx, enum wpa_event_type event,
     union wpa_event_data *data);
 void hostapd_wpa_event_global(void *ctx, enum wpa_event_type event,
     union wpa_event_data *data);
-
-enum dfs_channel_type {
-    DFS_ANY_CHANNEL,
-    DFS_AVAILABLE, /* non-radar or radar-available */
-    DFS_NO_CAC_YET, /* radar-not-yet-available */
-};
-
-struct hostapd_channel_data *dfs_get_valid_channel(struct hostapd_iface *iface,
-    int *secondary_channel,
-    u8 *oper_centr_freq_seg0_idx,
-    u8 *oper_centr_freq_seg1_idx,
-    enum dfs_channel_type type);
-#endif
+#endif /* QCOM_ATH12K_PORT */
 
 #endif // WIFI_HAL_PRIV_H
