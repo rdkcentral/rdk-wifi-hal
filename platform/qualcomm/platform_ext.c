@@ -865,7 +865,7 @@ static int qca_create_mld_interfaces(wifi_vap_info_map_t *map)
 
 int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
-    char interface_name[10] = {0};
+    char interface_name[IFNAMSIZ] = {0};
     char param[128] = {0};
     wifi_vap_info_t *vap = NULL;
     unsigned int vap_itr = 0;

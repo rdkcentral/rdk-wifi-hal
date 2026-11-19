@@ -187,8 +187,11 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
-#endif
+        /* Skip station event delivery if the STA state machine was already torn down. */
+        if (interface->u.sta.wpa_sm != NULL) {
+            supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        }
+#endif /* BANANA_PI_PORT && HOSTAPD_VERSION >= 211 */
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
     }
@@ -338,8 +341,8 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
     wifi_frame_t mgmt_frame;
     int sig_dbm = -100;
 #if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined (TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || \
-    defined (_MERCURY_PRODUCT_REQ_) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT)
+    defined(TCHCBRV2_PORT) || defined(SCXER10_PORT) || defined(VNTXER5_PORT) || \
+    defined(_MERCURY_PRODUCT_REQ_) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT)
     int phy_rate = 60;
 #endif
 #ifdef CONFIG_GENERIC_MLO
@@ -373,8 +376,8 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
         sig_dbm = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
     }
 #if defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || defined(XB10_PORT) || \
-    defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
-    defined (_MERCURY_PRODUCT_REQ_) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT)
+    defined(SCXER10_PORT) || defined(TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
+    defined(_MERCURY_PRODUCT_REQ_) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT)
     if (tb[NL80211_ATTR_RX_PHY_RATE_INFO]) {
         phy_rate = nla_get_u32(tb[NL80211_ATTR_RX_PHY_RATE_INFO]) *10;
     }
@@ -506,11 +509,11 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             station = ap_get_sta(&interface->u.ap.hapd, sta);
             if (station) {
-#if !defined(PLATFORM_LINUX)
+#if !defined(PLATFORM_LINUX) && defined(FEATURE_SUPPORT_RADIUSGREYLIST)
                 if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
                     reason = station->disconnect_reason_code;
                 }
-#endif
+#endif /* !PLATFORM_LINUX && FEATURE_SUPPORT_RADIUSGREYLIST */
 #if !defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210)
                 ap_free_sta(&interface->u.ap.hapd, station);
 #endif // !defined(CONFIG_GENERIC_MLO)
@@ -561,12 +564,12 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             station = ap_get_sta(&interface->u.ap.hapd, sta);
             if (station) {
-#if !defined(PLATFORM_LINUX)
+#if !defined(PLATFORM_LINUX) && defined(FEATURE_SUPPORT_RADIUSGREYLIST)
                 if (station->disconnect_reason_code == WLAN_RADIUS_GREYLIST_REJECT) {
                     reason = station->disconnect_reason_code;
-                    wifi_hal_info_print("reason from disconnect reason code is %d\n",reason);
+                    wifi_hal_info_print("reason from disconnect reason code is %d\n", reason);
                 }
-#endif
+#endif /* !PLATFORM_LINUX && FEATURE_SUPPORT_RADIUSGREYLIST */
 #if !defined(CONFIG_GENERIC_MLO) && (HOSTAPD_VERSION <= 210)
                 ap_free_sta(&interface->u.ap.hapd, station);
 #endif // !defined(CONFIG_GENERIC_MLO)
@@ -620,8 +623,8 @@ static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, stru
             callbacks->mgmt_frame_rx_callback(vap->vap_index, &mgmt_frame, 0);
 #else
 #if defined(RDK_ONEWIFI) && (defined(TCXB7_PORT) || defined(CMXB7_PORT) || defined(TCXB8_PORT) || \
-    defined(XB10_PORT) || defined(SCXER10_PORT) || defined (TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
-    defined (_MERCURY_PRODUCT_REQ_) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT))
+    defined(XB10_PORT) || defined(SCXER10_PORT) || defined(TCHCBRV2_PORT) || defined(VNTXER5_PORT) || \
+    defined(_MERCURY_PRODUCT_REQ_) || defined(SCXF10_PORT) || defined(RDKB_ONE_WIFI_PROD) || defined(XER2_PORT))
             callbacks->mgmt_frame_rx_callback(vap->vap_index, sta, (unsigned char *)event.tx_status.data,
                 event.tx_status.data_len, mgmt_type, dir, sig_dbm, phy_rate, 0);
 #else
@@ -853,6 +856,12 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     vap = &interface->vap_info;
     interface->u.sta.state = WPA_DISCONNECTED;
 
+#if defined(CONFIG_GENERIC_MLO) && defined(CONFIG_IEEE80211BE)
+    /* Reset MLO state on disconnect to prevent stale link data on reconnect. */
+    memset(&interface->mlo_params, 0, sizeof(interface->mlo_params));
+    interface->mlo_params.assoc_link_id = -1;
+#endif /* CONFIG_GENERIC_MLO & CONFIG_IEEE80211BE */
+
 #if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
         is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
@@ -996,13 +1005,11 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
     hostapd_set_oper_centr_freq_seg1_idx(iconf, seg1_idx);
     hostapd_set_oper_chwidth(iconf, hostap_channel_width);
 
-#ifdef CONFIG_IEEE80211AX
-#if HOSTAPD_VERSION >= 210
+#if !defined(QCOM_ATH12K_PORT) && defined(CONFIG_IEEE80211AX) && (HOSTAPD_VERSION >= 210)
     if (radio->oper_param.band == WIFI_FREQUENCY_2_4_BAND) {
         iconf->he_2ghz_40mhz_width_allowed = hal_channel_width == WIFI_CHANNELBANDWIDTH_40MHZ;
     }
-#endif
-#endif
+#endif /* !QCOM_ATH12K_PORT && CONFIG_IEEE80211AX && HOSTAPD_VERSION >= 210 */
 
     iconf->ht_capab &= ~HT_CAP_INFO_SUPP_CHANNEL_WIDTH_SET;
     if (hal_channel_width >= WIFI_CHANNELBANDWIDTH_40MHZ) {
@@ -1020,6 +1027,9 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
 static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, struct nlattr **tb, wifi_chan_eventType_t wifi_chan_event_type)
 {
     int ifidx = 0, freq = 0, bw = NL80211_CHAN_WIDTH_20_NOHT, cf1 = 0, cf2 = 0;
+#if defined(CONFIG_GENERIC_MLO) && defined(QCOM_ATH12K_PORT)
+    int link_id = -1;
+#endif
     enum nl80211_channel_type ch_type = 0;
     u8 channel;
     wifi_channel_change_event_t radio_channel_param;
@@ -1039,7 +1049,22 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         ifidx = nla_get_u32(tb[NL80211_ATTR_IFINDEX]);
     }
 
-    if(tb[NL80211_ATTR_WIPHY_FREQ] == NULL) {
+#if defined(CONFIG_GENERIC_MLO) && defined(QCOM_ATH12K_PORT)
+    if (tb[NL80211_ATTR_MLO_LINK_ID]) {
+        link_id = nla_get_u8(tb[NL80211_ATTR_MLO_LINK_ID]);
+        if (link_id >= 0) {
+            wifi_interface_info_t *link_iface = get_interface_by_if_index(ifidx, link_id);
+            if (link_iface != NULL) {
+                interface = link_iface;
+            }
+            wifi_hal_info_print("%s:%d: [MLO-LINK] ifidx=%d link_id=%d link_iface=%s\n",
+                __func__, __LINE__, ifidx, link_id,
+                link_iface ? link_iface->name : "NULL");
+        }
+    }
+#endif /* QCOM_ATH12K_PORT */
+
+    if (tb[NL80211_ATTR_WIPHY_FREQ] == NULL) {
         wifi_hal_dbg_print("%s:%d: channel attribute not present\n", __func__, __LINE__);
         return;
     } else {
