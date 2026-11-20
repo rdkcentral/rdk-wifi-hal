@@ -359,10 +359,7 @@ void init_oem_config(wifi_interface_info_t *interface)
     conf->model_description = (char *)&interface->model_description;
     conf->model_url = (char *)&interface->model_url;
 #ifndef QCOM_ATH12K_PORT
-    conf->fw_version = malloc(strlen(interface->firmware_version) + 1);
-    if (conf->fw_version != NULL) {
-        strcpy(conf->fw_version, interface->firmware_version);
-    }
+    conf->fw_version = (char *)&interface->firmware_version;
 #endif /* !QCOM_ATH12K_PORT */
 
     if (wps_dev_type_str2bin("6-0050F204-1", conf->device_type)) {
