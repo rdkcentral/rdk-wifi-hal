@@ -28,6 +28,8 @@
 #include "wifi_hal.h"
 #include "wifi_hal_priv.h"
 #include <net/if.h>
+#include <netlink/netlink.h>
+#include <netlink/route/link.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1101,47 +1103,6 @@ INT wifi_halGetIfStatsNull(wifi_radioTrafficStats2_t *output_struct)
     return RETURN_OK;
 }
 
-INT File_Reading(CHAR *file, char *Value)
-{
-    FILE *fp = NULL;
-    char buf[MAX_CMD_SIZE] = { 0 };
-
-    if (file == NULL || Value == NULL) {
-        return RETURN_ERR;
-    }
-
-    fp = popen(file, "r");
-    if (fp == NULL) {
-        return RETURN_ERR;
-    }
-
-    if (fgets(buf, sizeof(buf), fp) == NULL) {
-        pclose(fp);
-        Value[0] = '\0';
-        return RETURN_ERR;
-    }
-
-    buf[strcspn(buf, "\n")] = '\0';
-    pclose(fp);
-    snprintf(Value, MAX_BUF_SIZE, "%s", buf);
-    return RETURN_OK;
-}
-
-INT GetIfacestatus(CHAR *interface_name, CHAR *status)
-{
-    wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
-    CHAR buf[MAX_CMD_SIZE] = { 0 };
-
-    if (interface_name != NULL && (strlen(interface_name) > 1) && status != NULL) {
-        sprintf(buf, "%s%s%s%s%s", "ifconfig -a ", interface_name, " | grep ", interface_name,
-            " | wc -l");
-        File_Reading(buf, status);
-    }
-    wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
-
-    return RETURN_OK;
-}
-
 // Get the running channel number
 INT wifi_getRadioChannel(INT radioIndex, ULONG *output_ulong) // RDKB
 {
@@ -1169,50 +1130,55 @@ INT wifi_getRadioChannel(INT radioIndex, ULONG *output_ulong) // RDKB
     return RETURN_OK;
 }
 
-static ULONG read_iface_stat(const char *ifname, const char *field)
+/*
+ * Fetch interface counters via rtnetlink (RTM_GETLINK).
+ * Returns RETURN_ERR if the interface does not exist or the query fails.
+ */
+static INT wifi_halGetIfStats(const char *ifname, wifi_radioTrafficStats2_t *pStats)
 {
-    CHAR path[MAX_BUF_SIZE] = { 0 };
-    FILE *fp;
-    unsigned long value = 0;
+    struct nl_sock *nl_get_sock;
+    struct rtnl_link *link = NULL;
+    int ret;
 
-    snprintf(path, sizeof(path), "/sys/class/net/%s/statistics/%s", ifname, field);
-    fp = fopen(path, "r");
-    if (fp == NULL) {
-        wifi_hal_error_print("%s:%d Failed to open %s\n", __func__, __LINE__, path);
-        return 0;
-    }
-
-    if (fscanf(fp, "%lu", &value) != 1) {
-        wifi_hal_error_print("%s:%d Failed to read %s\n", __func__, __LINE__, path);
-        value = 0;
-    }
-    fclose(fp);
-
-    return value;
-}
-
-INT wifi_halGetIfStats(char *ifname, wifi_radioTrafficStats2_t *pStats)
-{
-    wifi_hal_dbg_print("Inside %s:%d\n", __func__, __LINE__);
     POINTER_CHECK(pStats != NULL);
     POINTER_CHECK(ifname != NULL);
 
-    /* Bound the interface name so it cannot overflow the path buffer. */
-    if (wifi_strnlen(ifname, IFNAMSIZ) >= IFNAMSIZ) {
-        wifi_hal_error_print("%s:%d Invalid interface name length\n", __func__, __LINE__);
+    if (ifname[0] == '\0' || wifi_strnlen(ifname, IFNAMSIZ) >= IFNAMSIZ) {
+        wifi_hal_error_print("%s:%d Invalid interface name\n", __func__, __LINE__);
         return RETURN_ERR;
     }
 
-    pStats->radio_PacketsReceived = read_iface_stat(ifname, "rx_packets");
-    pStats->radio_PacketsSent = read_iface_stat(ifname, "tx_packets");
-    pStats->radio_BytesReceived = read_iface_stat(ifname, "rx_bytes");
-    pStats->radio_BytesSent = read_iface_stat(ifname, "tx_bytes");
-    pStats->radio_ErrorsReceived = read_iface_stat(ifname, "rx_errors");
-    pStats->radio_ErrorsSent = read_iface_stat(ifname, "tx_errors");
-    pStats->radio_DiscardPacketsReceived = read_iface_stat(ifname, "rx_dropped");
-    pStats->radio_DiscardPacketsSent = read_iface_stat(ifname, "tx_dropped");
+    nl_get_sock = nl_socket_alloc();
+    if (nl_get_sock == NULL) {
+        wifi_hal_error_print("%s:%d Failed to allocate netlink socket\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
 
-    wifi_hal_dbg_print("Exiting %s:%d\n", __func__, __LINE__);
+    if (nl_connect(nl_get_sock, NETLINK_ROUTE) < 0) {
+        wifi_hal_error_print("%s:%d Failed to connect netlink socket\n", __func__, __LINE__);
+        nl_socket_free(nl_get_sock);
+        return RETURN_ERR;
+    }
+
+    ret = rtnl_link_get_kernel(nl_get_sock, 0, ifname, &link);
+    if (ret < 0 || link == NULL) {
+        wifi_hal_dbg_print("%s:%d Interface %s not found: %s\n", __func__, __LINE__, ifname,
+            nl_geterror(ret));
+        nl_socket_free(nl_get_sock);
+        return RETURN_ERR;
+    }
+
+    pStats->radio_PacketsReceived = rtnl_link_get_stat(link, RTNL_LINK_RX_PACKETS);
+    pStats->radio_PacketsSent = rtnl_link_get_stat(link, RTNL_LINK_TX_PACKETS);
+    pStats->radio_BytesReceived = rtnl_link_get_stat(link, RTNL_LINK_RX_BYTES);
+    pStats->radio_BytesSent = rtnl_link_get_stat(link, RTNL_LINK_TX_BYTES);
+    pStats->radio_ErrorsReceived = rtnl_link_get_stat(link, RTNL_LINK_RX_ERRORS);
+    pStats->radio_ErrorsSent = rtnl_link_get_stat(link, RTNL_LINK_TX_ERRORS);
+    pStats->radio_DiscardPacketsReceived = rtnl_link_get_stat(link, RTNL_LINK_RX_DROPPED);
+    pStats->radio_DiscardPacketsSent = rtnl_link_get_stat(link, RTNL_LINK_TX_DROPPED);
+
+    rtnl_link_put(link);
+    nl_socket_free(nl_get_sock);
     return RETURN_OK;
 }
 
@@ -1231,7 +1197,6 @@ INT wifi_getRadioTrafficStats2(INT radioIndex, wifi_radioTrafficStats2_t *output
     POINTER_CHECK(output_struct != NULL);
     radioIndex_Check(radioIndex);
     CHAR private_interface_name[MAX_BUF_SIZE] = { 0 };
-    CHAR private_interface_status[MAX_BUF_SIZE] = { 0 };
     wifi_radioTrafficStats2_t private_radioTrafficStats = { 0 };
 
     switch (radioIndex) {
@@ -1249,10 +1214,7 @@ INT wifi_getRadioTrafficStats2(INT radioIndex, wifi_radioTrafficStats2_t *output
         return WIFI_HAL_INVALID_ARGUMENTS;
     }
 
-    GetIfacestatus(private_interface_name, private_interface_status);
-    if (strcmp(private_interface_status, "1") == 0)
-        wifi_halGetIfStats(private_interface_name, &private_radioTrafficStats);
-    else
+    if (wifi_halGetIfStats(private_interface_name, &private_radioTrafficStats) != RETURN_OK)
         wifi_halGetIfStatsNull(&private_radioTrafficStats);
 
     output_struct->radio_BytesSent = private_radioTrafficStats.radio_BytesSent;
