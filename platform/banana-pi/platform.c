@@ -361,6 +361,16 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         }
 
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+        /* Non-EHT radios cannot host an MLD link, including on later VAP updates. */
+        wifi_radio_info_t *radio = get_radio_by_rdk_index(index);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: radio index %d not found\n", __func__, __LINE__, index);
+            return -1;
+        }
+        if ((radio->oper_param.variant & WIFI_80211_VARIANT_BE) == 0) {
+            vap->u.bss_info.mld_info.common_info.mld_enable = false;
+        }
+
         // Prevent modifications of MLD_Addr and link ID
         memcpy(vap->u.bss_info.mld_info.common_info.mld_addr,
             interface->vap_info.u.bss_info.mld_info.common_info.mld_addr, sizeof(mac_address_t));
@@ -1099,4 +1109,3 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     return 0;
 }
 #endif /* CONFIG_IEEE80211BE && CONFIG_MLO */
-

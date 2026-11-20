@@ -1474,7 +1474,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     if ((pre_set_vap_params_fn = get_platform_pre_create_vap_fn()) != NULL) {
         wifi_hal_info_print("%s:%d: radio index:%d pre-create vap\n", __func__, __LINE__,
             radio->index);
-        pre_set_vap_params_fn(index, map);
+        ret = pre_set_vap_params_fn(index, map);
+        if (ret != RETURN_OK) {
+            wifi_hal_error_print("%s:%d: radio index:%d pre-create vap failed rc:%d\n",
+                __func__, __LINE__, index, ret);
+            return ret;
+        }
     }
 
     // now create vaps on the interfaces
