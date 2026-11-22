@@ -55,7 +55,6 @@
 #include <wifi_hal_rdk_framework.h>
 #include <cjson/cJSON.h>
 #include <sys/types.h>
-#include <ifaddrs.h>
 #include <limits.h>
 
 /* WPS_METHOD_LIMIT */
@@ -600,33 +599,6 @@ int json_parse_boolean(const char* file_name, const char *item_name, bool *val)
 
     cJSON_Delete(json);
     return 0;
-}
-
-/* This routine will take mac address from the user and returns associated interfacename */
-bool get_ifname_from_mac(const mac_address_t *mac, char *ifname)
-{
-    struct ifaddrs *ifaddr = NULL, *tmp = NULL;
-    struct sockaddr *addr;
-    struct sockaddr_ll *ll_addr;
-    bool found = false;
-
-    if (getifaddrs(&ifaddr) != 0) {
-        wifi_hal_error_print("%s:%d: Failed to get interface information\n", __func__, __LINE__);
-        return found;
-    }
-    tmp = ifaddr;
-    while (tmp != NULL) {
-        addr = tmp->ifa_addr;
-        ll_addr = (struct sockaddr_ll*)tmp->ifa_addr;
-        if ((addr != NULL) && (addr->sa_family == AF_PACKET) && (memcmp(ll_addr->sll_addr, mac, sizeof(mac_address_t)) == 0)) {
-            strncpy(ifname, tmp->ifa_name, strlen(tmp->ifa_name));
-            found = true;
-            break;
-        }
-        tmp = tmp->ifa_next;
-    }
-    freeifaddrs(ifaddr);
-    return found;
 }
 
 int wifi_convert_freq_band_to_radio_index(int band, int *radio_index)
