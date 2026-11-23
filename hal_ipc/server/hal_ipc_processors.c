@@ -1007,8 +1007,8 @@ int ipc_server_output(struct hal_ipc_processor_desc *desc,
             }
 
             if (sync_hostapd_freq_param(desc->in.set_rm_beacon_request.ap_index) != RETURN_OK) {
-                wifi_hal_error_print("%s:%d FAIL %s sync hostapd freq for ap_index:%d\n", __func__, __LINE__,
-                                     desc->name, desc->in.set_rm_beacon_request.ap_index);
+                wifi_hal_error_print("%s:%d FAIL %s sync hostapd freq for ap_index:%d\n", __func__,
+                    __LINE__, desc->name, desc->in.set_rm_beacon_request.ap_index);
                 free(beacon_request);
                 goto error_happened;
             }
