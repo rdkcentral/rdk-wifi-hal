@@ -69,7 +69,8 @@ int sync_hostapd_freq_param(unsigned int apIndex)
 
     freq = ieee80211_chan_to_freq(country, radio_param->operatingClass, radio_param->channel);
     if (freq <= 0) {
-        wifi_hal_error_print("%s:%d: ap index:%u no frequency for op class:%u channel:%u\n", __func__, __LINE__, apIndex, radio_param->operatingClass, radio_param->channel);
+        wifi_hal_error_print("%s:%d: ap index:%u no frequency for op class:%u channel:%u\n",
+            __func__, __LINE__, apIndex, radio_param->operatingClass, radio_param->channel);
         return RETURN_ERR;
     }
     if (interface->u.ap.hapd.iface == NULL) {
