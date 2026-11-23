@@ -359,10 +359,7 @@ void init_oem_config(wifi_interface_info_t *interface)
     conf->model_description = (char *)&interface->model_description;
     conf->model_url = (char *)&interface->model_url;
 #ifndef QCOM_ATH12K_PORT
-    conf->fw_version = malloc(strlen(interface->firmware_version) + 1);
-    if (conf->fw_version != NULL) {
-        strcpy(conf->fw_version, interface->firmware_version);
-    }
+    conf->fw_version = (char *)&interface->firmware_version;
 #endif /* !QCOM_ATH12K_PORT */
 
     if (wps_dev_type_str2bin("6-0050F204-1", conf->device_type)) {
@@ -2452,6 +2449,9 @@ static void print_hw_variants_by_bitmask(uint32_t mask)
 #ifdef CONFIG_IEEE80211BE
         "WIFI_80211_VARIANT_BE",
 #endif /* CONFIG_IEEE80211BE */
+#ifdef CONFIG_IEEE80211BN
+         "WIFI_80211_VARIANT_BN",
+#endif
     };
 
     for (i = 0; i < ARRAY_SIZE(wifi_mode_strings); i++) {
@@ -3286,6 +3286,7 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
 #if HOSTAPD_VERSION >= 210
     unsigned short max_rsnx_ie_len = 50;
 #endif /* HOSTAPD_VERSION >= 210 */
+    const unsigned char *auth_addr;
     vap = &interface->vap_info;
     sec = &vap->u.sta_info.security;
     backhaul = &interface->u.sta.backhaul;
@@ -3564,7 +3565,17 @@ void update_wpa_sm_params(wifi_interface_info_t *interface)
         }
     }
 #endif
-    wpa_sm_notify_assoc(sm, sm->bssid);
+    /* MLO: notify with the AP MLD address, not the per-link BSSID, so
+     * wpa_sm_get_auth_addr()'s fallback stays correct for PTK derivation. */
+    auth_addr = sm->bssid;
+#if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+    if (interface->mlo_params.valid_links > 0 && interface->mlo_params.assoc_link_id >= 0 &&
+        interface->mlo_params.assoc_link_id < MAX_NUM_MLD_LINKS &&
+        !is_zero_ether_addr(interface->mlo_params.mld_addr)) {
+        auth_addr = interface->mlo_params.mld_addr;
+    }
+#endif
+    wpa_sm_notify_assoc(sm, auth_addr);
 }
 
 static void wpa_sm_eapol_notify_done(void *ctx)
