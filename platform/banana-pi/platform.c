@@ -369,7 +369,27 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             continue;
         }
 
+        if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+            continue;
+        }
+
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
+        /* Non-EHT radios cannot host an MLD link, including on later VAP updates. */
+        wifi_radio_info_t *radio = get_radio_by_rdk_index(index);
+        if (radio == NULL) {
+            wifi_hal_error_print("%s:%d: radio index %d not found\n", __func__, __LINE__, index);
+            return -1;
+        }
+        if ((radio->oper_param.variant & WIFI_80211_VARIANT_BE) == 0) {
+            vap->u.bss_info.mld_info.common_info.mld_enable = false;
+        }
+
+        // Prevent modifications of MLD_Addr and link ID
+        memcpy(vap->u.bss_info.mld_info.common_info.mld_addr,
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_addr, sizeof(mac_address_t));
+        vap->u.bss_info.mld_info.common_info.mld_link_id =
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
+
         if (has_config_changed(&interface->vap_info, vap) == false ||
             (interface->u.ap.conf.disable_11be == true) ||
             (interface->vap_info.vap_mode != wifi_vap_mode_ap)) {
@@ -398,6 +418,7 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             interface->vap_info.u.bss_info.mld_info.common_info.mld_enable =
                 vap->u.bss_info.mld_info.common_info.mld_enable;
             interface->vap_info.u.bss_info.enabled = vap->u.bss_info.enabled;
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id = UNDEFINED_MLD_LINK_ID;
 
             //TODO: Above order - first getting interface, then changing the mld_enable/enabled values
             //seems weird but it is important, as wifi_hal_get_first_mld_interface due to its structure
@@ -429,11 +450,6 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 }
             }
 
-            // Set link_id to NA in DML
-            vap->u.bss_info.mld_info.common_info.mld_link_id = NL80211_DRV_LINK_ID_NA;
-            interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id =
-                NL80211_DRV_LINK_ID_NA;
-            continue;
         } else if (is_mlo_enabled == false && should_enable_mlo == true) {
             // We need to update data now since at this point vap_info is not yet copied
             interface->vap_info.u.bss_info.mld_info.common_info.mld_enable =
@@ -454,10 +470,11 @@ int platform_pre_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             }
         }
 
-        // This is feedback info to datamodel on MLD address
+        // Update MLD_Addr and link ID
         memcpy(vap->u.bss_info.mld_info.common_info.mld_addr,
-            interface->vap_info.u.bss_info.mld_info.common_info.mld_addr,
-            sizeof(vap->u.bss_info.mld_info.common_info.mld_addr));
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_addr, sizeof(mac_address_t));
+        vap->u.bss_info.mld_info.common_info.mld_link_id =
+            interface->vap_info.u.bss_info.mld_info.common_info.mld_link_id;
 #endif // CONFIG_IEEE80211BE && CONFIG_GENERIC_MLO
     }
     return 0;
@@ -730,7 +747,7 @@ static int get_sta_list(wifi_interface_info_t *interface, sta_list_t *sta_list)
 
 static void set_wifi_standard_from_rate(struct nlattr **rate, char *cli_OperatingStandard)
 {
-#if defined(NL80211_RATE_INFO_EHT_MCS) && defined(CONFIG_IEEE80211BE)
+#if defined(CONFIG_IEEE80211BE)
     if (rate[NL80211_RATE_INFO_EHT_MCS]) {
         snprintf(cli_OperatingStandard, BPI_LEN_64, "be");
     } else
@@ -1105,4 +1122,3 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     return 0;
 }
 #endif /* CONFIG_IEEE80211BE && CONFIG_MLO */
-
