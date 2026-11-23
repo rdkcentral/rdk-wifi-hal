@@ -1476,8 +1476,8 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             radio->index);
         ret = pre_set_vap_params_fn(index, map);
         if (ret != RETURN_OK) {
-            wifi_hal_error_print("%s:%d: radio index:%d pre-create vap failed rc:%d\n",
-                __func__, __LINE__, index, ret);
+            wifi_hal_error_print("%s:%d: radio index:%d pre-create vap failed rc:%d\n", __func__,
+                __LINE__, index, ret);
             return ret;
         }
     }
