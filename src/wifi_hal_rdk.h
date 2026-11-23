@@ -174,10 +174,10 @@ typedef struct _wifi_EapStats_t{    // Passpoint stats defined rdkb-1317
 
 #ifdef HOSTAPD_2_12
 #include "common/ieee802_11_defs.h"
-#endif
+#endif /* HOSTAPD_2_12 */
 #ifndef DPP_OUI_TYPE
 #define DPP_OUI_TYPE  0x1a // OUI Type
-#endif
+#endif /* DPP_OUI_TYPE */
 #define DPP_CONFPROTO 0x01 // denoting the DPP Configuration protocol
 
 #define WIFI_STATUS_OK 0

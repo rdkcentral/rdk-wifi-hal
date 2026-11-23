@@ -187,8 +187,11 @@ static void nl80211_del_station_event(wifi_interface_info_t *interface, struct n
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     if (interface->vap_info.vap_mode != wifi_vap_mode_ap || is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
 #if defined(BANANA_PI_PORT) && (HOSTAPD_VERSION >= 211)
-        supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
-#endif
+        /* Skip station event delivery if the STA state machine was already torn down. */
+        if (interface->u.sta.wpa_sm != NULL) {
+            supplicant_event(&interface->wpa_s, EVENT_DISASSOC, &event);
+        }
+#endif /* BANANA_PI_PORT && HOSTAPD_VERSION >= 211 */
     } else {
         wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DISASSOC, &event);
     }
@@ -853,6 +856,12 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     vap = &interface->vap_info;
     interface->u.sta.state = WPA_DISCONNECTED;
 
+#if defined(CONFIG_GENERIC_MLO) && defined(CONFIG_IEEE80211BE)
+    /* Reset MLO state on disconnect to prevent stale link data on reconnect. */
+    memset(&interface->mlo_params, 0, sizeof(interface->mlo_params));
+    interface->mlo_params.assoc_link_id = -1;
+#endif /* CONFIG_GENERIC_MLO & CONFIG_IEEE80211BE */
+
 #if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     if (interface->vap_info.vap_mode == wifi_vap_mode_sta &&
         is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
@@ -1018,7 +1027,7 @@ static void ch_switch_update_hostap_config(wifi_radio_info_t *radio, u8 channel,
 static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, struct nlattr **tb, wifi_chan_eventType_t wifi_chan_event_type)
 {
     int ifidx = 0, freq = 0, bw = NL80211_CHAN_WIDTH_20_NOHT, cf1 = 0, cf2 = 0;
-#if defined(CONFIG_GENERIC_MLO)
+#if defined(CONFIG_GENERIC_MLO) && defined(QCOM_ATH12K_PORT)
     int link_id = -1;
 #endif
     enum nl80211_channel_type ch_type = 0;
@@ -1040,7 +1049,7 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         ifidx = nla_get_u32(tb[NL80211_ATTR_IFINDEX]);
     }
 
-#if defined(CONFIG_GENERIC_MLO)
+#if defined(CONFIG_GENERIC_MLO) && defined(QCOM_ATH12K_PORT)
     if (tb[NL80211_ATTR_MLO_LINK_ID]) {
         link_id = nla_get_u8(tb[NL80211_ATTR_MLO_LINK_ID]);
         if (link_id >= 0) {
@@ -1053,7 +1062,7 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
                 link_iface ? link_iface->name : "NULL");
         }
     }
-#endif
+#endif /* QCOM_ATH12K_PORT */
 
     if (tb[NL80211_ATTR_WIPHY_FREQ] == NULL) {
         wifi_hal_dbg_print("%s:%d: channel attribute not present\n", __func__, __LINE__);

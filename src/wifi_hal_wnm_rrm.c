@@ -144,7 +144,7 @@ static inline bool is_valid_ap_index(int ap_index)
     return (ap_index >= MIN_AP_INDEX && ap_index < MAX_AP_INDEX);
 }
 
-#if !defined(QCOM_ATH12K_PORT)
+#ifndef QCOM_ATH12K_PORT
 /* Implementation is based on ieee802_11_send_bss_trans_mgmt_request() from wnm_ap.c */
 static int wifi_ieee802_11_send_bss_trans_mgmt_request(struct hostapd_data *hapd,
     const u8 *addr,
@@ -405,7 +405,7 @@ exit:
     free(request);
     return ret;
 }
-#endif /* !defined(QCOM_ATH12K_PORT) */
+#endif /* !QCOM_ATH12K_PORT */
 
 #if 0
 /* Implemented in wnm_ap.c */
@@ -422,7 +422,7 @@ void ap_sta_reset_steer_flag_timer(void *eloop_ctx, void *timeout_ctx)
 }
 #endif
 
-#if !defined(QCOM_ATH12K_PORT)
+#ifndef QCOM_ATH12K_PORT
 /* Implementation is based on ieee802_11_rx_bss_trans_mgmt_resp() */
 static int handle_rx_bss_trans_mgmt_resp(wifi_interface_info_t *interface,
     const mac_address_t addr, const struct bss_tm_resp *frm, size_t len)
@@ -584,7 +584,7 @@ static int handle_rx_wnm_notification_req(wifi_interface_info_t *interface,
         }
         return WIFI_HAL_UNSUPPORTED;
 }
-#endif /* !defined(QCOM_ATH12K_PORT) */
+#endif /* !QCOM_ATH12K_PORT */
 
 /* Only MLO builds can ever request a beacon report per MLD link; other builds send a single
  * request. */
@@ -659,7 +659,7 @@ int handle_wnm_action_frame(wifi_interface_info_t *interface, const mac_address_
         }
         return WIFI_HAL_UNSUPPORTED;
 }
-#endif /* !defined(PLATFORM_LINUX) && !defined(QCOM_ATH12K_PORT) || ... */
+#endif /* (!PLATFORM_LINUX && !QCOM_ATH12K_PORT) || _PLATFORM_BANANAPI_R4_ || _PLATFORM_RASPBERRYPI_ */
 
 /* based on hostapd_send_beacon_req() */
 int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
@@ -1075,7 +1075,7 @@ int wifi_rrm_send_beacon_req(wifi_interface_info_t *interface, const u8 *addr,
 
     return dialog_token;
 }
-#if !defined(QCOM_ATH12K_PORT)
+#ifndef QCOM_ATH12K_PORT
 static void wifi_set_disassoc_timer(struct hostapd_data *hapd, struct sta_info *sta,
     int disassoc_timer)
 {
@@ -1107,7 +1107,7 @@ static void wifi_set_disassoc_timer(struct hostapd_data *hapd, struct sta_info *
         timeout % 1000 * 1000,
         ap_handle_timer, hapd, sta);
 }
-#endif /*!defined(QCOM_ATH12K_PORT) */
+#endif /* !QCOM_ATH12K_PORT */
 
 #if (!defined(PLATFORM_LINUX) && !defined(QCOM_ATH12K_PORT)) || \
     defined(_PLATFORM_BANANAPI_R4_) || defined(_PLATFORM_RASPBERRYPI_)
@@ -1194,13 +1194,13 @@ int wifi_wnm_send_bss_tm_req(wifi_interface_info_t *interface, struct sta_info *
         os_free(buf);
         return -1;
     }
-#else
+#else /* HOSTAPD_VERSION < 210 */
     if (hostapd_drv_send_mlme(hapd, buf, pos - buf, 0) < 0) {
         wifi_hal_dbg_print("%s:%d: Failed to send BSS Transition Management Request frame\n", __func__, __LINE__);
         os_free(buf);
         return -1;
     }
-#endif
+#endif /* HOSTAPD_VERSION >= 210 */
     os_free(buf);
 
     if (disassoc_timer) {
@@ -1210,7 +1210,7 @@ int wifi_wnm_send_bss_tm_req(wifi_interface_info_t *interface, struct sta_info *
 
     return dialog_token;
 }
-#endif
+#endif /* (!PLATFORM_LINUX && !QCOM_ATH12K_PORT) || _PLATFORM_BANANAPI_R4_ || _PLATFORM_RASPBERRYPI_ */
 
 /*************************************/
 
