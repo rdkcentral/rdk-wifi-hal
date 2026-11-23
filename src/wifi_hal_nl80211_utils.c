@@ -55,6 +55,9 @@ static unsigned int interface_index_map_size;
 static wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #ifdef RASPBERRY_PI_PORT
 #if defined(PLATFORM_LINUX)
+    /* Raspberry Pi PLATFORM_LINUX: no longer actively used.
+     * Development has moved to Banana Pi and other platforms. This minimal fallback is kept
+     * for backwards compatibility only. For active platforms, InterfaceMap.json is used. */
     {0, 0,  "wlan0",   "",  "brlan0",    0,    0,      "private_ssid_2g"},
 #else
     {0, 0,  "wlan0",   "",  "brlan0",    0,    0,      "private_ssid_2g"},
@@ -1870,6 +1873,9 @@ static const wifi_enum_to_str_map_t wifi_variant_Map[] =
 #ifdef CONFIG_IEEE80211BE
     {WIFI_80211_VARIANT_BE, "be"},
 #endif /* CONFIG_IEEE80211BE */
+#ifdef CONFIG_IEEE80211BN
+    {WIFI_80211_VARIANT_BN, "bn"},
+#endif /* CONFIG_IEEE80211BN */
 };
 
 static const wifi_enum_to_str_map_t wifi_bandwidth_Map[] =
@@ -5180,17 +5186,20 @@ int wifi_ieee80211Variant_to_str(char *dest, size_t dest_size, wifi_ieee80211Var
             }
             if (variant &
                 (WIFI_80211_VARIANT_N | WIFI_80211_VARIANT_AC | WIFI_80211_VARIANT_AX |
-                    WIFI_80211_VARIANT_BE)) {
-                if ((variant & WIFI_80211_VARIANT_BE) && (variant & WIFI_80211_VARIANT_AX)) {
-                    // Wi-Fi 7 supports both AX (6E base) and BE (Wi-Fi 7)
+                    WIFI_80211_VARIANT_BE | WIFI_80211_VARIANT_BN)) {
+                if (variant & WIFI_80211_VARIANT_BN) {
+                    // Wi-Fi 8 supports both AX (6E base) and BE (Wi-Fi 7)
                     str_list_append(dest, dest_size, "ax");
                     str_list_append(dest, dest_size, "be");
+                    str_list_append(dest, dest_size, "bn");
+                } else if (variant & WIFI_80211_VARIANT_BE) {
+                    // Wi-Fi 7 supports AX (6E base)
+                    str_list_append(dest, dest_size, "ax");
+                    str_list_append(dest, dest_size, "be");
+                } else if (variant & WIFI_80211_VARIANT_AX) {
+                    str_list_append(dest, dest_size, "ax");
                 } else {
-                    if (variant & WIFI_80211_VARIANT_BE) {
-                        mode = "be";
-                    } else if (variant & WIFI_80211_VARIANT_AX) {
-                        mode = "ax";
-                    } else if (variant & WIFI_80211_VARIANT_AC) {
+                    if (variant & WIFI_80211_VARIANT_AC) {
                         mode = "ac";
                     } else {
                         mode = "n";
@@ -5824,85 +5833,6 @@ void init_interface_map(void)
 }
 #endif /* CONFIG_WIFI_EMULATOR */
 
-void concat_band_to_vap_name(wifi_vap_name_t vap_name, unsigned int rdk_radio_index)
-{
-    switch (rdk_radio_index) {
-    case 0:
-        strncat((char *)vap_name, "2g", strlen("2g") + 1);
-        break;
-    case 1:
-        strncat((char *)vap_name, "5g", strlen("5g") + 1);
-        break;
-    case 2:
-        strncat((char *)vap_name, "6g", strlen("6g") + 1);
-        break;
-    default:
-        wifi_hal_error_print("%s:%d: Invalid rdk_radio_index:%d for vap_name:%s\n", __func__,
-            __LINE__, rdk_radio_index, vap_name);
-    }
-}
-
-int configure_vap_name_basedon_colocated_mode(char *ifname, int colocated_mode)
-{
-    unsigned int index = 0, i = 0;
-    wifi_interface_info_t *interface = NULL;
-    int vap_count = 0;
-    int index_map_size = get_sizeof_interfaces_index_map();
-    for (index = 0; index < index_map_size; index++) {
-        if (strncmp(interface_index_map[index].interface_name, ifname, strlen(ifname)) == 0) {
-            switch (colocated_mode) {
-            case 0:
-                strcpy((char *)interface_index_map[index].vap_name, "mesh_sta_");
-                concat_band_to_vap_name((char *)interface_index_map[index].vap_name,
-                    interface_index_map[index].rdk_radio_index);
-                break;
-            case 1:
-                for (i = 0; i < index_map_size; i++) {
-                    if (interface_index_map[i].rdk_radio_index ==
-                        interface_index_map[index].rdk_radio_index) {
-                        vap_count++;
-                    }
-                }
-                /* If only one VAP in collocated mode, configure it as mesh_back_haul */
-                if (vap_count == 1) {
-                    strcpy((char *)interface_index_map[index].vap_name, "mesh_backhaul_");
-                    concat_band_to_vap_name((char *)interface_index_map[index].vap_name,
-                        interface_index_map[index].rdk_radio_index);
-                }
-                /* Check the interface should be either fronthaul or backhaul */
-                if (is_wifi_hal_vap_private(interface_index_map[index].index) == false &&
-                    is_wifi_hal_vap_mesh_backhaul(interface_index_map[index].index) == false) {
-                    /* Error case */
-                    wifi_hal_error_print(
-                        "%s:%d: Invalid vap_name:%s for ifname:%s for colocated_mode:%d\n",
-                        __func__, __LINE__, interface_index_map[index].vap_name, ifname,
-                        colocated_mode);
-                    return -1;
-                }
-                break;
-            default:
-                /* Error case */
-                wifi_hal_error_print("%s:%d: Invalid colocated_mode:%d for ifname:%s\n", __func__,
-                    __LINE__, colocated_mode, ifname);
-                return -1;
-            }
-            wifi_hal_dbg_print("%s:%d: vap_name:%s configured for ifname:%s vap_index:%d\n",
-                __func__, __LINE__, interface_index_map[index].vap_name, ifname,
-                interface_index_map[index].index);
-            if (colocated_mode == 0) {
-                interface = get_interface_by_vap_index(interface_index_map[index].index);
-                if (interface != NULL && interface->vap_info.vap_mode == wifi_vap_mode_ap) {
-                    memset(&interface->u, 0, sizeof(interface->u));
-                }
-            }
-            return 0;
-        }
-    }
-    wifi_hal_error_print("%s:%d: Interface:%s not present in interface_index_map\n", __func__,
-        __LINE__, ifname);
-    return -1;
-}
-
 char *wifi_hal_get_mld_name_by_interface_name(char *ifname)
 {
     for (unsigned int i = 0; i < get_sizeof_interfaces_index_map(); i++) {
@@ -6040,7 +5970,7 @@ wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *i
     wifi_radio_info_t *radio;
     wifi_interface_info_t *interface_iter;
 
-    if (!wifi_hal_is_mld_enabled(interface)) {
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap || !wifi_hal_is_mld_enabled(interface)) {
         return interface;
     }
 
@@ -6053,6 +5983,10 @@ wifi_interface_info_t *wifi_hal_get_first_mld_interface(wifi_interface_info_t *i
         }
 
         hash_map_foreach(radio->interface_map, interface_iter) {
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap) {
+                continue;
+            }
+
             if (!wifi_hal_is_mld_enabled(interface_iter)) {
                 continue;
             }
@@ -6360,6 +6294,12 @@ int reload_interface(wifi_interface_info_t *interface)
 {
     char *interface_name = wifi_hal_get_interface_name(interface);
 
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_dbg_print("%s:%d: interface:%s is not an AP, skipping hostapd reload\n", __func__,
+            __LINE__, interface_name);
+        return 0;
+    }
+
     wifi_hal_dbg_print("%s:%d: interface:%s reload hostapd config\n", __func__, __LINE__,
         interface_name);
 
@@ -6368,6 +6308,15 @@ int reload_interface(wifi_interface_info_t *interface)
 #endif /* CONFIG_GENERIC_MLO */
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+
+    if (interface->u.ap.hapd.iface == NULL || !interface->bss_started) {
+        /* BSS not started or already torn down — nothing to reload or deinit */
+        wifi_hal_dbg_print("%s:%d: interface:%s hapd iface not initialized, skipping reload\n",
+            __func__, __LINE__, interface_name);
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        return 0;
+    }
+
     if (hostapd_reload_config(interface->u.ap.hapd.iface) < 0) {
         wifi_hal_error_print("%s:%d: interface:%s failed to reload VAP configuration\n", __func__,
             __LINE__, interface_name);
@@ -6465,6 +6414,9 @@ static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
         }
 
         hash_map_foreach(radio->interface_map, interface_iter) {
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap) {
+                continue;
+            }
             if (interface_iter->vap_info.u.bss_info.enabled == false) {
                 continue;
             }
@@ -6501,6 +6453,9 @@ static int reload_mlo_vap_configuration(wifi_interface_info_t *interface)
         wifi_radio_info_t *radio = get_radio_by_rdk_index(i);
 
         hash_map_foreach(radio->interface_map, interface_iter) {
+            if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap) {
+                continue;
+            }
             if (interface_iter->vap_info.u.bss_info.enabled == false) {
                 continue;
             }
