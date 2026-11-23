@@ -703,6 +703,9 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     wifi_radio_operationParam_t *old_operationParam = NULL;
     platform_set_radio_pre_init_t set_radio_pre_init_fn;
     bool is_channel_changed;
+#ifdef BANANA_PI_PORT
+    bool transmit_power_updated = false;
+#endif
     int ret;
 
 #ifdef CMXB7_PORT
@@ -970,7 +973,15 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
         if (old_operationParam->transmitPower != operationParam->transmitPower) {
             wifi_hal_info_print("%s:%d: OldTransmitPower:%d, NewTransmitPower:%d updating\n", __func__, __LINE__, old_operationParam->transmitPower, operationParam->transmitPower);
+#ifdef BANANA_PI_PORT
+            if (wifi_hal_setRadioTransmitPower(index, operationParam->transmitPower) != RETURN_OK) {
+                wifi_hal_error_print("%s:%d: Error setting transmit power\n", __func__, __LINE__);
+                goto reload_config;
+            }
+            transmit_power_updated = true;
+#else
             (void)wifi_hal_setRadioTransmitPower(index, operationParam->transmitPower);
+#endif
         }
         radio->oper_param.transmitPower = operationParam->transmitPower;
 		radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
@@ -1036,6 +1047,11 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                         memcpy((unsigned char *)&radio->oper_param,
                             (unsigned char *)old_operationParam,
                             sizeof(wifi_radio_operationParam_t));
+#ifdef BANANA_PI_PORT
+                        if (transmit_power_updated) {
+                            radio->oper_param.transmitPower = operationParam->transmitPower;
+                        }
+#endif
                         free(old_operationParam);
                         old_operationParam = NULL;
                         return RETURN_ERR;
