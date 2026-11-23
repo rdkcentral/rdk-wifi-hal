@@ -2383,7 +2383,7 @@ static void platform_beacon_update(wifi_radio_index_t r_index, wifi_vap_info_map
                 wifi_interface_info_t *interface_iter = NULL;
                 wifi_radio_info_t *radio_iter = get_radio_by_rdk_index(radio_index);
 
-                if (radio_iter == NULL) {
+                if (radio_iter == NULL || radio_iter->oper_param.enable == false) {
                     continue;
                 }
 
