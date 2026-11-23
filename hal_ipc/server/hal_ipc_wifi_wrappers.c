@@ -474,8 +474,7 @@ INT wifi_hal_getSSIDName(   INT apIndex,
         } else {
             return RETURN_ERR;
         }
-        for (n = 0; n < max && ssid[n] != '\0'; n++) {
-        }
+        for (n = 0; n < max && ssid[n] != '\0'; n++) {}
         memcpy(output_string, ssid, n);
         output_string[n] = '\0';
     }
