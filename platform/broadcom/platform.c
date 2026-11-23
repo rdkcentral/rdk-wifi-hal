@@ -701,7 +701,9 @@ int platform_mlo_init(void)
     }
     mlo_init_map = 0;
     memset(mld_vapidx, -1, sizeof(mld_vapidx));
-    memset(_vap_mld_unit, -1, sizeof(_vap_mld_unit));
+    for (i = 0; i < MAX_VAP; i++) {
+        _vap_mld_unit[i] = UNDEFINED_MLD_ID;
+    }
     wifi_hal_info_print("### %s: wl_mlo_config=[%s] MAP=%d radio_cnt %d radio_map %d init_map %d ###\n",
          __func__, value, mlo_MAP, mlo_radio_cnt, mlo_radio_map, mlo_init_map);
 
@@ -753,7 +755,7 @@ void platform_mld_up(int mld_unit, bool up)
  */
 void platform_mld_update(wifi_vap_info_t *vap)
 {
-    int i, mld_unit = -1, vapidx = -1;
+    int i, mld_unit = UNDEFINED_MLD_ID, vapidx = -1;
     wifi_mld_common_info_t *mld = NULL;
 
     if (vap == NULL) {
@@ -787,7 +789,7 @@ void platform_mld_update(wifi_vap_info_t *vap)
         for (i = 0; i < MLD_UNIT_COUNT; i++) {
             if (mld_vapidx[i][vap->radio_index] == vap->vap_index) {
                 mld_vapidx[i][vap->radio_index] = -1;
-                _vap_mld_unit[vap->vap_index] = -1;
+                _vap_mld_unit[vap->vap_index] = UNDEFINED_MLD_ID;
                 break;
             }
         }
@@ -968,7 +970,7 @@ static int platform_vap_enable_update(wifi_vap_info_map_t *vap_map, int vap_maps
     }
     /* Bring up all non-MLO BSSes */
     for (i = 0; i < MAX_VAP; i++) {
-        if (_vap_enable[i] && _vap_mld_unit[i] < 0) {
+        if (_vap_enable[i] && (_vap_mld_unit[i] == UNDEFINED_MLD_ID)) {
             wifi_hal_info_print("### %s: calling non MLO platform_bss_up(vap_idx:%d, en:%d) ###\n",
                 __func__, i, _vap_enable[i]);
             platform_bss_up(i, _vap_enable[i]);
@@ -2340,8 +2342,8 @@ static void platform_snapshot_mld_units(wifi_vap_info_map_t *map, u8 old_mld_uni
         }
 
         vap_index = map->vap_array[index].vap_index;
-        unit = (vap_index >= 0 && vap_index < MAX_VAP) ? _vap_mld_unit[vap_index] : -1;
-        old_mld_unit[index] = (unit >= 0 && unit < MLD_UNIT_COUNT) ? (u8)unit : UNDEFINED_MLD_ID;
+        unit = (vap_index >= 0 && vap_index < MAX_VAP) ? _vap_mld_unit[vap_index] : UNDEFINED_MLD_ID;
+        old_mld_unit[index] = (unit >= 0 && unit < MLD_UNIT_COUNT) ? unit : UNDEFINED_MLD_ID;
     }
 }
 #endif /* MLO_ENAB */
