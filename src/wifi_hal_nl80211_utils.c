@@ -5199,12 +5199,7 @@ int wifi_ieee80211Variant_to_str(char *dest, size_t dest_size, wifi_ieee80211Var
                 } else if (variant & WIFI_80211_VARIANT_AX) {
                     str_list_append(dest, dest_size, "ax");
                 } else {
-                    if (variant & WIFI_80211_VARIANT_AC) {
-                        mode = "ac";
-                    } else {
-                        mode = "n";
-                    }
-                    str_list_append(dest, dest_size, mode);
+                    str_list_append(dest, dest_size, variant & WIFI_80211_VARIANT_AC ? "ac" : "n");
                 }
             }
         } else {
