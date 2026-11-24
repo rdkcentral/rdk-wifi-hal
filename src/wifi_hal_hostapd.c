@@ -2757,6 +2757,27 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
              __func__, __LINE__, radio->index);
      }
 #endif /* CONFIG_IEEE80211BN */
+#if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT)
+    iconf->npca_enable = 0;
+    iconf->npca_primary_channel = 0;
+    iconf->npca_punct_bitmap = 0;
+    if ((param->variant & WIFI_80211_VARIANT_BN) && param->npca_enable) {
+        if (param->npca_channel > UINT8_MAX || param->npca_bitmap > UINT16_MAX) {
+            wifi_hal_error_print("%s:%d: Invalid NPCA parameters for radio %d\n",
+                __func__, __LINE__, radio->index);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+            return RETURN_ERR;
+        }
+        iconf->ieee80211bn = 1;
+        iconf->npca_enable = 1;
+        iconf->npca_primary_channel = (u8)param->npca_channel;
+        iconf->npca_punct_bitmap = (u16)param->npca_bitmap;
+        wifi_hal_dbg_print("%s:%d: NPCA configured for radio %d: "
+            "primary_channel=%u punct_bitmap=0x%04x\n",
+            __func__, __LINE__, radio->index, iconf->npca_primary_channel,
+            iconf->npca_punct_bitmap);
+    }
+#endif
 
      switch (param->channelWidth) {
      case WIFI_CHANNELBANDWIDTH_80MHZ:
