@@ -1367,9 +1367,9 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
             vap = &interface->vap_info;
 
             mld_conf = &vap->u.bss_info.mld_info.common_info;
-
             nvram_update_wl_mlo_config(vap->radio_index,
-                    mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
+                    (mld_conf->mld_enable && mld_conf->mld_link_id < MAX_NUM_MLD_LINKS) ?
+                    mld_conf->mld_link_id : -1, &nvram_changed);
 
 			if (nvram_changed & USER_NVRAM_CHANGED) {
 				wifi_hal_info_print("%s:%d nvram was changed => nvram_commit()\n", __func__, __LINE__);
@@ -5429,7 +5429,8 @@ int update_hostap_mlo(wifi_interface_info_t *interface)
     if (is_vap_private) {
          if (!radio->oper_param.EcoPowerDown) {
              nvram_update_wl_mlo_config(vap->radio_index,
-                     mld_conf->mld_link_id < MAX_NUM_MLD_LINKS ? mld_conf->mld_link_id : -1, &nvram_changed);
+                     (mld_conf->mld_enable && mld_conf->mld_link_id < MAX_NUM_MLD_LINKS) ?
+                     mld_conf->mld_link_id : -1, &nvram_changed);
          } else {
              wifi_hal_info_print("%s:%d Not updating the mlo_config for radio_index : %d due to ecomode\n",
                 __func__, __LINE__, vap->radio_index);
