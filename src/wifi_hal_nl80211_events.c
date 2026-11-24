@@ -325,6 +325,34 @@ static void nl80211_authenticate_event(wifi_interface_info_t *interface, struct 
 }
 #endif //CONFIG_WIFI_EMULATOR || BANANA_PI_PORT
 
+/* Answer to wifi_drv_poll_client(): the station ACKed the null-data frame, hostapd keeps it. */
+static void nl80211_probe_client_event(wifi_interface_info_t *interface, struct nlattr **tb)
+{
+    union wpa_event_data event;
+    mac_addr_str_t mac_str;
+
+    if (tb[NL80211_ATTR_MAC] == NULL) {
+        wifi_hal_dbg_print("%s:%d: mac attribute not present\n", __func__, __LINE__);
+        return;
+    }
+    if (tb[NL80211_ATTR_ACK] == NULL) {
+        wifi_hal_dbg_print("%s:%d: %s: poll of %s not acked\n", __func__, __LINE__,
+            interface->name, to_mac_str(nla_data(tb[NL80211_ATTR_MAC]), mac_str));
+        return;
+    }
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap ||
+        is_wifi_hal_vap_mesh_sta(interface->vap_info.vap_index)) {
+        return;
+    }
+
+    memset(&event, 0, sizeof(event));
+    memcpy(event.client_poll.addr, nla_data(tb[NL80211_ATTR_MAC]), sizeof(event.client_poll.addr));
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    wpa_supplicant_event(&interface->u.ap.hapd, EVENT_DRIVER_CLIENT_POLL_OK, &event);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+}
+
 static void nl80211_frame_tx_status_event(wifi_interface_info_t *interface, struct nlattr **tb)
 {
     struct nlattr *frame, *addr, *cookie, *ack, *attr;
@@ -1920,6 +1948,10 @@ static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, stru
 
     case NL80211_CMD_VENDOR:
         nl80211_vendor_event(interface, tb);
+        break;
+
+    case NL80211_CMD_PROBE_CLIENT:
+        nl80211_probe_client_event(interface, tb);
         break;
 
    default:
