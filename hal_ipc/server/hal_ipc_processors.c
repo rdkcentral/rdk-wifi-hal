@@ -57,6 +57,10 @@ int sync_hostapd_freq_param(unsigned int apIndex)
     }
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d radio is NULL for apIndex=%u\n", __func__, __LINE__, apIndex);
+        return RETURN_ERR;
+    }
     radio_param = &radio->oper_param;
 
     get_coutry_str_from_code(radio_param->countryCode, country);
@@ -172,6 +176,12 @@ int ipc_server_output(struct hal_ipc_processor_desc *desc,
             array_size = desc->in.get_radio_channel_stats.array_size;
 
             wifi_channelStats_t *input_output_channelStats_array, *chan_stats_tmp;
+
+            if (array_size <= 0) {
+                wifi_hal_error_print("%s:%d: Invalid radio channel stats array_size=%d\n",
+                    __func__, __LINE__, array_size);
+                goto error_happened;
+            }
 
             if (array_size > HAL_IPC_RADIO_CHANNELS_MAX) {
                 array_size = HAL_IPC_RADIO_CHANNELS_MAX;
