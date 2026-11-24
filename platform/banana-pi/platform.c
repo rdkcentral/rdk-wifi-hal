@@ -130,11 +130,6 @@ int platform_set_radio_pre_init(wifi_radio_index_t index, wifi_radio_operationPa
 
 int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 {
-#if (HOSTAPD_VERSION >= 211)
-    wifi_vap_info_t *vap;
-    wifi_interface_info_t *interface;
-    struct hostapd_data *hapd, *link_bss;
-
     if (map == NULL) {
         wifi_hal_error_print("%s:%d: wifi_vap_info_map_t *map is NULL\n", __func__, __LINE__);
         return -1;
@@ -143,6 +138,11 @@ int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         wifi_hal_error_print("%s:%d: invalid num_vaps %u\n", __func__, __LINE__, map->num_vaps);
         return -1;
     }
+
+#if (HOSTAPD_VERSION >= 211)
+    wifi_vap_info_t *vap;
+    wifi_interface_info_t *interface;
+    struct hostapd_data *hapd, *link_bss;
 
     for (unsigned int i = 0; i < map->num_vaps; i++) {
         vap = &map->vap_array[i];
@@ -171,7 +171,7 @@ int platform_create_vap(wifi_radio_index_t index, wifi_vap_info_map_t *map)
 
         /* beacon has to be set twice to make it broadcast */
         hapd = &interface->u.ap.hapd;
-	if (hapd->mld == NULL) {
+        if (hapd->mld == NULL) {
             wifi_hal_error_print("%s:%d: no mld for vap_index %d\n", __func__, __LINE__, vap->vap_index);
             continue;
         }
