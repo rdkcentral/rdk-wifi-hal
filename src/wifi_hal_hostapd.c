@@ -359,10 +359,7 @@ void init_oem_config(wifi_interface_info_t *interface)
     conf->model_description = (char *)&interface->model_description;
     conf->model_url = (char *)&interface->model_url;
 #ifndef QCOM_ATH12K_PORT
-    conf->fw_version = malloc(strlen(interface->firmware_version) + 1);
-    if (conf->fw_version != NULL) {
-        strcpy(conf->fw_version, interface->firmware_version);
-    }
+    conf->fw_version = (char *)&interface->firmware_version;
 #endif /* !QCOM_ATH12K_PORT */
 
     if (wps_dev_type_str2bin("6-0050F204-1", conf->device_type)) {
@@ -2438,28 +2435,31 @@ int update_mld_iface_cross_links(void)
 
 static void print_hw_variants_by_bitmask(uint32_t mask)
 {
-    int i;
-    static const char* const wifi_mode_strings[] =
-    {
-        "WIFI_80211_VARIANT_A",
-        "WIFI_80211_VARIANT_B",
-        "WIFI_80211_VARIANT_G",
-        "WIFI_80211_VARIANT_N",
-        "WIFI_80211_VARIANT_H",
-        "WIFI_80211_VARIANT_AC",
-        "WIFI_80211_VARIANT_AD",
-        "WIFI_80211_VARIANT_AX",
+    unsigned int i;
+    static const struct {
+        uint32_t mask;
+        const char *name;
+    } wifi_mode_strings[] = {
+        { WIFI_80211_VARIANT_A,  "WIFI_80211_VARIANT_A"  },
+        { WIFI_80211_VARIANT_B,  "WIFI_80211_VARIANT_B"  },
+        { WIFI_80211_VARIANT_G,  "WIFI_80211_VARIANT_G"  },
+        { WIFI_80211_VARIANT_N,  "WIFI_80211_VARIANT_N"  },
+        { WIFI_80211_VARIANT_H,  "WIFI_80211_VARIANT_H"  },
+        { WIFI_80211_VARIANT_AC, "WIFI_80211_VARIANT_AC" },
+        { WIFI_80211_VARIANT_AD, "WIFI_80211_VARIANT_AD" },
+        { WIFI_80211_VARIANT_AX, "WIFI_80211_VARIANT_AX" },
 #ifdef CONFIG_IEEE80211BE
-        "WIFI_80211_VARIANT_BE",
+        { WIFI_80211_VARIANT_BE, "WIFI_80211_VARIANT_BE" },
 #endif /* CONFIG_IEEE80211BE */
 #ifdef CONFIG_IEEE80211BN
-         "WIFI_80211_VARIANT_BN",
-#endif
+        { WIFI_80211_VARIANT_BN, "WIFI_80211_VARIANT_BN" },
+#endif /* CONFIG_IEEE80211BN */
     };
 
     for (i = 0; i < ARRAY_SIZE(wifi_mode_strings); i++) {
-        if (mask & (1ul << i))
-            wifi_hal_dbg_print("WIFI HW MODE SET[%d]: %s\n", i, wifi_mode_strings[i]);
+        if (mask & wifi_mode_strings[i].mask)
+            wifi_hal_dbg_print("WIFI HW MODE SET[0x%x]: %s\n", wifi_mode_strings[i].mask,
+                wifi_mode_strings[i].name);
     }
 }
 
@@ -2752,7 +2752,7 @@ int update_hostap_config_params(wifi_radio_info_t *radio)
      /* Enable 802.11bn (UHR/Wi-Fi 8) if radio variant includes BE and BN is requested.
      * 11BN requires 11BE which requires 11AX. */
      iconf->ieee80211bn = 0;
-     if ((param->variant & WIFI_80211_VARIANT_BE)) {
+     if ((param->variant & WIFI_80211_VARIANT_BN) && (param->variant & WIFI_80211_VARIANT_BE)) {
          /* Enable 11BN when BE is active; hardware capability check is done
          * at association time via uhr_capab[].uhr_supported */
          iconf->ieee80211bn = 1;

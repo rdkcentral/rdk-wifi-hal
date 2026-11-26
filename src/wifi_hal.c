@@ -137,10 +137,7 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     wifi_vap_info_t *vap;
     unsigned int radio_band = 0;
     char output[256] = {0};
-    mac_addr_str_t al_ctrl_mac;
-    char ifname[100] = {0};
     int ret = 0, colocated_mode;
-    bool interface_found = false;
     size_t len;
 
     NULL_PTR_ASSERT(hal);
@@ -267,23 +264,6 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
     }
     to_mac_bytes(output,hal->wifi_prop.cm_mac);
 #endif
-
-
-    memset(output, '\0', sizeof(output));
-#if defined(_PLATFORM_BANANAPI_R4_)
-    if (get_mac_address("erouter0", hal->wifi_prop.al_1905_mac) != RETURN_OK) {
-       if (get_mac_address("eth0", hal->wifi_prop.al_1905_mac) != RETURN_OK) {
-            wifi_hal_error_print("%s:%d: Unable to get AL mac address\n", __func__, __LINE__);
-            memset(hal->wifi_prop.al_1905_mac, 0, sizeof(hal->wifi_prop.al_1905_mac));
-       }
-    }
-#else
-    if (get_mac_address("eth0", hal->wifi_prop.al_1905_mac) != RETURN_OK) {
-        wifi_hal_error_print("%s:%d: Unable to get AL mac address\n", __func__, __LINE__);
-        memset(hal->wifi_prop.al_1905_mac, 0, sizeof(hal->wifi_prop.al_1905_mac));
-    }
-#endif
-
 #elif (defined(_PLATFORM_RASPBERRYPI_))
    /* Copy device manufacturer,model,serial no and software version to here */
     memset(output, '\0', sizeof(output));
@@ -318,11 +298,6 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
         memset(hal->wifi_prop.cm_mac, 0, sizeof(hal->wifi_prop.cm_mac));
     }
 
-    memset(output, '\0', sizeof(output));
-    if (get_mac_address("eth0", hal->wifi_prop.al_1905_mac) != RETURN_OK) {
-        wifi_hal_error_print("%s:%d: Unable to get AL mac address\n", __func__, __LINE__);
-        memset(hal->wifi_prop.al_1905_mac, 0, sizeof(hal->wifi_prop.al_1905_mac));
-    }
 #endif
 
     if (access(EASYMESH_OFF_FLAG, F_OK) == 0) {
@@ -332,61 +307,22 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal)
         if (errno != ENOENT) {
             wifi_hal_error_print("%s:%d: access(%s) failed: %s\n", __func__, __LINE__, EASYMESH_OFF_FLAG, strerror(errno));
         }
-    /* Read the al_mac address from EM_CFG_FILE */
-    ret = json_parse_string(EM_CFG_FILE, "Al_MAC_ADDR", al_ctrl_mac, sizeof(al_ctrl_mac));
-    if (ret == 0) {
-        to_mac_bytes(al_ctrl_mac, hal->wifi_prop.al_1905_mac);
-        wifi_hal_dbg_print("%s:%d al_mac %s read from json file:%s.\n", __func__, __LINE__,
-            al_ctrl_mac, EM_CFG_FILE);
-    } else {
-        wifi_hal_error_print("%s:%d: Unable to read al_mac from json file:%s, error:%d\n", __func__,
-            __LINE__, EM_CFG_FILE, ret);
-        memset(hal->wifi_prop.al_1905_mac, 0, sizeof(hal->wifi_prop.al_1905_mac));
-        hal->wifi_prop.colocated_mode = -1;
-    }
-
     /* Read the collocated mode from EM_CFG_FILE*/
     ret = json_parse_integer(EM_CFG_FILE, "Colocated_Mode", &colocated_mode);
-    if (ret == 0) {
+    if (ret == 0 && (colocated_mode == 0 || colocated_mode == 1)) {
         hal->wifi_prop.colocated_mode = colocated_mode;
-        interface_found = get_ifname_from_mac((mac_address_t *)hal->wifi_prop.al_1905_mac, ifname);
-        /* Based on the value of colocated_mode and the interface obtained from almac_address
-           Configure the vap_name appropriately */
-        if (interface_found == true) {
-            if (strncmp(ifname, "eth", strlen("eth")) != 0 &&
-                strncmp(ifname, "lo", strlen("lo")) != 0 &&
-                strncmp(ifname, "lan", strlen("lan")) != 0 &&
-                strncmp(ifname, "brlan", strlen("brlan")) != 0) {
-                /* interface is not an ethernet and not an loopback interface */
-                if (configure_vap_name_basedon_colocated_mode(ifname,
-                        hal->wifi_prop.colocated_mode) != 0) {
-                    wifi_hal_error_print(
-                        "%s:%d Error configuring vapname for interface:%s, colocated_mode:%d",
-                        __func__, __LINE__, ifname, hal->wifi_prop.colocated_mode);
-                    hal->wifi_prop.colocated_mode = -1;
-                }
-            } else {
-                /* almac_address is either ethernet or loopback, nothing to be done*/
-            }
-        } else {
-            /* al_mac address configured is incorrect, reset the al_1905_mac to 0*/
-            wifi_hal_error_print("%s:%d: No interface found for al_mac address:%s\n", __func__,
-                __LINE__, to_mac_str(hal->wifi_prop.al_1905_mac, al_ctrl_mac));
-            memset(hal->wifi_prop.al_1905_mac, 0, sizeof(hal->wifi_prop.al_1905_mac));
-            hal->wifi_prop.colocated_mode = -1;
-        }
     } else {
-        wifi_hal_error_print("%s:%d: Unable to read colocated_mode from json file:%s, error:%d\n",
-            __func__, __LINE__, EM_CFG_FILE, ret);
+        wifi_hal_error_print("%s:%d: Invalid or unreadable colocated_mode:%d in json file:%s, error:%d\n",
+            __func__, __LINE__, colocated_mode, EM_CFG_FILE, ret);
         hal->wifi_prop.colocated_mode = -1;
     }
     } /* EASYMESH_OFF_FLAG not present */
 
     wifi_hal_info_print("%s:%d: serialNo=%s, ModelName=%s,sw_version=%s, manufacturer=%s "
-                        "al_mac_addr=%s colocated_mode:%d\n",
+                        "colocated_mode:%d\n",
         __func__, __LINE__, hal->wifi_prop.serialNo, hal->wifi_prop.manufacturerModel,
         hal->wifi_prop.software_version, hal->wifi_prop.manufacturer,
-        to_mac_str(hal->wifi_prop.al_1905_mac, al_ctrl_mac), hal->wifi_prop.colocated_mode);
+        hal->wifi_prop.colocated_mode);
 
     for (i = 0; i < hal->wifi_prop.numRadios; i++) {
         radio_band = 0;
@@ -767,6 +703,9 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     wifi_radio_operationParam_t *old_operationParam = NULL;
     platform_set_radio_pre_init_t set_radio_pre_init_fn;
     bool is_channel_changed;
+#ifdef BANANA_PI_PORT
+    bool transmit_power_updated = false;
+#endif
     int ret;
 
 #ifdef CMXB7_PORT
@@ -1034,7 +973,15 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         radio->oper_param.autoChannelEnabled = operationParam->autoChannelEnabled;
         if (old_operationParam->transmitPower != operationParam->transmitPower) {
             wifi_hal_info_print("%s:%d: OldTransmitPower:%d, NewTransmitPower:%d updating\n", __func__, __LINE__, old_operationParam->transmitPower, operationParam->transmitPower);
+#ifdef BANANA_PI_PORT
+            if (wifi_hal_setRadioTransmitPower(index, operationParam->transmitPower) != RETURN_OK) {
+                wifi_hal_error_print("%s:%d: Error setting transmit power\n", __func__, __LINE__);
+                goto reload_config;
+            }
+            transmit_power_updated = true;
+#else
             (void)wifi_hal_setRadioTransmitPower(index, operationParam->transmitPower);
+#endif
         }
         radio->oper_param.transmitPower = operationParam->transmitPower;
 		radio->oper_param.DfsEnabledBootup = operationParam->DfsEnabledBootup;
@@ -1100,6 +1047,11 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                         memcpy((unsigned char *)&radio->oper_param,
                             (unsigned char *)old_operationParam,
                             sizeof(wifi_radio_operationParam_t));
+#ifdef BANANA_PI_PORT
+                        if (transmit_power_updated) {
+                            radio->oper_param.transmitPower = operationParam->transmitPower;
+                        }
+#endif
                         free(old_operationParam);
                         old_operationParam = NULL;
                         return RETURN_ERR;
@@ -1555,7 +1507,12 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
     if ((pre_set_vap_params_fn = get_platform_pre_create_vap_fn()) != NULL) {
         wifi_hal_info_print("%s:%d: radio index:%d pre-create vap\n", __func__, __LINE__,
             radio->index);
-        pre_set_vap_params_fn(index, map);
+        ret = pre_set_vap_params_fn(index, map);
+        if (ret != RETURN_OK) {
+            wifi_hal_error_print("%s:%d: radio index:%d pre-create vap failed rc:%d\n", __func__,
+                __LINE__, index, ret);
+            return ret;
+        }
     }
 
     for (i = 0; i < map->num_vaps; i++) {
