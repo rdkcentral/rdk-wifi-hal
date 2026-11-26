@@ -2376,10 +2376,12 @@ void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface)
         if (skip_radio_iface != NULL && radio_index == skip_radio_iface->vap_info.radio_index) {
             continue;
         }
+
         radio_iter = get_radio_by_rdk_index(radio_index);
-        if (radio_iter == NULL) {
+        if (radio_iter == NULL || radio_iter->oper_param.enable == false) {
             continue;
         }
+
         hash_map_foreach(radio_iter->interface_map, interface_iter) {
             if (interface_iter->vap_info.vap_mode != wifi_vap_mode_ap ||
                 !interface_iter->vap_info.u.bss_info.enabled ||
