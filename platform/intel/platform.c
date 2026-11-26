@@ -1181,12 +1181,12 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
                 wifi_hal_info_print("%s is repurposed to %s hence not setting key in uci \n",map->vap_array[index].vap_name,map->vap_array[index].repurposed_vap_name);
              }
         }
-        if(uci_converter_set_str(TYPE_VAP, map->vap_array[index].vap_index, "hessid" ,map->vap_array[index].u.bss_info.interworking.interworking.hessid))
-          wifi_hal_dbg_print("%s:%d: Failed to set the hessid:%s for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.interworking.interworking.hessid,map->vap_array[index].vap_index);
-        if(uci_converter_set_uint(TYPE_VAP, map->vap_array[index].vap_index, "venue_group" , map->vap_array[index].u.bss_info.interworking.interworking.venueGroup))
-          wifi_hal_dbg_print("%s:%d: Failed to set the venuegroup:%d for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.interworking.interworking.venueGroup,map->vap_array[index].vap_index);
-        if(uci_converter_set_uint(TYPE_VAP, map->vap_array[index].vap_index, "venue_type" , map->vap_array[index].u.bss_info.interworking.interworking.venueType))
-          wifi_hal_dbg_print("%s:%d: Failed to set the venuetype:%d for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.interworking.interworking.venueType,map->vap_array[index].vap_index);
+        if(uci_converter_set_str(TYPE_VAP, map->vap_array[index].vap_index, "hessid" ,map->vap_array[index].u.bss_info.interworking.hessid))
+          wifi_hal_dbg_print("%s:%d: Failed to set the hessid:%s for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.interworking.hessid,map->vap_array[index].vap_index);
+        if(uci_converter_set_uint(TYPE_VAP, map->vap_array[index].vap_index, "venue_group" , map->vap_array[index].u.bss_info.interworking.venueGroup))
+          wifi_hal_dbg_print("%s:%d: Failed to set the venuegroup:%d for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.interworking.venueGroup,map->vap_array[index].vap_index);
+        if(uci_converter_set_uint(TYPE_VAP, map->vap_array[index].vap_index, "venue_type" , map->vap_array[index].u.bss_info.interworking.venueType))
+          wifi_hal_dbg_print("%s:%d: Failed to set the venuetype:%d for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.interworking.venueType,map->vap_array[index].vap_index);
       }
       else if (map->vap_array[index].vap_mode == wifi_vap_mode_sta)
       {
@@ -1220,12 +1220,12 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
           if(uci_converter_set_str(TYPE_VAP, map->vap_array[index].vap_index, "key", map->vap_array[index].u.bss_info.security.u.key.key))
             wifi_hal_dbg_print("%s:%d: Failed to set the KeyPassPhrase:%s for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.security.u.key.key,map->vap_array[index].vap_index);
         }
-        if(uci_converter_set_str(TYPE_VAP, map->vap_array[index].vap_index, "hessid" ,map->vap_array[index].u.bss_info.interworking.interworking.hessid))
-          wifi_hal_dbg_print("%s:%d: Failed to set the hessid:%s for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.interworking.interworking.hessid,map->vap_array[index].vap_index);
-        if(uci_converter_set_uint(TYPE_VAP, map->vap_array[index].vap_index, "venue_group" , map->vap_array[index].u.bss_info.interworking.interworking.venueGroup))
-          wifi_hal_dbg_print("%s:%d: Failed to set the venuegroup:%d for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.interworking.interworking.venueGroup,map->vap_array[index].vap_index);
-        if(uci_converter_set_uint(TYPE_VAP, map->vap_array[index].vap_index, "venue_type" , map->vap_array[index].u.bss_info.interworking.interworking.venueType))
-          wifi_hal_dbg_print("%s:%d: Failed to set the venuetype:%d for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.interworking.interworking.venueType,map->vap_array[index].vap_index);
+        if(uci_converter_set_str(TYPE_VAP, map->vap_array[index].vap_index, "hessid" ,map->vap_array[index].u.bss_info.interworking.hessid))
+          wifi_hal_dbg_print("%s:%d: Failed to set the hessid:%s for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.interworking.hessid,map->vap_array[index].vap_index);
+        if(uci_converter_set_uint(TYPE_VAP, map->vap_array[index].vap_index, "venue_group" , map->vap_array[index].u.bss_info.interworking.venueGroup))
+          wifi_hal_dbg_print("%s:%d: Failed to set the venuegroup:%d for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.interworking.venueGroup,map->vap_array[index].vap_index);
+        if(uci_converter_set_uint(TYPE_VAP, map->vap_array[index].vap_index, "venue_type" , map->vap_array[index].u.bss_info.interworking.venueType))
+          wifi_hal_dbg_print("%s:%d: Failed to set the venuetype:%d for index:%d\n", __func__, __LINE__,map->vap_array[index].u.bss_info.interworking.venueType,map->vap_array[index].vap_index);
       }
     }
     uci_converter_commit_wireless();

@@ -1395,6 +1395,29 @@ int get_sta_4addr_status(bool *sta_4addr)
     return json_parse_boolean(EM_CFG_FILE, "sta_4addr_mode_enabled", sta_4addr);
 }
 
+INT wifi_hal_setRadioInterworkingPayload(wifi_radio_index_t index,
+    const wifi_radio_interworking_t *payload)
+{
+    wifi_radio_info_t *radio;
+
+    RADIO_INDEX_ASSERT(index);
+    NULL_PTR_ASSERT(payload);
+
+    radio = get_radio_by_rdk_index(index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: radio index:%d failed not find radio\n", __func__,
+            __LINE__, index);
+        return RETURN_ERR;
+    }
+
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    memcpy(&radio->interworking_payload, payload, sizeof(wifi_radio_interworking_t));
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+    wifi_hal_dbg_print("%s:%d: radio:%d passpoint.enable:%d gafDisable:%d p2pDisable:%d roamingConsortiumCount:%d\n", __func__, __LINE__,
+        index, payload->passpoint.enable, payload->passpoint.gafDisable, payload->passpoint.p2pDisable,
+        payload->roamingConsortium.wifiRoamingConsortiumCount);
+    return RETURN_OK;
+}
 #if defined(EASY_MESH_NODE) && defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
 static void sync_radio_channel_with_sta_mlo_link(wifi_radio_info_t *target_radio)
 {

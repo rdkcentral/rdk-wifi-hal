@@ -2344,6 +2344,19 @@ wifi_radio_info_t *get_radio_by_rdk_index(wifi_radio_index_t index)
     return NULL;
 }
 
+// Hotspot secure vaps use their own radio payload; other vaps fall back to radio 0
+const wifi_radio_interworking_t *get_vap_interworking_payload(const wifi_vap_info_t *vap)
+{
+    const wifi_radio_info_t *radio;
+    wifi_radio_index_t radio_index = 0;
+
+    if (strncmp(vap->vap_name, "hotspot_secure", strlen("hotspot_secure")) == 0) {
+        radio_index = vap->radio_index;
+    }
+    radio = get_radio_by_rdk_index(radio_index);
+    return (radio != NULL) ? &radio->interworking_payload : NULL;
+}
+
 #if defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
 void wifi_hal_update_beacons(wifi_interface_info_t *skip_radio_iface)
 {

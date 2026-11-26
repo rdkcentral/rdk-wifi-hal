@@ -442,19 +442,19 @@ int validate_wifi_interface_vap_info_params(wifi_vap_info_t *vap_info, char *msg
 #endif
 
     // interworking parameter values
-    if (bss_info->interworking.interworking.interworkingEnabled > 1) {
+    if (bss_info->interworking.interworkingEnabled > 1) {
         ret = RETURN_ERR;
-        snprintf(msg + strlen(msg), len - strlen(msg), " interworkingEnabled: %d", bss_info->interworking.interworking.interworkingEnabled);
+        snprintf(msg + strlen(msg), len - strlen(msg), " interworkingEnabled: %d", bss_info->interworking.interworkingEnabled);
     }
     // accessNetworkType possible values are: 0 - Private network; 1 - Private network with guest access; 2 - Chargeable public network; 3 - Free public network; 4 - Personal device network; 5 - Emergency services only network; 6-13 - Reserved; 14 - Test or experimental; 15 - Wildcard
-    if (!((bss_info->interworking.interworking.accessNetworkType < 6) ||
-            ((bss_info->interworking.interworking.accessNetworkType > 13) && (bss_info->interworking.interworking.accessNetworkType < 16)))) {
+    if (!((bss_info->interworking.accessNetworkType < 6) ||
+            ((bss_info->interworking.accessNetworkType > 13) && (bss_info->interworking.accessNetworkType < 16)))) {
         ret = RETURN_ERR;
-        snprintf(msg + strlen(msg), len - strlen(msg), " accessNetworkType: %d", bss_info->interworking.interworking.accessNetworkType);
+        snprintf(msg + strlen(msg), len - strlen(msg), " accessNetworkType: %d", bss_info->interworking.accessNetworkType);
     }
-    if (bss_info->interworking.interworking.internetAvailable > 1) {
+    if (bss_info->interworking.internetAvailable > 1) {
         ret = RETURN_ERR;
-        snprintf(msg + strlen(msg), len - strlen(msg), " internetAvailable: %d", bss_info->interworking.interworking.internetAvailable);
+        snprintf(msg + strlen(msg), len - strlen(msg), " internetAvailable: %d", bss_info->interworking.internetAvailable);
     }
 
     // wps values

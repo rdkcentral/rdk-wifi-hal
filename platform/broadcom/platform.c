@@ -2739,13 +2739,13 @@ int platform_create_vap(wifi_radio_index_t r_index, wifi_vap_info_map_t *map)
             }
 
             prepare_param_name(param_name, interface_name, "_hessid");
-            set_string_nvram_param(param_name, map->vap_array[index].u.bss_info.interworking.interworking.hessid);
+            set_string_nvram_param(param_name, map->vap_array[index].u.bss_info.interworking.hessid);
 
             prepare_param_name(param_name, interface_name, "_venuegrp");
-            set_decimal_nvram_param(param_name, map->vap_array[index].u.bss_info.interworking.interworking.venueGroup);
+            set_decimal_nvram_param(param_name, map->vap_array[index].u.bss_info.interworking.venueGroup);
 
             prepare_param_name(param_name, interface_name, "_venuetype");
-            set_decimal_nvram_param(param_name, map->vap_array[index].u.bss_info.interworking.interworking.venueType);
+            set_decimal_nvram_param(param_name, map->vap_array[index].u.bss_info.interworking.venueType);
     
             prepare_param_name(param_name, interface_name, "_bcnprs_txpwr_offset");
             set_decimal_nvram_param(param_name, abs(map->vap_array[index].u.bss_info.mgmtPowerControl));
