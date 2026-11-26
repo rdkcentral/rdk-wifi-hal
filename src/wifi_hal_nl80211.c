@@ -23007,11 +23007,7 @@ static bool add_eid_rnr_bss(struct hostapd_data *hapd, struct hostapd_data *repo
     if (!(*tbtt_count)) {
         *tbtt_count_pos = eid++;
         *eid++ = tbtt_info_len;
-#ifdef CONFIG_GENERIC_MLO
         *eid++ = (op_class == 137 ? 134 : op_class);
-#else
-        *eid++ = op_class;
-#endif
         *eid++ = bss->iconf->channel;
         *len += RNR_TBTT_HEADER_LEN;
     }
