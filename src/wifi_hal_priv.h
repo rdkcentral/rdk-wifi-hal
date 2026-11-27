@@ -610,6 +610,7 @@ typedef struct wifi_interface_info_t {
 #if defined(CONFIG_IEEE80211BE) && defined(CONFIG_GENERIC_MLO)
     struct sta_mlo_params mlo_params;
 #endif /* CONFIG_IEEE80211BE & CONFIG_GENERIC_MLO */
+    bool cac_finished;
 } wifi_interface_info_t;
 
 #define MAX_RATES   16
@@ -1617,6 +1618,7 @@ int teardown_mlo_vap(wifi_interface_info_t *interface);
 int setup_mlo_vap(wifi_interface_info_t *interface, wifi_vap_info_t *new_vap_config);
 #endif /* CONFIG_GENERIC_MLO */
 #endif /* defined(CONFIG_IEEE80211BE) && (HOSTAPD_VERSION >= 211) */
+bool is_dfs_channel(wifi_radio_operationParam_t *operationParam);
 #ifdef QCOM_ATH12K_PORT
 void hostapd_wpa_event(void *ctx, enum wpa_event_type event,
     union wpa_event_data *data);
