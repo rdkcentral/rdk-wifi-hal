@@ -149,8 +149,10 @@ static wifi_interface_name_idex_map_t static_interface_index_map[] = {
 #endif /* QCOM_ATH12K_PORT */
 
 #if defined(_MERCURY_PRODUCT_REQ_) // for Qualcomm based platforms
-    { 1, 0,  "home-ap-24",   "mld0", "br-home",  100,   0,  "private_ssid_2g" },
-    { 2, 1,  "home-ap-50",   "mld0", "br-home",  100,   1,  "private_ssid_5g" },
+    { 1, 0,  "home-ap-24",   "", "br-home",  100,   0,  "private_ssid_2g" },
+    { 2, 1,  "home-ap-50",   "", "br-home",  100,   1,  "private_ssid_5g" },
+    { 1, 0,  "svc-e-ap-24",  "", "br-home",  101,   2,  "iot_ssid_2g"},
+    { 2, 1,  "svc-e-ap-50",  "", "br-home",  101,   3,  "iot_ssid_5g"},
     { 1, 0,  "bhaul-ap-24",  "", "",           0,  12,  "mesh_backhaul_2g" },
     {2, 1,  "bhaul-ap-50",  "", "",           0,  13,  "mesh_backhaul_5g"},
     {1, 0,  "bhaul-sta-24", "", "",           0,  14,  "mesh_sta_2g"},
@@ -530,7 +532,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
 
 #ifdef BANANA_PI_PORT // for reference device platforms
@@ -566,7 +567,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
 
 #ifdef TCXB7_PORT // for Broadcom based platforms
@@ -602,7 +602,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
 
 #ifdef QCOM_ATH12K_PORT // for Qualcomm based platforms
@@ -638,8 +637,7 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
-#endif
+#endif /* QCOM_ATH12K_PORT */
 
 #if defined(VNTXER5_PORT)
     "vntxer5",
@@ -674,7 +672,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
 
 #ifdef _MERCURY_PRODUCT_REQ_
@@ -710,11 +707,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-#if defined (CONFIG_IEEE80211BE) && defined(CONFIG_MLO)
-    platform_get_mld_address_default,
-#else
-    NULL,
-#endif
 #endif 
 
 #ifdef TCXB8_PORT // for Broadcom based platforms
@@ -750,7 +742,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
 
 
@@ -787,7 +778,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
 
 #ifdef XB10_PORT // for Broadcom based platforms
@@ -828,11 +818,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-#ifdef CONFIG_IEEE80211BE
-    platform_get_mld_address_default,
-#else
-    NULL,
-#endif
 #endif
 
 #ifdef SCXER10_PORT // for Broadcom based platforms
@@ -868,7 +853,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
 
 #ifdef SCXF10_PORT // for Broadcom based platforms
@@ -904,7 +888,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
 
 #ifdef XER2_PORT // For XER2 Broadcom Platform
@@ -940,7 +923,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
 
 #ifdef CMXB7_PORT
@@ -976,7 +958,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
 
 #ifdef XLE_PORT // for Broadcom XLE
@@ -1012,7 +993,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
 
 #ifdef SKYSR213_PORT // for Broadcom HUB6
@@ -1048,7 +1028,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
 #ifdef RDKB_ONE_WIFI_PROD // for Broadcom based platforms
     "rdkb",
@@ -1083,7 +1062,6 @@ const wifi_driver_info_t  driver_info = {
     platform_get_radio_caps,
     platform_get_reg_domain,
     platform_set_beacon_prot,
-    NULL,
 #endif
     
 };
@@ -4745,13 +4723,6 @@ platform_set_beacon_prot_t get_platform_set_beacon_prot_fn()
 {
     return driver_info.platform_set_beacon_prot_fn;
 }
-
-#ifdef CONFIG_IEEE80211BE
-platform_mld_address_default_t get_platform_mld_address_default_fn()
-{
-    return driver_info.platform_mld_address_default_fn;
-}
-#endif /* CONFIG_IEEE80211BE */
 
 bool lsmod_by_name(const char *name)
 {
