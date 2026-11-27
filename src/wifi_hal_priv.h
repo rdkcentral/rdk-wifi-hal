@@ -647,6 +647,7 @@ typedef struct {
     rnr_scan_t rnr;
     bool rnr_enabled;
 #endif //FEATURE_SINGLE_PHY
+    wifi_radio_interworking_t interworking_payload; /* Per-radio ANQP/Passpoint/RoamingConsortium payload. */
 } wifi_radio_info_t;
 
 typedef wifi_vap_name_t wifi_vap_type_t;
@@ -954,6 +955,8 @@ INT wifi_hal_getHalCapability(wifi_hal_capability_t *hal);
 INT wifi_hal_sm_deinit(INT vap_index);
 INT wifi_hal_connect(INT ap_index, wifi_bss_info_t *bss);
 INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_operationParam_t *operationParam);
+INT wifi_hal_setRadioInterworkingPayload(wifi_radio_index_t index,
+    const wifi_radio_interworking_t *payload);
 INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map);
 INT wifi_hal_kickAssociatedDevice(INT ap_index, mac_address_t mac);
 INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mode, INT dwell_time, UINT num, UINT *chan_list);
@@ -1194,6 +1197,7 @@ int     wifi_set_ap_wps_ie(void *priv, const struct wpabuf *beacon,
 int     wifi_sta_get_seqnum(const char *ifname, void *priv, const u8 *addr, int idx, u8 *seq);
 int     wifi_commit(void *priv);
 wifi_radio_info_t *get_radio_by_rdk_index(wifi_radio_index_t index);
+const wifi_radio_interworking_t *get_vap_interworking_payload(const wifi_vap_info_t *vap);
 int set_interface_properties(unsigned int phy_index, wifi_interface_info_t *interface);
 int convert_enum_beaconrate_to_int(wifi_bitrate_t rates);
 int get_op_class_from_radio_params(wifi_radio_operationParam_t *param);

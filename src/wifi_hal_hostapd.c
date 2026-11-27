@@ -1384,47 +1384,51 @@ int update_hostap_bss(wifi_interface_info_t *interface)
     wifi_hal_dbg_print("%s:%d:min_adv_mcs is %d  and ifacename is %s\n", __func__, __LINE__, conf->min_adv_mcs, conf->iface);
 #endif /* !QCOM_ATH12K_PORT && HOSTAPD_VERSION >= 210 */
     /* IEEE 802.11u - Interworking */
-    conf->interworking = vap->u.bss_info.interworking.interworking.interworkingEnabled;
+    conf->interworking = vap->u.bss_info.interworking.interworkingEnabled;
     //access_network_type
-    conf->access_network_type = vap->u.bss_info.interworking.interworking.accessNetworkType;
+    conf->access_network_type = vap->u.bss_info.interworking.accessNetworkType;
     if (conf->access_network_type < 0 || conf->access_network_type > 15) {
         wifi_hal_error_print("%s:%d:Invalid access network setting in VAP setting : %d\n", __func__, __LINE__, conf->access_network_type);
         return RETURN_ERR;
     }
 
     //internet
-    conf->internet = vap->u.bss_info.interworking.interworking.internetAvailable;
+    conf->internet = vap->u.bss_info.interworking.internetAvailable;
     //asra
-    conf->asra = vap->u.bss_info.interworking.interworking.asra;
+    conf->asra = vap->u.bss_info.interworking.asra;
     //esr
-    conf->esr = vap->u.bss_info.interworking.interworking.esr;
+    conf->esr = vap->u.bss_info.interworking.esr;
     //uesa
-    conf->uesa = vap->u.bss_info.interworking.interworking.uesa;
+    conf->uesa = vap->u.bss_info.interworking.uesa;
     //venue_group
-    conf->venue_group = vap->u.bss_info.interworking.interworking.venueGroup;
+    conf->venue_group = vap->u.bss_info.interworking.venueGroup;
     //venue_type
-    conf->venue_type = vap->u.bss_info.interworking.interworking.venueType;
-    conf->venue_info_set = vap->u.bss_info.interworking.interworking.venueOptionPresent;
+    conf->venue_type = vap->u.bss_info.interworking.venueType;
+    conf->venue_info_set = vap->u.bss_info.interworking.venueOptionPresent;
     
     //hessid
 
-    to_mac_bytes((vap->u.bss_info.interworking.interworking.hessid), conf->hessid);
+    to_mac_bytes((vap->u.bss_info.interworking.hessid), conf->hessid);
     wifi_hal_dbg_print(" %s: %s 802.11u - NEW IW_En=%d access_network_type=%d conf->[venue_info_set=%d venue_group=%d venue_type=%d hessid="MACF"]\n",
                 __func__, interface->name, conf->interworking, conf->access_network_type,
                 conf->venue_info_set, conf->venue_group, conf->venue_type, MAC_TO_MACF(conf->hessid));
     hostapd_set_security_params(conf, 1);
-    if (vap->u.bss_info.interworking.passpoint.enable) {
-        wifi_hal_dbg_print("gafDisable %d,p2pDisable %d l2tfi %d\n",vap->u.bss_info.interworking.passpoint.gafDisable,vap->u.bss_info.interworking.passpoint.p2pDisable,vap->u.bss_info.interworking.passpoint.l2tif);
+    const wifi_radio_interworking_t *iw_payload = get_vap_interworking_payload(vap);
+    wifi_hal_dbg_print("%s:%d: vap:%s interworkingEnabled:%d payload:%s passpoint.enable:%d\n", __func__, __LINE__, vap->vap_name,
+        vap->u.bss_info.interworking.interworkingEnabled, (iw_payload != NULL) ? "set" : "NULL",
+        (iw_payload != NULL) ? iw_payload->passpoint.enable : -1);
+    if ((iw_payload != NULL) && iw_payload->passpoint.enable) {
+        wifi_hal_dbg_print("gafDisable %d,p2pDisable %d l2tfi %d\n",iw_payload->passpoint.gafDisable,iw_payload->passpoint.p2pDisable,iw_payload->passpoint.l2tif);
         wifi_hal_dbg_print("%s:%d, Passpoint enabled hence add roaming consortium IE \n", __func__, __LINE__);
 
 #if !defined(PLATFORM_LINUX)
         conf->hs20 = 1;
         conf->hs20_release = 1;
-        conf->disable_dgaf = vap->u.bss_info.interworking.passpoint.gafDisable;
+        conf->disable_dgaf = iw_payload->passpoint.gafDisable;
 #endif
         conf->roaming_consortium_count = 0;
         conf->roaming_consortium = NULL;
-        const wifi_roamingConsortiumElement_t *rc_p = &(vap->u.bss_info.interworking.roamingConsortium);
+        const wifi_roamingConsortiumElement_t *rc_p = &(iw_payload->roamingConsortium);
         unsigned char rc_cnt = rc_p->wifiRoamingConsortiumCount;
         wifi_hal_dbg_print("roaming consoritum count = %d\n",rc_cnt);
         rc_cnt = (rc_cnt > 3) ? 3 : rc_cnt;

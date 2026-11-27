@@ -226,12 +226,13 @@ void callback_anqp_gas_init_frame_received(int ap_index, mac_address_t sta, unsi
 #else
     const wifi_interface_info_t *interface = get_interface_by_vap_index(ap_index);
     const wifi_vap_info_t *vap = &(interface->vap_info);
+    const wifi_radio_interworking_t *iw_payload = get_vap_interworking_payload(vap);
     wifi_anqp_dbg_print(1,"Interworking enabled=%d and passpoint enabled =%d vap name=%s\n",
-            vap->u.bss_info.interworking.interworking.interworkingEnabled,
-            vap->u.bss_info.interworking.passpoint.enable,
+            vap->u.bss_info.interworking.interworkingEnabled,
+            (iw_payload != NULL) ? iw_payload->passpoint.enable : 0,
             vap->vap_name);
 
-    if ( !(vap->u.bss_info.interworking.interworking.interworkingEnabled) || !(vap->u.bss_info.interworking.passpoint.enable)) {
+    if ( !(vap->u.bss_info.interworking.interworkingEnabled) || (iw_payload == NULL) || !(iw_payload->passpoint.enable)) {
         wifi_anqp_dbg_print(1, "%s:%d: ONEWIFI passpoint is disabled  for ap_index=%d\n", __func__, __LINE__,ap_index);
         return;
     }
