@@ -58,6 +58,8 @@ int sync_hostapd_freq_param(unsigned int apIndex)
     vap = &interface->vap_info;
     radio = get_radio_by_rdk_index(vap->radio_index);
     if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: radio index:%u for ap index:%u not found\n", __func__,
+            __LINE__, vap->radio_index, apIndex);
         wifi_hal_error_print("%s:%d radio is NULL for apIndex=%u\n", __func__, __LINE__, apIndex);
         return RETURN_ERR;
     }
@@ -66,6 +68,16 @@ int sync_hostapd_freq_param(unsigned int apIndex)
     get_coutry_str_from_code(radio_param->countryCode, country);
 
     freq = ieee80211_chan_to_freq(country, radio_param->operatingClass, radio_param->channel);
+    if (freq <= 0) {
+        wifi_hal_error_print("%s:%d: ap index:%u no frequency for op class:%u channel:%u\n",
+            __func__, __LINE__, apIndex, radio_param->operatingClass, radio_param->channel);
+        return RETURN_ERR;
+    }
+    if (interface->u.ap.hapd.iface == NULL) {
+        wifi_hal_error_print("%s:%d: ap index:%u hostapd interface not created\n", __func__,
+            __LINE__, apIndex);
+        return RETURN_ERR;
+    }
     if (interface->u.ap.hapd.iface->freq != freq) {
         wifi_hal_info_print("%s:%d: ap index:%u existing freq:%d curr freq:%d\n", __func__, __LINE__, apIndex, interface->u.ap.hapd.iface->freq, freq);
         interface->u.ap.hapd.iface->freq = freq;
@@ -995,7 +1007,12 @@ int ipc_server_output(struct hal_ipc_processor_desc *desc,
                 goto error_happened;
             }
 
-            sync_hostapd_freq_param(desc->in.set_rm_beacon_request.ap_index);
+            if (sync_hostapd_freq_param(desc->in.set_rm_beacon_request.ap_index) != RETURN_OK) {
+                wifi_hal_error_print("%s:%d FAIL %s sync hostapd freq for ap_index:%d\n", __func__,
+                    __LINE__, desc->name, desc->in.set_rm_beacon_request.ap_index);
+                free(beacon_request);
+                goto error_happened;
+            }
             wifi_hal_info_print("%s:%d name:%s ap_index:%d peer mac::%02x:%02x:%02x:%02x:%02x:%02x\n", __func__, __LINE__,
                             desc->name, desc->in.set_rm_beacon_request.ap_index,
                             desc->in.set_rm_beacon_request.peer_mac[0], desc->in.set_rm_beacon_request.peer_mac[1],
