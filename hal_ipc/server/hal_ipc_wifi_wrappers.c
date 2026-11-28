@@ -432,7 +432,14 @@ INT wifi_hal_steering_clientDisconnect( UINT steeringgroupIndex,
       wifi_hal_error_print("%s:%d:interface for ap index:%d not found\n", __func__, __LINE__, apIndex);
       return RETURN_ERR;
     }
-
+    if (client_mac == NULL) {
+        wifi_hal_error_print("%s:%d: NULL client mac for ap index:%d\n", __func__, __LINE__, apIndex);
+        return RETURN_ERR;
+    }
+    if (interface->vap_info.vap_mode != wifi_vap_mode_ap) {
+        wifi_hal_error_print("%s:%d: vap:%d is not an AP vap\n", __func__, __LINE__, apIndex);
+        return RETURN_ERR;
+    }
     if ((type == DISCONNECT_TYPE_DEAUTH) || (type == DISCONNECT_TYPE_DISASSOC)) {
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         ap_sta_disconnect(&interface->u.ap.hapd, NULL, client_mac, reason);
