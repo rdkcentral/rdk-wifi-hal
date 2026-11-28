@@ -715,6 +715,17 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     RADIO_INDEX_ASSERT(index);
     NULL_PTR_ASSERT(operationParam);
 
+#if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT)
+    if (operationParam->npca_enable &&
+        (!(operationParam->variant & WIFI_80211_VARIANT_BN) ||
+            operationParam->npca_channel > UINT8_MAX ||
+            operationParam->npca_bitmap > UINT16_MAX)) {
+        wifi_hal_error_print("%s:%d: Invalid NPCA parameters for radio index:%d\n",
+            __func__, __LINE__, index);
+        return WIFI_HAL_INVALID_ARGUMENTS;
+    }
+#endif
+
 #if defined(CONFIG_WIFI_EMULATOR) || defined(CONFIG_WIFI_EMULATOR_EXT_AGENT)
     radio = get_radio_by_rdk_index(index);
     if (radio == NULL) {
@@ -991,6 +1002,19 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
         memcpy(radio->oper_param.channel_map, operationParam->channel_map,
             sizeof(radio->oper_param.channel_map));
 
+#if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT)
+        radio->oper_param.npca_enable = operationParam->npca_enable;
+        radio->oper_param.npca_channel = operationParam->npca_enable ?
+            operationParam->npca_channel : 0;
+        radio->oper_param.npca_bitmap = operationParam->npca_enable ?
+            operationParam->npca_bitmap : 0;
+        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+        radio->iconf.npca_enable = radio->oper_param.npca_enable;
+        radio->iconf.npca_primary_channel = (u8)radio->oper_param.npca_channel;
+        radio->iconf.npca_punct_bitmap = (u16)radio->oper_param.npca_bitmap;
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+#endif
+
 #ifdef CMXB7_PORT
         if( ((radio->oper_param.band == WIFI_FREQUENCY_5_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5H_BAND))) {
             if( !primary_interface->u.ap.iface.cac_started && ((operationParam->channel >= dfs_start_chan && operationParam->channel <= dfs_end_chan) || (operationParam->channelWidth == WIFI_CHANNELBANDWIDTH_160MHZ)) ) {
@@ -1047,6 +1071,15 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                         memcpy((unsigned char *)&radio->oper_param,
                             (unsigned char *)old_operationParam,
                             sizeof(wifi_radio_operationParam_t));
+#if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT)
+                        pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+                        radio->iconf.npca_enable = old_operationParam->npca_enable;
+                        radio->iconf.npca_primary_channel = old_operationParam->npca_enable ?
+                            (u8)old_operationParam->npca_channel : 0;
+                        radio->iconf.npca_punct_bitmap = old_operationParam->npca_enable ?
+                            (u16)old_operationParam->npca_bitmap : 0;
+                        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+#endif
 #ifdef BANANA_PI_PORT
                         if (transmit_power_updated) {
                             radio->oper_param.transmitPower = operationParam->transmitPower;

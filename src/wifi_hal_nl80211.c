@@ -5298,6 +5298,7 @@ static void phy_info_iftype_copy(struct hostapd_hw_modes *mode,
 #if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT)
     {
         struct uhr_capabilities *uhr_capab = &mode->uhr_capab[opmode];
+        struct uhr_npca_info *npca_info = &mode->npca_info[opmode];
 
         if (tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_MAC] &&
             tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_PHY]) {
@@ -5322,6 +5323,18 @@ static void phy_info_iftype_copy(struct hostapd_hw_modes *mode,
                     __func__, __LINE__,
                     uhr_capab->mac[0], uhr_capab->phy[0]);
             }
+        }
+        if (tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_NPCA] &&
+            (size_t)nla_len(tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_NPCA]) >=
+                sizeof(*npca_info)) {
+            os_memcpy(npca_info,
+                nla_data(tb[NL80211_BAND_IFTYPE_ATTR_UHR_CAP_NPCA]),
+                sizeof(*npca_info));
+            wifi_hal_dbg_print("%s:%d: UHR NPCA capability: supported=%d "
+                "min_dur=%u switch_delay=%u switch_back=%u\n",
+                __func__, __LINE__, npca_info->npca_supported,
+                npca_info->npca_min_dur_threshold, npca_info->npca_switch_delay,
+                npca_info->npca_switch_back_delay);
         }
     }
 #endif /* CONFIG_IEEE80211BN && HOSTAPD_VERSION >= 212 && QCOM_ATH12K_PORT */
@@ -8975,6 +8988,26 @@ static int nl80211_put_freq_params_device_hal(wifi_driver_data_t *drv,
     return 0;
 }
 
+#if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT)
+static int nl80211_put_freq_params_npca(struct nl_msg *msg,
+    const struct hostapd_freq_params *freq)
+{
+    if (freq->npca_freq == 0)
+        return 0;
+
+    if (freq->npca_freq < 0)
+        return -EINVAL;
+
+    wifi_hal_dbg_print("  * npca_freq=%d npca_punct_bitmap=0x%04x\n",
+        freq->npca_freq, freq->npca_punct_bitmap);
+    if (nla_put_u32(msg, NL80211_ATTR_NPCA_PRIMARY_FREQ, freq->npca_freq) ||
+        nla_put_u32(msg, NL80211_ATTR_NPCA_PUNCT_BITMAP, freq->npca_punct_bitmap))
+        return -ENOBUFS;
+
+    return 0;
+}
+#endif
+
 static int nl80211_put_freq_params_drv(wifi_driver_data_t *drv, struct nl_msg *msg, const struct hostapd_freq_params *freq)
 {
 #ifdef CONFIG_IEEE80211BE
@@ -9100,6 +9133,13 @@ static int nl80211_put_freq_params_drv(wifi_driver_data_t *drv, struct nl_msg *m
             return -ENOBUFS;
     }
 
+#if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT)
+    {
+        int ret = nl80211_put_freq_params_npca(msg, freq);
+        if (ret)
+            return ret;
+    }
+#endif
     if (nl80211_put_freq_params_device_hal(drv, msg, freq)) {
         wifi_hal_error_print("Failed to add device parameters\n");
         return -EINVAL;
@@ -9263,6 +9303,26 @@ static int fill_csa_params(wifi_radio_info_t *radio, struct csa_settings *csa_se
     csa_settings->freq_params.center_freq1 = freq1;
     csa_settings->freq_params.center_freq2 = 0;
     csa_settings->freq_params.bandwidth = bandwidth;
+
+#if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT)
+    if (radio->iconf.npca_enable && radio->iconf.npca_primary_channel) {
+        wifi_interface_info_t *primary_if = get_primary_interface(radio);
+        int npca_freq;
+
+        if (primary_if == NULL)
+            return -EINVAL;
+
+        npca_freq = hostapd_hw_get_freq(&primary_if->u.ap.hapd,
+            radio->iconf.npca_primary_channel);
+        if (npca_freq <= 0) {
+            wifi_hal_error_print("%s:%d: Invalid NPCA primary channel %u\n",
+                __func__, __LINE__, radio->iconf.npca_primary_channel);
+            return -EINVAL;
+        }
+        csa_settings->freq_params.npca_freq = npca_freq;
+        csa_settings->freq_params.npca_punct_bitmap = radio->iconf.npca_punct_bitmap;
+    }
+#endif
 
     wifi_hal_dbg_print("%s:%d chan_freq: %d center_freq: %d bandwidth: %d sec_chan_offset: %d\n",
         __func__, __LINE__, freq, freq1, bandwidth, sec_chan_offset);
@@ -18694,6 +18754,13 @@ static int nl80211_put_freq_params_hal(
             return -ENOBUFS;
     }
 
+#if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT)
+    {
+        int ret = nl80211_put_freq_params_npca(msg, freq);
+        if (ret)
+            return ret;
+    }
+#endif
     if (nl80211_put_freq_params_device_hal(drv, msg, freq)) {
         wifi_hal_error_print("Failed to add device parameters\n");
         return -EINVAL;
@@ -24964,7 +25031,91 @@ int wifi_drv_link_remove(void *priv, enum wpa_driver_if_type type, const char *i
 
 #endif // HOSTAPD_VERSION >= 211
 
+#if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT)
+static int wifi_drv_uhr_mode_update(void *priv, struct uhr_params_link_config *links,
+    int num_links)
+{
+    wifi_interface_info_t *interface = priv;
+    struct nl_msg *msg;
+    struct nlattr *params_attr, *link_attr;
+    int i, ret;
+
+    if (interface == NULL || links == NULL || num_links <= 0 || num_links > 16) {
+        wifi_hal_error_print("%s:%d: invalid UHR mode update request\n",
+            __func__, __LINE__);
+        return -1;
+    }
+
+    for (i = 0; i < num_links; i++) {
+        if (links[i].link_id < -1 || links[i].link_id > 15)
+            return -EINVAL;
+        /* This callback implements NPCA; DSO needs its own attributes. */
+        if (links[i].dso_update)
+            return -EOPNOTSUPP;
+        if (!links[i].npca_update)
+            return -EINVAL;
+    }
+
+    msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0,
+        NL80211_CMD_UHR_MODE_UPDATE);
+    if (msg == NULL)
+        return -1;
+
+    params_attr = nla_nest_start(msg, NL80211_ATTR_UHR_MODE_UPDATE_PARAMS);
+    if (params_attr == NULL)
+        goto fail;
+
+    for (i = 0; i < num_links; i++) {
+        link_attr = nla_nest_start(msg, i + 1);
+        if (link_attr == NULL)
+            goto fail;
+
+        if (nla_put_u8(msg, NL80211_UHR_MODE_UPDATE_ATTR_LINK_ID,
+                (u8)links[i].link_id))
+            goto fail;
+
+        if (links[i].npca_enable &&
+            nla_put_flag(msg, NL80211_UHR_MODE_UPDATE_ATTR_NPCA_ENABLE))
+            goto fail;
+
+        if (links[i].npca_switch_delay &&
+            nla_put_u8(msg,
+                NL80211_UHR_MODE_UPDATE_ATTR_NPCA_SWITCH_DELAY,
+                links[i].npca_switch_delay))
+            goto fail;
+
+        if (links[i].npca_switchback_delay &&
+            nla_put_u8(msg,
+                NL80211_UHR_MODE_UPDATE_ATTR_NPCA_SWITCHBACK_DELAY,
+                links[i].npca_switchback_delay))
+            goto fail;
+
+        nla_nest_end(msg, link_attr);
+    }
+
+    nla_nest_end(msg, params_attr);
+
+    ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
+    if (ret != 0) {
+        wifi_hal_error_print("%s:%d: UHR mode update failed ret=%d (%s)\n",
+            __func__, __LINE__, ret, strerror(-ret));
+        return ret;
+    }
+
+    wifi_hal_dbg_print("%s:%d: UHR mode update sent for %d link(s)\n",
+        __func__, __LINE__, num_links);
+    return 0;
+
+fail:
+    nlmsg_free(msg);
+    return -1;
+}
+#endif
+
 const struct wpa_driver_ops g_wpa_driver_nl80211_ops = {
+#if defined(CONFIG_IEEE80211BN) && HOSTAPD_VERSION >= 212 && defined(QCOM_ATH12K_PORT)
+    .uhr_mode_update = wifi_drv_uhr_mode_update,
+#endif
     .name = "nl80211",
     .desc = "Linux nl80211/cfg80211",
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
