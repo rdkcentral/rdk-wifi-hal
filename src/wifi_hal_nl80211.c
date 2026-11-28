@@ -14805,9 +14805,40 @@ int wifi_drv_set_p2p_powersave(void *priv, int legacy_ps, int opp_ps, int ctwind
     return 0;
 }
 
+/* hostapd polls a station that has sent nothing for ap_max_inactivity before it drops it
+ * (ap_handle_timer): the driver sends a null-data frame and reports the ACK through an
+ * NL80211_CMD_PROBE_CLIENT event, see nl80211_probe_client_event(). Without the poll every
+ * station idle that long is disassociated with reason 4 although it is still there. */
 void wifi_drv_poll_client(void *priv, const u8 *own_addr, const u8 *addr, int qos)
 {
-    wifi_hal_dbg_print("%s:%d: Enter\n", __func__, __LINE__);
+    wifi_interface_info_t *interface = (wifi_interface_info_t *)priv;
+    wifi_radio_info_t *radio;
+    struct nl_msg *msg;
+    mac_addr_str_t mac_str;
+    int ret;
+
+    radio = get_radio_by_rdk_index(interface->rdk_radio_index);
+    if (radio == NULL || !radio->driver_data.poll_command_supported) {
+        wifi_hal_dbg_print("%s:%d: %s: driver has no probe client command, %s not polled\n",
+            __func__, __LINE__, interface->name, to_mac_str(addr, mac_str));
+        return;
+    }
+
+    if ((msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0,
+                                    NL80211_CMD_PROBE_CLIENT)) == NULL) {
+        wifi_hal_error_print("%s:%d: Failed to create message\n", __func__, __LINE__);
+        return;
+    }
+    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr);
+
+    ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
+    if (ret) {
+        wifi_hal_error_print("%s:%d: %s: probe client %s failed: %d (%s)\n", __func__, __LINE__,
+            interface->name, to_mac_str(addr, mac_str), ret, strerror(-ret));
+        return;
+    }
+    wifi_hal_dbg_print("%s:%d: %s: polling %s\n", __func__, __LINE__, interface->name,
+        to_mac_str(addr, mac_str));
 }
 
 

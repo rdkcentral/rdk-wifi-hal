@@ -43,6 +43,11 @@
 #define MACF      "%02x:%02x:%02x:%02x:%02x:%02x"
 #define MAC_TO_MACF(addr)    addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]
 #define RADIUS_FALLBACK_TIMER_IN_SECS   12*60*60
+/* Seconds without traffic before hostapd polls an associated station and, when
+ * it does not answer, disassociates it. hostapd's default of 300 s reports a
+ * lost station only after 5.5-6 min. Used when hostapd runs the inactivity
+ * timer; a driver that runs the timer itself keeps the default. */
+#define WIFI_HAL_AP_MAX_INACTIVITY_SECS 90
 
 extern const struct wpa_driver_ops g_wpa_driver_nl80211_ops;
 
@@ -223,7 +228,8 @@ void init_hostap_bss(wifi_interface_info_t *interface)
    // conf->radius->radius_max_retry_wait = RADIUS_CLIENT_MAX_WAIT;
     conf->eap_sim_db_timeout = 1;
     conf->eap_sim_id = 3;
-    conf->ap_max_inactivity = AP_MAX_INACTIVITY;
+    conf->ap_max_inactivity = (g_wifi_hal.platform_flags & PLATFORM_FLAGS_STA_INACTIVITY_TIMER) ?
+        AP_MAX_INACTIVITY : WIFI_HAL_AP_MAX_INACTIVITY_SECS;
     conf->eapol_version = EAPOL_VERSION;
 
     conf->max_listen_interval = 65535;
