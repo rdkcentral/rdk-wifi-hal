@@ -5001,6 +5001,13 @@ static struct hostapd_hw_modes *phy_info_freqs(wifi_radio_info_t *radio, struct 
             goto skip;
         }
 
+        radio->channel_max_tx_power_valid[band][chan - radio->channel_data[band]] =
+            tb_freq[NL80211_FREQUENCY_ATTR_MAX_TX_POWER] != NULL;
+        if (tb_freq[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]) {
+            chan->max_tx_power =
+                (int32_t)nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_MAX_TX_POWER]) / 100;
+        }
+
         if (tb_freq[NL80211_FREQUENCY_ATTR_NO_IR]) {
             chan->flag |= HOSTAPD_CHAN_NO_IR;
         }
@@ -5150,6 +5157,41 @@ static wifi_freq_bands_t nl80211_band_to_wifi_freq_band(enum nl80211_band band)
     default:
         return (wifi_freq_bands_t)0;
     }
+}
+
+INT wifi_getRadioChannelMaxTxPower(INT radioIndex, wifi_freq_bands_t band, INT channel,
+    INT *output_dBm)
+{
+    wifi_radio_info_t *radio;
+    enum nl80211_band nl_band;
+    int i;
+
+    if (output_dBm == NULL) {
+        wifi_hal_error_print("%s:%d: output_dBm is NULL\n", __func__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    radio = get_radio_by_rdk_index(radioIndex);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: radio %d not found\n", __func__, __LINE__, radioIndex);
+        return RETURN_ERR;
+    }
+
+    nl_band = wifi_freq_band_to_nl80211_band(band);
+    if (nl_band >= NUM_NL80211_BANDS) {
+        wifi_hal_error_print("%s:%d: unsupported band %d\n", __func__, __LINE__, band);
+        return RETURN_ERR;
+    }
+
+    for (i = 0; i < radio->hw_modes[nl_band].num_channels && i < MAX_CHANNELS; i++) {
+        if (radio->channel_data[nl_band][i].chan == channel &&
+            radio->channel_max_tx_power_valid[nl_band][i]) {
+            *output_dBm = radio->channel_data[nl_band][i].max_tx_power;
+            return RETURN_OK;
+        }
+    }
+
+    return RETURN_ERR;
 }
 
 #if defined(CONFIG_HW_CAPABILITIES) || defined(VNTXER5_PORT) || defined(_MERCURY_PRODUCT_REQ_) || \
@@ -8011,6 +8053,12 @@ int nl80211_read_sta_data(wifi_interface_info_t *interface, const u8 *addr)
 int update_channel_flags()
 {
     struct nl_msg *msg;
+
+    /* phy_info_freqs() skips disabled channels, so invalidate the cached limits before the dump */
+    for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+        memset(g_wifi_hal.radio_info[i].channel_max_tx_power_valid, 0,
+            sizeof(g_wifi_hal.radio_info[i].channel_max_tx_power_valid));
+    }
 
     msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, NULL, NLM_F_DUMP, NL80211_CMD_GET_WIPHY);
     if (msg == NULL) {
