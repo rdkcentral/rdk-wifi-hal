@@ -685,7 +685,7 @@ static void nl80211_new_scan_aborted_event(wifi_interface_info_t *interface, str
 void send_sta_connection_status_to_cb(unsigned char *mac, unsigned int vap_index, wifi_connection_status_t conn_status)
 {
     wifi_bss_info_t bss;
-    wifi_station_stats_t sta;
+    wifi_station_stats_t sta = { 0 };
     wifi_device_callbacks_t *callbacks;
     callbacks = get_hal_device_callbacks();
 
@@ -847,7 +847,7 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
     wifi_device_callbacks_t *callbacks;
     wifi_vap_info_t *vap;
     wifi_bss_info_t bss;
-    wifi_station_stats_t sta;
+    wifi_station_stats_t sta = { 0 };
 #if defined(XLE_PORT) && defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
     wifi_radio_info_t *radio;
     wifi_interface_info_t *mgt_interface;

@@ -2936,7 +2936,7 @@ static void wpa_sm_sta_set_state(void *ctx, enum wpa_states state)
     wifi_interface_info_t *interface;
     wifi_vap_info_t *vap;
     wifi_bss_info_t bss;
-    wifi_station_stats_t sta;
+    wifi_station_stats_t sta = { 0 };
     interface = (wifi_interface_info_t *)ctx;
 #if defined(CONFIG_WIFI_EMULATOR) || defined(BANANA_PI_PORT)
     interface->wpa_s.wpa_state = state;

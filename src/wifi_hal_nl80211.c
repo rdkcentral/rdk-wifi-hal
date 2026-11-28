@@ -12546,7 +12546,7 @@ static int conn_get_interface_handler(struct nl_msg *msg, void *arg)
     wifi_vap_info_t *vap;
     int bw = NL80211_CHAN_WIDTH_20_NOHT;
     wifi_device_callbacks_t *callbacks;
-    wifi_station_stats_t sta;
+    wifi_station_stats_t sta = { 0 };
     wifi_radio_info_t *radio =  NULL;
     wifi_radio_operationParam_t *radio_param = NULL;
     int op_class = 0;
@@ -12664,6 +12664,75 @@ static int conn_get_interface_handler(struct nl_msg *msg, void *arg)
     sta.vap_index = vap->vap_index;
 #endif
     sta.connect_status = wifi_connection_status_connected;
+
+#if defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO) && defined(CONFIG_IEEE80211BE)
+    if (interface->mlo_params.valid_links > 0 && interface->mlo_params.assoc_link_id >= 0 &&
+        tb[NL80211_ATTR_MLO_LINKS]) {
+        unsigned int assoc_link_id = (unsigned int)interface->mlo_params.assoc_link_id;
+        unsigned int link_id;
+        unsigned char *bsta_mld_addr = wifi_hal_get_mld_mac_address(interface);
+        sta.mld_info.common_info.mld_enable = true;
+        sta.mld_info.common_info.mld_link_id = assoc_link_id;
+        if (bsta_mld_addr == NULL || is_zero_ether_addr(bsta_mld_addr)) {
+            bsta_mld_addr = vap->u.sta_info.mac;
+        }
+        memcpy(sta.mld_info.common_info.mld_addr, bsta_mld_addr, sizeof(mac_address_t));
+        memcpy(sta.mld_info.local_addr, bsta_mld_addr, sizeof(mac_address_t));
+        memcpy(sta.mld_info.peer_addr, interface->mlo_params.mld_addr, sizeof(mac_address_t));
+
+        struct nlattr *link;
+        int rem;
+
+        if (tb[NL80211_ATTR_MLO_LINKS]) {
+            nla_for_each_nested(link, tb[NL80211_ATTR_MLO_LINKS], rem) {
+                struct nlattr *ltb[NL80211_ATTR_MAX + 1];
+                wifi_mld_link_info_t *link_info;
+                wifi_radio_info_t *link_radio = NULL;
+                int freq;
+
+                if (nla_parse_nested(ltb, NL80211_ATTR_MAX, link, NULL) < 0 ||
+                    !ltb[NL80211_ATTR_MLO_LINK_ID] ||
+                    nla_len(ltb[NL80211_ATTR_MLO_LINK_ID]) != sizeof(u8) ||
+                    !ltb[NL80211_ATTR_MAC] || nla_len(ltb[NL80211_ATTR_MAC]) != ETH_ALEN ||
+                    !ltb[NL80211_ATTR_WIPHY_FREQ] ||
+                    nla_len(ltb[NL80211_ATTR_WIPHY_FREQ]) != sizeof(u32)) {
+                    continue;
+                }
+
+                link_id = nla_get_u8(ltb[NL80211_ATTR_MLO_LINK_ID]);
+                if (link_id >= MAX_NUM_MLD_LINKS ||
+                    !(interface->mlo_params.valid_links & BIT(link_id)) ||
+                    is_zero_ether_addr(nla_data(ltb[NL80211_ATTR_MAC]))) {
+                    continue;
+                }
+                if (sta.mld_info.num_links >= MAX_NUM_RADIOS) {
+                    break;
+                }
+
+                freq = nla_get_u32(ltb[NL80211_ATTR_WIPHY_FREQ]);
+                for (unsigned int i = 0; i < g_wifi_hal.num_radios; i++) {
+                    if (is_chan_freq_supported_on_radio(&g_wifi_hal.radio_info[i], freq)) {
+                        link_radio = &g_wifi_hal.radio_info[i];
+                        break;
+                    }
+                }
+                if (link_radio == NULL) {
+                    wifi_hal_error_print("%s:%d: no radio found for link:%u freq:%d\n", __func__,
+                        __LINE__, link_id, freq);
+                    continue;
+                }
+
+                link_info = &sta.mld_info.links[sta.mld_info.num_links];
+                link_info->valid = true;
+                link_info->link_id = link_id;
+                link_info->radio_index = link_radio->rdk_radio_index;
+                memcpy(link_info->link_addr, nla_data(ltb[NL80211_ATTR_MAC]),
+                    sizeof(mac_address_t));
+                sta.mld_info.num_links++;
+            }
+        }
+    }
+#endif /* defined(BANANA_PI_PORT) && defined(CONFIG_GENERIC_MLO) && defined(CONFIG_IEEE80211BE) */
 
     callbacks = get_hal_device_callbacks();
 
